@@ -511,7 +511,7 @@ async def get_analytics_trends(days: int = Query(default=30, ge=7, le=365)):
                 AVG(engagement_rate) as avg_engagement_rate,
                 SUM(follower_growth) as total_growth
             FROM social_analytics_snapshots
-            WHERE snapshot_date >= CURRENT_DATE - :days::INTEGER
+            WHERE snapshot_date >= CURRENT_DATE - CAST(:days AS INTEGER)
             GROUP BY snapshot_date
             ORDER BY snapshot_date
         """), {"days": days}).fetchall()

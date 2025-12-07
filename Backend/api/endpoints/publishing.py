@@ -195,6 +195,44 @@ async def _publish_via_blotato(
             )
             await db.commit()
 
+@router.get("/scheduled")
+async def get_scheduled_posts(
+    limit: int = 50,
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get scheduled posts - alias for common endpoint pattern"""
+    from sqlalchemy import select
+    from database.models import ScheduledPost
+    from datetime import datetime, timedelta, timezone
+    
+    try:
+        query = select(ScheduledPost).order_by(ScheduledPost.scheduled_time.desc()).limit(limit)
+        
+        if status:
+            query = query.where(ScheduledPost.status == status)
+        
+        result = await db.execute(query)
+        posts = list(result.scalars().all())
+        
+        return [
+            {
+                "id": str(post.id),
+                "clip_id": str(post.clip_id) if post.clip_id else None,
+                "platform": post.platform,
+                "scheduled_time": post.scheduled_time.isoformat() if post.scheduled_time else None,
+                "status": post.status,
+                "published_at": post.published_at.isoformat() if post.published_at else None,
+                "platform_post_id": post.platform_post_id,
+                "platform_url": post.platform_url,
+            }
+            for post in posts
+        ]
+    except Exception as e:
+        from loguru import logger
+        logger.error(f"Error fetching scheduled posts: {e}")
+        return []
+
 @router.get("/calendar")
 async def get_calendar_posts(
     start_date: Optional[datetime] = None,

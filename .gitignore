@@ -23,6 +23,10 @@ local_storage/temp/
 .env
 .env.local
 .env.*.local
+.env.backup
+.env.bak
+.env.*.backup
+.env.*.bak
 
 # IDE
 .vscode/
@@ -96,3 +100,5 @@ Backend/automation/tests/test_output/screenshots/
 Backend/logs/
 Backend/automation/tests/test_output/logs/
 *.log
+Backend/automation/tests/screenshots/
+Backend/.env.backup*

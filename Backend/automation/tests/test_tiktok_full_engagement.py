@@ -674,8 +674,41 @@ class TestIntegration:
         
         for i in range(1, 2):  # 1 video for testing
             print(f"\n=== PROCESSING VIDEO {i} ===")
+            safari.take_screenshot(f"video_{i}_start", screenshot_dir)
             
-            # 2. Comment on video
+            # 1. LIKE VIDEO (with state confirmation)
+            print("\n--- LIKE ---")
+            like_result = safari.run_js(
+                "(function() {"
+                "var likeBtn = document.querySelector('[data-e2e=\"like-icon\"]');"
+                "if (!likeBtn) return 'NOT_FOUND';"
+                "var svg = likeBtn.querySelector('svg');"
+                "var fill = svg ? window.getComputedStyle(svg).fill : '';"
+                "var isLiked = fill.includes('255, 56, 92');"
+                "if (isLiked) return 'ALREADY_LIKED';"
+                "likeBtn.click();"
+                "return 'CLICKED';"
+                "})();"
+            )
+            print(f"Like action: {like_result}")
+            
+            # Verify like state after click
+            if like_result == 'CLICKED':
+                time.sleep(0.3)
+                verify_like = safari.run_js(
+                    "(function() {"
+                    "var svg = document.querySelector('[data-e2e=\"like-icon\"] svg');"
+                    "if (!svg) return 'SVG_NOT_FOUND';"
+                    "var fill = window.getComputedStyle(svg).fill;"
+                    "return fill.includes('255, 56, 92') ? 'CONFIRMED_LIKED' : 'NOT_LIKED';"
+                    "})();"
+                )
+                print(f"Like verification: {verify_like}")
+            
+            safari.take_screenshot(f"video_{i}_liked", screenshot_dir)
+            
+            # 2. COMMENT on video
+            print("\n--- COMMENT ---")
             # First check if panel is ALREADY open (persists on scroll)
             panel_open = safari.run_js("""
                 var container = document.querySelector('[class*="DivInputEditorContainer"]');
@@ -765,16 +798,66 @@ class TestIntegration:
             
             safari.take_screenshot(f"video_{i}_end", screenshot_dir)
             
-            # 3. Scroll to next video
-            print("Scrolling to next video...")
-            safari.activate()
-            time.sleep(0.2)
-            pyautogui.press('down')
-            time.sleep(3) # Wait for scroll and load
+            # 3. SCROLL to next video
+            print("\n--- SCROLL ---")
             
-            # Verify scroll worked
-            new_url = safari.get_url()
-            print(f"After scroll URL: {new_url[:60]}...")
+            # Get current video identifier (like count or username)
+            before_info = safari.run_js(
+                "var u = document.querySelector('[data-e2e=\"video-author-uniqueid\"]');"
+                "var c = document.querySelector('[data-e2e=\"like-count\"]');"
+                "(u ? u.innerText : '') + '|' + (c ? c.innerText : '');"
+            )
+            print(f"Before scroll: {before_info}")
+            
+            # Click on VIDEO area (left side) to deselect comment field, then scroll
+            print("Clicking on video area to deselect comment field...")
+            safari.activate()
+            time.sleep(0.1)
+            
+            # Get video container position
+            video_click = safari.run_js(
+                "var v = document.querySelector('video') || document.querySelector('[class*=\"DivVideoContainer\"]');"
+                "if(v) { var r = v.getBoundingClientRect(); Math.round(r.left + r.width/2) + ',' + Math.round(r.top + r.height/2); }"
+                "else { '400,400'; }"
+            )
+            print(f"Video center: {video_click}")
+            
+            if ',' in video_click:
+                # Get Safari window position
+                bounds = subprocess.run(
+                    ["osascript", "-e", 'tell application "Safari" to get bounds of front window'],
+                    capture_output=True, text=True
+                ).stdout.strip()
+                parts = [int(x.strip()) for x in bounds.split(',')]
+                win_x, win_y = parts[0], parts[1]
+                
+                coords = video_click.split(',')
+                click_x = win_x + int(coords[0])
+                click_y = win_y + int(coords[1]) + 75  # toolbar offset
+                
+                print(f"Clicking at screen ({click_x}, {click_y})")
+                pyautogui.click(click_x, click_y)
+                time.sleep(0.2)
+            
+            # Now press down arrow
+            print("Pressing down arrow...")
+            pyautogui.press('down')
+            time.sleep(2)
+            
+            # Check if video changed
+            after_info = safari.run_js(
+                "var u = document.querySelector('[data-e2e=\"video-author-uniqueid\"]');"
+                "var c = document.querySelector('[data-e2e=\"like-count\"]');"
+                "(u ? u.innerText : '') + '|' + (c ? c.innerText : '');"
+            )
+            print(f"After scroll: {after_info}")
+            
+            if after_info != before_info:
+                print("Scroll verification: SUCCESS - Video changed!")
+            else:
+                print("Scroll verification: Same video (may need retry)")
+            
+            safari.take_screenshot(f"video_{i}_scrolled", screenshot_dir)
 
 
 # =============================================================================

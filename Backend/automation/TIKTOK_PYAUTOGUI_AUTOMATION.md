@@ -1,6 +1,6 @@
 # TikTok PyAutoGUI Automation Guide
 > **Status**: ✅ VERIFIED WORKING
-> **Date**: 2024-12-06
+> **Date**: 2024-12-07
 > **Environment**: macOS / Safari
 
 ## Executive Summary
@@ -39,6 +39,44 @@ for (var icon of icons) {
 
 ---
 
+## 🚀 Optimizations
+
+### 1. Smart Like Detection (Toggle Prevention)
+Video pages are stateful. Clicking a like button blindly will **unlike** a video if it's already liked.
+We inspect the `fill` color of the SVG icon to determine state before acting.
+
+**Logic:**
+```javascript
+// Check for like state (specific to like icon)
+var isLiked = false;
+var svg = el.querySelector('svg'); 
+if (svg) {
+    var fill = window.getComputedStyle(svg).fill;
+    // Red color indicates Liked
+    isLiked = fill.includes('255, 56, 92') || fill.includes('rgb(255, 56, 92)');
+}
+```
+*   **If `isLiked == true`**: Skip click (Log: "Already Liked").
+*   **If `isLiked == false`**: Perform click.
+
+### 2. Persistent Comment Panel (Click Reduction)
+The comment panel is a **globally persistent** element in the DOM overlay. When scrolling from Video A to Video B, if the panel was open, it **stays open**.
+Blindly clicking the comment icon again might close it or interact with the wrong element.
+
+**Optimization:**
+Before finding the comment icon, check if the panel is already open:
+```javascript
+var container = document.querySelector('[class*="DivInputEditorContainer"]');
+var footer = document.querySelector('[class*="DivCommentFooter"]');
+var isOpen = (!!container || !!footer);
+```
+*   **If `isOpen`**: Skip icon click -> Immediately focus input.
+*   **If `!isOpen`**: Find and click `comment-icon`.
+
+**Benefit**: Saves ~2 seconds and 1 click per video interaction.
+
+---
+
 ## 🛠️ Implementation Workflow
 
 ### 1. Calculate Screen Coordinates
@@ -74,7 +112,7 @@ js_code = """
     var visible = null;
     for (var icon of icons) {
         var rect = icon.getBoundingClientRect();
-        if (rect.top > 100 && rect.top < 900) { // Safety margins
+        if (rect.top > 0 && rect.top < window.innerHeight) { 
             visible = {x: rect.left + rect.width/2, y: rect.top + rect.height/2};
             break;
         }
@@ -98,7 +136,7 @@ pyautogui.click(screen_x, screen_y)
 
 When the automation runs correctly, observe these indicators:
 
-1.  **Panel Opens**: The comment sidebar slides open.
+1.  **Panel Opens**: The comment sidebar slides open (or stays open).
 2.  **Input Focus**: The text cursor appears in the "Add comment..." field.
 3.  **Typing**: Text appears character-by-character (e.g., `NiceVideo2024`).
 4.  **Button Activation**: The "Post" button turns from grey/faded to **RED** (`rgb(255, 87, 111)`).

@@ -4,7 +4,7 @@ Phase 3: Pre/Post Social Score + Coaching
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 
 from database.connection import get_db

@@ -139,12 +139,13 @@ class TikTokEngagement:
     
     # ==================== Initialization ====================
     
-    async def start(self, url: str = "https://www.tiktok.com/en/") -> bool:
+    async def start(self, url: str = "https://www.tiktok.com/en/", find_existing: bool = True) -> bool:
         """
         Start the browser and initialize the automation.
         
         Args:
             url: Initial URL to navigate to
+            find_existing: If True, try to find existing Safari window with TikTok
             
         Returns:
             True if started successfully.
@@ -155,7 +156,24 @@ class TikTokEngagement:
             
             if self.browser_type == "safari":
                 self.safari_controller = SafariAppController()
-                await self.safari_controller.launch_safari(url)
+                
+                # Try to find existing TikTok window first
+                if find_existing:
+                    logger.info("🔍 Looking for existing Safari window with TikTok...")
+                    found = await self.safari_controller.activate_tiktok_window(require_logged_in=True)
+                    
+                    if found:
+                        logger.info("✅ Found existing TikTok session, using it")
+                        await asyncio.sleep(2)
+                        # Get current URL
+                        self.current_url = await self.get_current_url()
+                        # Check login status
+                        await self.check_login_status()
+                    else:
+                        logger.info("📝 No existing TikTok session found, opening new one...")
+                        await self.safari_controller.launch_safari(url)
+                else:
+                    await self.safari_controller.launch_safari(url)
             else:
                 self.login_automation = TikTokLoginAutomationV2(
                     browser_type=self.browser_type,
@@ -283,6 +301,121 @@ class TikTokEngagement:
     async def navigate_to_video(self, video_url: str) -> bool:
         """Navigate to a specific video."""
         return await self.navigate_to_url(video_url)
+    
+    async def go_to_next_video(self) -> bool:
+        """
+        Navigate to the next video on FYP (swipe down or press down arrow).
+        
+        Returns:
+            True if navigation was successful.
+        """
+        try:
+            if self.safari_controller:
+                # Use JavaScript to scroll or use keyboard
+                # TikTok FYP uses arrow keys or swipe gestures
+                script = '''
+                tell application "Safari"
+                    tell front window
+                        tell current tab
+                            do JavaScript "window.scrollBy(0, window.innerHeight);"
+                        end tell
+                    end tell
+                end tell
+                '''
+                self.safari_controller._run_applescript(script)
+                await asyncio.sleep(1)  # Wait for video to load
+                
+                # Update current URL
+                self.current_url = await self.get_current_url()
+                return True
+            elif self.login_automation and self.login_automation.page:
+                # Use Playwright keyboard
+                await self.login_automation.page.keyboard.press("ArrowDown")
+                await asyncio.sleep(1)
+                self.current_url = self.login_automation.page.url
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Go to next video error: {e}")
+            return False
+    
+    async def get_current_url(self) -> str:
+        """
+        Get the current page URL.
+        
+        Returns:
+            Current URL string.
+        """
+        try:
+            if self.safari_controller:
+                script = '''
+                tell application "Safari"
+                    tell front window
+                        tell current tab
+                            return URL
+                        end tell
+                    end tell
+                end tell
+                '''
+                url = self.safari_controller._run_applescript(script).strip()
+                self.current_url = url
+                return url
+            elif self.login_automation and self.login_automation.page:
+                url = self.login_automation.page.url
+                self.current_url = url
+                return url
+            return self.current_url or ""
+        except Exception as e:
+            logger.debug(f"Get current URL error: {e}")
+            return self.current_url or ""
+    
+    async def get_current_video_info(self) -> Dict:
+        """
+        Get information about the current video.
+        
+        Returns:
+            Dict with username, caption, video_id, etc.
+        """
+        try:
+            # Use simpler JavaScript that avoids escaping issues
+            js_code = """
+            (function() {
+                var info = {};
+                var usernameEl = document.querySelector('[data-e2e="browse-username"]') || document.querySelector('a[href*="/@"]');
+                if (usernameEl) {
+                    var href = usernameEl.getAttribute('href') || '';
+                    var match = href.match(/@([^/]+)/);
+                    info.username = match ? match[1] : usernameEl.textContent.trim().replace('@', '');
+                }
+                var captionEl = document.querySelector('[data-e2e="browse-video-desc"]');
+                if (captionEl) {
+                    info.caption = captionEl.textContent.trim();
+                }
+                var url = window.location.href;
+                var videoMatch = url.match(/\\/video\\/(\\d+)/);
+                if (videoMatch) {
+                    info.video_id = videoMatch[1];
+                }
+                var likeCountEl = document.querySelector('[data-e2e="like-count"]');
+                if (likeCountEl) {
+                    info.like_count = likeCountEl.textContent.trim();
+                }
+                return JSON.stringify(info);
+            })();
+            """
+            
+            result = await self._run_js(js_code)
+            if result:
+                import json
+                try:
+                    return json.loads(result)
+                except json.JSONDecodeError:
+                    pass
+            
+            return {}
+        except Exception as e:
+            logger.debug(f"Get video info error: {e}")
+            return {}
     
     async def search(self, query: str) -> bool:
         """
@@ -466,6 +599,107 @@ class TikTokEngagement:
         except Exception as e:
             logger.error(f"Comment error: {e}")
             return {"success": False, "error": str(e), "text": text}
+    
+    async def verify_comment_at_top(self, comment_text: str, username: str = None) -> Dict:
+        """
+        Verify that a comment appears at the top of the comments list.
+        
+        Args:
+            comment_text: The comment text to look for
+            username: Optional username to verify (your username)
+            
+        Returns:
+            Dict with verified (bool), found_at_top (bool), username_match (bool), details
+        """
+        try:
+            await asyncio.sleep(2)  # Wait for comment to appear
+            
+            # Get first few comments from the top
+            js_code = """
+            (function() {
+                var comments = [];
+                var items = document.querySelectorAll('[data-e2e="comment-level-1"]');
+                for (var i = 0; i < Math.min(5, items.length); i++) {
+                    var item = items[i];
+                    var wrapper = item.closest('div[class*="Comment"]');
+                    if (!wrapper) wrapper = item.parentElement.parentElement;
+                    var userEl = wrapper ? wrapper.querySelector('[data-e2e="comment-username-1"]') : null;
+                    if (!userEl) userEl = wrapper ? wrapper.querySelector('a[href*="/@"]') : null;
+                    var username = userEl ? userEl.textContent.trim().replace('@', '') : 'unknown';
+                    var text = item.textContent.trim();
+                    comments.push({username: username, text: text, index: i});
+                }
+                return JSON.stringify(comments);
+            })();
+            """
+            
+            result = await self._run_js(js_code)
+            
+            if not result or result == "[]":
+                return {
+                    "verified": False,
+                    "found_at_top": False,
+                    "username_match": False,
+                    "error": "No comments found",
+                    "top_comments": []
+                }
+            
+            import json
+            try:
+                comments = json.loads(result)
+            except:
+                return {
+                    "verified": False,
+                    "found_at_top": False,
+                    "username_match": False,
+                    "error": "Failed to parse comments",
+                    "top_comments": []
+                }
+            
+            # Check if our comment is at the top
+            found_at_top = False
+            username_match = False
+            comment_match = False
+            
+            if comments:
+                top_comment = comments[0]
+                # Check if text matches (allow partial match)
+                comment_lower = comment_text.lower()
+                top_text_lower = top_comment.get("text", "").lower()
+                
+                # Check if comment text appears in top comment
+                if comment_lower in top_text_lower or top_text_lower in comment_lower:
+                    comment_match = True
+                
+                # Check if username matches (if provided)
+                if username:
+                    top_username = top_comment.get("username", "").lower()
+                    username_lower = username.lower()
+                    if username_lower in top_username or top_username in username_lower:
+                        username_match = True
+                
+                found_at_top = comment_match
+            
+            verified = found_at_top and (username_match if username else True)
+            
+            return {
+                "verified": verified,
+                "found_at_top": found_at_top,
+                "username_match": username_match,
+                "comment_match": comment_match,
+                "top_comments": comments[:3],
+                "top_comment": comments[0] if comments else None
+            }
+            
+        except Exception as e:
+            logger.error(f"Verify comment error: {e}")
+            return {
+                "verified": False,
+                "found_at_top": False,
+                "username_match": False,
+                "error": str(e),
+                "top_comments": []
+            }
     
     async def _verify_comment_posted(self, text: str) -> bool:
         """

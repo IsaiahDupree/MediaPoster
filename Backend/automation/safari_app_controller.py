@@ -41,9 +41,147 @@ class SafariAppController:
             logger.warning(f"AppleScript timeout after {timeout}s - Safari may be slow to launch")
             raise
     
+    async def find_tiktok_window(self, require_logged_in: bool = True) -> Optional[Dict]:
+        """
+        Find Safari window/tab with TikTok, optionally checking if logged in.
+        
+        Args:
+            require_logged_in: If True, only return windows where user is logged in
+            
+        Returns:
+            Dict with window_index, tab_index, url, is_logged_in, or None if not found
+        """
+        try:
+            script = '''
+            tell application "Safari"
+                set windowList to every window
+                repeat with w from 1 to count of windowList
+                    set tabList to every tab of window w
+                    repeat with t from 1 to count of tabList
+                        set tabUrl to URL of tab t of window w
+                        if tabUrl contains "tiktok.com" then
+                            return {w, t, tabUrl}
+                        end if
+                    end repeat
+                end repeat
+                return "not_found"
+            end tell
+            '''
+            
+            result = self._run_applescript(script, timeout=10)
+            
+            if "not_found" in result or result == "":
+                return None
+            
+            # Parse result: "{window_index, tab_index, url}"
+            import re
+            match = re.search(r'\{(\d+),\s*(\d+),\s*"([^"]+)"\}', result)
+            if not match:
+                return None
+            
+            window_idx = int(match.group(1))
+            tab_idx = int(match.group(2))
+            url = match.group(3)
+            
+            # Check if logged in
+            is_logged_in = False
+            if require_logged_in:
+                # Switch to this tab and check login status
+                check_script = f'''
+                tell application "Safari"
+                    set current tab of window {window_idx} to tab {tab_idx} of window {window_idx}
+                    set index of window {window_idx} to 1
+                    tell window {window_idx}
+                        tell tab {tab_idx}
+                            do JavaScript "
+                                (function() {{
+                                    var profileIcon = document.querySelector('[data-e2e=\\"profile-icon\\"]');
+                                    var uploadIcon = document.querySelector('[data-e2e=\\"upload-icon\\"]');
+                                    return (profileIcon || uploadIcon) ? 'logged_in' : 'not_logged_in';
+                                }})();
+                            "
+                        end tell
+                    end tell
+                end tell
+                '''
+                try:
+                    login_result = self._run_applescript(check_script, timeout=5)
+                    is_logged_in = 'logged_in' in login_result.lower()
+                except:
+                    is_logged_in = False
+            
+            return {
+                "window_index": window_idx,
+                "tab_index": tab_idx,
+                "url": url,
+                "is_logged_in": is_logged_in
+            }
+            
+        except Exception as e:
+            logger.debug(f"Error finding TikTok window: {e}")
+            return None
+    
+    async def activate_tiktok_window(self, require_logged_in: bool = True) -> bool:
+        """
+        Find and activate Safari window/tab with TikTok.
+        
+        Args:
+            require_logged_in: If True, only activate if user is logged in
+            
+        Returns:
+            True if found and activated, False otherwise
+        """
+        try:
+            tiktok_info = await self.find_tiktok_window(require_logged_in=require_logged_in)
+            
+            if not tiktok_info:
+                logger.warning("⚠️ No TikTok tab found in Safari")
+                return False
+            
+            if require_logged_in and not tiktok_info.get("is_logged_in"):
+                logger.warning("⚠️ Found TikTok tab but user is not logged in")
+                return False
+            
+            # Activate the window and tab
+            window_idx = tiktok_info["window_index"]
+            tab_idx = tiktok_info["tab_index"]
+            
+            script = f'''
+            tell application "Safari"
+                activate
+                set current tab of window {window_idx} to tab {tab_idx} of window {window_idx}
+                set index of window {window_idx} to 1
+            end tell
+            '''
+            
+            self._run_applescript(script, timeout=10)
+            await asyncio.sleep(1)  # Wait for activation
+            
+            logger.info(f"✅ Activated TikTok tab: {tiktok_info['url'][:50]}...")
+            if tiktok_info.get("is_logged_in"):
+                logger.info("✅ User is logged in")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error activating TikTok window: {e}")
+            return False
+    
     async def launch_safari(self, url: str = "https://www.tiktok.com/en/"):
         """Launch Safari.app with a specific URL."""
         logger.info("Launching Safari.app with your actual profile...")
+        
+        # First, try to find existing TikTok window
+        logger.info("🔍 Looking for existing TikTok tab...")
+        found = await self.activate_tiktok_window(require_logged_in=False)
+        
+        if found:
+            logger.info("✅ Found existing TikTok tab, using it")
+            await asyncio.sleep(2)
+            return
+        
+        # If not found, open new tab
+        logger.info("📝 No TikTok tab found, opening new one...")
         
         # First, try to just open Safari (simpler, faster)
         try:

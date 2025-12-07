@@ -1,0 +1,773 @@
+selector and js path "Skip to content
+Chat history
+
+
+
+
+
+You said:
+what element would we need in order to obtain the text and select field for websites like tiktok instagrm
+ChatGPT said:
+
+Thought for 14s
+Short answer: you don’t need a special TikTok/Instagram element — you need to target text inputs + contenteditable fields and/or the current selection from the DOM.
+Let me break it into the two main cases.
+
+1. Getting the currently typed text (caption, comment, DM, etc.)
+On modern apps like TikTok/Instagram, text isn’t always in a classic <input> or <textarea>. Very often it’s a div with contenteditable="true".
+So your logic should look for:
+
+<textarea>
+<input type="text">, <input type="search">, etc.
+Any element where element.isContentEditable === true
+(this covers TikTok/IG caption fields, comment boxes, DM boxes, etc.)
+A robust pattern is: grab the active element and check if it’s a text field.
+function getActiveTextField() {
+  const el = document.activeElement;
+  if (!el) return null;
+
+  const tag = el.tagName;
+  const type = (el.type || '').toLowerCase();
+
+  const isTextInput =
+    tag === 'TEXTAREA' ||
+    (tag === 'INPUT' && ['text', 'search', 'email', 'url', 'tel', 'password'].includes(type));
+
+  const isEditableDiv = el.isContentEditable === true;
+
+  if (isTextInput || isEditableDiv) {
+    return el;
+  }
+
+  return null;
+}
+
+// Usage:
+const field = getActiveTextField();
+const value =
+  field?.value !== undefined
+    ? field.value
+    : field?.innerText ?? '';
+On TikTok/Instagram:
+Caption fields, comment fields, and DM inputs are usually contenteditable divs (React-controlled).
+This approach still works because you’re just reading innerText (or textContent) off the focused editable element.
+2. Getting the selected text anywhere on the page
+If you want “whatever the user has highlighted” (not just inside inputs), you use the selection API:
+function getSelectedText() {
+  const selection = window.getSelection();
+  return selection ? selection.toString() : '';
+}
+You can combine that with the field detection:
+function getTextContext() {
+  const selected = getSelectedText().trim();
+  if (selected) {
+    return { mode: 'selection', text: selected };
+  }
+
+  const field = getActiveTextField();
+  if (field) {
+    const text = field.value !== undefined ? field.value : field.innerText;
+    return { mode: 'field', text };
+  }
+
+  return { mode: 'none', text: '' };
+}
+3. If you’re doing this in a Chrome extension
+Your content script just needs to run on TikTok/Instagram URLs, e.g.:
+// manifest.json
+"content_scripts": [
+  {
+    "matches": [
+      "*://*.tiktok.com/*",
+      "*://*.instagram.com/*"
+    ],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }
+]
+Then content.js can use the helper functions above to:
+Grab the current selection, or
+Grab the active text field (caption/comment/DM box)
+…and send that text to your background script / external API.
+TL;DR
+For TikTok/Instagram you’re mainly dealing with:
+textarea
+input[type=text|search|…]
+div[contenteditable="true"] (and similar)
+Use:
+document.activeElement + isContentEditable to get the field
+window.getSelection() to get highlighted text
+That combo will cover pretty much every “obtain the text + select field” use case on those sites.
+You said:
+Uploaded image
+like what copy method? 
+ChatGPT said:
+
+Thought for 17s
+Nice, that screenshot helps a lot 👌
+For what you want (a script/extension that grabs text from elements like this), the one you care about is:
+
+➡️ “Copy selector”
+Why “Copy selector”?
+It gives you a CSS selector string.
+You can drop it straight into code like:
+const el = document.querySelector('PASTED_SELECTOR_HERE');
+const text = el?.innerText || el?.textContent || '';
+That’s exactly what you want for:
+Chrome extensions (content scripts)
+Userscripts
+Any DOM-scraping JS
+What the other ones are (and why they’re less useful here)
+Copy element – copies the whole HTML of that node (<span class="...">686.6K</span>). Good for debugging, not for targeting in code.
+Copy outerHTML – same idea; full HTML string of that element.
+Copy JS path – gives you a long document.querySelector(...).children[0]... style path. Works, but it’s brittle and ugly to maintain.
+Copy XPath / Copy full XPath – mainly used for Selenium-style automation. Overkill and fragile for extension-style DOM work.
+Copy styles – just CSS rules, not helpful for selecting.
+One important tweak
+When you paste the selector Chrome gives you, it’ll often look like:
+"div.css-1ltrz9p4-7937d8bb button.css-1sdk0s-7937d8bb span.css-1au6o1s-7937d8bb"
+Those css-...-7937d8bb classes are auto-generated and can change, so:
+Use “Copy selector” as a starting point.
+Then manually simplify it to something more stable, like:
+const likeCountEl = document.querySelector('button[aria-label*="likes"] span');
+Look for attributes like:
+aria-label
+data-* attributes (data-e2e, data-testid, etc.)
+Stable-looking class names (not hashed gibberish)
+Those make great long-term selectors.
+So:
+Use Copy → Copy selector, then clean it up into a stable CSS selector and feed it into document.querySelector in your extension.
+You said:
+so that can be used for automation, with playwrite or apple script or other automation frameworks? 
+ChatGPT said:
+
+Thought for 21s
+Yep, exactly 💡
+Those selectors you copy from DevTools are the same kind of selectors Playwright, Puppeteer, Selenium, etc. use under the hood — and you can also feed them into JavaScript that you call from AppleScript.
+
+1. Using the selector in Playwright
+If you hit Copy → Copy selector, you’ll get something like:
+button[aria-label="Like video"] span
+You can plug that straight into Playwright:
+// get the text
+const likeText = await page.locator('button[aria-label="Like video"] span').innerText();
+
+// click the like button
+await page.click('button[aria-label="Like video"]');
+Playwright also supports:
+page.locator('css=...')
+page.click('css=...')
+…but plain CSS (no css= prefix) works fine.
+⚠️ Only thing to watch: DevTools often gives you super-long selectors with hashed class names (e.g. .css-1au6o1s-7937d8bb). Those are brittle. Use them as a starting point, then simplify to stable attributes like aria-label, data-e2e, etc.
+2. Using the selector from AppleScript (via JavaScript in Safari)
+Safari itself doesn’t understand CSS selectors,
+but you can send JavaScript to the page from AppleScript.
+Rough example:
+
+set cssSelector to "button[aria-label*='likes'] span"
+set js to "document.querySelector('" & cssSelector & "').innerText"
+
+tell application "Safari"
+    do JavaScript js in front document
+end tell
+What’s happening:
+AppleScript calls do JavaScript ... in Safari.
+That JS uses document.querySelector('<your selector>').
+The selector is exactly what you copied from DevTools (maybe cleaned up).
+(That’s why you enabled “Allow JavaScript from Apple Events” in Safari: it lets AppleScript/JXA run JS in the page.)
+You can do clicks too:
+
+document.querySelector('button[aria-label="Like video"]').click();
+wrapped inside the AppleScript do JavaScript.
+3. Other automation frameworks
+Same idea applies almost everywhere:
+Puppeteer / Playwright / Selenium / Cypress
+→ Take CSS/XPath selectors directly (page.$(), page.locator(), driver.findElement(By.css(...)), etc.).
+Any framework that can run page JS
+→ Use document.querySelector('PASTED_SELECTOR') or document.querySelectorAll(...) inside the injected script.
+TL;DR
+Yes, the selector you copy from Chrome DevTools can be used directly in Playwright and most automation tools.
+For AppleScript, you pass that selector into JavaScript (document.querySelector) via do JavaScript.
+Just remember to simplify the selector so it doesn’t rely on unstable, auto-generated class names.
+You said:
+#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(2) > span  document.querySelector("#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(2) > span")
+ChatGPT said:
+
+Thought for 23s
+Yes! That selector is exactly the kind of thing you can use in automation 👇
+const el = document.querySelector(
+  "#one-column-item-0 >
+You said:
+#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(3) > span  document.querySelector("#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(3) > span")
+ChatGPT said:
+
+Thought for 15s
+Yup, that’s a valid selector + query:
+document.querySelector(
+  "#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(3) > span"
+);
+That will return the <span> for the 3rd button’s count in that action bar (e.g. comments/share/etc. depending on TikTok’s layout).
+You can use it exactly like this in any automation:
+
+Plain JS / AppleScript-injected JS
+const el = document.querySelector(
+  "#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(3) > span"
+);
+
+const text = el?.innerText?.trim() ?? "";
+console.log(text);
+In AppleScript (Safari):
+set js to "const el = document.querySelector('#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(3) > span'); el ? el.innerText.trim() : '';"
+
+tell application "Safari"
+    do JavaScript js in front document
+end tell
+Playwright
+const commentCount = await page
+  .locator('#one-column-item-0 > div > section.css-11fh2ar-7937d88b--SectionActionBarContainer.e12arnib0 > button:nth-child(3) > span')
+  .innerText();
+But: this is very brittle
+css-11fh2ar-7937d88b--SectionActionBarContainer is auto-generated.
+nth-child(3) will break if TikTok adds/reorders buttons.
+Better to simplify once you know what that element is. For example:
+// minimal but similar structure; less brittle
+const el = document.querySelector(
+  '#one-column-item-0 section[role="group"] button:nth-of-type(3) span'
+);
+Or, if you can find a stable attribute (ideal):
+// example pattern – adjust to whatever real attribute exists
+const el = document.querySelector(
+  'section[aria-label*="Action bar"] button[aria-label*="Comments"] span'
+);
+So:
+✅ What you pasted works and can be used in Playwright / AppleScript / other frameworks.
+⚠️ Use it as a starting point, then strip out the noisy classes and rely on more stable attributes (aria-, data-*, or simpler hierarchy) so your automation doesn’t break every time TikTok tweaks their CSS.
+You said:
+#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-1v8ruav-7937d88b--DivCommentMain.e1ozpz0h3 > div.css-fv26y3-7937d88b--DivCommentListContainer.e1v8eaq60 > div:nth-child(1) > div > div.css-7waxo-7937d88b--DivCommentItemWrapper.e1395o4f0 > div.css-f1qr57-7937d88b--DivCommentContentWrapper.e1395o4f2 > span  document.querySelector("#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-1v8ruav-7937d88b--DivCommentMain.e1ozpz0h3 > div.css-fv26y3-7937d88b--DivCommentListContainer.e1v8eaq60 > div:nth-child(1) > div > div.css-7waxo-7937d88b--DivCommentItemWrapper.e1395o4f0 > div.css-f1qr57-7937d88b--DivCommentContentWrapper.e1395o4f2 > span")
+ChatGPT said:
+
+Thought for 26s
+Yesss, that’s exactly the kind of thing you can use 💻
+…but that raw selector is way too long + fragile to ship as-is.
+You pasted:
+
+document.querySelector(
+  "#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-1v8ruav-7937d88b--DivCommentMain.e1ozpz0h3 > div.css-fv26y3-7937d88b--DivCommentListContainer.e1v8eaq60 > div:nth-child(1) > div > div.css-7waxo-7937d88b--DivCommentItemWrapper.e1395o4f0 > div.css-f1qr57-7937d88b--DivCommentContentWrapper.e1395o4f2 > span"
+);
+That will return the first comment text span right now.
+But any tiny layout change or new wrapper div will break it.
+Step 1 – Use it as a starting point
+From that path we’ve learned:
+Root: #main-content-homepage_hot
+There’s a list container: DivCommentListContainer
+Each item: DivCommentItemWrapper
+Comment text: DivCommentContentWrapper > span
+TikTok’s classes are modular:
+css-XXXX--DivCommentContentWrapper.YYYY
+The DivCommentContentWrapper part is usually stable, the gibberish around it changes.
+
+So we can simplify to:
+
+// All comment text spans
+const commentNodes = document.querySelectorAll(
+  '#main-content-homepage_hot [class*="DivCommentContentWrapper"] > span'
+);
+
+const comments = [...commentNodes].map(el => el.innerText.trim());
+console.log(comments);
+#main-content-homepage_hot – still anchors us to the main video.
+[class*="DivCommentContentWrapper"] – matches any class name that contains that stable component name.
+> span – the actual text element.
+To get just the first comment:
+const firstComment =
+  document.querySelector(
+    '#main-content-homepage_hot [class*="DivCommentContentWrapper"] > span'
+  )?.innerText.trim() ?? '';
+Step 2 – Drop this into automation tools
+Playwright
+const commentLocator = page.locator(
+  '#main-content-homepage_hot [class*="DivCommentContentWrapper"] > span'
+);
+
+const firstComment = await commentLocator.nth(0).innerText();
+const allComments = await commentLocator.allInnerTexts(); // array of strings
+AppleScript → Safari (via injected JS)
+set js to "
+  const nodes = document.querySelectorAll('#main-content-homepage_hot [class*=\"DivCommentContentWrapper\"] > span');
+  [...nodes].map(el => el.innerText.trim()).join('\\n');
+"
+
+tell application "Safari"
+    do JavaScript js in front document
+end tell
+Mental model to keep using
+Copy selector from DevTools ✅
+Use that giant path to identify:
+root id / container
+repeating wrapper class
+inner text element
+Replace:
+> div > div > div... with shorter hierarchy
+css-8f4z5s-7937d88b--Something with [class*="Something"]
+nth-child(1) with .nth(0) in Playwright or just grabbing the 0th element in JS.
+Keep throwing me paths like this and I’ll help you turn each into a stable, automation-ready selector.
+You said:
+#placeholder-ilvl #main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-oxqjg9-7937d88b--DivCommentFooter.e1ozpz0h4 > div > div > div > div.css-4ypvqz-7937d88b--DivLayoutContainer.efkjbru1 > div  document.querySelector("#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-oxqjg9-7937d88b--DivCommentFooter.e1ozpz0h4 > div > div > div > div.css-4ypvqz-7937d88b--DivLayoutContainer.efkjbru1 > div")  
+ChatGPT said:
+
+Stopped thinking
+You said:
+#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-oxqjg9-7937d88b--DivCommentFooter.e1ozpz0h4 > div > div > div > div.css-ykwl00-7937d88b--DivPostButton.efkjbru6  document.querySelector("#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-oxqjg9-7937d88b--DivCommentFooter.e1ozpz0h4 > div > div > div > div.css-ykwl00-7937d88b--DivPostButton.efkjbru6")
+ChatGPT said:
+
+Thought for 10s
+Nice, you’ve basically just grabbed:
+The comment footer container / layout div
+The “Post” button in that footer
+Let’s decode and then make them usable + stable.
+1. Your raw selectors
+You posted:
+// Footer layout container
+document.querySelector(
+  "#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-oxqjg9-7937d88b--DivCommentFooter.e1ozpz0h4 > div > div > div > div.css-4ypvqz-7937d88b--DivLayoutContainer.efkjbru1 > div"
+);
+
+// Post button wrapper
+document.querySelector(
+  "#main-content-homepage_hot > aside > div.css-8f4z5s-7937d88b--DivCommentSidebarTransitionWrapper.e1vhiwmz1.comment-sidebar-transition-enter-done > section > div.css-oxqjg9-7937d88b--DivCommentFooter.e1ozpz0h4 > div > div > div > div.css-ykwl00-7937d88b--DivPostButton.efkjbru6"
+);
+Yes: those will work right now in the browser and in automation (Playwright, puppeteer, AppleScript-injected JS, etc.).
+But they’re super brittle.
+
+2. Turn them into stable selectors
+TikTok’s classes follow the pattern:
+css-XXXXXX-7937d88b--DivSomething.SOMETHING
+The DivSomething part is usually stable. So we can target that via class*="DivCommentFooter" and class*="DivPostButton".
+Comment footer container (where the input lives)
+const commentFooter = document.querySelector(
+  '#main-content-homepage_hot [class*="DivCommentFooter"]'
+);
+From there you can find the input field (contenteditable div) inside:
+const commentInput = commentFooter?.querySelector('[contenteditable="true"]');
+
+const currentText = commentInput?.innerText.trim() ?? '';
+Post button
+const postButton = commentFooter?.querySelector('[class*="DivPostButton"]');
+
+// Click it:
+postButton?.click();
+That’s way cleaner and more resilient than the huge path.
+3. Example: full automation helper snippet
+You can drop this into:
+A content script (Chrome extension)
+page.evaluate in Playwright
+do JavaScript in Safari from AppleScript
+function getCommentContext() {
+  const footer = document.querySelector(
+    '#main-content-homepage_hot [class*="DivCommentFooter"]'
+  );
+  if (!footer) return { text: '', canPost: false };
+
+  const input = footer.querySelector('[contenteditable="true"]');
+  const postBtn = footer.querySelector('[class*="DivPostButton"]');
+
+  const text = input?.innerText.trim() ?? '';
+  const canPost = !!postBtn && text.length > 0;
+
+  return { text, canPost };
+}
+
+function postCurrentComment() {
+  const footer = document.querySelector(
+    '#main-content-homepage_hot [class*="DivCommentFooter"]'
+  );
+  if (!footer) return false;
+
+  const postBtn = footer.querySelector('[class*="DivPostButton"]');
+  if (!postBtn) return false;
+
+  postBtn.click();
+  return true;
+}
+In Playwright:
+const commentText = await page.evaluate(() => {
+  const footer = document.querySelector('#main-content-homepage_hot [class*="DivCommentFooter"]');
+  const input = footer?.querySelector('[contenteditable="true"]');
+  return input?.innerText.trim() ?? '';
+});
+
+await page.evaluate(() => {
+  const footer = document.querySelector('#main-content-homepage_hot [class*="DivCommentFooter"]');
+  const postBtn = footer?.querySelector('[class*="DivPostButton"]');
+  postBtn?.click();
+});
+TL;DR
+✅ Yes, your long selectors are valid and usable in automation.
+🧠 Use them only as a probe, then:
+Anchor to #main-content-homepage_hot
+Use [class*="DivCommentFooter"] and [class*="DivPostButton"]
+Grab [contenteditable="true"] for the text field
+This gives you a nice, reusable pattern for any TikTok comment automation (read text + press Post).
+You said:
+#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div.css-1l0harv-7937d88b--DivSideNavPlaceholderContainer.e9sj7gd0 > div > div.css-1ho3tbu-7937d88b--DivScrollingContentContainer.e9sj7gd5 > div.css-bf8n6f-7937d88b--DivMainNavContainer.exb7d124 > div:nth-child(7) > a > button > div > div.TUXButton-iconContainer > div > svg    document.querySelector("#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div.css-1l0harv-7937d88b--DivSideNavPlaceholderContainer.e9sj7gd0 > div > div.css-1ho3tbu-7937d88b--DivScrollingContentContainer.e9sj7gd5 > div.css-bf8n6f-7937d88b--DivMainNavContainer.exb7d124 > div:nth-child(7) > a > button > div > div.TUXButton-iconContainer > div > svg")
+ChatGPT said:
+
+Thought for 11s
+Perfect, you just grabbed the 7th item in the left-side main nav (that svg icon).
+Let’s turn that monster into something you can actually use in automation without it breaking every other week.
+
+1. What you have right now
+You pasted:
+document.querySelector(
+  "#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div.css-1l0harv-7937d88b--DivSideNavPlaceholderContainer.e9sj7gd0 > div > div.css-1ho3tbu-7937d88b--DivScrollingContentContainer.e9sj7gd5 > div.css-bf8n6f-7937d88b--DivMainNavContainer.exb7d124 > div:nth-child(7) > a > button > div > div.TUXButton-iconContainer > div > svg"
+);
+✅ This works right now.
+❌ It’s super fragile:
+All those css-xxxx-7937d88b--Something classes are generated.
+div:nth-child(7) will break if TikTok adds or reorders nav items.
+You’re selecting the svg, but usually for automation you want the button or a so you can click it.
+2. Make it a stable selector
+We use the same trick as before:
+Keep a stable root/container
+Target a stable component-name fragment (DivMainNavContainer)
+Avoid full path / nth-child when possible
+A good generalized selector for all main nav buttons:
+// All nav buttons in the left sidebar
+const navButtons = document.querySelectorAll(
+  '#app [class*="DivMainNavContainer"] a button'
+);
+Now you can:
+// 7th nav item (index 6)
+const targetButton = navButtons[6];
+targetButton?.click();
+If you really only care about the icon:
+const navIcons = document.querySelectorAll(
+  '#app [class*="DivMainNavContainer"] .TUXButton-iconContainer svg'
+);
+
+const seventhIcon = navIcons[6];
+But again, for automation, click the button, not the svg.
+3. Using this in Playwright / Puppeteer
+// Click the 7th nav item
+await page.locator('#app [class*="DivMainNavContainer"] a button').nth(6).click();
+Or get fancy and map them:
+const labels = await page.locator('#app [class*="DivMainNavContainer"] a').allInnerTexts();
+console.log(labels); // See what each nav is (For You, Following, Friends, etc.)
+If TikTok gives you a stable aria-label on that button (check DevTools!), prefer:
+await page.click('#app [class*="DivMainNavContainer"] button[aria-label*="Inbox"]');
+That’s the dream selector: human-readable and robust.
+4. Using this via AppleScript + Safari
+set js to "
+  const buttons = document.querySelectorAll('#app [class*=\"DivMainNavContainer\"] a button');
+  const target = buttons[6];
+  if (target) target.click();
+"
+
+tell application "Safari"
+    do JavaScript js in front document
+end tell
+Pattern you can keep reusing
+For any crazy DevTools selector you copy:
+Copy selector once.
+Identify:
+A stable root: #app, #main-content-homepage_hot, etc.
+A stable container: [class*="DivMainNavContainer"], [class*="DivCommentFooter"], etc.
+The meaningful element: button, [contenteditable="true"], span, etc.
+Rewrite as:
+document.querySelectorAll(
+  "<root> <container>[class*='DivSomething'] <target>"
+);
+You’re doing exactly the right thing by collecting these – we can keep turning each into a stable, automation-grade selector.
+You said:
+#app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div.css-1l0harv-7937d88b--DivSideNavPlaceholderContainer.e9sj7gd0 > div > div.css-1ho3tbu-7937d88b--DivScrollingContentContainer.e9sj7gd5 > div.css-bf8n6f-7937d88b--DivMainNavContainer.exb7d124 > div:nth-child(7) > a > button > div > div.TUXButton-iconContainer > div > svg   #app > div.css-2kk9ks-7937d88b--BaseBodyContainer.e1pgfmdu0 > div.css-1l0harv-7937d88b--DivSideNavPlaceholderContainer.e9sj7gd0 > div > div.css-1ho3tbu-7937d88b--DivScrollingContentContainer.e9sj7gd5 > div.css-bf8n6f-7937d88b--DivMainNavContainer.exb7d124 > div:nth-child(7) > a > button > div > div.TUXButton-iconContainer > div > svg
+#main-content-messages > div > div.css-1s9gnv8-7937d88b--DivChatBottom.e1m74s5b0 > div.css-chrgrf-7937d88b--DivMessageInputAndSendButton.e1m74s5b1 > div   document.querySelector("#main-content-messages > div > div.css-1s9gnv8-7937d88b--DivChatBottom.e1m74s5b0 > div.css-chrgrf-7937d88b--DivMessageInputAndSendButton.e1m74s5b1 > div")
+ChatGPT said:
+
+Thought for 15s
+Nice, you just grabbed the DM input + send button container on the TikTok messages page. 🙌
+Here’s how to turn that giant selector into something stable + automation-ready.
+
+1. What your selector currently targets
+You pasted:
+document.querySelector(
+  "#main-content-messages > div > div.css-1s9gnv8-7937d88b--DivChatBottom.e1m74s5b0 > div.css-chrgrf-7937d88b--DivMessageInputAndSendButton.e1m74s5b1 > div"
+);
+That div is the bottom chat bar that contains:
+The message input (usually a div[contenteditable="true"])
+The send button
+It works, but it’s too brittle for long-term automation (same story: hashed classes + long > chain).
+2. Stable-ish selector for the DM input area
+We can simplify to:
+// The whole input + send bar
+const bar = document.querySelector(
+  '#main-content-messages [class*="DivMessageInputAndSendButton"]'
+);
+From that bar, grab the actual text field:
+const input = bar?.querySelector('[contenteditable="true"], textarea, input[type="text"]');
+
+const currentText =
+  input?.innerText !== undefined
+    ? input.innerText.trim()
+    : input?.value?.trim() ?? '';
+This gives you the text currently typed into the DM box.
+3. Finding & clicking the send button
+Inside the same bar, you can usually find the send button via:
+const sendButton =
+  bar?.querySelector('button, [role="button"], [class*="Send"]'); // adjust if you see a real class/aria
+
+sendButton?.click();
+You can wrap this as helpers for your automation:
+function getTikTokDMText() {
+  const bar = document.querySelector(
+    '#main-content-messages [class*="DivMessageInputAndSendButton"]'
+  );
+  if (!bar) return '';
+
+  const input = bar.querySelector('[contenteditable="true"], textarea, input[type="text"]');
+  if (!input) return '';
+
+  return input.innerText !== undefined
+    ? input.innerText.trim()
+    : (input.value ?? '').trim();
+}
+
+function clickTikTokDMSend() {
+  const bar = document.querySelector(
+    '#main-content-messages [class*="DivMessageInputAndSendButton"]'
+  );
+  if (!bar) return false;
+
+  const btn = bar.querySelector('button, [role="button"], [class*="Send"]');
+  if (!btn) return false;
+
+  btn.click();
+  return true;
+}
+4. Dropping this into different automation stacks
+Playwright
+// Read DM text
+const dmText = await page.evaluate(() => {
+  const bar = document.querySelector('#main-content-messages [class*="DivMessageInputAndSendButton"]');
+  const input = bar?.querySelector('[contenteditable="true"], textarea, input[type="text"]');
+  if (!input) return '';
+
+  // @ts-ignore
+  return input.innerText !== undefined
+    // @ts-ignore
+    ? input.innerText.trim()
+    : (input.value ?? '').trim();
+});
+
+// Click send
+await page.evaluate(() => {
+  const bar = document.querySelector('#main-content-messages [class*="DivMessageInputAndSendButton"]');
+  const btn = bar?.querySelector('button, [role="button"], [class*="Send"]');
+  // @ts-ignore
+  if (btn) btn.click();
+});
+AppleScript → Safari
+set jsGetText to "
+  const bar = document.querySelector('#main-content-messages [class*=\"DivMessageInputAndSendButton\"]');
+  const input = bar?.querySelector('[contenteditable=\"true\"], textarea, input[type=\"text\"]');
+  if (!input) ''; else (input.innerText !== undefined ? input.innerText.trim() : (input.value ?? '').trim());
+"
+
+tell application "Safari"
+    set dmText to do JavaScript jsGetText in front document
+end tell
+And similarly for a clickTikTokDMSend() snippet.
+Pattern to keep using
+For every TikTok/IG bit you grab:
+Copy the long DevTools selector.
+Find:
+Root: #main-content-messages, #main-content-homepage_hot, #app, etc.
+A stable fragment in classes: DivMessageInputAndSendButton, DivCommentFooter, DivMainNavContainer, etc.
+Then build:
+'<root> [class*="DivSomethingImportant"] <target-element>'
+You’re basically building a little selector library for TikTok; this DM one fits right into that.
+You said:
+#main-content-messages > div > div.css-1s9gnv8-7937d88b--DivChatBottom.e1m74s5b0 > div.css-chrgrf-7937d88b--DivMessageInputAndSendButton.e1m74s5b1 > svg   document.querySelector("#main-content-messages > div > div.css-1s9gnv8-7937d88b--DivChatBottom.e1m74s5b0 > div.css-chrgrf-7937d88b--DivMessageInputAndSendButton.e1m74s5b1 > svg")
+ChatGPT said:
+
+Thought for 7s
+Nice, that one’s clear. You’ve just grabbed the SVG icon inside the DM input bar on the TikTok messages page.
+Raw selector you pasted:
+
+document.querySelector(
+  "#main-content-messages > div > div.css-1s9gnv8-7937d88b--DivChatBottom.e1m74s5b0 > div.css-chrgrf-7937d88b--DivMessageInputAndSendButton.e1m74s5b1 > svg"
+);
+That works, but same story as before: too long + brittle. Let’s turn it into something you can actually rely on.
+1. Simplify into a stable selector
+We already know this wrapper:
+#main-content-messages → messages page
+DivMessageInputAndSendButton → the bottom bar container (input + send + icons)
+So you can do:
+// The whole input+send bar
+const bar = document.querySelector(
+  '#main-content-messages [class*="DivMessageInputAndSendButton"]'
+);
+
+// All icons (svgs) in that bar
+const icons = bar?.querySelectorAll('svg') ?? [];
+
+// Example: first icon (often emoji/attach)
+const firstIcon = icons[0];
+Or in one shot:
+const firstIcon = document.querySelector(
+  '#main-content-messages [class*="DivMessageInputAndSendButton"] svg'
+);
+2. Important: click the button, not just the svg
+Sometimes clicking the SVG works, sometimes all the click handlers are on the parent button or div. Safer pattern:
+// Get the svg you targeted
+const svg = document.querySelector(
+  '#main-content-messages [class*="DivMessageInputAndSendButton"] svg'
+);
+
+// Climb to the clickable ancestor (button or role=button)
+const clickable = svg?.closest('button, [role="button"], div[tabindex]');
+clickable?.click();
+That’s much more robust than only calling svg.click().
+3. Using this in automation
+Playwright
+// Click the first icon in the DM bar
+await page.evaluate(() => {
+  const svg = document.querySelector(
+    '#main-content-messages [class*="DivMessageInputAndSendButton"] svg'
+  );
+  const clickable = svg?.closest('button, [role="button"], div[tabindex]');
+  // @ts-ignore
+  if (clickable) clickable.click();
+});
+AppleScript → Safari
+set js to "
+  const svg = document.querySelector('#main-content-messages [class*=\"DivMessageInputAndSendButton\"] svg');
+  const clickable = svg?.closest('button, [role=\"button\"], div[tabindex]');
+  if (clickable) clickable.click();
+"
+
+tell application "Safari"
+    do JavaScript js in front document
+end tell
+Mental pattern (you’re doing this right)
+Copy huge selector from DevTools ✅
+Extract stable pieces:
+root: #main-content-messages
+container: [class*="DivMessageInputAndSendButton"]
+target type: svg, button, [contenteditable="true"]
+Build a short selector:
+'#main-content-messages [class*="DivMessageInputAndSendButton"] svg'
+For actions, wrap with .closest('button, [role="button"]') and click that.
+Drop me the next selector whenever you want and I’ll keep “shrinking” them into a reusable TikTok selector toolkit with you.
+You said:
+#main-content-messages > div > div.css-2p0m0i-7937d88b--DivChatMain.e1vvtwvo8 > div > div:nth-child(38) > div > div > div:nth-child(2) > div > div > div > div    document.querySelector("#main-content-messages > div > div.css-2p0m0i-7937d88b--DivChatMain.e1vvtwvo8 > div > div:nth-child(38) > div > div > div:nth-child(2) > div > div > div > div")
+ChatGPT said:
+Nice, this one is you grabbing a specific chat bubble in the DM thread 👀
+You pasted:
+
+document.querySelector(
+  "#main-content-messages > div > div.css-2p0m0i-7937d88b--DivChatMain.e1vvtwvo8 > div > div:nth-child(38) > div > div > div:nth-child(2) > div > div > div > div"
+);
+That’s basically:
+#main-content-messages → messages page root
+DivChatMain → the scroll area that holds all messages
+div:nth-child(38) → the 38th message row
+A bunch of wrappers → down to the innermost div (usually the text container)
+So yes: this probably is the text content div of the 38th message. But we do not want to hard-code “38” in automation.
+1. Make a general messages selector
+First, anchor to the chat main area:
+const chatMain = document.querySelector(
+  '#main-content-messages [class*="DivChatMain"]'
+);
+Now instead of nth-child(38), grab all message blocks and work with the list:
+// All message rows inside the chat
+const msgRows = chatMain?.querySelectorAll(':scope > div > div') ?? [];
+From there, you can:
+Get the last message (most realistic for automation)
+Iterate over all messages
+Example: get the last message text
+function getLastTikTokDM() {
+  const chatMain = document.querySelector(
+    '#main-content-messages [class*="DivChatMain"]'
+  );
+  if (!chatMain) return '';
+
+  const rows = chatMain.querySelectorAll(':scope > div > div');
+  if (!rows.length) return '';
+
+  const lastRow = rows[rows.length - 1];
+
+  // Go hunting inside the row for the *deepest* text div
+  const textNode =
+    lastRow.querySelector('[data-e2e*="message"], [class*="Text"], div div div div') ??
+    lastRow;
+
+  return textNode.innerText?.trim?.() ?? '';
+}
+^ That div div div div bit is just a fallback pattern—you can tighten it once you see actual attributes like data-e2e="chat-message" or a stable DivMessageBubble class.
+If you really do want “the 38th message”:
+
+function getNthTikTokDM(index) {
+  const chatMain = document.querySelector(
+    '#main-content-messages [class*="DivChatMain"]'
+  );
+  if (!chatMain) return '';
+
+  const rows = chatMain.querySelectorAll(':scope > div > div');
+  const row = rows[index]; // 0-based; 37 = "38th" in DevTools
+  if (!row) return '';
+
+  const textNode =
+    row.querySelector('[data-e2e*="message"], [class*="Text"], div div div div') ??
+    row;
+
+  return textNode.innerText?.trim?.() ?? '';
+}
+2. Using this in Playwright
+// Last message text
+const lastMessage = await page.evaluate(() => {
+  const chatMain = document.querySelector('#main-content-messages [class*="DivChatMain"]');
+  if (!chatMain) return '';
+
+  const rows = chatMain.querySelectorAll(':scope > div > div');
+  if (!rows.length) return '';
+
+  const lastRow = rows[rows.length - 1];
+  const textNode =
+    lastRow.querySelector('[data-e2e*="message"], [class*="Text"], div div div div') ??
+    lastRow;
+
+  // @ts-ignore
+  return textNode.innerText?.trim?.() ?? '';
+});
+3. Using this from AppleScript (Safari)
+set js to "
+  const chatMain = document.querySelector('#main-content-messages [class*=\"DivChatMain\"]');
+  if (!chatMain) '';
+  const rows = chatMain.querySelectorAll(':scope > div > div');
+  if (!rows.length) '';
+  const lastRow = rows[rows.length - 1];
+  const textNode =
+    lastRow.querySelector('[data-e2e*=\"message\"], [class*=\"Text\"], div div div div') ??
+    lastRow;
+  textNode.innerText ? textNode.innerText.trim() : '';
+"
+
+tell application "Safari"
+    set lastMessage to do JavaScript js in front document
+end tell
+Pattern recap (you’re doing this right):
+DevTools → Copy selector (what you’re pasting ✅)
+Use it once to learn:
+Root: #main-content-messages
+Container: [class*="DivChatMain"]
+The part that repeats (each message row)
+Replace:
+nth-child(38) → querySelectorAll(...)[index] or “last”
+Hash classes → [class*="DivChatMain"], [data-e2e*="message"], etc.
+Keep throwing me your copied selectors—I’ll keep turning them into a reusable TikTok/IG automation toolkit with you.
+
+
+
+
+ChatGPT can make mistakes. Check important info.
+" save this off as md and lets build from it 

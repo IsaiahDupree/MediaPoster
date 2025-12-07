@@ -1,0 +1,1005 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1FA703DF2EE526A600BE1101 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA703DE2EE526A600BE1101 /* AppDelegate.swift */; };
+		1FA703E12EE526A600BE1101 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA703E02EE526A600BE1101 /* SceneDelegate.swift */; };
+		1FA703E42EE526A600BE1101 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703E22EE526A600BE1101 /* LaunchScreen.storyboard */; };
+		1FA703E72EE526A600BE1101 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703E52EE526A600BE1101 /* Main.storyboard */; };
+		1FA703F02EE526A600BE1101 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA703EF2EE526A600BE1101 /* AppDelegate.swift */; };
+		1FA703F32EE526A600BE1101 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703F12EE526A600BE1101 /* Main.storyboard */; };
+		1FA703FA2EE526A600BE1101 /* TikTok Comment Automation Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1FA703F92EE526A600BE1101 /* TikTok Comment Automation Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1FA704042EE526A600BE1101 /* TikTok Comment Automation Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1FA704032EE526A600BE1101 /* TikTok Comment Automation Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1FA704092EE526A600BE1101 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703CE2EE526A400BE1101 /* Main.html */; };
+		1FA7040A2EE526A600BE1101 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703CE2EE526A400BE1101 /* Main.html */; };
+		1FA7040B2EE526A600BE1101 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D02EE526A400BE1101 /* Icon.png */; };
+		1FA7040C2EE526A600BE1101 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D02EE526A400BE1101 /* Icon.png */; };
+		1FA7040D2EE526A600BE1101 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D12EE526A400BE1101 /* Style.css */; };
+		1FA7040E2EE526A600BE1101 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D12EE526A400BE1101 /* Style.css */; };
+		1FA7040F2EE526A600BE1101 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D22EE526A400BE1101 /* Script.js */; };
+		1FA704102EE526A600BE1101 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D22EE526A400BE1101 /* Script.js */; };
+		1FA704112EE526A600BE1101 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA703D32EE526A400BE1101 /* ViewController.swift */; };
+		1FA704122EE526A600BE1101 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA703D32EE526A400BE1101 /* ViewController.swift */; };
+		1FA704132EE526A600BE1101 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D42EE526A600BE1101 /* Assets.xcassets */; };
+		1FA704142EE526A600BE1101 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1FA703D42EE526A600BE1101 /* Assets.xcassets */; };
+		1FA704152EE526A600BE1101 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA703D62EE526A600BE1101 /* SafariWebExtensionHandler.swift */; };
+		1FA704162EE526A600BE1101 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA703D62EE526A600BE1101 /* SafariWebExtensionHandler.swift */; };
+		1FA704302EE526A700BE1101 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA704282EE526A700BE1101 /* popup.js */; };
+		1FA704312EE526A700BE1101 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA704292EE526A700BE1101 /* background.js */; };
+		1FA704322EE526A700BE1101 /* SETUP.md in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042A2EE526A700BE1101 /* SETUP.md */; };
+		1FA704332EE526A700BE1101 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042B2EE526A700BE1101 /* popup.html */; };
+		1FA704342EE526A700BE1101 /* safari_extension_bridge.py in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042C2EE526A700BE1101 /* safari_extension_bridge.py */; };
+		1FA704352EE526A700BE1101 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042D2EE526A700BE1101 /* README.md */; };
+		1FA704362EE526A700BE1101 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042E2EE526A700BE1101 /* manifest.json */; };
+		1FA704372EE526A700BE1101 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042F2EE526A700BE1101 /* content.js */; };
+		1FA704382EE526A700BE1101 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA704282EE526A700BE1101 /* popup.js */; };
+		1FA704392EE526A700BE1101 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA704292EE526A700BE1101 /* background.js */; };
+		1FA7043A2EE526A700BE1101 /* SETUP.md in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042A2EE526A700BE1101 /* SETUP.md */; };
+		1FA7043B2EE526A700BE1101 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042B2EE526A700BE1101 /* popup.html */; };
+		1FA7043C2EE526A700BE1101 /* safari_extension_bridge.py in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042C2EE526A700BE1101 /* safari_extension_bridge.py */; };
+		1FA7043D2EE526A700BE1101 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042D2EE526A700BE1101 /* README.md */; };
+		1FA7043E2EE526A700BE1101 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042E2EE526A700BE1101 /* manifest.json */; };
+		1FA7043F2EE526A700BE1101 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 1FA7042F2EE526A700BE1101 /* content.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1FA703FB2EE526A600BE1101 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1FA703C82EE526A400BE1101 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1FA703F82EE526A600BE1101;
+			remoteInfo = "TikTok Comment Automation Extension (iOS)";
+		};
+		1FA704052EE526A600BE1101 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1FA703C82EE526A400BE1101 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1FA704022EE526A600BE1101;
+			remoteInfo = "TikTok Comment Automation Extension (macOS)";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		1FA7041C2EE526A600BE1101 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1FA703FA2EE526A600BE1101 /* TikTok Comment Automation Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA704232EE526A600BE1101 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1FA704042EE526A600BE1101 /* TikTok Comment Automation Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		1FA703CF2EE526A400BE1101 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		1FA703D02EE526A400BE1101 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		1FA703D12EE526A400BE1101 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		1FA703D22EE526A400BE1101 /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		1FA703D32EE526A400BE1101 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		1FA703D42EE526A600BE1101 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1FA703D62EE526A600BE1101 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		1FA703DB2EE526A600BE1101 /* TikTok Comment Automation.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TikTok Comment Automation.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FA703DE2EE526A600BE1101 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		1FA703E02EE526A600BE1101 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		1FA703E32EE526A600BE1101 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		1FA703E62EE526A600BE1101 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		1FA703E82EE526A600BE1101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1FA703ED2EE526A600BE1101 /* TikTok Comment Automation.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TikTok Comment Automation.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FA703EF2EE526A600BE1101 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		1FA703F22EE526A600BE1101 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		1FA703F42EE526A600BE1101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1FA703F92EE526A600BE1101 /* TikTok Comment Automation Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "TikTok Comment Automation Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FA703FE2EE526A600BE1101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1FA704032EE526A600BE1101 /* TikTok Comment Automation Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "TikTok Comment Automation Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FA704082EE526A600BE1101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1FA704282EE526A700BE1101 /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = ../../../safari_extension/popup.js; sourceTree = "<group>"; };
+		1FA704292EE526A700BE1101 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = ../../../safari_extension/background.js; sourceTree = "<group>"; };
+		1FA7042A2EE526A700BE1101 /* SETUP.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = SETUP.md; path = ../../../safari_extension/SETUP.md; sourceTree = "<group>"; };
+		1FA7042B2EE526A700BE1101 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = popup.html; path = ../../../safari_extension/popup.html; sourceTree = "<group>"; };
+		1FA7042C2EE526A700BE1101 /* safari_extension_bridge.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = safari_extension_bridge.py; path = ../../../safari_extension/safari_extension_bridge.py; sourceTree = "<group>"; };
+		1FA7042D2EE526A700BE1101 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = README.md; path = ../../../safari_extension/README.md; sourceTree = "<group>"; };
+		1FA7042E2EE526A700BE1101 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../../safari_extension/manifest.json; sourceTree = "<group>"; };
+		1FA7042F2EE526A700BE1101 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content.js; path = ../../../safari_extension/content.js; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1FA703D82EE526A600BE1101 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA703EA2EE526A600BE1101 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA703F62EE526A600BE1101 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA704002EE526A600BE1101 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1FA703C72EE526A400BE1101 = {
+			isa = PBXGroup;
+			children = (
+				1FA703CC2EE526A400BE1101 /* Shared (App) */,
+				1FA703D52EE526A600BE1101 /* Shared (Extension) */,
+				1FA703DD2EE526A600BE1101 /* iOS (App) */,
+				1FA703EE2EE526A600BE1101 /* macOS (App) */,
+				1FA703FD2EE526A600BE1101 /* iOS (Extension) */,
+				1FA704072EE526A600BE1101 /* macOS (Extension) */,
+				1FA703DC2EE526A600BE1101 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1FA703CC2EE526A400BE1101 /* Shared (App) */ = {
+			isa = PBXGroup;
+			children = (
+				1FA703D32EE526A400BE1101 /* ViewController.swift */,
+				1FA703D42EE526A600BE1101 /* Assets.xcassets */,
+				1FA703CD2EE526A400BE1101 /* Resources */,
+			);
+			path = "Shared (App)";
+			sourceTree = "<group>";
+		};
+		1FA703CD2EE526A400BE1101 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1FA703CE2EE526A400BE1101 /* Main.html */,
+				1FA703D02EE526A400BE1101 /* Icon.png */,
+				1FA703D12EE526A400BE1101 /* Style.css */,
+				1FA703D22EE526A400BE1101 /* Script.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		1FA703D52EE526A600BE1101 /* Shared (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				1FA704272EE526A700BE1101 /* Resources */,
+				1FA703D62EE526A600BE1101 /* SafariWebExtensionHandler.swift */,
+			);
+			path = "Shared (Extension)";
+			sourceTree = "<group>";
+		};
+		1FA703DC2EE526A600BE1101 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1FA703DB2EE526A600BE1101 /* TikTok Comment Automation.app */,
+				1FA703ED2EE526A600BE1101 /* TikTok Comment Automation.app */,
+				1FA703F92EE526A600BE1101 /* TikTok Comment Automation Extension.appex */,
+				1FA704032EE526A600BE1101 /* TikTok Comment Automation Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1FA703DD2EE526A600BE1101 /* iOS (App) */ = {
+			isa = PBXGroup;
+			children = (
+				1FA703DE2EE526A600BE1101 /* AppDelegate.swift */,
+				1FA703E02EE526A600BE1101 /* SceneDelegate.swift */,
+				1FA703E22EE526A600BE1101 /* LaunchScreen.storyboard */,
+				1FA703E52EE526A600BE1101 /* Main.storyboard */,
+				1FA703E82EE526A600BE1101 /* Info.plist */,
+			);
+			path = "iOS (App)";
+			sourceTree = "<group>";
+		};
+		1FA703EE2EE526A600BE1101 /* macOS (App) */ = {
+			isa = PBXGroup;
+			children = (
+				1FA703EF2EE526A600BE1101 /* AppDelegate.swift */,
+				1FA703F12EE526A600BE1101 /* Main.storyboard */,
+				1FA703F42EE526A600BE1101 /* Info.plist */,
+			);
+			path = "macOS (App)";
+			sourceTree = "<group>";
+		};
+		1FA703FD2EE526A600BE1101 /* iOS (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				1FA703FE2EE526A600BE1101 /* Info.plist */,
+			);
+			path = "iOS (Extension)";
+			sourceTree = "<group>";
+		};
+		1FA704072EE526A600BE1101 /* macOS (Extension) */ = {
+			isa = PBXGroup;
+			children = (
+				1FA704082EE526A600BE1101 /* Info.plist */,
+			);
+			path = "macOS (Extension)";
+			sourceTree = "<group>";
+		};
+		1FA704272EE526A700BE1101 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1FA704282EE526A700BE1101 /* popup.js */,
+				1FA704292EE526A700BE1101 /* background.js */,
+				1FA7042A2EE526A700BE1101 /* SETUP.md */,
+				1FA7042B2EE526A700BE1101 /* popup.html */,
+				1FA7042C2EE526A700BE1101 /* safari_extension_bridge.py */,
+				1FA7042D2EE526A700BE1101 /* README.md */,
+				1FA7042E2EE526A700BE1101 /* manifest.json */,
+				1FA7042F2EE526A700BE1101 /* content.js */,
+			);
+			name = Resources;
+			path = "Shared (Extension)";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1FA703DA2EE526A600BE1101 /* TikTok Comment Automation (iOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1FA7041D2EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation (iOS)" */;
+			buildPhases = (
+				1FA703D72EE526A600BE1101 /* Sources */,
+				1FA703D82EE526A600BE1101 /* Frameworks */,
+				1FA703D92EE526A600BE1101 /* Resources */,
+				1FA7041C2EE526A600BE1101 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1FA703FC2EE526A600BE1101 /* PBXTargetDependency */,
+			);
+			name = "TikTok Comment Automation (iOS)";
+			packageProductDependencies = (
+			);
+			productName = "TikTok Comment Automation (iOS)";
+			productReference = 1FA703DB2EE526A600BE1101 /* TikTok Comment Automation.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1FA703EC2EE526A600BE1101 /* TikTok Comment Automation (macOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1FA704242EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation (macOS)" */;
+			buildPhases = (
+				1FA703E92EE526A600BE1101 /* Sources */,
+				1FA703EA2EE526A600BE1101 /* Frameworks */,
+				1FA703EB2EE526A600BE1101 /* Resources */,
+				1FA704232EE526A600BE1101 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1FA704062EE526A600BE1101 /* PBXTargetDependency */,
+			);
+			name = "TikTok Comment Automation (macOS)";
+			packageProductDependencies = (
+			);
+			productName = "TikTok Comment Automation (macOS)";
+			productReference = 1FA703ED2EE526A600BE1101 /* TikTok Comment Automation.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1FA703F82EE526A600BE1101 /* TikTok Comment Automation Extension (iOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1FA704192EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation Extension (iOS)" */;
+			buildPhases = (
+				1FA703F52EE526A600BE1101 /* Sources */,
+				1FA703F62EE526A600BE1101 /* Frameworks */,
+				1FA703F72EE526A600BE1101 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "TikTok Comment Automation Extension (iOS)";
+			packageProductDependencies = (
+			);
+			productName = "TikTok Comment Automation Extension (iOS)";
+			productReference = 1FA703F92EE526A600BE1101 /* TikTok Comment Automation Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		1FA704022EE526A600BE1101 /* TikTok Comment Automation Extension (macOS) */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1FA704202EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation Extension (macOS)" */;
+			buildPhases = (
+				1FA703FF2EE526A600BE1101 /* Sources */,
+				1FA704002EE526A600BE1101 /* Frameworks */,
+				1FA704012EE526A600BE1101 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "TikTok Comment Automation Extension (macOS)";
+			packageProductDependencies = (
+			);
+			productName = "TikTok Comment Automation Extension (macOS)";
+			productReference = 1FA704032EE526A600BE1101 /* TikTok Comment Automation Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1FA703C82EE526A400BE1101 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					1FA703DA2EE526A600BE1101 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					1FA703EC2EE526A600BE1101 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					1FA703F82EE526A600BE1101 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					1FA704022EE526A600BE1101 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+				};
+			};
+			buildConfigurationList = 1FA703CB2EE526A400BE1101 /* Build configuration list for PBXProject "TikTok Comment Automation" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1FA703C72EE526A400BE1101;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1FA703DC2EE526A600BE1101 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1FA703DA2EE526A600BE1101 /* TikTok Comment Automation (iOS) */,
+				1FA703EC2EE526A600BE1101 /* TikTok Comment Automation (macOS) */,
+				1FA703F82EE526A600BE1101 /* TikTok Comment Automation Extension (iOS) */,
+				1FA704022EE526A600BE1101 /* TikTok Comment Automation Extension (macOS) */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1FA703D92EE526A600BE1101 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA7040B2EE526A600BE1101 /* Icon.png in Resources */,
+				1FA703E42EE526A600BE1101 /* LaunchScreen.storyboard in Resources */,
+				1FA704092EE526A600BE1101 /* Main.html in Resources */,
+				1FA7040F2EE526A600BE1101 /* Script.js in Resources */,
+				1FA704132EE526A600BE1101 /* Assets.xcassets in Resources */,
+				1FA703E72EE526A600BE1101 /* Main.storyboard in Resources */,
+				1FA7040D2EE526A600BE1101 /* Style.css in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA703EB2EE526A600BE1101 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA7040C2EE526A600BE1101 /* Icon.png in Resources */,
+				1FA7040E2EE526A600BE1101 /* Style.css in Resources */,
+				1FA703F32EE526A600BE1101 /* Main.storyboard in Resources */,
+				1FA704102EE526A600BE1101 /* Script.js in Resources */,
+				1FA704142EE526A600BE1101 /* Assets.xcassets in Resources */,
+				1FA7040A2EE526A600BE1101 /* Main.html in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA703F72EE526A600BE1101 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA7043F2EE526A700BE1101 /* content.js in Resources */,
+				1FA7043D2EE526A700BE1101 /* README.md in Resources */,
+				1FA7043E2EE526A700BE1101 /* manifest.json in Resources */,
+				1FA7043A2EE526A700BE1101 /* SETUP.md in Resources */,
+				1FA7043B2EE526A700BE1101 /* popup.html in Resources */,
+				1FA7043C2EE526A700BE1101 /* safari_extension_bridge.py in Resources */,
+				1FA704392EE526A700BE1101 /* background.js in Resources */,
+				1FA704382EE526A700BE1101 /* popup.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA704012EE526A600BE1101 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA704372EE526A700BE1101 /* content.js in Resources */,
+				1FA704352EE526A700BE1101 /* README.md in Resources */,
+				1FA704362EE526A700BE1101 /* manifest.json in Resources */,
+				1FA704322EE526A700BE1101 /* SETUP.md in Resources */,
+				1FA704332EE526A700BE1101 /* popup.html in Resources */,
+				1FA704342EE526A700BE1101 /* safari_extension_bridge.py in Resources */,
+				1FA704312EE526A700BE1101 /* background.js in Resources */,
+				1FA704302EE526A700BE1101 /* popup.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1FA703D72EE526A600BE1101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA704112EE526A600BE1101 /* ViewController.swift in Sources */,
+				1FA703DF2EE526A600BE1101 /* AppDelegate.swift in Sources */,
+				1FA703E12EE526A600BE1101 /* SceneDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA703E92EE526A600BE1101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA704122EE526A600BE1101 /* ViewController.swift in Sources */,
+				1FA703F02EE526A600BE1101 /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA703F52EE526A600BE1101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA704152EE526A600BE1101 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1FA703FF2EE526A600BE1101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FA704162EE526A600BE1101 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1FA703FC2EE526A600BE1101 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1FA703F82EE526A600BE1101 /* TikTok Comment Automation Extension (iOS) */;
+			targetProxy = 1FA703FB2EE526A600BE1101 /* PBXContainerItemProxy */;
+		};
+		1FA704062EE526A600BE1101 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1FA704022EE526A600BE1101 /* TikTok Comment Automation Extension (macOS) */;
+			targetProxy = 1FA704052EE526A600BE1101 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		1FA703CE2EE526A400BE1101 /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1FA703CF2EE526A400BE1101 /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		1FA703E22EE526A600BE1101 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1FA703E32EE526A600BE1101 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		1FA703E52EE526A600BE1101 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1FA703E62EE526A600BE1101 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		1FA703F12EE526A600BE1101 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1FA703F22EE526A600BE1101 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		1FA704172EE526A600BE1101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1FA704182EE526A600BE1101 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		1FA7041A2EE526A600BE1101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment.Extension;
+				PRODUCT_NAME = "TikTok Comment Automation Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1FA7041B2EE526A600BE1101 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment.Extension;
+				PRODUCT_NAME = "TikTok Comment Automation Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1FA7041E2EE526A600BE1101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment;
+				PRODUCT_NAME = "TikTok Comment Automation";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1FA7041F2EE526A600BE1101 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment;
+				PRODUCT_NAME = "TikTok Comment Automation";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1FA704212EE526A600BE1101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment.Extension;
+				PRODUCT_NAME = "TikTok Comment Automation Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		1FA704222EE526A600BE1101 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (Extension)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment.Extension;
+				PRODUCT_NAME = "TikTok Comment Automation Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		1FA704252EE526A600BE1101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment;
+				PRODUCT_NAME = "TikTok Comment Automation";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		1FA704262EE526A600BE1101 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "macOS (App)/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "TikTok Comment Automation";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediaposter.tiktokcomment;
+				PRODUCT_NAME = "TikTok Comment Automation";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1FA703CB2EE526A400BE1101 /* Build configuration list for PBXProject "TikTok Comment Automation" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1FA704172EE526A600BE1101 /* Debug */,
+				1FA704182EE526A600BE1101 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1FA704192EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation Extension (iOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1FA7041A2EE526A600BE1101 /* Debug */,
+				1FA7041B2EE526A600BE1101 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1FA7041D2EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation (iOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1FA7041E2EE526A600BE1101 /* Debug */,
+				1FA7041F2EE526A600BE1101 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1FA704202EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation Extension (macOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1FA704212EE526A600BE1101 /* Debug */,
+				1FA704222EE526A600BE1101 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1FA704242EE526A600BE1101 /* Build configuration list for PBXNativeTarget "TikTok Comment Automation (macOS)" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1FA704252EE526A600BE1101 /* Debug */,
+				1FA704262EE526A600BE1101 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1FA703C82EE526A400BE1101 /* Project object */;
+}

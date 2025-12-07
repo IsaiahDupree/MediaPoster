@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./Backend
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./Backend:/app
+    environment:
+      # Connect to Supabase DB on host machine
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      # Connect to Supabase API on host machine
+      - SUPABASE_URL=http://host.docker.internal:54321
+      - REDIS_URL=redis://redis:6379/0
+      # Allow overriding via .env
+    env_file:
+      - ./Backend/.env
+    depends_on:
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build: ./Frontend
+    ports:
+      - "5557:5557"
+    volumes:
+      - ./Frontend:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5555
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"

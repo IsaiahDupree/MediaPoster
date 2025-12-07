@@ -1,0 +1,98 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Local storage (media files)
+local_storage/videos/
+local_storage/thumbnails/
+local_storage/clips/
+local_storage/temp/
+
+# Keep the directories but ignore contents
+!local_storage/videos/.gitkeep
+!local_storage/thumbnails/.gitkeep
+!local_storage/clips/.gitkeep
+!local_storage/temp/.gitkeep
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Secrets and credentials
+**/client_secret*.json
+**/*credentials*.json
+**/*secret*.json
+!**/venv/**
+!**/node_modules/**
+
+# Session and authentication data
+Backend/automation/sessions/
+Backend/automation/recordings/
+Backend/automation/tiktok_cookies.json
+Backend/automation/tiktok_session.json
+**/sessions/
+**/recordings/
+**/*_cookies.json
+**/*_session.json
+
+# Browser profiles and configs (may contain user paths)
+Backend/automation/browser_profile_config.json
+Backend/automation/chrome_profile_config.json
+
+# Analytics data (may contain sensitive info)
+Backend/*_analytics_*.json
+Backend/instagram_*.json
+Backend/youtube_*.json
+
+# Screenshots and recordings
+Backend/automation/screenshots/
+Backend/automation/comment_screenshots/
+Backend/automation/tests/test_output/screenshots/
+
+# Logs (may contain sensitive data)
+Backend/logs/
+Backend/automation/tests/test_output/logs/
+*.log

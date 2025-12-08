@@ -19,7 +19,7 @@ local_storage/temp/
 !local_storage/clips/.gitkeep
 !local_storage/temp/.gitkeep
 
-# Environment files
+# Environment files - NEVER COMMIT SECRETS
 .env
 .env.local
 .env.*.local
@@ -27,6 +27,14 @@ local_storage/temp/
 .env.bak
 .env.*.backup
 .env.*.bak
+.env.production
+.env.development
+Backend/.env
+dashboard/.env.local
+Frontend/.env.local
+*/.env
+**/.env
+**/.env.local
 
 # IDE
 .vscode/

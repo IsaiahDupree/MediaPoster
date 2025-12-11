@@ -1,12 +1,62 @@
 #!/usr/bin/env python3
 """
-Regenerate all thumbnails with color support for HEIC files
+Regenerate all thumbnails with color support for HEIC files.
+Ensures HEIC images produce vibrant color thumbnails, not grayscale.
 """
 import requests
 import time
 import json
+import os
+import sys
+from pathlib import Path
+
+# Add parent to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
 
 API_BASE = "http://localhost:5555/api"
+
+
+def convert_heic_to_color_jpg(heic_path: str, output_path: str) -> bool:
+    """
+    Convert a single HEIC file to a color JPG using pillow-heif.
+    
+    Args:
+        heic_path: Path to HEIC file
+        output_path: Path to save JPG
+        
+    Returns:
+        True if successful
+    """
+    try:
+        import pillow_heif
+        from PIL import Image, ImageEnhance
+        
+        pillow_heif.register_heif_opener()
+        
+        img = Image.open(heic_path)
+        
+        # Ensure RGB color mode
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Apply slight color enhancement
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(1.05)
+        
+        # Increase saturation slightly for vibrant colors
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.02)
+        
+        img.save(output_path, "JPEG", quality=95)
+        print(f"  ✅ Converted: {heic_path} -> {output_path}")
+        return True
+        
+    except ImportError:
+        print("  ❌ pillow-heif not installed. Run: pip install pillow-heif")
+        return False
+    except Exception as e:
+        print(f"  ❌ Error converting {heic_path}: {e}")
+        return False
 
 def get_all_videos():
     """Fetch all videos from the API"""
@@ -88,5 +138,56 @@ def main():
     else:
         print("\n⚠️  Some thumbnails may still be missing. Check the logs.")
 
+def convert_heic_directory(directory: str, recursive: bool = True):
+    """
+    Convert all HEIC files in a directory to color JPGs.
+    
+    Args:
+        directory: Path to directory
+        recursive: Whether to search subdirectories
+    """
+    from pathlib import Path
+    
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        print(f"❌ Directory not found: {directory}")
+        return
+    
+    pattern = "**/*.heic" if recursive else "*.heic"
+    heic_files = list(dir_path.glob(pattern))
+    heic_files += list(dir_path.glob(pattern.replace('.heic', '.HEIC')))
+    
+    if not heic_files:
+        print(f"No HEIC files found in {directory}")
+        return
+    
+    print(f"\n🖼️  Found {len(heic_files)} HEIC files")
+    print("Converting to color JPG...\n")
+    
+    success = 0
+    for heic_file in heic_files:
+        output_path = heic_file.with_suffix('.jpg')
+        if convert_heic_to_color_jpg(str(heic_file), str(output_path)):
+            success += 1
+    
+    print(f"\n✅ Converted {success}/{len(heic_files)} HEIC files to color JPG")
+
+
 if __name__ == "__main__":
-    main()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Regenerate thumbnails with color HEIC support")
+    parser.add_argument("--heic-dir", help="Convert all HEIC files in directory to color JPG")
+    parser.add_argument("--heic-file", help="Convert a single HEIC file to color JPG")
+    parser.add_argument("--output", help="Output path for single file conversion")
+    parser.add_argument("--api", action="store_true", help="Regenerate via API (default)")
+    
+    args = parser.parse_args()
+    
+    if args.heic_dir:
+        convert_heic_directory(args.heic_dir)
+    elif args.heic_file:
+        output = args.output or args.heic_file.replace('.heic', '.jpg').replace('.HEIC', '.jpg')
+        convert_heic_to_color_jpg(args.heic_file, output)
+    else:
+        main()

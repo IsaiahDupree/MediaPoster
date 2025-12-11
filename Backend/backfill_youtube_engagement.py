@@ -26,7 +26,7 @@ async def main():
     
     # Fetch analytics
     print(f"📺 Fetching YouTube analytics for channel: {channel_id}\n")
-    data = await fetch_youtube_analytics(channel_id, max_videos=20)
+    data = await fetch_youtube_analytics(channel_id, max_videos=20, fetch_all_comments=True)
     
     # Save raw data
     output_file = f"youtube_analytics_{channel_id}.json"

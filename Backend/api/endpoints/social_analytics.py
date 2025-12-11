@@ -99,7 +99,7 @@ async def get_dashboard_overview():
     conn = engine.connect()
     
     try:
-        # Get aggregated metrics
+        # Try social_media_accounts table first (primary source)
         result = conn.execute(text("""
             SELECT 
                 COUNT(DISTINCT platform) as total_platforms,
@@ -110,7 +110,8 @@ async def get_dashboard_overview():
                 COALESCE(SUM(total_likes), 0) as total_likes,
                 COALESCE(SUM(total_comments), 0) as total_comments,
                 COALESCE(AVG(engagement_rate), 0) as avg_engagement_rate
-            FROM social_analytics_latest
+            FROM social_media_accounts
+            WHERE is_active = TRUE
         """)).fetchone()
         
         # Get platform breakdown
@@ -123,7 +124,8 @@ async def get_dashboard_overview():
                 COALESCE(SUM(total_views), 0) as total_views,
                 COALESCE(SUM(total_likes), 0) as total_likes,
                 COALESCE(AVG(engagement_rate), 0) as avg_engagement_rate
-            FROM social_analytics_latest
+            FROM social_media_accounts
+            WHERE is_active = TRUE
             GROUP BY platform
             ORDER BY total_followers DESC
         """)).fetchall()
@@ -402,9 +404,57 @@ async def get_content_mapping(
         conn.close()
 
 
+@router.get("/account/{account_id}/trends")
+async def get_account_trends(
+    account_id: int,
+    days: int = Query(default=30, ge=1, le=365)
+):
+    """
+    Get view trends over time for a specific account
+    Returns daily snapshots of views, likes, comments
+    """
+    conn = engine.connect()
+    
+    try:
+        # Get trends from analytics snapshots
+        query = text("""
+            SELECT 
+                snapshot_date,
+                total_views,
+                total_likes,
+                total_comments,
+                followers_count
+            FROM social_media_analytics_snapshots
+            WHERE account_id = :account_id
+            AND snapshot_date >= CURRENT_DATE - INTERVAL '1 day' * :days
+            ORDER BY snapshot_date ASC
+        """)
+        
+        results = conn.execute(query, {"account_id": account_id, "days": days}).fetchall()
+        
+        trends = [
+            {
+                "date": str(row[0]),
+                "views": row[1] or 0,
+                "likes": row[2] or 0,
+                "comments": row[3] or 0,
+                "followers": row[4] or 0
+            }
+            for row in results
+        ]
+        
+        return trends
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
 @router.get("/posts", response_model=List[PostWithContent])
 async def get_posts_with_content(
     platform: Optional[str] = None,
+    account_id: Optional[int] = Query(None, description="Filter by account ID"),
     limit: int = Query(default=50, le=500),
     has_video: Optional[bool] = None,
     has_clip: Optional[bool] = None
@@ -452,6 +502,10 @@ async def get_posts_with_content(
         if platform:
             conditions.append("spa.platform = :platform")
             params["platform"] = platform
+        
+        if account_id:
+            conditions.append("sa.id = :account_id")
+            params["account_id"] = account_id
         
         if has_video is not None:
             conditions.append("spa.video_id IS NOT NULL" if has_video else "spa.video_id IS NULL")

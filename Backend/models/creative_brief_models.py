@@ -128,7 +128,7 @@ class SceneAnalysis:
 @dataclass
 class TranscriptData:
     """Transcript and language data"""
-    full_text: str
+    full_text: str = ""
     language: str = "en"
     summary: str = ""
     key_phrases: List[str] = field(default_factory=list)

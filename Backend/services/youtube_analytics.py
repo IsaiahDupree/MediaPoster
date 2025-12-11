@@ -126,73 +126,126 @@ class YouTubeAnalytics:
     async def get_video_comments(
         self, 
         video_id: str, 
-        max_results: int = 100,
-        include_replies: bool = True
+        max_results: int = None,
+        include_replies: bool = True,
+        fetch_all: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Get comments for a video with commenter information
+        Get comments for a video with commenter information.
+        
+        Args:
+            video_id: YouTube video ID
+            max_results: Maximum number of comments to return (None = all if fetch_all=True)
+            include_replies: Whether to include reply comments
+            fetch_all: If True, fetch ALL comments using pagination (ignores max_results)
+        
+        Returns:
+            List of comment dictionaries
         """
         url = f"{YOUTUBE_API_BASE}/commentThreads"
-        params = {
-            "part": "snippet,replies",
-            "videoId": video_id,
-            "maxResults": min(max_results, 100),
-            "order": "relevance",
-            "textFormat": "plainText",
-            "key": self.api_key
-        }
         
         all_comments = []
+        page_token = None
+        page_count = 0
+        max_per_page = 100  # YouTube API limit
         
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params) as response:
-                data = await response.json()
+            while True:
+                params = {
+                    "part": "snippet,replies",
+                    "videoId": video_id,
+                    "maxResults": max_per_page,
+                    "order": "relevance",
+                    "textFormat": "plainText",
+                    "key": self.api_key
+                }
                 
-                for item in data.get("items", []):
-                    # Top-level comment
-                    top_comment = item.get("snippet", {}).get("topLevelComment", {})
-                    comment_snippet = top_comment.get("snippet", {})
+                if page_token:
+                    params["pageToken"] = page_token
+                
+                async with session.get(url, params=params) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        print(f"⚠️  YouTube API error: {response.status} - {error_text}")
+                        break
                     
-                    comment_data = {
-                        "comment_id": top_comment.get("id"),
-                        "text": comment_snippet.get("textDisplay"),
-                        "author_name": comment_snippet.get("authorDisplayName"),
-                        "author_channel_id": comment_snippet.get("authorChannelId", {}).get("value"),
-                        "author_profile_image": comment_snippet.get("authorProfileImageUrl"),
-                        "author_channel_url": comment_snippet.get("authorChannelUrl"),
-                        "like_count": comment_snippet.get("likeCount", 0),
-                        "published_at": comment_snippet.get("publishedAt"),
-                        "updated_at": comment_snippet.get("updatedAt"),
-                        "is_reply": False
-                    }
-                    all_comments.append(comment_data)
+                    data = await response.json()
                     
-                    # Replies if enabled
-                    if include_replies and "replies" in item:
-                        for reply in item.get("replies", {}).get("comments", []):
-                            reply_snippet = reply.get("snippet", {})
-                            reply_data = {
-                                "comment_id": reply.get("id"),
-                                "text": reply_snippet.get("textDisplay"),
-                                "author_name": reply_snippet.get("authorDisplayName"),
-                                "author_channel_id": reply_snippet.get("authorChannelId", {}).get("value"),
-                                "author_profile_image": reply_snippet.get("authorProfileImageUrl"),
-                                "author_channel_url": reply_snippet.get("authorChannelUrl"),
-                                "like_count": reply_snippet.get("likeCount", 0),
-                                "published_at": reply_snippet.get("publishedAt"),
-                                "updated_at": reply_snippet.get("updatedAt"),
-                                "is_reply": True,
-                                "parent_id": comment_data["comment_id"]
-                            }
-                            all_comments.append(reply_data)
+                    if "error" in data:
+                        print(f"⚠️  YouTube API error: {data['error']}")
+                        break
+                    
+                    items = data.get("items", [])
+                    if not items:
+                        break
+                    
+                    page_count += 1
+                    print(f"   📄 Fetched page {page_count} ({len(items)} comment threads)")
+                    
+                    for item in items:
+                        # Top-level comment
+                        top_comment = item.get("snippet", {}).get("topLevelComment", {})
+                        comment_snippet = top_comment.get("snippet", {})
+                        
+                        comment_data = {
+                            "comment_id": top_comment.get("id"),
+                            "text": comment_snippet.get("textDisplay"),
+                            "author_name": comment_snippet.get("authorDisplayName"),
+                            "author_channel_id": comment_snippet.get("authorChannelId", {}).get("value"),
+                            "author_profile_image": comment_snippet.get("authorProfileImageUrl"),
+                            "author_channel_url": comment_snippet.get("authorChannelUrl"),
+                            "like_count": comment_snippet.get("likeCount", 0),
+                            "published_at": comment_snippet.get("publishedAt"),
+                            "updated_at": comment_snippet.get("updatedAt"),
+                            "is_reply": False,
+                            "video_id": video_id
+                        }
+                        all_comments.append(comment_data)
+                        
+                        # Replies if enabled
+                        if include_replies and "replies" in item:
+                            for reply in item.get("replies", {}).get("comments", []):
+                                reply_snippet = reply.get("snippet", {})
+                                reply_data = {
+                                    "comment_id": reply.get("id"),
+                                    "text": reply_snippet.get("textDisplay"),
+                                    "author_name": reply_snippet.get("authorDisplayName"),
+                                    "author_channel_id": reply_snippet.get("authorChannelId", {}).get("value"),
+                                    "author_profile_image": reply_snippet.get("authorProfileImageUrl"),
+                                    "author_channel_url": reply_snippet.get("authorChannelUrl"),
+                                    "like_count": reply_snippet.get("likeCount", 0),
+                                    "published_at": reply_snippet.get("publishedAt"),
+                                    "updated_at": reply_snippet.get("updatedAt"),
+                                    "is_reply": True,
+                                    "parent_id": comment_data["comment_id"],
+                                    "video_id": video_id
+                                }
+                                all_comments.append(reply_data)
+                    
+                    # Check if we should continue paginating
+                    if not fetch_all:
+                        # If max_results is set and we've reached it, stop
+                        if max_results and len(all_comments) >= max_results:
+                            all_comments = all_comments[:max_results]
+                            break
+                    
+                    # Get next page token
+                    page_token = data.get("nextPageToken")
+                    if not page_token:
+                        break  # No more pages
+                    
+                    # Rate limiting - small delay between pages
+                    await asyncio.sleep(0.2)
         
+        print(f"   ✅ Total comments fetched: {len(all_comments)}")
         return all_comments
     
     async def get_channel_analytics(
         self, 
         channel_id: str, 
         max_videos: int = 50,
-        fetch_comments: bool = True
+        fetch_comments: bool = True,
+        fetch_all_comments: bool = True
     ) -> Dict[str, Any]:
         """
         Get complete analytics for a channel including videos and comments
@@ -223,10 +276,14 @@ class YouTubeAnalytics:
                 print(f"   Title: {video_details['title'][:60]}...")
                 print(f"   Stats: {video_details['view_count']:,} views, {video_details['like_count']} likes, {video_details['comment_count']} comments")
                 
-                # Get comments if enabled
+                # Get comments if enabled - fetch ALL if requested
                 if fetch_comments and video_details['comment_count'] > 0:
                     print(f"   💬 Fetching comments...")
-                    comments = await self.get_video_comments(video_id)
+                    comments = await self.get_video_comments(
+                        video_id, 
+                        fetch_all=fetch_all_comments,
+                        include_replies=True
+                    )
                     video_details['comments'] = comments
                     print(f"   ✅ Got {len(comments)} comments")
                 else:

@@ -2,7 +2,7 @@
 SQLAlchemy models for MediaPoster database
 Maps to Supabase Postgres schema including EverReach/Blend tables
 """
-from sqlalchemy import Column, String, Integer, Float, Boolean, Text, BigInteger, ForeignKey, TIMESTAMP, Interval, Numeric
+from sqlalchemy import Column, String, Integer, Float, Boolean, Text, BigInteger, ForeignKey, TIMESTAMP, Interval, Numeric, Index, Date
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from sqlalchemy import JSON
 
@@ -1006,6 +1006,97 @@ class ScheduledPost(Base):
     # Relationships
     clip = relationship("VideoClip", foreign_keys=[clip_id])
     content_variant = relationship("ContentVariant", foreign_keys=[content_variant_id])
+
+
+# =====================================================
+# CONTENT METRICS HISTORY (Growth Tracking)
+# =====================================================
+
+class ContentMetricsSnapshot(Base):
+    """Historical metrics snapshot for tracking content growth over time"""
+    __tablename__ = "content_metrics_snapshots"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Reference to the published post
+    scheduled_post_id = Column(UUID(as_uuid=True), ForeignKey("scheduled_posts.id", ondelete="CASCADE"))
+    
+    # Platform info (denormalized for query efficiency)
+    platform = Column(String(50), nullable=False)
+    platform_post_id = Column(String(255))
+    
+    # Metrics at this point in time
+    views = Column(Integer, default=0)
+    likes = Column(Integer, default=0)
+    comments = Column(Integer, default=0)
+    shares = Column(Integer, default=0)
+    saves = Column(Integer, default=0)
+    reach = Column(Integer, default=0)
+    impressions = Column(Integer, default=0)
+    
+    # Engagement metrics
+    engagement_rate = Column(Float, default=0.0)
+    
+    # Video-specific metrics
+    watch_time_seconds = Column(Integer, default=0)
+    avg_view_duration = Column(Float, default=0.0)
+    
+    # Timestamp when this snapshot was taken
+    snapshot_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    
+    # Source of the data
+    data_source = Column(String(50), default='api')  # api, manual, backfill
+    
+    # Relationships
+    scheduled_post = relationship("ScheduledPost", foreign_keys=[scheduled_post_id])
+    
+    __table_args__ = (
+        # Index for efficient time-series queries
+        Index('idx_metrics_post_time', scheduled_post_id, snapshot_at.desc()),
+        Index('idx_metrics_platform_time', platform, snapshot_at.desc()),
+    )
+
+
+class ContentGrowthSummary(Base):
+    """Aggregated growth metrics per content (updated periodically)"""
+    __tablename__ = "content_growth_summaries"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    scheduled_post_id = Column(UUID(as_uuid=True), ForeignKey("scheduled_posts.id", ondelete="CASCADE"), unique=True)
+    platform = Column(String(50), nullable=False)
+    
+    # Current totals
+    current_views = Column(Integer, default=0)
+    current_likes = Column(Integer, default=0)
+    current_comments = Column(Integer, default=0)
+    current_shares = Column(Integer, default=0)
+    current_engagement_rate = Column(Float, default=0.0)
+    
+    # Growth metrics (percentage change)
+    growth_24h_views = Column(Float, default=0.0)
+    growth_7d_views = Column(Float, default=0.0)
+    growth_30d_views = Column(Float, default=0.0)
+    
+    growth_24h_engagement = Column(Float, default=0.0)
+    growth_7d_engagement = Column(Float, default=0.0)
+    growth_30d_engagement = Column(Float, default=0.0)
+    
+    # Velocity (rate per day)
+    views_per_day = Column(Float, default=0.0)
+    engagement_per_day = Column(Float, default=0.0)
+    
+    # Peak metrics
+    peak_views_day = Column(Date)
+    peak_views_count = Column(Integer, default=0)
+    
+    # Timestamps
+    first_snapshot_at = Column(TIMESTAMP(timezone=True))
+    last_snapshot_at = Column(TIMESTAMP(timezone=True))
+    last_calculated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    
+    # Relationships
+    scheduled_post = relationship("ScheduledPost", foreign_keys=[scheduled_post_id])
 
 
 # =====================================================

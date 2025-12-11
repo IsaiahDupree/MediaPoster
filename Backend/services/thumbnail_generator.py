@@ -93,26 +93,92 @@ class ThumbnailGenerator:
             return [video_path]
             
         if ext in heic_extensions:
-            logger.info(f"Input is HEIC image {ext}, converting to JPG")
+            logger.info(f"Input is HEIC image {ext}, converting to color JPG")
             output_path = f"{output_dir}/{Path(video_path).stem}.jpg"
             
-            # Convert HEIC to JPG using ffmpeg
-            # HEIC files can have multiple streams - explicitly select the first one (usually the color image)
+            # Try pillow-heif first (better color handling)
+            try:
+                import pillow_heif
+                pillow_heif.register_heif_opener()
+                heic_img = Image.open(video_path)
+                
+                # Ensure RGB color mode
+                if heic_img.mode != 'RGB':
+                    heic_img = heic_img.convert('RGB')
+                
+                # Apply slight color enhancement to ensure vibrant output
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Color(heic_img)
+                heic_img = enhancer.enhance(1.05)  # Slight boost
+                
+                heic_img.save(output_path, "JPEG", quality=95)
+                logger.info(f"Converted HEIC to color JPG using pillow-heif: {output_path}")
+                return [output_path]
+                
+            except ImportError:
+                logger.warning("pillow-heif not installed, falling back to ffmpeg")
+            except Exception as e:
+                logger.warning(f"pillow-heif failed: {e}, trying ffmpeg")
+            
+            # Fallback to ffmpeg with improved color handling
+            # Probe for streams to find the main color image (usually largest resolution)
+            probe_cmd = [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v",
+                "-show_entries", "stream=index,width,height",
+                "-of", "json",
+                video_path
+            ]
+            
+            try:
+                probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+                streams = json.loads(probe_result.stdout).get("streams", [])
+                
+                # Find the stream with the largest resolution (main color image)
+                best_stream = 0
+                max_pixels = 0
+                for stream in streams:
+                    pixels = stream.get("width", 0) * stream.get("height", 0)
+                    if pixels > max_pixels:
+                        max_pixels = pixels
+                        best_stream = stream.get("index", 0)
+                
+                logger.info(f"HEIC: Selected stream {best_stream} with {max_pixels} pixels")
+                
+            except Exception as e:
+                logger.warning(f"Could not probe HEIC streams: {e}")
+                best_stream = 0
+            
+            # Convert using ffmpeg with proper color settings
             convert_cmd = [
                 "ffmpeg",
                 "-i", video_path,
-                "-map", "0:v:0",  # Select first video stream (color image)
+                "-map", f"0:v:{best_stream}",  # Select best resolution stream
                 "-vframes", "1",
-                "-pix_fmt", "yuvj420p",  # Ensure color output
+                "-pix_fmt", "yuvj444p",  # Full color range
+                "-colorspace", "bt709",  # Standard color space
+                "-color_primaries", "bt709",
+                "-color_trc", "bt709",
+                "-q:v", "2",  # High quality
                 "-y",
                 output_path
             ]
             
             try:
-                subprocess.run(convert_cmd, capture_output=True, check=True)
+                result = subprocess.run(convert_cmd, capture_output=True, check=True)
+                
+                # Verify the output has color by checking if it's not grayscale
+                verify_img = Image.open(output_path)
+                if verify_img.mode == 'L':  # Grayscale
+                    logger.warning("HEIC converted to grayscale, forcing RGB")
+                    verify_img = verify_img.convert('RGB')
+                    verify_img.save(output_path, "JPEG", quality=95)
+                
+                logger.info(f"Converted HEIC to color JPG using ffmpeg: {output_path}")
                 return [output_path]
+                
             except subprocess.CalledProcessError as e:
-                logger.error(f"Error converting HEIC: {e}")
+                logger.error(f"Error converting HEIC: {e.stderr.decode() if e.stderr else e}")
                 return []
         
         # It's a video, proceed with frame extraction

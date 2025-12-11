@@ -45,11 +45,22 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
     
-    # Social Media Account IDs
+    # RapidAPI
+    rapidapi_key: str = Field(default="", env="RAPIDAPI_KEY")
+    
+    # Social Media Account IDs (supports multiple comma-separated)
     instagram_account_id: Optional[str] = Field(None, env="INSTAGRAM_ACCOUNT_ID")
+    instagram_usernames: str = Field(default="", env="INSTAGRAM_USERNAMES")
     tiktok_account_id: Optional[str] = Field(None, env="TIKTOK_ACCOUNT_ID")
+    tiktok_usernames: str = Field(default="", env="TIKTOK_USERNAMES")
     youtube_channel_id: Optional[str] = Field(None, env="YOUTUBE_CHANNEL_ID")
+    youtube_channel_ids: str = Field(default="", env="YOUTUBE_CHANNEL_IDS")
     twitter_account_id: Optional[str] = Field(None, env="TWITTER_ACCOUNT_ID")
+    twitter_usernames: str = Field(default="", env="TWITTER_USERNAMES")
+    linkedin_profile_urls: str = Field(default="", env="LINKEDIN_PROFILE_URLS")
+    threads_usernames: str = Field(default="", env="THREADS_USERNAMES")
+    pinterest_usernames: str = Field(default="", env="PINTEREST_USERNAMES")
+    medium_usernames: str = Field(default="", env="MEDIUM_USERNAMES")
     
     # Application Settings
     app_env: str = Field(default="development", env="APP_ENV")

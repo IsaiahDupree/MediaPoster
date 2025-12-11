@@ -667,15 +667,90 @@ class TestIntegration:
         time.sleep(1) # Wait for UI reaction
 
     def test_engagement_on_three_videos(self, safari, screenshot_dir):
-        """Navigate and engage with 3 videos in a row."""
+        """
+        Navigate and engage with 3 videos in a row.
+        
+        For each video:
+        1. Like the video (verify it's actually liked)
+        2. Comment on the video (verify comment appears at top with username)
+        3. Move to next video
+        """
         safari.activate()
         safari.navigate("https://www.tiktok.com/foryou")
         time.sleep(3) # Let FYP load
         
-        for i in range(1, 2):  # 1 video for testing
-            print(f"\n=== PROCESSING VIDEO {i} ===")
+        results = []
+        
+        for i in range(1, 4):  # 3 videos
+            print(f"\n{'='*60}")
+            print(f"=== PROCESSING VIDEO {i}/3 ===")
+            print(f"{'='*60}")
             
-            # 2. Comment on video
+            video_result = {
+                "video_number": i,
+                "liked": False,
+                "like_verified": False,
+                "commented": False,
+                "comment_verified": False,
+                "username_visible": False,
+                "error": None
+            }
+            
+            # Step 1: Like the video
+            print(f"\n--- STEP 1: LIKING VIDEO {i} ---")
+            safari.take_screenshot(f"video_{i}_before_like", screenshot_dir)
+            
+            # Check if already liked
+            like_status_before = safari.run_js("""
+                (function() {
+                    var btn = document.querySelector('[data-e2e="like-icon"], [data-e2e="browse-like-icon"]');
+                    if (btn) {
+                        var svg = btn.querySelector('svg');
+                        if (svg) {
+                            var fill = window.getComputedStyle(svg).fill;
+                            return fill.includes('255, 56, 92') || fill.includes('rgb(255, 56, 92)') ? 'LIKED' : 'NOT_LIKED';
+                        }
+                    }
+                    return 'UNKNOWN';
+                })();
+            """)
+            print(f"Like status before: {like_status_before}")
+            
+            # Like the video
+            print("Pressing 'l' to like...")
+            safari.activate()
+            pyautogui.press('l')
+            time.sleep(1)
+            
+            # CRITICAL: Verify like status is actually "liked"
+            like_status_after = safari.run_js("""
+                (function() {
+                    var btn = document.querySelector('[data-e2e="like-icon"], [data-e2e="browse-like-icon"]');
+                    if (btn) {
+                        var svg = btn.querySelector('svg');
+                        if (svg) {
+                            var fill = window.getComputedStyle(svg).fill;
+                            return fill.includes('255, 56, 92') || fill.includes('rgb(255, 56, 92)') ? 'LIKED' : 'NOT_LIKED';
+                        }
+                    }
+                    return 'UNKNOWN';
+                })();
+            """)
+            print(f"Like status after: {like_status_after}")
+            
+            if 'LIKED' in like_status_after:
+                print("✅ Video is LIKED (verified)")
+                video_result["liked"] = True
+                video_result["like_verified"] = True
+            else:
+                print("❌ FAILURE: Video is NOT liked - like action failed!")
+                video_result["error"] = "Like status is unliked"
+                video_result["liked"] = False
+                video_result["like_verified"] = False
+            
+            safari.take_screenshot(f"video_{i}_after_like", screenshot_dir)
+            
+            # Step 2: Comment on video
             # First check if panel is ALREADY open (persists on scroll)
             panel_open = safari.run_js("""
                 var container = document.querySelector('[class*="DivInputEditorContainer"]');

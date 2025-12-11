@@ -277,6 +277,10 @@ app.include_router(viral_analysis.router, prefix="/api", tags=["Viral Analysis"]
 from api.endpoints import social_analytics
 app.include_router(social_analytics.router, prefix="/api/social-analytics", tags=["Social Analytics"])
 
+# Social Media Accounts (RapidAPI Live Fetch)
+from api.endpoints import social_accounts
+app.include_router(social_accounts.router, prefix="/api/social-accounts", tags=["Social Accounts"])
+
 # Blotato Test Page (Connectivity & Scrapers)
 from api.endpoints import blotato_test
 app.include_router(blotato_test.router, prefix="/api/blotato", tags=["Blotato Test"])
@@ -324,7 +328,58 @@ app.include_router(publishing.router, prefix="/api/publishing", tags=["Publishin
 # Storage Management endpoints
 from api.endpoints import storage
 app.include_router(storage.router, prefix="/api", tags=["Storage Management"])
-# Duplicate analytics router removed
+
+# Media Processing (Mobile/Web uploads with smart resume)
+from api import media_processing
+app.include_router(media_processing.router, tags=["Media Processing"])
+
+# Database-backed Media Processing (persists to Supabase)
+from api import media_processing_db
+app.include_router(media_processing_db.router, tags=["Media Processing (Database)"])
+
+# Blotato API Integration (Social Publishing & AI Videos)
+from api import blotato_router
+app.include_router(blotato_router.router, tags=["Blotato API"])
+
+# AI Chat (Chat with all data)
+from api import ai_chat
+app.include_router(ai_chat.router, tags=["AI Chat"])
+
+# Analytics Comparison (Cross-account and cross-platform)
+from api import analytics_compare
+app.include_router(analytics_compare.router, tags=["Analytics Compare"])
+
+# Posted Media (Published content from connected accounts)
+from api import posted_media
+app.include_router(posted_media.router, tags=["Posted Media"])
+
+# Content Growth (Metrics tracking over time)
+from api import content_growth
+app.include_router(content_growth.router, tags=["Content Growth"])
+
+# Metrics Scheduler (Configurable check-back periods)
+from api import metrics_scheduler_api
+app.include_router(metrics_scheduler_api.router, tags=["Metrics Scheduler"])
+
+# Human in the Loop (Approval Queue)
+from api import approval_queue
+app.include_router(approval_queue.router, tags=["Approval Queue"])
+
+# AI Image Analysis
+from api import image_analysis
+app.include_router(image_analysis.router, tags=["Image Analysis"])
+
+# Content Pipeline (Automated sourcing, approval, scheduling)
+from api import content_pipeline
+app.include_router(content_pipeline.router, tags=["Content Pipeline"])
+
+# RapidAPI Metrics (Multi-API Instagram/LinkedIn with rate limit management)
+from api import rapidapi_metrics
+app.include_router(rapidapi_metrics.router, tags=["RapidAPI Metrics"])
+
+# Comment Automation (AI-powered comment engagement across platforms)
+from api import comment_automation
+app.include_router(comment_automation.router, tags=["Comment Automation"])
 
 
 # Error handlers

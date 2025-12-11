@@ -1,0 +1,328 @@
+
+1. End-to-end system flow
+Goal: Take raw media → analyze → schedule → auto-post → track → learn → suggest new media.
+Pipeline:
+
+Ingest from directory → Supabase
+A local watcher or worker:
+Scans a directory (/media_outbox).
+Uploads files to Supabase Storage.
+Inserts a row in media_assets table for each file.
+Status: ingested.
+AI analysis (pre-social phase)
+Trigger: Supabase Insert trigger / cron worker on media_assets with status = 'ingested'.
+Extract audio → run speech-to-text → store transcript.
+Sample frames (e.g., every X seconds) → run vision model to:
+Rate frames for hook potential (faces, text, motion, clarity).
+Select best_frame_index and save a generated thumbnail.
+Derive virality features:
+Topic, niche, emotional tone.
+Hook strength, pacing indicators.
+Trend overlap with Kalodata patterns (if you send top-performer archetypes in).
+Compute pre_social_score (0–100) + explanation.
+Status: analyzed.
+Scheduling for next 2 months
+Worker: schedule_planner
+Runs periodically (e.g., every 15 min).
+Looks at:
+media_assets with status = 'analyzed' and not yet scheduled.
+Existing posting_schedule events in next 60 days.
+Generates schedule times:
+Minimum gap between posts on a platform: 2 hours.
+Max gap: 24 hours.
+Horizon: now → now + 60 days.
+Inserts rows into posting_schedule.
+If schedule is set, media can move to status: scheduled.
+Auto-posting (Bloatato / “Lotado”)
+Worker: publisher
+Every few minutes:
+Fetches posting_schedule where status = 'pending' and scheduled_at <= now.
+Fetches AI suggestions from media_analysis:
+Best frame path (thumbnail).
+AI caption / description.
+Platform-specific hashtag set.
+Calls Bloatato (or whichever poster) with:
+Media file URL.
+Caption.
+Thumbnail.
+Target platform + time (immediate).
+On success:
+Stores external_post_id + external_post_url.
+Sets status = 'posted'.
+Enqueues check-back jobs for metrics at fixed intervals (see 5).
+Check-back metrics (RapidAPI, TikTok Data API, etc.)
+Worker: metrics_poller
+For each posted schedule row:
+Has planned checkpoints, e.g.:
++15m, +1h, +4h, +24h, +72h, +7d.
+At each checkpoint, calls RapidAPI / platform to get:
+Views, likes, comments count, shares, CTR, watch time, profile visits, follower delta, etc.
+Writes a row into posting_metrics.
+For new comments:
+Saves comments with sentiment + topic tags.
+Updates post_social_score based on performance vs:
+Pre_social prediction.
+Baseline benchmarks per account (e.g., avg views).
+AI coach + format mixer
+Worker or endpoint: coach_insights
+Triggered after key checkpoints (e.g., +24h, +7d) OR on demand:
+Looks at:
+media_analysis (topics, hook style).
+posting_metrics (actual performance).
+Sentiment + themes from comments.
+Kalodata top performer patterns.
+Outputs:
+What worked / didn’t.
+Recommended next angles.
+How to remix the clip (B-roll + text, face-cam, explainer, etc.).
+Writes into ai_coach_insights + creative_briefs.
+Deriving new media from existing assets
+Worker: derivative_planner
+For each well-performing asset or promising topic:
+Creates derivative_media_plans like:
+B-roll shot w/ text overlay.
+Face-to-camera re-take of the same hook.
+Carousel / image explainer version.
+“Faces video” (you + friend / guest).
+Those plans can either:
+Be exported as briefs for human execution.
+Or be sent to a separate video-gen pipeline later.
+2. Supabase data model (core tables)
+You can adjust names, but something like:
+media_assets
+id (uuid, PK)
+owner_id (uuid)
+source_type (enum: local_upload, kalodata_clip, repurposed, etc.)
+storage_path (text) – path in Supabase Storage
+media_type (enum: video, image)
+duration_sec (int, nullable for images)
+resolution (text, e.g., "1080x1920")
+status (enum: ingested, analyzed, scheduled, posted, archived)
+platform_hint (text, e.g., tiktok, yt_shorts, multi)
+created_at (timestamptz)
+media_analysis
+id (uuid, PK)
+media_id (uuid FK → media_assets)
+transcript (text)
+transcript_language (text)
+topics (jsonb) – key topics / entities.
+sentiment_overall (float)
+frames_sampled (int)
+best_frame_index (int)
+best_frame_url (text)
+virality_features (jsonb) – pacing, presence of face, hook rank, etc.
+pre_social_score (float)
+pre_social_explanation (text)
+ai_caption_suggestions (jsonb)
+ai_hashtag_suggestions (jsonb)
+created_at (timestamptz)
+posting_schedule
+id (uuid, PK)
+media_id (uuid)
+platform (enum: tiktok, instagram_reels, yt_shorts …)
+scheduled_at (timestamptz)
+status (enum: pending, posted, failed, canceled)
+external_post_id (text, nullable)
+external_post_url (text, nullable)
+created_at (timestamptz)
+posting_metrics
+id (uuid)
+schedule_id (uuid FK → posting_schedule)
+check_time (timestamptz)
+views (bigint)
+likes (bigint)
+comments_count (bigint)
+shares (bigint)
+watch_time_sec (bigint, nullable)
+ctr (float, nullable)
+profile_visits (int, nullable)
+follower_delta (int, nullable)
+raw_payload (jsonb)
+post_social_score (float, nullable) – derived at this checkpoint.
+comments
+id (uuid)
+schedule_id (uuid)
+platform_comment_id (text)
+author_handle (text)
+text (text)
+like_count (int)
+sentiment_score (float)
+sentiment_label (enum: very_negative, negative, neutral, positive, very_positive)
+topic_tags (jsonb)
+created_at (timestamptz)
+ai_coach_insights
+id (uuid)
+media_id (uuid)
+schedule_id (uuid, nullable)
+checkpoint (text, e.g., "24h", "7d")
+input_snapshot (jsonb) – the metrics + context used.
+summary (text)
+what_worked (text)
+what_to_change (text)
+next_actions (jsonb) – structured suggestions.
+created_at (timestamptz)
+creative_briefs
+id (uuid)
+source_type (enum: kalodata_product, own_top_post, prompt_only)
+source_reference (jsonb) – link to Kalodata product / your schedule row etc.
+angle_name (text)
+target_audience (text)
+core_promise (text)
+hook_ideas (jsonb)
+script_outline (jsonb) – intro, body beats, CTA.
+visual_directions (jsonb) – B-roll, face cam notes, text overlays.
+posting_guidance (jsonb) – when to post, platform priority, frequency.
+ready_for_use (bool)
+created_at (timestamptz)
+derivative_media_plans
+id (uuid)
+brief_id (uuid, nullable)
+source_media_id (uuid, nullable)
+format_type (enum: broll_text, face_cam, faces_video, explainer, carousel)
+instructions (text)
+target_platform (text)
+estimated_length_sec (int)
+status (enum: planned, in_production, completed)
+created_at (timestamptz)
+3. Scheduling logic (2h–24h, 2-month horizon)
+You described the constraints as:
+Min gap between posts: 2 hours.
+Max gap: 24 hours.
+Horizon: always keep a queue covering up to 2 months out.
+Try to use all content without “running out” early, but don’t slow down so much that you post less than once per day if you have enough content.
+One simple deterministic algorithm:
+function buildSchedule(mediaCount: number, horizonHours: number = 24*60) {
+  if (mediaCount === 0) return [];
+
+  // step 1: ideal spacing to cover the whole horizon
+  const idealSpacing = horizonHours / mediaCount; // hours
+
+  // step 2: clamp spacing between [2, 24]
+  const spacing = Math.min(24, Math.max(2, idealSpacing));
+
+  // step 3: schedule each piece at now + i*spacing
+  const slots: number[] = [];
+  for (let i = 0; i < mediaCount; i++) {
+    const offsetHours = i * spacing;
+    if (offsetHours > horizonHours) break; // don’t exceed 2 months
+    slots.push(offsetHours);
+  }
+
+  return slots; // convert to timestamps relative to now
+}
+Behavior:
+If you have lots of media (so idealSpacing < 2), spacing clamps to 2h, you just keep posting every 2 hours until you hit the 2-month boundary.
+If you have little media (e.g., 10 clips over 60 days → 144 hours/clip → >24h):
+Spacing clamps at 24h, so you still get one per day until you’ve used all the clips.
+For everything in between, it spreads content evenly over the 2-month horizon between 2h and 24h.
+When new media comes in:
+Run schedule_planner again:
+Only fill empty slots (times where there’s no scheduled post).
+Or, if you want a smarter version later, re-optimize the whole timeline in a “rolling horizon” fashion.
+4. External integrations
+a) Supabase + local directory
+Local script / n8n worker:
+Watches folder.
+Calls your POST /api/media/ingest endpoint with file path or direct upload.
+Endpoint uploads to Supabase Storage + creates media_assets row.
+b) AI stack (vision + transcript + scoring)
+This can be one “Analysis Service”:
+Inputs: media_id.
+Steps:
+Download media from Supabase Storage.
+Call STT (Whisper / OpenAI) for transcript.
+Sample frames + call vision model for:
+Hook detection.
+Thumbnail quality.
+Combine features + Kalodata “top ad patterns” into virality model.
+Output: writes media_analysis + updates media_assets.status = 'analyzed'.
+c) Posting (Bloatato / “Lotado”)
+publisher will:
+Resolve:
+Storage URL.
+Caption from media_analysis.ai_caption_suggestions.
+Thumbnail from best_frame_url.
+Call Bloatato API:
+On success, store external_post_id, external_post_url.
+Trigger creation of metrics checkpoints.
+d) RapidAPI (TikTok Data API, etc.)
+metrics_poller will:
+Use external_post_id + platform to fetch metrics.
+Parse JSON into posting_metrics.
+For comments:
+Insert into comments.
+Optionally batch comments → send to sentiment + clustering model → update topic_tags.
+e) Kalodata for creative pattern mining
+You can feed to the coach:
+Top performing ads meta: hooks, intros, lengths, formats.
+Product category, price range, angle (UGC, testimonial, problem/solution, etc.).
+Coach model uses those as “exemplar patterns” when generating briefs and predictions.
+5. AI coach & creative brief endpoints
+Think of briefs + insights as APIs that other apps can hit.
+Example: GET /api/media/:id/coach-summary
+Response shape (example):
+{
+  "media_id": "uuid",
+  "pre_social_score": 78,
+  "post_social_score_24h": 82,
+  "performance_summary": "Above your channel median by 45% views and 70% watch time.",
+  "what_worked": [
+    "Strong first 2 seconds with clear problem statement.",
+    "Visual contrast between A/B results kept people watching."
+  ],
+  "what_to_improve": [
+    "CTA appears only in last 3 seconds; move first call-to-action to 5s mark.",
+    "Caption doesn’t mirror the hook, consider adding '…without burning out' to match the script."
+  ],
+  "recommended_next_formats": [
+    {
+      "format": "broll_text",
+      "description": "Use B-roll of you working at your desk with large text: 'This is why your content never compounds.'"
+    },
+    {
+      "format": "face_cam",
+      "description": "Face to camera, start with: 'You don’t need more ideas. You need better timing.'"
+    }
+  ]
+}
+Example: GET /api/creative-briefs?source=kalodata_product_id
+Response (one brief):
+{
+  "id": "uuid",
+  "angle_name": "The 'I tried this so you don't have to' demo",
+  "target_audience": "TikTok creators selling low-ticket digital products",
+  "core_promise": "Show them how your system finds viral frames and captions so they can recycle old videos into new sales.",
+  "hook_ideas": [
+    "“This 30-second script made my OLD video go viral again.”",
+    "“I fed my entire camera roll into an AI and this is what happened…”"
+  ],
+  "script_outline": {
+    "intro": [
+      "Quick pattern interrupt: show a grid of old, 'dead' posts.",
+      "Line: “You’re sitting on a goldmine of content and don’t even know it.”"
+    ],
+    "body": [
+      "Show your dashboard auto-rating clips.",
+      "Explain pre-social score vs post-social score in 1 sentence.",
+      "Show one before/after of performance."
+    ],
+    "cta": [
+      "“Comment ‘POSTER’ and I’ll send you the breakdown.”"
+    ]
+  },
+  "visual_directions": {
+    "broll": [
+      "Screen capture of timeline view of your scheduler.",
+      "Overlay text: “This is my 2-month queue.”"
+    ],
+    "face_cam": [
+      "Shoot in vertical, close-up framing.",
+      "Use captions synced to the hook lines."
+    ]
+  },
+  "posting_guidance": {
+    "platform_priority": ["tiktok", "reels"],
+    "frequency": "2-4 times per day",
+    "time_window_hint": "Cluster around your historical high-engagement windows."
+  }
+}

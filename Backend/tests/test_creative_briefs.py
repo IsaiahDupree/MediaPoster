@@ -506,45 +506,148 @@ class TestCreativeBriefService:
 class TestCreativeBriefAPI:
     """Tests for creative brief API endpoints"""
     
-    def test_generate_brief_endpoint(self):
+    @pytest.fixture
+    def client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from api.endpoints.creative_briefs import router
+        
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app)
+    
+    @pytest.fixture
+    def sample_request_data(self):
+        return {
+            "product": {
+                "product_id": "p1",
+                "product_name": "Test Serum",
+                "category": "Beauty",
+                "price_min": 25.0,
+                "revenue_usd": 100000.0
+            },
+            "video": {
+                "video_id": "v1",
+                "video_url": "http://test.com/v1",
+                "duration_sec": 30,
+                "views": 50000,
+                "transcript_text": "This serum changed my life.",
+                "core_promise": "Glass skin"
+            }
+        }
+    
+    def test_generate_brief_endpoint(self, client, sample_request_data):
         """Test POST /generate-brief endpoint"""
-        assert True  # Would use TestClient
+        response = client.post(
+            "/api/creative-briefs/generate-brief",
+            json={
+                **sample_request_data,
+                "format_type": "short_form",
+                "niche": "skincare"
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "brief_id" in data
+        assert "markdown" in data
     
-    def test_generate_prompt_endpoint(self):
+    def test_generate_prompt_endpoint(self, client, sample_request_data):
         """Test POST /generate-prompt endpoint"""
-        assert True
+        response = client.post(
+            "/api/creative-briefs/generate-prompt",
+            json={
+                **sample_request_data,
+                "style": "realistic_ugc",
+                "output_format": "text"
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "prompt_id" in data
+        assert "full_prompt" in data
     
-    def test_get_formats_endpoint(self):
+    def test_get_formats_endpoint(self, client):
         """Test GET /formats endpoint"""
-        assert True
+        response = client.get("/api/creative-briefs/formats")
+        assert response.status_code == 200
+        data = response.json()
+        assert "formats" in data
+        assert len(data["formats"]) > 0
     
-    def test_get_niches_endpoint(self):
+    def test_get_niches_endpoint(self, client):
         """Test GET /niches endpoint"""
-        assert True
+        response = client.get("/api/creative-briefs/niches")
+        assert response.status_code == 200
+        data = response.json()
+        assert "niches" in data
+        assert any(n["niche"] == "skincare" for n in data["niches"])
     
-    def test_get_scene_roles_endpoint(self):
+    def test_get_scene_roles_endpoint(self, client):
         """Test GET /scene-roles endpoint"""
-        assert True
+        response = client.get("/api/creative-briefs/scene-roles")
+        assert response.status_code == 200
+        data = response.json()
+        assert "roles" in data
+        assert len(data["roles"]) > 0
     
-    def test_brief_markdown_output(self):
+    def test_brief_markdown_output(self, client, sample_request_data):
         """Test markdown output format"""
-        assert True
+        response = client.post(
+            "/api/creative-briefs/generate-brief",
+            json={
+                **sample_request_data,
+                "output_format": "markdown"
+            }
+        )
+        assert response.status_code == 200
+        assert response.json()["markdown"].startswith("# Creative")
     
-    def test_brief_json_output(self):
+    def test_brief_json_output(self, client, sample_request_data):
         """Test JSON output format"""
-        assert True
+        response = client.post(
+            "/api/creative-briefs/generate-brief",
+            json={
+                **sample_request_data,
+                "output_format": "json"
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "brief_json" in data
+        assert "title" in data["brief_json"]
     
-    def test_prompt_text_output(self):
+    def test_prompt_text_output(self, client, sample_request_data):
         """Test text prompt output"""
-        assert True
+        response = client.post(
+            "/api/creative-briefs/generate-prompt",
+            json={
+                **sample_request_data,
+                "output_format": "text"
+            }
+        )
+        assert response.status_code == 200
+        assert "full_prompt" in response.json()
     
-    def test_prompt_structured_output(self):
+    def test_prompt_structured_output(self, client, sample_request_data):
         """Test structured prompt output"""
-        assert True
+        response = client.post(
+            "/api/creative-briefs/generate-prompt",
+            json={
+                **sample_request_data,
+                "output_format": "json"
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "shots" in data
     
-    def test_api_error_handling(self):
-        """Test API error handling"""
-        assert True
+    def test_api_error_handling(self, client):
+        """Test API error handling with bad data"""
+        response = client.post(
+            "/api/creative-briefs/generate-brief",
+            json={"invalid": "data"}
+        )
+        assert response.status_code == 422  # Validation error
 
 
 pytestmark = pytest.mark.creative_briefs

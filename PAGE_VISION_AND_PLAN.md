@@ -580,25 +580,166 @@ interface ContentIntelligence {
 
 ---
 
-## 🛠️ Next Steps
+## 🆕 NEW PAGES - Competitor Feature Integration (Dec 2025)
 
-### Immediate Actions (This Week)
-1. Create detailed wireframes for priority pages
-2. Define exact API endpoints needed
-3. Create database queries for new data
-4. Build out Dashboard widgets
-5. Implement Video → Clip workflow
+### 🎯 Visual Planner (`/visual-planner`) ✅ CREATED
+**Purpose**: Instagram grid planning like Planoly/Later
+**Source**: Planoly, Later
 
-### Week 2-3
-6. Enhance People detail page
-7. Add Analytics comparisons
-8. Implement Brief → Content workflow
-9. Build Segment creator
+**Features**:
+- [x] 3x3, 4x3, 3x4 grid layouts
+- [x] Drag & drop reordering
+- [x] Media library sidebar
+- [x] Status badges (Draft/Scheduled/Posted)
+- [x] Post editing modal
+- [x] Schedule all drafts
+- [ ] Connect to real API
+- [ ] Persist order changes
 
-### Week 4+
-10. Schedule enhancements
-11. Goals visualization
-12. Settings implementation
+---
+
+### 🎠 Carousel Creator (`/carousel-creator`) ✅ CREATED
+**Purpose**: AI-powered carousel creation from grouped images
+**Source**: Original MediaPoster Feature
+
+**Features**:
+- [x] AI content grouping
+- [x] Theme detection
+- [x] Multi-select (up to 10 slides)
+- [x] AI caption suggestions
+- [x] Edit carousels
+- [ ] Connect to real media library
+- [ ] Actual AI similarity scoring
+- [ ] Caption generation via AI
+
+---
+
+### 🤖 AI Chat (`/ai-chat`) ✅ CREATED
+**Purpose**: Chat with all your data
+**Source**: Original MediaPoster Feature
+
+**Features**:
+- [x] Conversational AI interface
+- [x] Data context selector
+- [x] Quick prompts
+- [x] Source citations
+- [x] Multiple data sources
+- [ ] Connect to actual LLM
+- [ ] Real data integration
+
+---
+
+### 📬 Social Inbox (`/inbox`) - PLANNED
+**Purpose**: Unified comment/message management
+**Source**: Buffer, Later
+
+**Features Needed**:
+- [ ] Aggregate comments from all platforms
+- [ ] Reply from within MediaPoster
+- [ ] Filter by platform/status/sentiment
+- [ ] Bulk actions
+- [ ] AI reply suggestions
+- [ ] Saved replies
+
+**Priority**: P0 - CRITICAL
+**Effort**: 3 weeks
+
+---
+
+### #️⃣ Hashtag Manager (`/hashtags`) - PLANNED
+**Purpose**: Save and organize hashtag groups
+**Source**: Buffer, Planoly
+
+**Features Needed**:
+- [ ] Create hashtag groups
+- [ ] One-click insert to posts
+- [ ] Hashtag analytics
+- [ ] AI suggestions
+- [ ] Performance tracking
+
+**Priority**: P2
+**Effort**: 1 week
+
+---
+
+### 🔗 Link in Bio (`/link-in-bio`) - PLANNED
+**Purpose**: Customizable bio link page
+**Source**: Buffer, Later, Planoly
+
+**Features Needed**:
+- [ ] Page builder UI
+- [ ] Custom themes
+- [ ] Unlimited links
+- [ ] Social links
+- [ ] Click analytics
+- [ ] Custom subdomain
+
+**Priority**: P2
+**Effort**: 3 weeks
+
+---
+
+### ⏰ Best Time to Post - ENHANCEMENT
+**Purpose**: AI-calculated optimal posting times
+**Source**: Buffer, Later, Planoly
+
+**Features Needed**:
+- [ ] Engagement analysis algorithm
+- [ ] Calendar heat map overlay
+- [ ] Per-platform recommendations
+- [ ] One-click optimal scheduling
+
+**Priority**: P0 - CRITICAL
+**Effort**: 2 weeks
+
+---
+
+## 🛠️ Updated Roadmap
+
+### Sprint 1-2: Foundation (P0)
+1. ✅ Visual Planner - CREATED
+2. ✅ Carousel Creator - CREATED
+3. ✅ AI Chat - CREATED
+4. ⏳ Best Time to Post - IN PROGRESS
+5. ⏳ Social Inbox - IN PROGRESS
+
+### Sprint 3-4: Content Tools (P1-P2)
+6. First Comment Scheduling
+7. Hashtag Manager
+8. Holiday Calendar
+9. Content Placeholders
+
+### Sprint 5-6: Link in Bio (P2)
+10. Page Builder
+11. Theme System
+12. Public Serving
+13. Analytics
+
+### Sprint 7-8: Advanced (P2-P3)
+14. Hashtag Analytics
+15. Competitive Benchmarking
+16. Social Listening (Optional)
+
+---
+
+## 📊 Competitor Parity Status
+
+| Feature | MediaPoster | Buffer | OpusClip | Later | Planoly |
+|---------|:-----------:|:------:|:--------:|:-----:|:-------:|
+| **AI Video Creation** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Pre-Social Score** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **AI Coaching** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **AI Chat** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Visual Grid Planner** | ✅ | ❌ | ❌ | ✅ | ✅ |
+| **AI Carousel Creator** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Best Time to Post | ⏳ | ✅ | ❌ | ✅ | ✅ |
+| Social Inbox | ⏳ | ✅ | ❌ | ✅ | ❌ |
+| First Comment | 📋 | ✅ | ❌ | ❌ | ❌ |
+| Hashtag Manager | 📋 | ✅ | ❌ | ❌ | ✅ |
+| Link in Bio | 📋 | ✅ | ❌ | ✅ | ✅ |
+| Holiday Calendar | 📋 | ❌ | ❌ | ❌ | ✅ |
+
+**Legend:** ✅ Built | ⏳ In Progress | 📋 Planned | ❌ Not Available
 
 ---
 
@@ -609,8 +750,11 @@ interface ContentIntelligence {
 3. **Connected**: Easy navigation between related pages
 4. **Progressive Disclosure**: Start simple, reveal complexity on demand
 5. **Intelligence Built-In**: AI insights throughout, not isolated
+6. **Visual-First**: Match competitor UX for visual planning
+7. **AI-Powered**: Unique AI features as differentiators
 
 ---
 
-**Status**: Vision documented, ready for implementation  
-**Next**: Create wireframes and API specs for Phase 1 pages
+**Status**: Vision updated with competitor features  
+**Last Updated**: December 8, 2025  
+**Next**: Implement P0 features (Best Time, Social Inbox)

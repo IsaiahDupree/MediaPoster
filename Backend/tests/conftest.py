@@ -6,6 +6,8 @@ import pytest_asyncio
 import tempfile
 import shutil
 import subprocess
+import requests
+import time
 from pathlib import Path
 from typing import Generator
 import sys
@@ -18,6 +20,118 @@ pytest_asyncio.fixture = pytest_asyncio.fixture
 
 # Load environment variables from .env file
 load_dotenv()
+
+# =============================================================================
+# SERVER CONFIGURATION
+# =============================================================================
+BACKEND_PORT = int(os.getenv("BACKEND_PORT", "5555"))
+FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", os.getenv("PORT", "5557")))
+BACKEND_URL = f"http://localhost:{BACKEND_PORT}"
+FRONTEND_URL = f"http://localhost:{FRONTEND_PORT}"
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+BACKEND_DIR = PROJECT_ROOT / "Backend"
+FRONTEND_DIR = PROJECT_ROOT / "dashboard"
+
+
+def check_server_health(url: str, timeout: float = 3.0) -> bool:
+    """Check if a server is healthy."""
+    try:
+        response = requests.get(url, timeout=timeout)
+        return response.status_code < 500
+    except Exception:
+        return False
+
+
+def is_port_in_use(port: int) -> bool:
+    """Check if a port is in use."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+
+def start_backend_in_terminal():
+    """Start the backend server in a new Terminal window."""
+    script = f'''
+    tell application "Terminal"
+        do script "cd {BACKEND_DIR} && source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port {BACKEND_PORT} --reload"
+        activate
+    end tell
+    '''
+    subprocess.run(["osascript", "-e", script], capture_output=True)
+
+
+def start_frontend_in_terminal():
+    """Start the frontend server in a new Terminal window."""
+    script = f'''
+    tell application "Terminal"
+        do script "cd {FRONTEND_DIR} && PORT={FRONTEND_PORT} npm run dev"
+        activate
+    end tell
+    '''
+    subprocess.run(["osascript", "-e", script], capture_output=True)
+
+
+def wait_for_server(url: str, name: str, timeout: int = 30) -> bool:
+    """Wait for a server to become available."""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if check_server_health(url):
+            return True
+        time.sleep(1)
+    return False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_servers_running():
+    """Ensure both backend and frontend servers are running before tests."""
+    servers_needed = os.getenv("REQUIRE_SERVERS", "false").lower() == "true"
+    
+    if not servers_needed:
+        # Skip server checks if not required
+        yield
+        return
+    
+    backend_healthy = False
+    frontend_healthy = False
+    
+    # Check backend
+    for endpoint in ["/health", "/docs", "/"]:
+        if check_server_health(f"{BACKEND_URL}{endpoint}"):
+            backend_healthy = True
+            print(f"\n✓ Backend server healthy at {BACKEND_URL}")
+            break
+    
+    if not backend_healthy:
+        if is_port_in_use(BACKEND_PORT):
+            print(f"\n⚠ Backend port {BACKEND_PORT} in use but not responding")
+        else:
+            print(f"\n⚠ Backend not running, starting in new terminal...")
+            start_backend_in_terminal()
+            if wait_for_server(BACKEND_URL, "Backend", timeout=30):
+                backend_healthy = True
+                print(f"✓ Backend started at {BACKEND_URL}")
+            else:
+                print(f"✗ Backend failed to start")
+    
+    # Check frontend
+    if check_server_health(FRONTEND_URL):
+        frontend_healthy = True
+        print(f"✓ Frontend server healthy at {FRONTEND_URL}")
+    else:
+        if is_port_in_use(FRONTEND_PORT):
+            print(f"⚠ Frontend port {FRONTEND_PORT} in use but not responding")
+        else:
+            print(f"⚠ Frontend not running, starting in new terminal...")
+            start_frontend_in_terminal()
+            if wait_for_server(FRONTEND_URL, "Frontend", timeout=30):
+                frontend_healthy = True
+                print(f"✓ Frontend started at {FRONTEND_URL}")
+            else:
+                print(f"✗ Frontend failed to start")
+    
+    yield
+    
+    # Servers are left running after tests (user can stop manually)
 
 # Use REAL database for tests (not mocks)
 # Ensure DATABASE_URL points to test database

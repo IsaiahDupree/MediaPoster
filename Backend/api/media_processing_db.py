@@ -822,6 +822,127 @@ async def stream_video(
 
 
 # =============================================================================
+# ENDPOINTS - TRANSCODED VIDEO (Browser-compatible H.264)
+# =============================================================================
+
+@router.get("/video-stream/{media_id}")
+async def stream_transcoded_video(
+    media_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Stream video transcoded to H.264 for browser compatibility.
+    HEVC/ProRes videos are transcoded on-the-fly to H.264.
+    """
+    from fastapi.responses import StreamingResponse
+    import subprocess
+    import tempfile
+    
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Get the source file path
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    actual_path = None
+    if container_source and Path(container_source).exists():
+        actual_path = container_source
+    elif source_path and Path(source_path).exists():
+        actual_path = source_path
+    
+    if not actual_path:
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    # Check if we have a cached transcoded version
+    cache_dir = Path("/tmp/mediaposter/transcoded")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_path = cache_dir / f"{media_id}.mp4"
+    
+    if not cached_path.exists():
+        # Transcode using ffmpeg
+        try:
+            cmd = [
+                "ffmpeg", "-y", "-i", str(actual_path),
+                "-c:v", "libx264",  # H.264 codec
+                "-preset", "fast",   # Fast encoding
+                "-crf", "23",        # Quality (lower = better, 18-28 typical)
+                "-c:a", "aac",       # AAC audio
+                "-b:a", "128k",      # Audio bitrate
+                "-movflags", "+faststart",  # Web optimized
+                "-max_muxing_queue_size", "1024",
+                str(cached_path)
+            ]
+            
+            process = subprocess.run(cmd, capture_output=True, timeout=300)
+            
+            if process.returncode != 0:
+                # Fallback to original file
+                return FileResponse(
+                    actual_path,
+                    media_type="video/quicktime",
+                    headers={"Accept-Ranges": "bytes"}
+                )
+        except Exception as e:
+            # Fallback to original file
+            return FileResponse(
+                actual_path,
+                media_type="video/quicktime",
+                headers={"Accept-Ranges": "bytes"}
+            )
+    
+    # Serve the transcoded file with range support
+    file_size = cached_path.stat().st_size
+    range_header = request.headers.get("range")
+    
+    if range_header:
+        range_match = range_header.replace("bytes=", "").split("-")
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] else file_size - 1
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+        
+        def iterfile():
+            with open(cached_path, "rb") as f:
+                f.seek(start)
+                remaining = content_length
+                chunk_size = 1024 * 1024
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+        
+        return StreamingResponse(
+            iterfile(),
+            status_code=206,
+            media_type="video/mp4",
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+            }
+        )
+    
+    return FileResponse(
+        str(cached_path),
+        media_type="video/mp4",
+        headers={"Accept-Ranges": "bytes"}
+    )
+
+
+# =============================================================================
 # ENDPOINTS - IMAGE
 # =============================================================================
 

@@ -257,6 +257,10 @@ app.include_router(clip_management.router, prefix="/api/clip-management", tags=[
 from api.endpoints import enhanced_analysis
 app.include_router(enhanced_analysis.router, prefix="/api/enhanced-analysis", tags=["Enhanced Analysis"])
 
+# Posted Content Tracking
+from api.endpoints import posted_content
+app.include_router(posted_content.router, prefix="/api", tags=["Posted Content"])
+
 # Publishing Queue
 from api.endpoints import publishing_queue
 app.include_router(publishing_queue.router, prefix="/api/publishing", tags=["Publishing Queue"])
@@ -280,6 +284,10 @@ app.include_router(social_analytics.router, prefix="/api/social-analytics", tags
 # Social Media Accounts (RapidAPI Live Fetch)
 from api.endpoints import social_accounts
 app.include_router(social_accounts.router, prefix="/api/social-accounts", tags=["Social Accounts"])
+
+# YouTube Analytics (Google Cloud Console / YouTube Data API v3)
+from api.endpoints import youtube_analytics
+app.include_router(youtube_analytics.router, prefix="/api/youtube-analytics", tags=["YouTube Analytics"])
 
 # Blotato Test Page (Connectivity & Scrapers)
 from api.endpoints import blotato_test
@@ -380,6 +388,10 @@ app.include_router(rapidapi_metrics.router, tags=["RapidAPI Metrics"])
 # Comment Automation (AI-powered comment engagement across platforms)
 from api import comment_automation
 app.include_router(comment_automation.router, tags=["Comment Automation"])
+
+# Device Import (iOS/Android media import with duplicate detection)
+from routers import import_router
+app.include_router(import_router.router, tags=["Device Import"])
 
 
 # Error handlers

@@ -1453,3 +1453,56 @@ class APIResponseCache(Base):
         Index('idx_cache_key', 'cache_key'),
         Index('idx_cache_expires', 'expires_at'),
     )
+
+
+# =====================================================
+# POSTED CONTENT TRACKING
+# =====================================================
+
+class PostedContent(Base):
+    """Track content that has been published to social media platforms"""
+    __tablename__ = "posted_content"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Platform info
+    platform = Column(Text, nullable=False)  # tiktok, instagram, youtube, twitter
+    platform_post_id = Column(Text)  # Blotato submission ID
+    platform_url = Column(Text)  # Public URL on the platform
+    
+    # Account info
+    account_id = Column(Text)  # Blotato account ID
+    account_username = Column(Text)
+    
+    # Local content reference
+    media_id = Column(UUID(as_uuid=True))  # Reference to local media library
+    
+    # Content details
+    caption = Column(Text)
+    hashtags = Column(ARRAY(Text))
+    
+    # Analytics
+    views = Column(Integer, default=0)
+    likes = Column(Integer, default=0)
+    comments = Column(Integer, default=0)
+    shares = Column(Integer, default=0)
+    saves = Column(Integer, default=0)
+    engagement_rate = Column(Float, default=0.0)
+    
+    # Status
+    status = Column(Text, default='published')  # published, failed, deleted
+    error_message = Column(Text)
+    
+    # Timestamps
+    posted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    analytics_updated_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_posted_content_platform', 'platform'),
+        Index('idx_posted_content_media_id', 'media_id'),
+        Index('idx_posted_content_platform_post_id', 'platform_post_id'),
+        Index('idx_posted_content_posted_at', 'posted_at'),
+    )

@@ -3,19 +3,21 @@ Posted Content API Endpoints
 Tracks content that has been published to social media platforms
 """
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, func
 import logging
 import uuid
+
+from database.connection import get_db
+from database.models import PostedContent as PostedContentModel
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/posted-content", tags=["posted-content"])
-
-# In-memory store for posted content (will be replaced with database)
-_posted_content_store: List[dict] = []
 
 
 class PostedContentItem(BaseModel):
@@ -63,109 +65,177 @@ async def get_posted_content(
     page: int = Query(default=1, ge=1),
     platform: Optional[str] = None,
     account_username: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Get list of posted content.
-    
-    This endpoint returns content that has been published to social media platforms.
+    Get list of posted content from database.
     """
-    # Filter by platform if specified
-    filtered = _posted_content_store
-    if platform:
-        filtered = [p for p in filtered if p.get('platform', '').lower() == platform.lower()]
-    if account_username:
-        filtered = [p for p in filtered if p.get('account_username', '').lower() == account_username.lower()]
-    
-    # Paginate
-    total = len(filtered)
-    start = (page - 1) * limit
-    end = start + limit
-    page_items = filtered[start:end]
-    
-    # Convert to response format
-    items = []
-    for p in page_items:
-        items.append(PostedContentItem(
-            id=p.get('id', ''),
-            platform=p.get('platform', ''),
-            platform_post_id=p.get('blotato_submission_id', ''),
-            platform_url=p.get('platform_url', ''),
-            account_username=p.get('blotato_account_id', ''),
-            local_content_id=p.get('media_id'),
-            description=p.get('caption'),
-            posted_at=p.get('posted_at', datetime.now().isoformat()),
-            status=p.get('status', 'published'),
-            views=p.get('views', 0),
-            likes=p.get('likes', 0),
-            comments=p.get('comments', 0),
-            shares=p.get('shares', 0),
-        ))
-    
-    return PostedContentResponse(
-        items=items,
-        total=total,
-        page=page,
-        limit=limit,
-    )
+    try:
+        # Build query
+        query = select(PostedContentModel)
+        
+        if platform:
+            query = query.where(func.lower(PostedContentModel.platform) == platform.lower())
+        if account_username:
+            query = query.where(func.lower(PostedContentModel.account_username) == account_username.lower())
+        
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Paginate and order
+        query = query.order_by(PostedContentModel.posted_at.desc())
+        query = query.offset((page - 1) * limit).limit(limit)
+        
+        result = await db.execute(query)
+        posts = result.scalars().all()
+        
+        # Convert to response format
+        items = []
+        for p in posts:
+            items.append(PostedContentItem(
+                id=str(p.id),
+                platform=p.platform,
+                platform_post_id=p.platform_post_id or '',
+                platform_url=p.platform_url,
+                account_username=p.account_username or '',
+                local_content_id=str(p.media_id) if p.media_id else None,
+                description=p.caption,
+                posted_at=p.posted_at.isoformat() if p.posted_at else datetime.now().isoformat(),
+                status=p.status or 'published',
+                views=p.views or 0,
+                likes=p.likes or 0,
+                comments=p.comments or 0,
+                shares=p.shares or 0,
+            ))
+        
+        return PostedContentResponse(
+            items=items,
+            total=total,
+            page=page,
+            limit=limit,
+        )
+    except Exception as e:
+        logger.error(f"Error fetching posted content: {e}")
+        return PostedContentResponse(items=[], total=0, page=page, limit=limit)
 
 
 @router.post("/record")
-async def record_post(request: PostRecordRequest):
+async def record_post(request: PostRecordRequest, db: AsyncSession = Depends(get_db)):
     """
     Record a new post after publishing via Blotato.
-    Stores the platform URL for analytics tracking.
+    Stores the platform URL for analytics tracking in database.
     """
-    post_record = {
-        "id": str(uuid.uuid4()),
-        "media_id": request.media_id,
-        "platform": request.platform,
-        "blotato_submission_id": request.blotato_submission_id,
-        "platform_url": request.platform_url,
-        "blotato_account_id": request.blotato_account_id,
-        "caption": request.caption,
-        "status": request.status,
-        "posted_at": datetime.now().isoformat(),
-        "views": 0,
-        "likes": 0,
-        "comments": 0,
-        "shares": 0,
-    }
-    
-    _posted_content_store.append(post_record)
-    logger.info(f"✓ Recorded post: {request.platform} - {request.platform_url}")
-    
-    return {
-        "success": True,
-        "id": post_record["id"],
-        "platform_url": request.platform_url
-    }
+    try:
+        new_post = PostedContentModel(
+            platform=request.platform,
+            platform_post_id=request.blotato_submission_id,
+            platform_url=request.platform_url,
+            account_id=request.blotato_account_id,
+            account_username=request.blotato_account_id,
+            media_id=uuid.UUID(request.media_id) if request.media_id else None,
+            caption=request.caption,
+            status=request.status,
+        )
+        
+        db.add(new_post)
+        await db.commit()
+        await db.refresh(new_post)
+        
+        logger.info(f"✓ Recorded post to DB: {request.platform} - {request.platform_url}")
+        
+        return {
+            "success": True,
+            "id": str(new_post.id),
+            "platform_url": request.platform_url
+        }
+    except Exception as e:
+        logger.error(f"Error recording post: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/by-submission/{submission_id}")
-async def get_by_submission_id(submission_id: str):
+async def get_by_submission_id(submission_id: str, db: AsyncSession = Depends(get_db)):
     """Get post record by Blotato submission ID"""
-    for post in _posted_content_store:
-        if post.get('blotato_submission_id') == submission_id:
-            return post
-    raise HTTPException(status_code=404, detail="Post not found")
+    try:
+        query = select(PostedContentModel).where(PostedContentModel.platform_post_id == submission_id)
+        result = await db.execute(query)
+        post = result.scalar_one_or_none()
+        
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        return {
+            "id": str(post.id),
+            "platform": post.platform,
+            "platform_post_id": post.platform_post_id,
+            "platform_url": post.platform_url,
+            "media_id": str(post.media_id) if post.media_id else None,
+            "caption": post.caption,
+            "status": post.status,
+            "posted_at": post.posted_at.isoformat() if post.posted_at else None,
+            "views": post.views,
+            "likes": post.likes,
+            "comments": post.comments,
+            "shares": post.shares,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching post by submission ID: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/by-media/{media_id}")
-async def get_posts_by_media(media_id: str):
+async def get_posts_by_media(media_id: str, db: AsyncSession = Depends(get_db)):
     """Get all posts for a specific media item"""
-    posts = [p for p in _posted_content_store if p.get('media_id') == media_id]
-    return {"posts": posts, "count": len(posts)}
+    try:
+        query = select(PostedContentModel).where(PostedContentModel.media_id == uuid.UUID(media_id))
+        result = await db.execute(query)
+        posts = result.scalars().all()
+        
+        return {
+            "posts": [
+                {
+                    "id": str(p.id),
+                    "platform": p.platform,
+                    "platform_url": p.platform_url,
+                    "status": p.status,
+                    "posted_at": p.posted_at.isoformat() if p.posted_at else None,
+                }
+                for p in posts
+            ],
+            "count": len(posts)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching posts by media ID: {e}")
+        return {"posts": [], "count": 0}
 
 
 @router.patch("/by-submission/{submission_id}/url")
-async def update_platform_url(submission_id: str, platform_url: str):
+async def update_platform_url(submission_id: str, platform_url: str, db: AsyncSession = Depends(get_db)):
     """Update the platform URL for a post after it's been published"""
-    for post in _posted_content_store:
-        if post.get('blotato_submission_id') == submission_id:
-            post['platform_url'] = platform_url
-            logger.info(f"✓ Updated platform URL for {submission_id}: {platform_url}")
-            return {"success": True, "platform_url": platform_url}
-    raise HTTPException(status_code=404, detail="Post not found")
+    try:
+        query = select(PostedContentModel).where(PostedContentModel.platform_post_id == submission_id)
+        result = await db.execute(query)
+        post = result.scalar_one_or_none()
+        
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        post.platform_url = platform_url
+        await db.commit()
+        
+        logger.info(f"✓ Updated platform URL for {submission_id}: {platform_url}")
+        return {"success": True, "platform_url": platform_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating platform URL: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("")

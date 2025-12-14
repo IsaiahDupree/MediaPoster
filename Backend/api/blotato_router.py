@@ -614,6 +614,25 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
             use_supabase=False,  # Use Google Drive with API key (bypasses virus scan)
         )
         
+        # Record the post if successful
+        if result['success'] and result.get('post_submission_id'):
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        "http://localhost:5555/api/posted-content/record",
+                        json={
+                            "media_id": request.media_id,
+                            "platform": platform_lower,
+                            "blotato_submission_id": result.get('post_submission_id'),
+                            "blotato_account_id": request.blotato_account_id,
+                            "caption": request.text,
+                            "status": "published",
+                        }
+                    )
+                    logger.info(f"✓ Recorded post to posted-content store")
+            except Exception as record_err:
+                logger.warning(f"Failed to record post: {record_err}")
+        
         return FullPublishResponse(
             success=result['success'],
             post_submission_id=result.get('post_submission_id'),

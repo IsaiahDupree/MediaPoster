@@ -403,27 +403,42 @@ async def list_api_providers():
     List all configured API providers with their current status.
     
     Returns:
-        List of providers with usage summary
+        List of providers with usage summary including days until reset
     """
     from services.api_usage_tracker import get_api_usage_tracker, ALL_API_PROVIDERS, APIProvider
+    from datetime import datetime
     
     tracker = get_api_usage_tracker()
     providers = []
+    
+    # Calculate days until reset (end of month)
+    now = datetime.now()
+    next_month = (now.replace(day=28) + timedelta(days=4)).replace(day=1)
+    days_until_reset = (next_month - now).days
     
     for provider_enum, config in ALL_API_PROVIDERS.items():
         budget_check = tracker.can_make_call(provider_enum)
         budget = tracker._budgets.get(provider_enum.value)
         current_tier = budget.tier_name if budget and hasattr(budget, 'tier_name') else "basic"
+        period_end = budget.period_end if budget and hasattr(budget, 'period_end') else None
+        current_usage = budget.current_usage if budget and hasattr(budget, 'current_usage') else 0
+        monthly_limit = budget.monthly_limit if budget and hasattr(budget, 'monthly_limit') else 0
+        
         providers.append({
             "provider": provider_enum.value,
             "display_name": config["display_name"],
             "host": config["host"],
+            "base_url": f"https://{config['host']}",
             "endpoint_count": len(config["endpoints"]),
             "current_tier": current_tier,
             "usage_pct": budget_check.get("usage_pct", 0),
+            "current_usage": current_usage,
+            "monthly_limit": monthly_limit,
             "remaining_calls": budget_check.get("remaining_calls", 0),
             "can_call": budget_check.get("allowed", True),
             "warning": budget_check.get("warning", False),
+            "days_until_reset": days_until_reset,
+            "period_end": period_end,
         })
     
-    return {"providers": providers}
+    return {"providers": providers, "days_until_reset": days_until_reset}

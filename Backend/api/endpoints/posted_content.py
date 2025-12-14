@@ -412,12 +412,14 @@ async def list_api_providers():
     
     for provider_enum, config in ALL_API_PROVIDERS.items():
         budget_check = tracker.can_make_call(provider_enum)
+        budget = tracker._budgets.get(provider_enum.value)
+        current_tier = budget.tier_name if budget and hasattr(budget, 'tier_name') else "basic"
         providers.append({
             "provider": provider_enum.value,
             "display_name": config["display_name"],
             "host": config["host"],
             "endpoint_count": len(config["endpoints"]),
-            "current_tier": tracker._budgets.get(provider_enum.value, {}).tier_name if hasattr(tracker._budgets.get(provider_enum.value, {}), 'tier_name') else "basic",
+            "current_tier": current_tier,
             "usage_pct": budget_check.get("usage_pct", 0),
             "remaining_calls": budget_check.get("remaining_calls", 0),
             "can_call": budget_check.get("allowed", True),

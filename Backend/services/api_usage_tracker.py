@@ -339,11 +339,11 @@ class APIUsageTracker:
         next_month = (now.replace(day=28) + timedelta(days=4)).replace(day=1)
         period_end = (next_month - timedelta(days=1)).strftime("%Y-%m-%d")
         
-        # Default to free tier if not configured
+        # Default to basic (free) tier if not configured
         if APIProvider.RAPIDAPI_TIKTOK.value not in self._budgets:
             tier = RAPIDAPI_TIKTOK_TIERS.get(
-                os.getenv("RAPIDAPI_TIKTOK_TIER", "free").lower(),
-                RAPIDAPI_TIKTOK_TIERS["free"]
+                os.getenv("RAPIDAPI_TIKTOK_TIER", "basic").lower(),
+                RAPIDAPI_TIKTOK_TIERS["basic"]
             )
             self._budgets[APIProvider.RAPIDAPI_TIKTOK.value] = MonthlyBudget(
                 provider=APIProvider.RAPIDAPI_TIKTOK.value,
@@ -353,6 +353,45 @@ class APIUsageTracker:
                 period_start=period_start,
                 period_end=period_end,
                 current_usage=self._count_current_month_usage(APIProvider.RAPIDAPI_TIKTOK.value)
+            )
+        
+        # Initialize Twitter budget
+        if APIProvider.RAPIDAPI_TWITTER.value not in self._budgets:
+            tier = RAPIDAPI_TWITTER_TIERS.get("basic")
+            self._budgets[APIProvider.RAPIDAPI_TWITTER.value] = MonthlyBudget(
+                provider=APIProvider.RAPIDAPI_TWITTER.value,
+                tier_name=tier.name,
+                monthly_limit=tier.monthly_limit,
+                monthly_cost=tier.cost_usd,
+                period_start=period_start,
+                period_end=period_end,
+                current_usage=0
+            )
+        
+        # Initialize Instagram budget
+        if APIProvider.RAPIDAPI_INSTAGRAM.value not in self._budgets:
+            tier = RAPIDAPI_INSTAGRAM_TIERS.get("basic")
+            self._budgets[APIProvider.RAPIDAPI_INSTAGRAM.value] = MonthlyBudget(
+                provider=APIProvider.RAPIDAPI_INSTAGRAM.value,
+                tier_name=tier.name,
+                monthly_limit=tier.monthly_limit,
+                monthly_cost=tier.cost_usd,
+                period_start=period_start,
+                period_end=period_end,
+                current_usage=0
+            )
+        
+        # Initialize YouTube budget
+        if APIProvider.RAPIDAPI_YOUTUBE.value not in self._budgets:
+            tier = RAPIDAPI_YOUTUBE_TIERS.get("basic")
+            self._budgets[APIProvider.RAPIDAPI_YOUTUBE.value] = MonthlyBudget(
+                provider=APIProvider.RAPIDAPI_YOUTUBE.value,
+                tier_name=tier.name,
+                monthly_limit=tier.monthly_limit,
+                monthly_cost=tier.cost_usd,
+                period_start=period_start,
+                period_end=period_end,
+                current_usage=0
             )
         
         self._save_data()

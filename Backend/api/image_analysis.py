@@ -376,6 +376,30 @@ FORMAT YOUR RESPONSE AS VALID JSON matching this structure:
     return base_prompt
 
 
+async def fetch_and_encode_local_image(url: str) -> str:
+    """Fetch image from local URL and convert to base64"""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(url)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch image from {url}")
+        
+        content_type = response.headers.get("content-type", "image/jpeg")
+        image_bytes = response.content
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        
+        # Determine mime type
+        if "png" in content_type:
+            mime = "image/png"
+        elif "gif" in content_type:
+            mime = "image/gif"
+        elif "webp" in content_type:
+            mime = "image/webp"
+        else:
+            mime = "image/jpeg"
+        
+        return f"data:{mime};base64,{image_base64}"
+
+
 async def analyze_with_openai(image_data: str, is_url: bool, custom_fields: List[str], focus_areas: List[str], depth: str) -> Dict[str, Any]:
     """Analyze image using OpenAI Vision API"""
     
@@ -385,9 +409,24 @@ async def analyze_with_openai(image_data: str, is_url: bool, custom_fields: List
     
     prompt = get_analysis_prompt(custom_fields, focus_areas, depth)
     
+    # Handle different image sources
     if is_url:
-        image_content = {"type": "image_url", "image_url": {"url": image_data}}
+        # Check if it's a localhost URL - OpenAI can't access these
+        if "localhost" in image_data or "127.0.0.1" in image_data:
+            # Fetch the image locally and convert to base64
+            try:
+                data_url = await fetch_and_encode_local_image(image_data)
+                image_content = {"type": "image_url", "image_url": {"url": data_url}}
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Cannot analyze localhost URL. Either upload the image directly or use a publicly accessible URL. Error: {str(e)}"
+                )
+        else:
+            # Public URL - OpenAI can access directly
+            image_content = {"type": "image_url", "image_url": {"url": image_data}}
     else:
+        # Already base64 encoded
         image_content = {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
     
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -540,47 +579,97 @@ async def analyze_image(request: AnalysisRequest):
         raise HTTPException(status_code=400, detail="Either image_url or image_base64 is required")
     
     try:
-        # Check if OpenAI key exists
-        if os.getenv("OPENAI_API_KEY"):
-            if request.image_url:
-                analysis_data = await analyze_with_openai(
-                    request.image_url, 
-                    is_url=True,
-                    custom_fields=request.custom_fields,
-                    focus_areas=request.focus_areas,
-                    depth=request.analysis_depth,
-                )
-            else:
-                analysis_data = await analyze_with_openai(
-                    request.image_base64,
-                    is_url=False,
-                    custom_fields=request.custom_fields,
-                    focus_areas=request.focus_areas,
-                    depth=request.analysis_depth,
-                )
+        # Check if OpenAI key exists - NO MOCK FALLBACK
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            raise HTTPException(
+                status_code=503, 
+                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable to enable AI image analysis."
+            )
+        
+        if request.image_url:
+            analysis_data = await analyze_with_openai(
+                request.image_url, 
+                is_url=True,
+                custom_fields=request.custom_fields,
+                focus_areas=request.focus_areas,
+                depth=request.analysis_depth,
+            )
         else:
-            # Use mock for demo
-            analysis_data = await analyze_with_mock(request.custom_fields)
+            analysis_data = await analyze_with_openai(
+                request.image_base64,
+                is_url=False,
+                custom_fields=request.custom_fields,
+                focus_areas=request.focus_areas,
+                depth=request.analysis_depth,
+            )
         
         processing_time = int((time.time() - start_time) * 1000)
         
         # Create result object
         analysis_id = str(uuid.uuid4())
         
-        # Map the data to our model
-        result = ImageAnalysisResult(
-            analysis_id=analysis_id,
-            image_url=request.image_url,
-            processing_time_ms=processing_time,
-            **{k: v for k, v in analysis_data.items() if k in ImageAnalysisResult.__fields__}
-        )
+        # Check if we got valid analysis data or a refusal/error
+        if "raw_analysis" in analysis_data or not analysis_data.get("title"):
+            # OpenAI refused or returned invalid data - return minimal fallback
+            raw_content = analysis_data.get("raw_analysis", "Analysis unavailable")
+            result = ImageAnalysisResult(
+                analysis_id=analysis_id,
+                image_url=request.image_url,
+                processing_time_ms=processing_time,
+                title="Analysis Unavailable",
+                short_description="The AI could not analyze this image.",
+                detailed_description=str(raw_content)[:500] if raw_content else "No analysis available",
+                scene_type="other",
+                scene_setting="Unknown",
+                indoor_outdoor="mixed",
+                location_type="Unknown",
+                environment_description="Not analyzed",
+                time_of_day="unknown",
+                time_indicators=[],
+                people_count=0,
+                main_subjects=["Unknown"],
+                dominant_colors=["gray"],
+                color_palette="neutral",
+                lighting_type="unknown",
+                lighting_quality="unknown",
+                contrast_level="medium",
+                composition_style="unknown",
+                focal_point="unknown",
+                depth_of_field="medium",
+                perspective="unknown",
+                overall_mood="neutral",
+                visual_style="unknown",
+                content_type="unknown",
+                content_category="unknown",
+                suitable_platforms=["general"],
+                suggested_caption="",
+                engagement_prediction="medium",
+                image_quality="unknown",
+                sharpness="unknown",
+                exposure="unknown",
+                overall_confidence=0.0,
+            )
+        else:
+            # Map the valid data to our model
+            result = ImageAnalysisResult(
+                analysis_id=analysis_id,
+                image_url=request.image_url,
+                processing_time_ms=processing_time,
+                **{k: v for k, v in analysis_data.items() if k in ImageAnalysisResult.__fields__}
+            )
         
         # Store for later retrieval
         analyses_store[analysis_id] = result
         
         return result
         
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (don't wrap them)
+        raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
@@ -605,16 +694,21 @@ async def analyze_uploaded_image(
     focus_areas_list = [f.strip() for f in focus_areas.split(",") if f.strip()]
     
     try:
-        if os.getenv("OPENAI_API_KEY"):
-            analysis_data = await analyze_with_openai(
-                image_base64,
-                is_url=False,
-                custom_fields=custom_fields_list,
-                focus_areas=focus_areas_list,
-                depth=analysis_depth,
+        # Check if OpenAI key exists - NO MOCK FALLBACK
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            raise HTTPException(
+                status_code=503, 
+                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable to enable AI image analysis."
             )
-        else:
-            analysis_data = await analyze_with_mock(custom_fields_list)
+        
+        analysis_data = await analyze_with_openai(
+            image_base64,
+            is_url=False,
+            custom_fields=custom_fields_list,
+            focus_areas=focus_areas_list,
+            depth=analysis_depth,
+        )
         
         processing_time = int((time.time() - start_time) * 1000)
         
@@ -630,6 +724,9 @@ async def analyze_uploaded_image(
         
         return result
         
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (don't wrap them)
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 

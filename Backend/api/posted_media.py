@@ -8,11 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from database.connection import get_db
-from database.models import ScheduledPost, VideoClip, MediaCreationProject
+from database.models import ScheduledPost, VideoClip, MediaCreationProject, PostedContent
 
 router = APIRouter(prefix="/api/posted-media", tags=["Posted Media"])
 
@@ -41,8 +41,7 @@ class PostedMediaItem(BaseModel):
     clip_id: Optional[str] = None
     media_project_id: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class PostedMediaStats(BaseModel):
@@ -74,47 +73,77 @@ async def list_posted_media(
 ):
     """
     List all media that has been posted to connected accounts.
-    Pulls from scheduled_posts table where status = 'published'
+    Pulls from both scheduled_posts and posted_content tables.
     """
     try:
-        # Build base query
-        query = select(ScheduledPost)
-        
-        # Filter by status
-        if status == "published":
-            query = query.filter(ScheduledPost.status == "published")
-        elif status == "failed":
-            query = query.filter(ScheduledPost.status == "failed")
-        # else: all statuses
-        
-        # Filter by platform
-        if platform:
-            query = query.filter(ScheduledPost.platform == platform)
-        
-        # Filter by date range
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
-        query = query.filter(ScheduledPost.scheduled_time >= cutoff_date)
-        
-        # Order by most recent
-        query = query.order_by(desc(ScheduledPost.published_at), desc(ScheduledPost.scheduled_time))
-        
-        # Get total count
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await db.execute(count_query)
-        total = total_result.scalar() or 0
-        
-        # Apply pagination
-        offset = (page - 1) * limit
-        query = query.offset(offset).limit(limit)
-        
-        # Execute query
-        result = await db.execute(query)
-        posts = result.scalars().all()
-        
-        # Transform to response items
         items = []
-        for post in posts:
-            # Get source content info
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        
+        # =====================================================================
+        # 1. Fetch from PostedContent table (primary source for Blotato posts)
+        # =====================================================================
+        pc_query = select(PostedContent)
+        
+        if status == "published":
+            pc_query = pc_query.filter(PostedContent.status == "published")
+        elif status == "failed":
+            pc_query = pc_query.filter(PostedContent.status == "failed")
+        
+        if platform:
+            pc_query = pc_query.filter(func.lower(PostedContent.platform) == platform.lower())
+        
+        pc_query = pc_query.filter(PostedContent.posted_at >= cutoff_date)
+        pc_query = pc_query.order_by(desc(PostedContent.posted_at))
+        
+        pc_result = await db.execute(pc_query)
+        posted_contents = pc_result.scalars().all()
+        
+        for pc in posted_contents:
+            # Build thumbnail URL from media_id if available
+            thumbnail_url = None
+            if pc.media_id:
+                thumbnail_url = f"/api/media-db/thumbnail/{pc.media_id}"
+            
+            items.append(PostedMediaItem(
+                id=str(pc.id),
+                title=pc.caption[:50] if pc.caption else "Posted via MediaPoster",
+                platform=pc.platform,
+                platform_post_id=pc.platform_post_id,
+                platform_url=pc.platform_url,
+                published_at=pc.posted_at,
+                scheduled_time=pc.posted_at or datetime.utcnow(),
+                status=pc.status or "published",
+                thumbnail_url=thumbnail_url,
+                media_type="posted_content",
+                clip_id=str(pc.media_id) if pc.media_id else None,
+                media_project_id=None,
+                views=pc.views,
+                likes=pc.likes,
+                comments=pc.comments,
+                shares=pc.shares,
+                engagement_rate=None,
+            ))
+        
+        # =====================================================================
+        # 2. Also fetch from ScheduledPost table (legacy/scheduled posts)
+        # =====================================================================
+        sp_query = select(ScheduledPost)
+        
+        if status == "published":
+            sp_query = sp_query.filter(ScheduledPost.status == "published")
+        elif status == "failed":
+            sp_query = sp_query.filter(ScheduledPost.status == "failed")
+        
+        if platform:
+            sp_query = sp_query.filter(ScheduledPost.platform == platform)
+        
+        sp_query = sp_query.filter(ScheduledPost.scheduled_time >= cutoff_date)
+        sp_query = sp_query.order_by(desc(ScheduledPost.published_at), desc(ScheduledPost.scheduled_time))
+        
+        sp_result = await db.execute(sp_query)
+        scheduled_posts = sp_result.scalars().all()
+        
+        for post in scheduled_posts:
             title = "Untitled Post"
             thumbnail_url = None
             media_type = "unknown"
@@ -152,7 +181,6 @@ async def list_posted_media(
                 media_type=media_type,
                 clip_id=str(post.clip_id) if post.clip_id else None,
                 media_project_id=str(post.media_project_id) if post.media_project_id else None,
-                # Performance metrics would come from platform API sync
                 views=None,
                 likes=None,
                 comments=None,
@@ -160,27 +188,43 @@ async def list_posted_media(
                 engagement_rate=None,
             ))
         
-        # Calculate stats
-        all_posts_query = select(ScheduledPost).filter(ScheduledPost.status == "published")
-        all_posts_result = await db.execute(all_posts_query)
-        all_posts = all_posts_result.scalars().all()
+        # Sort combined items by published_at
+        items.sort(key=lambda x: x.published_at or datetime.min, reverse=True)
         
-        # Count by platform
+        # Apply pagination
+        total = len(items)
+        offset = (page - 1) * limit
+        items = items[offset:offset + limit]
+        
+        # =====================================================================
+        # 3. Calculate stats from both tables
+        # =====================================================================
         platform_counts = {}
-        for p in all_posts:
-            platform_counts[p.platform] = platform_counts.get(p.platform, 0) + 1
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        month_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        posts_this_week = 0
+        posts_this_month = 0
         
-        # Most active platform
+        # Count from PostedContent
+        for pc in posted_contents:
+            platform_counts[pc.platform] = platform_counts.get(pc.platform, 0) + 1
+            if pc.posted_at and pc.posted_at >= week_ago:
+                posts_this_week += 1
+            if pc.posted_at and pc.posted_at >= month_ago:
+                posts_this_month += 1
+        
+        # Count from ScheduledPost
+        for p in scheduled_posts:
+            platform_counts[p.platform] = platform_counts.get(p.platform, 0) + 1
+            if p.published_at and p.published_at >= week_ago:
+                posts_this_week += 1
+            if p.published_at and p.published_at >= month_ago:
+                posts_this_month += 1
+        
         most_active = max(platform_counts, key=platform_counts.get) if platform_counts else None
         
-        # Posts this week/month
-        week_ago = datetime.utcnow() - timedelta(days=7)
-        month_ago = datetime.utcnow() - timedelta(days=30)
-        posts_this_week = sum(1 for p in all_posts if p.published_at and p.published_at >= week_ago)
-        posts_this_month = sum(1 for p in all_posts if p.published_at and p.published_at >= month_ago)
-        
         stats = PostedMediaStats(
-            total_posts=len(all_posts),
+            total_posts=len(posted_contents) + len(scheduled_posts),
             posts_by_platform=platform_counts,
             posts_this_week=posts_this_week,
             posts_this_month=posts_this_month,

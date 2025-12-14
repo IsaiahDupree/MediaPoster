@@ -499,6 +499,72 @@ async def get_available_endpoints():
     return result
 
 
+@router.get("/{post_id}/comments")
+async def get_post_comments(post_id: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
+    """
+    Get comments for a specific post.
+    Fetches from RapidAPI based on platform and URL.
+    """
+    import re
+    from services.rapidapi_comments_service import RapidAPICommentsService
+    
+    # Get post from database
+    query = select(PostedContentModel).where(PostedContentModel.id == uuid.UUID(post_id))
+    result = await db.execute(query)
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    platform = post.platform.lower()
+    platform_url = post.platform_url
+    
+    if not platform_url:
+        return {"comments": [], "count": 0, "error": "No platform URL available"}
+    
+    comments_service = RapidAPICommentsService()
+    comments = []
+    
+    try:
+        if platform == "tiktok":
+            # Extract video ID from TikTok URL
+            match = re.search(r'/video/(\d+)', platform_url)
+            if match:
+                video_id = match.group(1)
+                comments = await comments_service.fetch_tiktok_comments(video_id, limit)
+        elif platform == "instagram":
+            # Extract post ID from Instagram URL
+            match = re.search(r'/p/([A-Za-z0-9_-]+)', platform_url) or re.search(r'/reel/([A-Za-z0-9_-]+)', platform_url)
+            if match:
+                post_code = match.group(1)
+                comments = await comments_service.fetch_instagram_comments(post_code, limit)
+        elif platform == "youtube":
+            # Extract video ID from YouTube URL
+            match = re.search(r'[?&]v=([A-Za-z0-9_-]+)', platform_url) or re.search(r'youtu\.be/([A-Za-z0-9_-]+)', platform_url)
+            if match:
+                video_id = match.group(1)
+                # Use YouTube API for comments
+                from services.youtube_service import YouTubeService
+                yt_service = YouTubeService()
+                yt_comments = await yt_service.get_video_comments(video_id, max_results=limit)
+                comments = yt_comments
+        
+        # Update comment count in database
+        if comments:
+            post.comments = len(comments)
+            await db.commit()
+        
+        return {
+            "post_id": post_id,
+            "platform": platform,
+            "comments": comments,
+            "count": len(comments)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching comments for post {post_id}: {e}")
+        return {"comments": [], "count": 0, "error": str(e)}
+
+
 @router.get("/api-usage/providers")
 async def list_api_providers():
     """

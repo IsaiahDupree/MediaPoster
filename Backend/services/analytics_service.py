@@ -1,8 +1,12 @@
 """
 Analytics Service - Phase 5: Analytics & Insights
 Calculates North Star Metrics, generates insights, and provides recommendations
+Includes external API integration for fetching live metrics from platforms
 """
 import logging
+import os
+import re
+import httpx
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
@@ -15,6 +19,213 @@ from database.models import (
 import uuid
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# EXTERNAL ANALYTICS FETCHER - Third-party API integration
+# =============================================================================
+
+class ExternalAnalyticsFetcher:
+    """Fetches analytics from external APIs (RapidAPI, etc.)"""
+    
+    def __init__(self):
+        self.rapidapi_key = os.getenv("RAPIDAPI_KEY")
+        self.rapidapi_tiktok_host = "tiktok-api6.p.rapidapi.com"
+    
+    def _get_rapidapi_headers(self, host: str) -> dict:
+        """Get headers for RapidAPI requests"""
+        return {
+            "X-RapidAPI-Key": self.rapidapi_key or "",
+            "X-RapidAPI-Host": host
+        }
+    
+    @staticmethod
+    def extract_tiktok_video_id(url: str) -> Optional[str]:
+        """Extract video ID from TikTok URL"""
+        # Patterns for TikTok URLs:
+        # https://www.tiktok.com/@username/video/1234567890123456789
+        # https://vm.tiktok.com/ABC123/
+        patterns = [
+            r'tiktok\.com/@[\w.-]+/video/(\d+)',
+            r'tiktok\.com/v/(\d+)',
+            r'/video/(\d+)',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
+    
+    @staticmethod
+    def extract_tiktok_username(url: str) -> Optional[str]:
+        """Extract username from TikTok URL"""
+        match = re.search(r'tiktok\.com/@([\w.-]+)', url)
+        return match.group(1) if match else None
+    
+    @staticmethod
+    def extract_instagram_media_id(url: str) -> Optional[str]:
+        """Extract media shortcode from Instagram URL"""
+        # https://www.instagram.com/p/ABC123/
+        # https://www.instagram.com/reel/ABC123/
+        patterns = [
+            r'instagram\.com/p/([\w-]+)',
+            r'instagram\.com/reel/([\w-]+)',
+            r'instagram\.com/reels/([\w-]+)',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
+    
+    @staticmethod
+    def extract_youtube_video_id(url: str) -> Optional[str]:
+        """Extract video ID from YouTube URL"""
+        # https://www.youtube.com/watch?v=ABC123
+        # https://youtu.be/ABC123
+        # https://www.youtube.com/shorts/ABC123
+        patterns = [
+            r'youtube\.com/watch\?v=([\w-]+)',
+            r'youtu\.be/([\w-]+)',
+            r'youtube\.com/shorts/([\w-]+)',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
+    
+    @staticmethod
+    def detect_platform(url: str) -> Optional[str]:
+        """Detect platform from URL"""
+        url_lower = url.lower()
+        if 'tiktok.com' in url_lower:
+            return 'tiktok'
+        elif 'instagram.com' in url_lower:
+            return 'instagram'
+        elif 'youtube.com' in url_lower or 'youtu.be' in url_lower:
+            return 'youtube'
+        elif 'twitter.com' in url_lower or 'x.com' in url_lower:
+            return 'twitter'
+        elif 'facebook.com' in url_lower or 'fb.com' in url_lower:
+            return 'facebook'
+        elif 'linkedin.com' in url_lower:
+            return 'linkedin'
+        elif 'threads.net' in url_lower:
+            return 'threads'
+        elif 'bsky.app' in url_lower:
+            return 'bluesky'
+        return None
+    
+    async def fetch_tiktok_analytics(self, video_url: str) -> Dict[str, Any]:
+        """
+        Fetch TikTok video analytics via RapidAPI
+        
+        Args:
+            video_url: TikTok video URL
+            
+        Returns:
+            Dict with video metrics
+        """
+        if not self.rapidapi_key:
+            return {"error": "RAPIDAPI_KEY not configured"}
+        
+        video_id = self.extract_tiktok_video_id(video_url)
+        if not video_id:
+            return {"error": f"Could not extract video ID from URL: {video_url}"}
+        
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(
+                    f"https://{self.rapidapi_tiktok_host}/video/details",
+                    headers=self._get_rapidapi_headers(self.rapidapi_tiktok_host),
+                    params={"video_id": video_id}
+                )
+                
+                if response.status_code != 200:
+                    return {"error": f"RapidAPI error: {response.status_code} - {response.text}"}
+                
+                data = response.json()
+                
+                # Extract metrics from response
+                # RapidAPI TikTok API response structure varies by provider
+                video_data = data.get('video', data.get('itemInfo', {}).get('itemStruct', data))
+                stats = video_data.get('stats', video_data.get('statistics', {}))
+                
+                return {
+                    "success": True,
+                    "platform": "tiktok",
+                    "video_id": video_id,
+                    "video_url": video_url,
+                    "metrics": {
+                        "views": stats.get('playCount', stats.get('play_count', stats.get('views', 0))),
+                        "likes": stats.get('diggCount', stats.get('like_count', stats.get('likes', 0))),
+                        "comments": stats.get('commentCount', stats.get('comment_count', stats.get('comments', 0))),
+                        "shares": stats.get('shareCount', stats.get('share_count', stats.get('shares', 0))),
+                        "saves": stats.get('collectCount', stats.get('save_count', stats.get('saves', 0))),
+                    },
+                    "video_info": {
+                        "description": video_data.get('desc', video_data.get('description', '')),
+                        "duration": video_data.get('duration', 0),
+                        "create_time": video_data.get('createTime', video_data.get('create_time')),
+                    },
+                    "fetched_at": datetime.now().isoformat(),
+                    "raw_data": data  # Store raw for debugging
+                }
+                
+        except httpx.TimeoutException:
+            return {"error": "Request timed out"}
+        except Exception as e:
+            logger.error(f"TikTok analytics fetch error: {e}")
+            return {"error": str(e)}
+    
+    async def fetch_analytics_by_url(self, url: str) -> Dict[str, Any]:
+        """
+        Fetch analytics for any supported platform URL
+        
+        Args:
+            url: Post/video URL
+            
+        Returns:
+            Dict with metrics
+        """
+        platform = self.detect_platform(url)
+        
+        if not platform:
+            return {"error": f"Unsupported platform for URL: {url}"}
+        
+        if platform == 'tiktok':
+            return await self.fetch_tiktok_analytics(url)
+        elif platform == 'instagram':
+            # TODO: Implement Instagram analytics via RapidAPI
+            return {
+                "error": "Instagram analytics not yet implemented",
+                "platform": "instagram",
+                "media_id": self.extract_instagram_media_id(url)
+            }
+        elif platform == 'youtube':
+            # TODO: Implement YouTube analytics via official API or RapidAPI
+            return {
+                "error": "YouTube analytics not yet implemented",
+                "platform": "youtube",
+                "video_id": self.extract_youtube_video_id(url)
+            }
+        else:
+            return {
+                "error": f"Analytics not yet supported for platform: {platform}",
+                "platform": platform
+            }
+
+
+# Singleton instance
+_external_fetcher = None
+
+def get_external_analytics_fetcher() -> ExternalAnalyticsFetcher:
+    """Get singleton instance of ExternalAnalyticsFetcher"""
+    global _external_fetcher
+    if _external_fetcher is None:
+        _external_fetcher = ExternalAnalyticsFetcher()
+    return _external_fetcher
 
 
 class AnalyticsService:

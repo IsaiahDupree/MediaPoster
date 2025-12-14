@@ -170,3 +170,118 @@ async def record_posted_content(item: PostedContentItem):
     logger.info(f"Recording posted content: {item.platform} - {item.platform_post_id}")
     
     return {"success": True, "id": item.id}
+
+
+# =============================================================================
+# ANALYTICS ENDPOINTS - Fetch live metrics from platforms
+# =============================================================================
+
+@router.get("/analytics/by-url")
+async def get_analytics_by_url(url: str):
+    """
+    Fetch live analytics for a post by its platform URL.
+    
+    Supports:
+    - TikTok (via RapidAPI)
+    - Instagram (coming soon)
+    - YouTube (coming soon)
+    
+    Requires RAPIDAPI_KEY in environment.
+    """
+    from services.analytics_service import get_external_analytics_fetcher
+    
+    fetcher = get_external_analytics_fetcher()
+    result = await fetcher.fetch_analytics_by_url(url)
+    
+    return result
+
+
+@router.get("/analytics/{post_id}")
+async def get_analytics_for_post(post_id: str):
+    """
+    Fetch live analytics for a stored post by its ID.
+    Looks up the platform_url and fetches current metrics.
+    """
+    from services.analytics_service import get_external_analytics_fetcher
+    
+    # Find the post
+    post = None
+    for p in _posted_content_store:
+        if p.get('id') == post_id:
+            post = p
+            break
+    
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    platform_url = post.get('platform_url')
+    if not platform_url:
+        raise HTTPException(status_code=400, detail="Post has no platform URL")
+    
+    fetcher = get_external_analytics_fetcher()
+    result = await fetcher.fetch_analytics_by_url(platform_url)
+    
+    # Update stored metrics if successful
+    if result.get('success') and result.get('metrics'):
+        metrics = result['metrics']
+        post['views'] = metrics.get('views', post.get('views', 0))
+        post['likes'] = metrics.get('likes', post.get('likes', 0))
+        post['comments'] = metrics.get('comments', post.get('comments', 0))
+        post['shares'] = metrics.get('shares', post.get('shares', 0))
+        post['last_analytics_fetch'] = datetime.now().isoformat()
+    
+    return {
+        "post_id": post_id,
+        "platform_url": platform_url,
+        "analytics": result
+    }
+
+
+@router.post("/analytics/refresh-all")
+async def refresh_all_analytics():
+    """
+    Refresh analytics for all stored posts.
+    Rate limited to avoid API throttling.
+    """
+    import asyncio
+    from services.analytics_service import get_external_analytics_fetcher
+    
+    fetcher = get_external_analytics_fetcher()
+    results = []
+    
+    for post in _posted_content_store:
+        platform_url = post.get('platform_url')
+        if not platform_url:
+            continue
+        
+        result = await fetcher.fetch_analytics_by_url(platform_url)
+        
+        if result.get('success') and result.get('metrics'):
+            metrics = result['metrics']
+            post['views'] = metrics.get('views', post.get('views', 0))
+            post['likes'] = metrics.get('likes', post.get('likes', 0))
+            post['comments'] = metrics.get('comments', post.get('comments', 0))
+            post['shares'] = metrics.get('shares', post.get('shares', 0))
+            post['last_analytics_fetch'] = datetime.now().isoformat()
+            
+            results.append({
+                "post_id": post.get('id'),
+                "platform": post.get('platform'),
+                "success": True,
+                "metrics": metrics
+            })
+        else:
+            results.append({
+                "post_id": post.get('id'),
+                "platform": post.get('platform'),
+                "success": False,
+                "error": result.get('error')
+            })
+        
+        # Rate limit: 1 request per second
+        await asyncio.sleep(1)
+    
+    return {
+        "refreshed": len(results),
+        "results": results
+    }

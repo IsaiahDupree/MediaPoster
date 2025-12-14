@@ -10,6 +10,7 @@ from services.youtube_analytics_service import (
     get_youtube_analytics_service,
     YouTubeVideoMetrics,
     YouTubeChannelMetrics,
+    YouTubeComment,
 )
 
 logger = logging.getLogger(__name__)
@@ -186,3 +187,61 @@ async def get_youtube_api_status():
             status["error"] = "Could not verify channel - check API key and channel ID"
     
     return status
+
+
+@router.get("/comments/{video_id}", response_model=dict)
+async def get_video_comments(
+    video_id: str,
+    max_results: int = Query(default=100, ge=1, le=500),
+    order: str = Query(default="relevance", regex="^(relevance|time)$")
+):
+    """
+    Get comments for a specific YouTube video
+    
+    Args:
+        video_id: YouTube video ID
+        max_results: Maximum comments to fetch (1-500)
+        order: Sort order - 'relevance' or 'time'
+        
+    Returns:
+        List of comments with author info, text, likes
+    """
+    service = get_youtube_analytics_service()
+    comments = await service.get_video_comments(video_id, max_results, order)
+    
+    return {
+        "success": True,
+        "video_id": video_id,
+        "count": len(comments),
+        "comments": [c.model_dump() for c in comments],
+    }
+
+
+@router.get("/comments", response_model=dict)
+async def get_all_comments(
+    max_videos: int = Query(default=10, ge=1, le=50),
+    max_comments_per_video: int = Query(default=50, ge=1, le=100)
+):
+    """
+    Get comments for all videos in the channel
+    
+    Args:
+        max_videos: Maximum videos to fetch comments from (1-50)
+        max_comments_per_video: Maximum comments per video (1-100)
+        
+    Returns:
+        All comments organized by video
+        
+    Note: This endpoint may take a while for channels with many videos.
+    API Cost: ~101 units per video (100 for search + 1 per video for comments)
+    """
+    service = get_youtube_analytics_service()
+    result = await service.get_all_channel_comments(
+        max_videos=max_videos,
+        max_comments_per_video=max_comments_per_video
+    )
+    
+    return {
+        "success": True,
+        **result
+    }

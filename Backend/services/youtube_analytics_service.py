@@ -45,6 +45,22 @@ class YouTubeChannelMetrics(BaseModel):
     published_at: Optional[str] = None
 
 
+class YouTubeComment(BaseModel):
+    """A single YouTube comment"""
+    comment_id: str
+    video_id: str
+    author_name: str
+    author_channel_id: Optional[str] = None
+    author_profile_image: Optional[str] = None
+    text: str
+    like_count: int = 0
+    reply_count: int = 0
+    published_at: str
+    updated_at: Optional[str] = None
+    is_reply: bool = False
+    parent_id: Optional[str] = None
+
+
 class YouTubeAnalyticsService:
     """
     Service for fetching YouTube analytics using YouTube Data API v3
@@ -338,6 +354,165 @@ class YouTubeAnalyticsService:
                 "avg_views_per_video": total_views // len(videos) if videos else 0,
                 "avg_likes_per_video": total_likes // len(videos) if videos else 0,
             },
+            "fetched_at": datetime.now().isoformat(),
+        }
+    
+    async def get_video_comments(
+        self, 
+        video_id: str, 
+        max_results: int = 100,
+        order: str = "relevance"
+    ) -> List[YouTubeComment]:
+        """
+        Fetch comments for a YouTube video
+        
+        Args:
+            video_id: YouTube video ID
+            max_results: Maximum comments to fetch (default 100)
+            order: Sort order - 'relevance' or 'time'
+            
+        Returns:
+            List of YouTubeComment objects
+            
+        API Cost: 1 unit per request (up to 100 comments per request)
+        """
+        if not self.api_key:
+            logger.error("YOUTUBE_API_KEY not configured")
+            return []
+        
+        comments = []
+        next_page_token = None
+        
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                while len(comments) < max_results:
+                    params = {
+                        "part": "snippet,replies",
+                        "videoId": video_id,
+                        "maxResults": min(100, max_results - len(comments)),
+                        "order": order,
+                        "textFormat": "plainText",
+                        "key": self.api_key,
+                    }
+                    
+                    if next_page_token:
+                        params["pageToken"] = next_page_token
+                    
+                    response = await client.get(
+                        f"{self.API_BASE}/commentThreads",
+                        params=params
+                    )
+                    
+                    if response.status_code == 403:
+                        error_data = response.json()
+                        error_reason = error_data.get("error", {}).get("errors", [{}])[0].get("reason", "")
+                        if error_reason == "commentsDisabled":
+                            logger.info(f"Comments disabled for video {video_id}")
+                            return []
+                        logger.error(f"YouTube API error: {response.text}")
+                        return comments
+                    
+                    if response.status_code != 200:
+                        logger.error(f"YouTube comments API error: {response.status_code}")
+                        return comments
+                    
+                    data = response.json()
+                    
+                    for item in data.get("items", []):
+                        snippet = item.get("snippet", {})
+                        top_comment = snippet.get("topLevelComment", {}).get("snippet", {})
+                        
+                        # Add top-level comment
+                        comments.append(YouTubeComment(
+                            comment_id=item.get("id", ""),
+                            video_id=video_id,
+                            author_name=top_comment.get("authorDisplayName", ""),
+                            author_channel_id=top_comment.get("authorChannelId", {}).get("value"),
+                            author_profile_image=top_comment.get("authorProfileImageUrl"),
+                            text=top_comment.get("textDisplay", ""),
+                            like_count=top_comment.get("likeCount", 0),
+                            reply_count=snippet.get("totalReplyCount", 0),
+                            published_at=top_comment.get("publishedAt", ""),
+                            updated_at=top_comment.get("updatedAt"),
+                            is_reply=False,
+                        ))
+                        
+                        # Add replies if present
+                        replies = item.get("replies", {}).get("comments", [])
+                        for reply in replies:
+                            reply_snippet = reply.get("snippet", {})
+                            comments.append(YouTubeComment(
+                                comment_id=reply.get("id", ""),
+                                video_id=video_id,
+                                author_name=reply_snippet.get("authorDisplayName", ""),
+                                author_channel_id=reply_snippet.get("authorChannelId", {}).get("value"),
+                                author_profile_image=reply_snippet.get("authorProfileImageUrl"),
+                                text=reply_snippet.get("textDisplay", ""),
+                                like_count=reply_snippet.get("likeCount", 0),
+                                reply_count=0,
+                                published_at=reply_snippet.get("publishedAt", ""),
+                                updated_at=reply_snippet.get("updatedAt"),
+                                is_reply=True,
+                                parent_id=reply_snippet.get("parentId"),
+                            ))
+                    
+                    next_page_token = data.get("nextPageToken")
+                    if not next_page_token:
+                        break
+                
+                logger.info(f"✓ Fetched {len(comments)} comments for video {video_id}")
+                return comments
+                
+        except Exception as e:
+            logger.error(f"Error fetching comments: {e}")
+            return comments
+    
+    async def get_all_channel_comments(
+        self, 
+        channel_id: Optional[str] = None,
+        max_videos: int = 10,
+        max_comments_per_video: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Fetch comments for all videos in a channel
+        
+        Args:
+            channel_id: YouTube channel ID (uses env var if not provided)
+            max_videos: Maximum videos to fetch comments from
+            max_comments_per_video: Maximum comments per video
+            
+        Returns:
+            Dict with comments organized by video
+        """
+        channel_id = channel_id or self.channel_id
+        
+        # First get videos
+        videos = await self.get_channel_videos(channel_id, max_results=max_videos)
+        
+        all_comments = []
+        videos_with_comments = []
+        
+        for video in videos:
+            comments = await self.get_video_comments(
+                video.video_id, 
+                max_results=max_comments_per_video
+            )
+            
+            if comments:
+                videos_with_comments.append({
+                    "video_id": video.video_id,
+                    "title": video.title,
+                    "comment_count": len(comments),
+                    "comments": [c.model_dump() for c in comments]
+                })
+                all_comments.extend(comments)
+        
+        return {
+            "total_comments": len(all_comments),
+            "videos_checked": len(videos),
+            "videos_with_comments": len(videos_with_comments),
+            "comments_by_video": videos_with_comments,
+            "all_comments": [c.model_dump() for c in all_comments],
             "fetched_at": datetime.now().isoformat(),
         }
 

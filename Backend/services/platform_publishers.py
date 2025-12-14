@@ -234,14 +234,19 @@ class TikTokPublisher(BasePlatformPublisher):
 
 
 class YouTubePublisher(BasePlatformPublisher):
-    """YouTube content publisher using YouTube Data API v3"""
+    """YouTube content publisher using YouTube Data API v3 with optimized chunked uploads"""
     
     platform = Platform.YOUTUBE
     API_BASE = "https://www.googleapis.com/youtube/v3"
     UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
     
+    # Chunk size for resumable uploads (256KB minimum, using 10MB for high-quality)
+    CHUNK_SIZE = 10 * 1024 * 1024  # 10MB chunks for optimal upload speed
+    MAX_RETRIES = 5
+    RETRY_DELAY = 2  # seconds
+    
     async def publish(self, request: PublishRequest) -> PublishResult:
-        """Publish video to YouTube"""
+        """Publish video to YouTube with optimized chunked upload for high-quality videos"""
         try:
             access_token = self.credentials.get("access_token")
             if not access_token:
@@ -252,7 +257,9 @@ class YouTubePublisher(BasePlatformPublisher):
                     error_message="Missing access token",
                 )
             
-            client = await self._get_client()
+            # Get file size for upload strategy
+            file_size = os.path.getsize(request.media_path)
+            logger.info(f"YouTube upload: {request.media_path} ({file_size / 1024 / 1024:.1f} MB)")
             
             # Prepare video metadata
             video_metadata = {
@@ -276,24 +283,80 @@ class YouTubePublisher(BasePlatformPublisher):
             # Check if it's a Short (vertical, < 60 seconds)
             is_short = request.media_type == MediaType.SHORT or request.metadata.get("is_short", False)
             if is_short:
-                # Add #Shorts to title/description
                 if "#Shorts" not in video_metadata["snippet"]["title"]:
                     video_metadata["snippet"]["title"] += " #Shorts"
             
-            # Upload video
-            with open(request.media_path, "rb") as f:
-                video_data = f.read()
+            # Use chunked upload for large files (>5MB), single upload for small
+            if file_size > 5 * 1024 * 1024:
+                return await self._chunked_upload(request, video_metadata, access_token, file_size, is_short)
+            else:
+                return await self._simple_upload(request, video_metadata, access_token, is_short)
             
-            # Resumable upload
+        except Exception as e:
+            logger.error(f"YouTube publish error: {e}")
+            return PublishResult(
+                success=False,
+                status=PublishStatus.FAILED,
+                platform=self.platform,
+                error_message=str(e),
+            )
+    
+    async def _simple_upload(self, request: PublishRequest, metadata: dict, access_token: str, is_short: bool) -> PublishResult:
+        """Simple single-request upload for small files"""
+        client = await self._get_client()
+        
+        with open(request.media_path, "rb") as f:
+            video_data = f.read()
+        
+        # Initialize resumable upload
+        init_response = await client.post(
+            f"{self.UPLOAD_URL}?uploadType=resumable&part=snippet,status",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "X-Upload-Content-Length": str(len(video_data)),
+                "X-Upload-Content-Type": "video/*",
+            },
+            json=metadata,
+        )
+        
+        if init_response.status_code != 200:
+            return PublishResult(
+                success=False,
+                status=PublishStatus.FAILED,
+                platform=self.platform,
+                error_message=f"Upload init failed: {init_response.text}",
+            )
+        
+        upload_url = init_response.headers.get("Location")
+        
+        # Upload video content
+        upload_response = await client.put(
+            upload_url,
+            headers={"Content-Type": "video/*"},
+            content=video_data,
+        )
+        
+        return self._process_upload_response(upload_response, is_short)
+    
+    async def _chunked_upload(self, request: PublishRequest, metadata: dict, access_token: str, file_size: int, is_short: bool) -> PublishResult:
+        """Chunked resumable upload for large high-quality videos"""
+        # Use longer timeout for large uploads
+        client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=30.0))
+        
+        try:
+            # Initialize resumable upload session
+            logger.info(f"Initializing chunked upload for {file_size / 1024 / 1024:.1f} MB video")
+            
             init_response = await client.post(
                 f"{self.UPLOAD_URL}?uploadType=resumable&part=snippet,status",
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
-                    "X-Upload-Content-Length": str(len(video_data)),
+                    "X-Upload-Content-Length": str(file_size),
                     "X-Upload-Content-Type": "video/*",
                 },
-                json=video_metadata,
+                json=metadata,
             )
             
             if init_response.status_code != 200:
@@ -305,43 +368,127 @@ class YouTubePublisher(BasePlatformPublisher):
                 )
             
             upload_url = init_response.headers.get("Location")
-            
-            # Upload video content
-            upload_response = await client.put(
-                upload_url,
-                headers={"Content-Type": "video/*"},
-                content=video_data,
-            )
-            
-            if upload_response.status_code in [200, 201]:
-                video_data = upload_response.json()
-                video_id = video_data.get("id")
-                
+            if not upload_url:
                 return PublishResult(
-                    success=True,
-                    status=PublishStatus.PUBLISHED,
+                    success=False,
+                    status=PublishStatus.FAILED,
                     platform=self.platform,
-                    post_id=video_id,
-                    post_url=f"https://youtube.com/watch?v={video_id}",
-                    published_at=datetime.now().isoformat(),
-                    metadata={"video_id": video_id, "is_short": is_short},
+                    error_message="No upload URL returned",
                 )
             
+            # Upload in chunks with retry logic
+            bytes_uploaded = 0
+            
+            with open(request.media_path, "rb") as f:
+                while bytes_uploaded < file_size:
+                    chunk = f.read(self.CHUNK_SIZE)
+                    chunk_size = len(chunk)
+                    end_byte = bytes_uploaded + chunk_size - 1
+                    
+                    # Content-Range header for chunked upload
+                    content_range = f"bytes {bytes_uploaded}-{end_byte}/{file_size}"
+                    
+                    logger.info(f"Uploading chunk: {content_range} ({(bytes_uploaded / file_size * 100):.1f}%)")
+                    
+                    # Retry logic for each chunk
+                    for retry in range(self.MAX_RETRIES):
+                        try:
+                            chunk_response = await client.put(
+                                upload_url,
+                                headers={
+                                    "Authorization": f"Bearer {access_token}",
+                                    "Content-Type": "video/*",
+                                    "Content-Length": str(chunk_size),
+                                    "Content-Range": content_range,
+                                },
+                                content=chunk,
+                            )
+                            
+                            # 308 = Resume Incomplete (more chunks needed)
+                            # 200/201 = Upload complete
+                            if chunk_response.status_code in [200, 201]:
+                                logger.info(f"✓ YouTube upload complete!")
+                                return self._process_upload_response(chunk_response, is_short)
+                            elif chunk_response.status_code == 308:
+                                # Check Range header for bytes received
+                                range_header = chunk_response.headers.get("Range", "")
+                                if range_header:
+                                    bytes_uploaded = int(range_header.split("-")[1]) + 1
+                                else:
+                                    bytes_uploaded += chunk_size
+                                break  # Success, continue to next chunk
+                            else:
+                                logger.warning(f"Chunk upload returned {chunk_response.status_code}: {chunk_response.text}")
+                                if retry < self.MAX_RETRIES - 1:
+                                    await asyncio.sleep(self.RETRY_DELAY * (retry + 1))
+                                    # Query upload status to resume
+                                    bytes_uploaded = await self._get_upload_progress(client, upload_url, access_token, file_size)
+                                    f.seek(bytes_uploaded)
+                                    
+                        except Exception as e:
+                            logger.warning(f"Chunk upload error (retry {retry + 1}): {e}")
+                            if retry < self.MAX_RETRIES - 1:
+                                await asyncio.sleep(self.RETRY_DELAY * (retry + 1))
+                            else:
+                                raise
+                    else:
+                        return PublishResult(
+                            success=False,
+                            status=PublishStatus.FAILED,
+                            platform=self.platform,
+                            error_message=f"Failed to upload chunk after {self.MAX_RETRIES} retries",
+                        )
+            
             return PublishResult(
                 success=False,
                 status=PublishStatus.FAILED,
                 platform=self.platform,
-                error_message=f"Upload failed: {upload_response.text}",
+                error_message="Upload completed but no response received",
             )
             
-        except Exception as e:
-            logger.error(f"YouTube publish error: {e}")
-            return PublishResult(
-                success=False,
-                status=PublishStatus.FAILED,
-                platform=self.platform,
-                error_message=str(e),
+        finally:
+            await client.aclose()
+    
+    async def _get_upload_progress(self, client: httpx.AsyncClient, upload_url: str, access_token: str, file_size: int) -> int:
+        """Query YouTube API for current upload progress (for resume)"""
+        try:
+            response = await client.put(
+                upload_url,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Range": f"bytes */{file_size}",
+                },
             )
+            if response.status_code == 308:
+                range_header = response.headers.get("Range", "")
+                if range_header:
+                    return int(range_header.split("-")[1]) + 1
+        except Exception as e:
+            logger.warning(f"Failed to get upload progress: {e}")
+        return 0
+    
+    def _process_upload_response(self, response: httpx.Response, is_short: bool) -> PublishResult:
+        """Process the final upload response"""
+        if response.status_code in [200, 201]:
+            video_data = response.json()
+            video_id = video_data.get("id")
+            
+            return PublishResult(
+                success=True,
+                status=PublishStatus.PUBLISHED,
+                platform=self.platform,
+                post_id=video_id,
+                post_url=f"https://youtube.com/watch?v={video_id}",
+                published_at=datetime.now().isoformat(),
+                metadata={"video_id": video_id, "is_short": is_short},
+            )
+        
+        return PublishResult(
+            success=False,
+            status=PublishStatus.FAILED,
+            platform=self.platform,
+            error_message=f"Upload failed: {response.text}",
+        )
     
     async def validate_credentials(self) -> bool:
         """Validate YouTube credentials"""

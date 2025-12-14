@@ -43,6 +43,7 @@ class MediaStatusResponse(BaseModel):
     pre_social_score: Optional[float] = None
     transcript: Optional[str] = None
     topics: Optional[List[str]] = None
+    curation_status: Optional[str] = None  # 'pending', 'approved', 'rejected'
     created_at: str
     updated_at: Optional[str] = None
 
@@ -202,9 +203,10 @@ async def list_media(
     for video in videos:
         # Try to get analysis with raw SQL to handle schema differences
         analysis = None
+        curation_status = None
         try:
             analysis_result = await db.execute(
-                text("SELECT video_id, transcript, topics, pre_social_score FROM video_analysis WHERE video_id = :vid"),
+                text("SELECT video_id, transcript, topics, pre_social_score, key_moments FROM video_analysis WHERE video_id = :vid"),
                 {"vid": str(video.id)}
             )
             row = analysis_result.fetchone()
@@ -214,6 +216,10 @@ async def list_media(
                     "topics": row[2],
                     "pre_social_score": row[3]
                 }
+                # Extract curation_status from key_moments
+                key_moments = row[4]
+                if key_moments and isinstance(key_moments, dict):
+                    curation_status = key_moments.get('curation_status')
         except Exception:
             pass
         
@@ -231,6 +237,7 @@ async def list_media(
             pre_social_score=analysis["pre_social_score"] if analysis else None,
             transcript=analysis["transcript"] if analysis else None,
             topics=analysis["topics"] if analysis else None,
+            curation_status=curation_status,
             created_at=video.created_at.isoformat() if video.created_at else "",
             updated_at=video.updated_at.isoformat() if video.updated_at else None
         ))

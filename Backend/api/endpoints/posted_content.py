@@ -6,7 +6,7 @@ Tracks content that has been published to social media platforms
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import uuid
 

@@ -293,6 +293,10 @@ app.include_router(youtube_analytics.router, prefix="/api/youtube-analytics", ta
 from api.endpoints import tiktok_analytics
 app.include_router(tiktok_analytics.router, prefix="/api/tiktok-analytics", tags=["TikTok Analytics"])
 
+# RapidAPI Comments (TikTok, Instagram, Threads, Facebook)
+from api.endpoints import rapidapi_comments
+app.include_router(rapidapi_comments.router, prefix="/api/rapidapi-comments", tags=["RapidAPI Comments"])
+
 # Blotato Test Page (Connectivity & Scrapers)
 from api.endpoints import blotato_test
 app.include_router(blotato_test.router, prefix="/api/blotato", tags=["Blotato Test"])

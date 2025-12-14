@@ -285,3 +285,110 @@ async def refresh_all_analytics():
         "refreshed": len(results),
         "results": results
     }
+
+
+# =============================================================================
+# API USAGE TRACKING ENDPOINTS
+# =============================================================================
+
+@router.get("/api-usage/summary")
+async def get_api_usage_summary(provider: Optional[str] = None):
+    """
+    Get API usage summary for all or specific provider.
+    
+    Args:
+        provider: Optional provider name (e.g., "rapidapi_tiktok")
+        
+    Returns:
+        Usage statistics including calls made, remaining, and recommendations
+    """
+    from services.api_usage_tracker import get_api_usage_tracker, APIProvider
+    
+    tracker = get_api_usage_tracker()
+    
+    if provider:
+        try:
+            api_provider = APIProvider(provider)
+            return tracker.get_usage_summary(api_provider)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+    
+    return tracker.get_usage_summary()
+
+
+@router.get("/api-usage/can-call")
+async def check_can_make_api_call(provider: str = "rapidapi_tiktok"):
+    """
+    Check if we can make an API call within budget.
+    
+    Args:
+        provider: Provider name (default: "rapidapi_tiktok")
+        
+    Returns:
+        Whether the call is allowed, usage percentage, and remaining calls
+    """
+    from services.api_usage_tracker import get_api_usage_tracker, APIProvider
+    
+    tracker = get_api_usage_tracker()
+    
+    try:
+        api_provider = APIProvider(provider)
+        return tracker.can_make_call(api_provider)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+
+
+@router.post("/api-usage/set-tier")
+async def set_api_tier(provider: str, tier: str):
+    """
+    Set the pricing tier for a provider.
+    
+    Args:
+        provider: Provider name (e.g., "rapidapi_tiktok")
+        tier: Tier name (e.g., "basic", "pro", "ultra", "mega")
+        
+    Returns:
+        Updated budget configuration
+    """
+    from services.api_usage_tracker import get_api_usage_tracker, APIProvider
+    
+    tracker = get_api_usage_tracker()
+    
+    try:
+        api_provider = APIProvider(provider)
+        tracker.set_tier(api_provider, tier)
+        return {
+            "success": True,
+            "message": f"Set {provider} tier to {tier}",
+            "summary": tracker.get_usage_summary(api_provider)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/api-usage/endpoints")
+async def get_available_endpoints():
+    """
+    Get available API endpoints and their details.
+    
+    Returns:
+        List of available endpoints by provider
+    """
+    from services.api_usage_tracker import RAPIDAPI_TIKTOK_ENDPOINTS, RAPIDAPI_TIKTOK_TIERS, RAPIDAPI_TIKTOK_RATE_LIMITS
+    
+    return {
+        "rapidapi_tiktok": {
+            "host": "tiktok-api6.p.rapidapi.com",
+            "endpoints": RAPIDAPI_TIKTOK_ENDPOINTS,
+            "tiers": {
+                name: {
+                    "monthly_limit": tier.monthly_limit,
+                    "cost_usd": tier.cost_usd,
+                    "overage_cost": tier.overage_cost_per_call,
+                    "cost_per_call": tier.cost_per_call
+                }
+                for name, tier in RAPIDAPI_TIKTOK_TIERS.items()
+            },
+            "rate_limits": RAPIDAPI_TIKTOK_RATE_LIMITS
+        }
+    }

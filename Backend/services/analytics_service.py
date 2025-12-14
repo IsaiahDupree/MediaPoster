@@ -26,11 +26,16 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 class ExternalAnalyticsFetcher:
-    """Fetches analytics from external APIs (RapidAPI, etc.)"""
+    """Fetches analytics from external APIs (RapidAPI, etc.) with usage tracking"""
     
     def __init__(self):
         self.rapidapi_key = os.getenv("RAPIDAPI_KEY")
         self.rapidapi_tiktok_host = "tiktok-api6.p.rapidapi.com"
+        
+        # Import usage tracker
+        from services.api_usage_tracker import get_api_usage_tracker, APIProvider
+        self.usage_tracker = get_api_usage_tracker()
+        self.APIProvider = APIProvider
     
     def _get_rapidapi_headers(self, host: str) -> dict:
         """Get headers for RapidAPI requests"""
@@ -117,15 +122,17 @@ class ExternalAnalyticsFetcher:
             return 'bluesky'
         return None
     
-    async def fetch_tiktok_analytics(self, video_url: str) -> Dict[str, Any]:
+    async def fetch_tiktok_analytics(self, video_url: str, use_cache: bool = True, cache_max_age_hours: int = 6) -> Dict[str, Any]:
         """
-        Fetch TikTok video analytics via RapidAPI
+        Fetch TikTok video analytics via RapidAPI with usage tracking.
         
         Args:
             video_url: TikTok video URL
+            use_cache: Whether to check cache first (default True)
+            cache_max_age_hours: Max age of cached data in hours (default 6)
             
         Returns:
-            Dict with video metrics
+            Dict with video metrics and usage info
         """
         if not self.rapidapi_key:
             return {"error": "RAPIDAPI_KEY not configured"}
@@ -133,6 +140,34 @@ class ExternalAnalyticsFetcher:
         video_id = self.extract_tiktok_video_id(video_url)
         if not video_id:
             return {"error": f"Could not extract video ID from URL: {video_url}"}
+        
+        # Check cache first
+        cache_key = f"tiktok:video:{video_id}"
+        if use_cache:
+            cached = self.usage_tracker.get_cached_response(cache_key, cache_max_age_hours)
+            if cached:
+                logger.debug(f"Using cached TikTok analytics for video {video_id}")
+                self.usage_tracker.record_call(
+                    provider=self.APIProvider.RAPIDAPI_TIKTOK,
+                    endpoint="/video/details",
+                    success=True,
+                    video_id=video_id,
+                    cached=True
+                )
+                cached["from_cache"] = True
+                return cached
+        
+        # Check if we can make the API call (budget check)
+        budget_check = self.usage_tracker.can_make_call(self.APIProvider.RAPIDAPI_TIKTOK)
+        if not budget_check["allowed"]:
+            return {
+                "error": f"API budget exceeded: {budget_check['reason']}",
+                "budget_info": budget_check
+            }
+        
+        # Log warning if approaching limit
+        if budget_check.get("warning"):
+            logger.warning(f"TikTok API budget warning: {budget_check.get('warning_message')}")
         
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -143,16 +178,33 @@ class ExternalAnalyticsFetcher:
                 )
                 
                 if response.status_code != 200:
+                    # Record failed call
+                    self.usage_tracker.record_call(
+                        provider=self.APIProvider.RAPIDAPI_TIKTOK,
+                        endpoint="/video/details",
+                        success=False,
+                        video_id=video_id,
+                        metadata={"status_code": response.status_code}
+                    )
                     return {"error": f"RapidAPI error: {response.status_code} - {response.text}"}
                 
                 data = response.json()
+                
+                # Record successful call
+                self.usage_tracker.record_call(
+                    provider=self.APIProvider.RAPIDAPI_TIKTOK,
+                    endpoint="/video/details",
+                    success=True,
+                    video_id=video_id,
+                    response_size=len(response.content)
+                )
                 
                 # Extract metrics from response
                 # RapidAPI TikTok API response structure varies by provider
                 video_data = data.get('video', data.get('itemInfo', {}).get('itemStruct', data))
                 stats = video_data.get('stats', video_data.get('statistics', {}))
                 
-                return {
+                result = {
                     "success": True,
                     "platform": "tiktok",
                     "video_id": video_id,
@@ -170,13 +222,36 @@ class ExternalAnalyticsFetcher:
                         "create_time": video_data.get('createTime', video_data.get('create_time')),
                     },
                     "fetched_at": datetime.now().isoformat(),
-                    "raw_data": data  # Store raw for debugging
+                    "from_cache": False,
+                    "budget_info": {
+                        "usage_pct": budget_check["usage_pct"],
+                        "remaining_calls": budget_check["remaining_calls"]
+                    }
                 }
                 
+                # Cache the result (without raw_data to save space)
+                self.usage_tracker.cache_response(cache_key, result)
+                
+                return result
+                
         except httpx.TimeoutException:
+            self.usage_tracker.record_call(
+                provider=self.APIProvider.RAPIDAPI_TIKTOK,
+                endpoint="/video/details",
+                success=False,
+                video_id=video_id,
+                metadata={"error": "timeout"}
+            )
             return {"error": "Request timed out"}
         except Exception as e:
             logger.error(f"TikTok analytics fetch error: {e}")
+            self.usage_tracker.record_call(
+                provider=self.APIProvider.RAPIDAPI_TIKTOK,
+                endpoint="/video/details",
+                success=False,
+                video_id=video_id,
+                metadata={"error": str(e)}
+            )
             return {"error": str(e)}
     
     async def fetch_analytics_by_url(self, url: str) -> Dict[str, Any]:

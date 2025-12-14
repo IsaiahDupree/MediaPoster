@@ -23,6 +23,8 @@ class Platform(str, Enum):
     THREADS = "threads"
     PINTEREST = "pinterest"
     MEDIUM = "medium"
+    FACEBOOK = "facebook"
+    BLUESKY = "bluesky"
 
 
 @dataclass
@@ -110,7 +112,7 @@ class RapidAPISocialFetcher:
             "X-RapidAPI-Host": config.get("host", ""),
         }
     
-    async def fetch_youtube_analytics(self, channel_id: str) -> AccountAnalytics:
+    async def fetch_youtube_analytics(self, channel_id_or_username: str) -> AccountAnalytics:
         """Fetch YouTube channel analytics using direct YouTube Data API"""
         youtube_api_key = os.getenv("YOUTUBE_API_KEY", "")
         
@@ -118,14 +120,54 @@ class RapidAPISocialFetcher:
         if youtube_api_key:
             try:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.get(
-                        "https://www.googleapis.com/youtube/v3/channels",
-                        params={
+                    # First try by channel ID (if it looks like a channel ID)
+                    if channel_id_or_username.startswith("UC") and len(channel_id_or_username) == 24:
+                        params = {
                             "part": "snippet,statistics",
-                            "id": channel_id,
+                            "id": channel_id_or_username,
                             "key": youtube_api_key
                         }
+                    else:
+                        # Try by handle (e.g., @username) or forHandle
+                        handle = channel_id_or_username.replace("@", "")
+                        params = {
+                            "part": "snippet,statistics",
+                            "forHandle": handle,
+                            "key": youtube_api_key
+                        }
+                    
+                    response = await client.get(
+                        "https://www.googleapis.com/youtube/v3/channels",
+                        params=params
                     )
+                    
+                    # If forHandle didn't work, try search
+                    if response.status_code == 200 and not response.json().get("items"):
+                        # Search for channel by name
+                        search_response = await client.get(
+                            "https://www.googleapis.com/youtube/v3/search",
+                            params={
+                                "part": "snippet",
+                                "type": "channel",
+                                "q": channel_id_or_username,
+                                "maxResults": 1,
+                                "key": youtube_api_key
+                            }
+                        )
+                        
+                        if search_response.status_code == 200:
+                            search_data = search_response.json()
+                            if search_data.get("items"):
+                                found_channel_id = search_data["items"][0]["snippet"]["channelId"]
+                                # Now get full channel details
+                                response = await client.get(
+                                    "https://www.googleapis.com/youtube/v3/channels",
+                                    params={
+                                        "part": "snippet,statistics",
+                                        "id": found_channel_id,
+                                        "key": youtube_api_key
+                                    }
+                                )
                     
                     if response.status_code == 200:
                         data = response.json()
@@ -423,6 +465,48 @@ class RapidAPISocialFetcher:
         
         return AccountAnalytics(platform=Platform.MEDIUM, username=username)
     
+    async def fetch_facebook_analytics(self, username: str) -> AccountAnalytics:
+        """Fetch Facebook page/profile analytics (placeholder - requires Facebook Graph API)"""
+        # Facebook requires OAuth and Graph API access
+        # For now, return empty analytics
+        logger.info(f"Facebook analytics not yet implemented for {username}")
+        return AccountAnalytics(platform=Platform.FACEBOOK, username=username)
+    
+    async def fetch_bluesky_analytics(self, handle: str) -> AccountAnalytics:
+        """Fetch Bluesky profile analytics via public API"""
+        try:
+            # Bluesky has a public API
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # Resolve handle to DID
+                clean_handle = handle.replace("@", "")
+                if not clean_handle.endswith(".bsky.social"):
+                    clean_handle = f"{clean_handle}.bsky.social"
+                
+                response = await client.get(
+                    f"https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile",
+                    params={"actor": clean_handle}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    return AccountAnalytics(
+                        platform=Platform.BLUESKY,
+                        username=data.get("handle", handle),
+                        followers_count=data.get("followersCount", 0),
+                        following_count=data.get("followsCount", 0),
+                        posts_count=data.get("postsCount", 0),
+                        bio=data.get("description", ""),
+                        profile_pic_url=data.get("avatar", ""),
+                    )
+                
+                logger.warning(f"Bluesky API returned {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error fetching Bluesky analytics: {e}")
+        
+        return AccountAnalytics(platform=Platform.BLUESKY, username=handle)
+    
     async def fetch_all_accounts(self, accounts: List[SocialAccount]) -> List[AccountAnalytics]:
         """
         Fetch analytics for all provided accounts
@@ -448,8 +532,13 @@ class RapidAPISocialFetcher:
                     analytics = await self.fetch_pinterest_analytics(account.username)
                 elif account.platform == Platform.MEDIUM:
                     analytics = await self.fetch_medium_analytics(account.username)
+                elif account.platform == Platform.FACEBOOK:
+                    analytics = await self.fetch_facebook_analytics(account.username)
+                elif account.platform == Platform.BLUESKY:
+                    analytics = await self.fetch_bluesky_analytics(account.username)
                 else:
-                    continue
+                    # Unknown platform - return empty analytics
+                    analytics = AccountAnalytics(platform=account.platform, username=account.username)
                 
                 results.append(analytics)
                 logger.info(f"Fetched analytics for {account.platform.value}/@{account.username}")

@@ -19,6 +19,7 @@ class APIProvider(Enum):
     RAPIDAPI_TIKTOK = "rapidapi_tiktok"
     RAPIDAPI_INSTAGRAM = "rapidapi_instagram"
     RAPIDAPI_YOUTUBE = "rapidapi_youtube"
+    RAPIDAPI_TWITTER = "rapidapi_twitter"
     BLOTATO = "blotato"
 
 
@@ -102,6 +103,149 @@ RAPIDAPI_TIKTOK_RATE_LIMITS = {
     "pro": 1,      # 1 request/second
     "ultra": 5,    # 5 requests/second
     "mega": 5,     # 5 requests/second
+}
+
+# =============================================================================
+# RapidAPI Twitter/X API (twitter-x) - from https://rapidapi.com/datarise-datarise-default/api/twitter-x
+# Host: twitter-x.p.rapidapi.com
+# Last updated: Dec 2024
+# =============================================================================
+RAPIDAPI_TWITTER_HOST = "twitter-x.p.rapidapi.com"
+
+RAPIDAPI_TWITTER_TIERS = {
+    "basic": APITier("BASIC", monthly_limit=200, cost_usd=0.0),  # Free tier
+    "pro": APITier("PRO", monthly_limit=10000, cost_usd=10.0, overage_cost_per_call=0.004),
+    "ultra": APITier("ULTRA", monthly_limit=100000, cost_usd=40.0, overage_cost_per_call=0.003),
+    "mega": APITier("MEGA", monthly_limit=500000, cost_usd=100.0, overage_cost_per_call=0.001),
+}
+
+RAPIDAPI_TWITTER_ENDPOINTS = {
+    "tweet_details": "/tweet/details",       # GET - Tweet detail & conversation
+    "tweet_retweeters": "/tweet/retweeters", # GET - Tweet retweeters
+    "tweet_favoriters": "/tweet/favoriters", # GET - Tweet favoriters (likers)
+    "user_details": "/user/details",         # GET - User by screen name or rest ID
+    "user_tweets": "/user/tweets",           # GET - User tweets
+    "user_replies": "/user/tweetsandreplies", # GET - User tweets & replies
+    "user_followers": "/user/followers",     # GET - User followers
+    "user_following": "/user/following",     # GET - User following
+    "user_likes": "/user/likes",             # GET - User likes
+    "user_media": "/user/media",             # GET - User media
+    "search": "/search/",                    # GET - Search results
+    "lists_details": "/lists/details",       # GET - Lists details
+    "lists_tweets": "/lists/tweets",         # GET - Lists tweets
+    "trends": "/trends/",                    # GET - Trends near location
+    "community_details": "/community/details", # GET - Community details
+    "community_tweets": "/community/tweets",   # GET - Community tweets
+}
+
+RAPIDAPI_TWITTER_RATE_LIMITS = {
+    "basic": 0,     # No rate limit
+    "pro": 5,       # 5 requests/second
+    "ultra": 10,    # 10 requests/second
+    "mega": 30,     # 30 requests/second
+}
+
+# =============================================================================
+# RapidAPI Instagram Scraper - from https://rapidapi.com/junioroangel/api/instagram-scraper
+# Host: instagram-scraper-api2.p.rapidapi.com
+# Last updated: Dec 2024
+# =============================================================================
+RAPIDAPI_INSTAGRAM_HOST = "instagram-scraper-api2.p.rapidapi.com"
+
+RAPIDAPI_INSTAGRAM_TIERS = {
+    "basic": APITier("BASIC", monthly_limit=100, cost_usd=0.0),  # Free tier
+    "pro": APITier("PRO", monthly_limit=10000, cost_usd=30.0, overage_cost_per_call=0.005),
+    "ultra": APITier("ULTRA", monthly_limit=100000, cost_usd=100.0, overage_cost_per_call=0.002),
+    "mega": APITier("MEGA", monthly_limit=500000, cost_usd=250.0, overage_cost_per_call=0.001),
+}
+
+RAPIDAPI_INSTAGRAM_ENDPOINTS = {
+    "user_info": "/v1/info",                  # GET - User info by username
+    "user_posts": "/v1/posts",                # GET - User posts
+    "user_followers": "/v1/followers",        # GET - User followers
+    "user_following": "/v1/following",        # GET - User following
+    "post_info": "/v1/post_info",             # GET - Post details by shortcode
+    "post_likes": "/v1/likes",                # GET - Post likers
+    "post_comments": "/v1/comments",          # GET - Post comments
+    "search_users": "/v1/search_users",       # GET - Search users
+    "search_hashtag": "/v1/search_hashtag",   # GET - Search hashtag
+    "reels": "/v1/reels",                     # GET - User reels
+    "stories": "/v1/stories",                 # GET - User stories
+    "highlights": "/v1/highlights",           # GET - User highlights
+}
+
+RAPIDAPI_INSTAGRAM_RATE_LIMITS = {
+    "basic": 1,     # 1 request/second
+    "pro": 5,       # 5 requests/second
+    "ultra": 10,    # 10 requests/second
+    "mega": 20,     # 20 requests/second
+}
+
+# =============================================================================
+# RapidAPI YouTube (YT-API) - from https://rapidapi.com/ytjar/api/yt-api
+# Host: yt-api.p.rapidapi.com
+# Last updated: Dec 2024
+# =============================================================================
+RAPIDAPI_YOUTUBE_HOST = "yt-api.p.rapidapi.com"
+
+RAPIDAPI_YOUTUBE_TIERS = {
+    "basic": APITier("BASIC", monthly_limit=100, cost_usd=0.0),  # Free tier
+    "pro": APITier("PRO", monthly_limit=50000, cost_usd=10.0, overage_cost_per_call=0.0003),
+    "ultra": APITier("ULTRA", monthly_limit=500000, cost_usd=50.0, overage_cost_per_call=0.0002),
+    "mega": APITier("MEGA", monthly_limit=2000000, cost_usd=100.0, overage_cost_per_call=0.0001),
+}
+
+RAPIDAPI_YOUTUBE_ENDPOINTS = {
+    "video_info": "/video/info",              # GET - Video details
+    "video_comments": "/video/comments",      # GET - Video comments
+    "channel_info": "/channel/info",          # GET - Channel details
+    "channel_videos": "/channel/videos",      # GET - Channel videos
+    "channel_shorts": "/channel/shorts",      # GET - Channel shorts
+    "search": "/search",                      # GET - Search videos/channels
+    "playlist": "/playlist",                  # GET - Playlist videos
+    "trending": "/trending",                  # GET - Trending videos
+    "hashtag": "/hashtag",                    # GET - Hashtag videos
+}
+
+RAPIDAPI_YOUTUBE_RATE_LIMITS = {
+    "basic": 1,     # 1 request/second
+    "pro": 5,       # 5 requests/second
+    "ultra": 10,    # 10 requests/second
+    "mega": 20,     # 20 requests/second
+}
+
+# =============================================================================
+# ALL PROVIDERS CONFIGURATION
+# =============================================================================
+ALL_API_PROVIDERS = {
+    APIProvider.RAPIDAPI_TIKTOK: {
+        "host": "tiktok-api6.p.rapidapi.com",
+        "display_name": "RapidAPI TikTok",
+        "tiers": RAPIDAPI_TIKTOK_TIERS,
+        "endpoints": RAPIDAPI_TIKTOK_ENDPOINTS,
+        "rate_limits": RAPIDAPI_TIKTOK_RATE_LIMITS,
+    },
+    APIProvider.RAPIDAPI_TWITTER: {
+        "host": RAPIDAPI_TWITTER_HOST,
+        "display_name": "RapidAPI Twitter/X",
+        "tiers": RAPIDAPI_TWITTER_TIERS,
+        "endpoints": RAPIDAPI_TWITTER_ENDPOINTS,
+        "rate_limits": RAPIDAPI_TWITTER_RATE_LIMITS,
+    },
+    APIProvider.RAPIDAPI_INSTAGRAM: {
+        "host": RAPIDAPI_INSTAGRAM_HOST,
+        "display_name": "RapidAPI Instagram",
+        "tiers": RAPIDAPI_INSTAGRAM_TIERS,
+        "endpoints": RAPIDAPI_INSTAGRAM_ENDPOINTS,
+        "rate_limits": RAPIDAPI_INSTAGRAM_RATE_LIMITS,
+    },
+    APIProvider.RAPIDAPI_YOUTUBE: {
+        "host": RAPIDAPI_YOUTUBE_HOST,
+        "display_name": "RapidAPI YouTube",
+        "tiers": RAPIDAPI_YOUTUBE_TIERS,
+        "endpoints": RAPIDAPI_YOUTUBE_ENDPOINTS,
+        "rate_limits": RAPIDAPI_YOUTUBE_RATE_LIMITS,
+    },
 }
 
 

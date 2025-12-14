@@ -369,17 +369,19 @@ async def set_api_tier(provider: str, tier: str):
 @router.get("/api-usage/endpoints")
 async def get_available_endpoints():
     """
-    Get available API endpoints and their details.
+    Get available API endpoints and their details for all providers.
     
     Returns:
-        List of available endpoints by provider
+        Complete configuration for all supported API providers
     """
-    from services.api_usage_tracker import RAPIDAPI_TIKTOK_ENDPOINTS, RAPIDAPI_TIKTOK_TIERS, RAPIDAPI_TIKTOK_RATE_LIMITS
+    from services.api_usage_tracker import ALL_API_PROVIDERS, APIProvider
     
-    return {
-        "rapidapi_tiktok": {
-            "host": "tiktok-api6.p.rapidapi.com",
-            "endpoints": RAPIDAPI_TIKTOK_ENDPOINTS,
+    result = {}
+    for provider, config in ALL_API_PROVIDERS.items():
+        result[provider.value] = {
+            "host": config["host"],
+            "display_name": config["display_name"],
+            "endpoints": config["endpoints"],
             "tiers": {
                 name: {
                     "monthly_limit": tier.monthly_limit,
@@ -387,8 +389,39 @@ async def get_available_endpoints():
                     "overage_cost": tier.overage_cost_per_call,
                     "cost_per_call": tier.cost_per_call
                 }
-                for name, tier in RAPIDAPI_TIKTOK_TIERS.items()
+                for name, tier in config["tiers"].items()
             },
-            "rate_limits": RAPIDAPI_TIKTOK_RATE_LIMITS
+            "rate_limits": config["rate_limits"]
         }
-    }
+    
+    return result
+
+
+@router.get("/api-usage/providers")
+async def list_api_providers():
+    """
+    List all configured API providers with their current status.
+    
+    Returns:
+        List of providers with usage summary
+    """
+    from services.api_usage_tracker import get_api_usage_tracker, ALL_API_PROVIDERS, APIProvider
+    
+    tracker = get_api_usage_tracker()
+    providers = []
+    
+    for provider_enum, config in ALL_API_PROVIDERS.items():
+        budget_check = tracker.can_make_call(provider_enum)
+        providers.append({
+            "provider": provider_enum.value,
+            "display_name": config["display_name"],
+            "host": config["host"],
+            "endpoint_count": len(config["endpoints"]),
+            "current_tier": tracker._budgets.get(provider_enum.value, {}).tier_name if hasattr(tracker._budgets.get(provider_enum.value, {}), 'tier_name') else "basic",
+            "usage_pct": budget_check.get("usage_pct", 0),
+            "remaining_calls": budget_check.get("remaining_calls", 0),
+            "can_call": budget_check.get("allowed", True),
+            "warning": budget_check.get("warning", False),
+        })
+    
+    return {"providers": providers}

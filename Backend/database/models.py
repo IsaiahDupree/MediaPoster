@@ -1288,16 +1288,168 @@ class VideoAnalysis(Base):
     
     video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id", ondelete="CASCADE"), primary_key=True)
     transcript = Column(Text)
+    transcript_analysis = Column(JSONB)  # Summary short/long, key points, sentiment
     topics = Column(ARRAY(Text))
     hooks = Column(ARRAY(Text))
     tone = Column(Text)
     pacing = Column(Text)
     key_moments = Column(JSONB)
-    visual_analysis = Column(JSONB)  # New: Visual context from frames
-    music_suggestion = Column(JSONB) # New: Background music recommendation
-    pre_social_score = Column(Float)
+    visual_analysis = Column(JSONB)  # Visual context from frames
+    frame_analyses = Column(JSONB)  # Array of frame analysis at timestamps
+    music_suggestion = Column(JSONB)  # Background music recommendation
+    platform_content = Column(JSONB)  # Platform-specific titles/descriptions/hashtags
+    
+    # Scores
+    pre_social_score = Column(Float)  # Score before posting (predicted)
+    post_social_score = Column(Float)  # Score after posting (actual performance)
+    post_social_updated_at = Column(TIMESTAMP(timezone=True))  # When post score was last updated
+    
+    # Deep AI analysis results
+    deep_analysis = Column(JSONB)  # Full image/video analysis from OpenAI
+    
     analysis_version = Column(Text)
     analyzed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
     video = relationship("Video", back_populates="analysis")
+
+
+# =====================================================
+# API USAGE TRACKING (Phase 52)
+# =====================================================
+
+class APIProvider(Base):
+    """External API provider configuration"""
+    __tablename__ = "api_providers"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(Text, nullable=False, unique=True)  # e.g., 'rapidapi_tiktok'
+    display_name = Column(Text)  # e.g., 'RapidAPI TikTok'
+    host = Column(Text)  # e.g., 'tiktok-api6.p.rapidapi.com'
+    base_url = Column(Text)  # Full base URL
+    
+    # Current tier configuration
+    current_tier = Column(Text, default='basic')  # e.g., 'basic', 'pro', 'ultra', 'mega'
+    monthly_limit = Column(Integer, default=50)
+    monthly_cost_usd = Column(Numeric(10, 2), default=0)
+    overage_cost_per_call = Column(Numeric(10, 6), default=0)
+    rate_limit_per_second = Column(Integer, default=0)
+    
+    # Budget thresholds
+    warning_threshold_pct = Column(Float, default=80.0)
+    hard_limit_pct = Column(Float, default=95.0)
+    
+    # Available endpoints (JSON array)
+    endpoints = Column(JSONB)  # [{name, path, method, description}]
+    
+    # Tier options (JSON object)
+    tier_options = Column(JSONB)  # {tier_name: {limit, cost, overage, rate_limit}}
+    
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    usage_logs = relationship("APIUsageLog", back_populates="provider", cascade="all, delete-orphan")
+    monthly_summaries = relationship("APIMonthlyUsage", back_populates="provider", cascade="all, delete-orphan")
+
+
+class APIUsageLog(Base):
+    """Individual API call log"""
+    __tablename__ = "api_usage_logs"
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("api_providers.id", ondelete="CASCADE"), nullable=False)
+    endpoint = Column(Text)  # e.g., '/video/details'
+    
+    # Call details
+    success = Column(Boolean, default=True)
+    cached = Column(Boolean, default=False)  # If served from cache (doesn't count against quota)
+    response_time_ms = Column(Integer)
+    response_size_bytes = Column(Integer)
+    status_code = Column(Integer)
+    
+    # Context
+    resource_id = Column(Text)  # e.g., video_id, user_id
+    resource_type = Column(Text)  # e.g., 'video', 'user', 'search'
+    call_metadata = Column(JSONB)  # Additional context
+    
+    # Timing
+    called_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    
+    # Relationships
+    provider = relationship("APIProvider", back_populates="usage_logs")
+    
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index('idx_api_usage_provider_date', 'provider_id', 'called_at'),
+        Index('idx_api_usage_endpoint', 'endpoint'),
+    )
+
+
+class APIMonthlyUsage(Base):
+    """Monthly aggregated API usage for budget tracking"""
+    __tablename__ = "api_monthly_usage"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("api_providers.id", ondelete="CASCADE"), nullable=False)
+    
+    # Period
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)  # 1-12
+    
+    # Usage counts
+    total_calls = Column(Integer, default=0)
+    successful_calls = Column(Integer, default=0)
+    failed_calls = Column(Integer, default=0)
+    cached_calls = Column(Integer, default=0)  # Calls served from cache
+    
+    # Budget tracking
+    monthly_limit = Column(Integer)  # Limit at time of tracking
+    tier_name = Column(Text)  # Tier at time of tracking
+    base_cost_usd = Column(Numeric(10, 2), default=0)
+    overage_calls = Column(Integer, default=0)
+    overage_cost_usd = Column(Numeric(10, 2), default=0)
+    total_cost_usd = Column(Numeric(10, 2), default=0)
+    
+    # Endpoint breakdown (JSON)
+    endpoint_usage = Column(JSONB)  # {endpoint: {calls, success, failed}}
+    
+    # Timestamps
+    period_start = Column(Date)
+    period_end = Column(Date)
+    last_updated = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    provider = relationship("APIProvider", back_populates="monthly_summaries")
+    
+    # Unique constraint on provider + year + month
+    __table_args__ = (
+        Index('idx_api_monthly_provider_period', 'provider_id', 'year', 'month', unique=True),
+    )
+
+
+class APIResponseCache(Base):
+    """Cache for API responses to reduce duplicate calls"""
+    __tablename__ = "api_response_cache"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cache_key = Column(Text, nullable=False, unique=True)  # e.g., 'tiktok:video:123456789'
+    provider_name = Column(Text, nullable=False)
+    endpoint = Column(Text)
+    
+    # Cached response
+    response_data = Column(JSONB)
+    
+    # Cache management
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    expires_at = Column(TIMESTAMP(timezone=True))
+    hit_count = Column(Integer, default=0)
+    last_hit_at = Column(TIMESTAMP(timezone=True))
+    
+    # Index for cache lookups
+    __table_args__ = (
+        Index('idx_cache_key', 'cache_key'),
+        Index('idx_cache_expires', 'expires_at'),
+    )

@@ -199,6 +199,30 @@ async def health_check():
 
 
 # -------------------------------------------------------------------------
+# ACCOUNT ENDPOINTS
+# -------------------------------------------------------------------------
+
+@router.get("/accounts")
+async def get_blotato_accounts(platform: Optional[str] = None):
+    """
+    Fetch connected social media accounts from Blotato.
+    
+    Args:
+        platform: Optional platform filter (twitter, instagram, tiktok, etc.)
+    
+    Returns:
+        List of connected accounts with id, platform, fullname, username
+    """
+    try:
+        client = BlotatoAPI()
+        accounts = await client.get_accounts(platform=platform)
+        return {"accounts": accounts}
+    except Exception as e:
+        logger.error(f"Failed to fetch Blotato accounts: {e}")
+        raise HTTPException(500, f"Failed to fetch accounts: {str(e)}")
+
+
+# -------------------------------------------------------------------------
 # POST ENDPOINTS
 # -------------------------------------------------------------------------
 
@@ -352,6 +376,244 @@ async def publish_to_multiple_platforms(request: MultiPlatformPostRequest):
         "successful": sum(1 for r in results.values() if r.get("success")),
         "results": results,
     }
+
+
+class AccountPublishItem(BaseModel):
+    """Individual account publish configuration"""
+    blotato_account_id: str = Field(..., description="Blotato account ID")
+    platform: str = Field(..., description="Platform name")
+    username: str = Field(..., description="Account username")
+    text: str = Field(..., description="Post caption/text")
+    media_urls: List[str] = Field(default=[], description="Media URLs")
+
+
+class BulkPublishRequest(BaseModel):
+    """Request to publish to multiple accounts"""
+    accounts: List[AccountPublishItem] = Field(..., description="List of accounts to publish to")
+    media_id: Optional[str] = Field(default=None, description="Local media ID for tracking")
+
+
+@router.post("/posts/bulk")
+async def bulk_publish(request: BulkPublishRequest):
+    """
+    Publish content to multiple accounts at once.
+    
+    Each account can have its own caption/text.
+    Returns results for each account.
+    """
+    results = []
+    
+    for account in request.accounts:
+        try:
+            platform = Platform(account.platform.lower())
+            
+            # Create content
+            content = PostContent(
+                text=account.text,
+                platform=platform,
+                media_urls=account.media_urls or [],
+            )
+            
+            # Create target based on platform
+            if platform == Platform.TWITTER:
+                target = TwitterTarget()
+            elif platform == Platform.LINKEDIN:
+                target = LinkedInTarget()
+            elif platform == Platform.INSTAGRAM:
+                target = InstagramTarget(media_type="reel")
+            elif platform == Platform.TIKTOK:
+                target = TikTokTarget(
+                    privacy_level=TikTokPrivacy.PUBLIC,
+                    is_ai_generated=True,
+                )
+            elif platform == Platform.THREADS:
+                target = ThreadsTarget()
+            elif platform == Platform.BLUESKY:
+                target = BlueskyTarget()
+            elif platform == Platform.YOUTUBE:
+                target = YouTubeTarget(
+                    title=account.text[:100] if account.text else "Video",
+                    privacy_status=YouTubePrivacy.PUBLIC,
+                    should_notify_subscribers=True,
+                )
+            elif platform == Platform.PINTEREST:
+                # Pinterest requires board_id - skip for now
+                results.append({
+                    "account_id": account.blotato_account_id,
+                    "platform": account.platform,
+                    "username": account.username,
+                    "success": False,
+                    "error": "Pinterest requires board_id configuration",
+                })
+                continue
+            elif platform == Platform.FACEBOOK:
+                # Facebook requires page_id - skip for now
+                results.append({
+                    "account_id": account.blotato_account_id,
+                    "platform": account.platform,
+                    "username": account.username,
+                    "success": False,
+                    "error": "Facebook requires page_id configuration",
+                })
+                continue
+            else:
+                results.append({
+                    "account_id": account.blotato_account_id,
+                    "platform": account.platform,
+                    "username": account.username,
+                    "success": False,
+                    "error": f"Unsupported platform: {account.platform}",
+                })
+                continue
+            
+            # Publish
+            client = BlotatoAPI()
+            result = await client.publish_post(
+                account_id=account.blotato_account_id,
+                content=content,
+                target=target,
+            )
+            
+            results.append({
+                "account_id": account.blotato_account_id,
+                "platform": account.platform,
+                "username": account.username,
+                "success": True,
+                "post_submission_id": result.get("postSubmissionId"),
+            })
+            
+        except Exception as e:
+            logger.error(f"Error publishing to {account.username}: {e}")
+            results.append({
+                "account_id": account.blotato_account_id,
+                "platform": account.platform,
+                "username": account.username,
+                "success": False,
+                "error": str(e),
+            })
+    
+    successful = sum(1 for r in results if r.get("success"))
+    return {
+        "total_accounts": len(request.accounts),
+        "successful": successful,
+        "failed": len(request.accounts) - successful,
+        "results": results,
+    }
+
+
+# -------------------------------------------------------------------------
+# FULL PUBLISH FLOW (with Google Drive staging)
+# -------------------------------------------------------------------------
+
+class FullPublishRequest(BaseModel):
+    """Request for full publish flow with Google Drive staging"""
+    media_id: str = Field(..., description="Local media ID to publish")
+    blotato_account_id: str = Field(..., description="Blotato account ID")
+    platform: str = Field(..., description="Target platform")
+    username: str = Field(..., description="Account username")
+    text: str = Field(..., description="Post caption/text")
+    cleanup_gdrive: bool = Field(default=True, description="Delete from Google Drive after publish")
+
+
+class FullPublishResponse(BaseModel):
+    """Response from full publish flow"""
+    success: bool
+    post_submission_id: Optional[str] = None
+    error: Optional[str] = None
+    steps: dict = {}
+
+
+@router.post("/posts/full-publish", response_model=FullPublishResponse)
+async def full_publish(request: FullPublishRequest, background_tasks: BackgroundTasks):
+    """
+    Full publish flow with Google Drive staging:
+    1. Get local file path from media_id
+    2. Upload to Google Drive (get public URL)
+    3. Upload to Blotato via /v2/media
+    4. Publish to platform via /v2/posts
+    5. Delete from Google Drive after success
+    """
+    from pathlib import Path
+    import httpx
+    
+    try:
+        # Step 1: Get local file path from media_id via media-db API
+        async with httpx.AsyncClient(timeout=30) as client:
+            media_res = await client.get(f"http://localhost:5555/api/media-db/detail/{request.media_id}")
+            if media_res.status_code != 200:
+                return FullPublishResponse(
+                    success=False,
+                    error=f"Media not found: {request.media_id}"
+                )
+            
+            media_data = media_res.json()
+            file_path_str = media_data.get('file_path')
+            
+            if not file_path_str:
+                return FullPublishResponse(
+                    success=False,
+                    error=f"No file path for media: {request.media_id}"
+                )
+        
+        # Check file outside of async context
+        file_path = Path(file_path_str.strip())
+        
+        logger.info(f"File path: {file_path}, exists: {file_path.exists()}, is_file: {file_path.is_file()}")
+        
+        if not file_path.exists():
+            # Try to resolve the path
+            import os
+            logger.info(f"Checking with os.path.exists: {os.path.exists(str(file_path))}")
+            return FullPublishResponse(
+                success=False,
+                error=f"File not found: {file_path}"
+            )
+        
+        # Step 2-5: Use PublishService for full flow
+        from services.publish_service import get_publish_service
+        
+        publish_service = get_publish_service()
+        
+        # Build target config based on platform
+        platform_lower = request.platform.lower()
+        target_config = {}
+        
+        if platform_lower == "tiktok":
+            target_config = {
+                "privacy_level": "PUBLIC_TO_EVERYONE",
+                "is_ai_generated": True,
+            }
+        elif platform_lower == "instagram":
+            target_config = {"media_type": "reel"}
+        elif platform_lower == "youtube":
+            target_config = {
+                "title": request.text[:100] if request.text else "Video",
+                "privacy_status": "public",
+            }
+        
+        result = await publish_service.full_publish_flow(
+            file_path=file_path,
+            account_id=request.blotato_account_id,
+            platform=platform_lower,
+            text=request.text,
+            target_config=target_config,
+            cleanup_storage=request.cleanup_gdrive,
+            use_supabase=False,  # Use Google Drive with API key (bypasses virus scan)
+        )
+        
+        return FullPublishResponse(
+            success=result['success'],
+            post_submission_id=result.get('post_submission_id'),
+            error=result.get('error'),
+            steps=result.get('steps', {}),
+        )
+        
+    except Exception as e:
+        logger.error(f"Full publish failed: {e}")
+        return FullPublishResponse(
+            success=False,
+            error=str(e)
+        )
 
 
 # -------------------------------------------------------------------------

@@ -499,6 +499,73 @@ async def get_available_endpoints():
     return result
 
 
+@router.get("/by-media/{media_id}/fetch-metrics")
+async def fetch_metrics_for_media(media_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Fetch and update metrics for all posts of a specific media item.
+    Returns aggregated totals across all posts.
+    """
+    import asyncio
+    from services.analytics_service import get_external_analytics_fetcher
+    
+    try:
+        # Get all posts for this media
+        query = select(PostedContentModel).where(PostedContentModel.media_id == uuid.UUID(media_id))
+        result = await db.execute(query)
+        posts = result.scalars().all()
+        
+        if not posts:
+            return {"error": "No posts found for this media", "totals": {"views": 0, "likes": 0, "comments": 0, "shares": 0}}
+        
+        fetcher = get_external_analytics_fetcher()
+        totals = {"views": 0, "likes": 0, "comments": 0, "shares": 0}
+        updated_posts = []
+        
+        for post in posts:
+            if not post.platform_url:
+                continue
+            
+            try:
+                result = await fetcher.fetch_analytics_by_url(post.platform_url)
+                
+                if result.get('success') and result.get('metrics'):
+                    metrics = result['metrics']
+                    post.views = metrics.get('views', post.views or 0)
+                    post.likes = metrics.get('likes', post.likes or 0)
+                    post.comments = metrics.get('comments', post.comments or 0)
+                    post.shares = metrics.get('shares', post.shares or 0)
+                    
+                    updated_posts.append({
+                        "id": str(post.id),
+                        "platform": post.platform,
+                        "metrics": metrics
+                    })
+                
+                # Rate limit
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.warning(f"Failed to fetch metrics for post {post.id}: {e}")
+            
+            # Aggregate totals
+            totals["views"] += post.views or 0
+            totals["likes"] += post.likes or 0
+            totals["comments"] += post.comments or 0
+            totals["shares"] += post.shares or 0
+        
+        await db.commit()
+        
+        return {
+            "media_id": media_id,
+            "post_count": len(posts),
+            "updated_count": len(updated_posts),
+            "totals": totals,
+            "posts": updated_posts
+        }
+    except Exception as e:
+        logger.error(f"Error fetching metrics for media {media_id}: {e}")
+        return {"error": str(e), "totals": {"views": 0, "likes": 0, "comments": 0, "shares": 0}}
+
+
 @router.get("/{post_id}/comments")
 async def get_post_comments(post_id: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
     """

@@ -417,6 +417,198 @@ class PublishService:
                     await self.delete_from_gdrive(storage_info['file_id'])
 
 
+    async def get_post_status(self, post_submission_id: str) -> Dict[str, Any]:
+        """
+        Get post status from Blotato API
+        Rate limit: 60 requests/minute
+        
+        Returns:
+            Dict with status, publicUrl, errorMessage
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(
+                    f"{self.BLOTATO_BASE_URL}/posts/{post_submission_id}",
+                    headers=self._get_blotato_headers()
+                )
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Get post status failed: {e.response.status_code} - {e.response.text}")
+            return {'error': str(e)}
+        except Exception as e:
+            logger.error(f"Get post status error: {e}")
+            return {'error': str(e)}
+    
+    async def poll_for_post_url(
+        self,
+        post_submission_id: str,
+        max_attempts: int = 30,
+        poll_interval_seconds: float = 2.0,
+        rate_limit_margin: float = 1.0
+    ) -> Dict[str, Any]:
+        """
+        Poll Blotato API for post status until published or failed
+        
+        Args:
+            post_submission_id: The submission ID from publish response
+            max_attempts: Maximum polling attempts (default 30 = ~1 minute)
+            poll_interval_seconds: Seconds between polls (default 2.0)
+            rate_limit_margin: Extra seconds to add for rate limit safety (default 1.0)
+        
+        Returns:
+            Dict with status, publicUrl, platform info
+        """
+        actual_interval = poll_interval_seconds + rate_limit_margin
+        
+        for attempt in range(max_attempts):
+            logger.info(f"Polling post status (attempt {attempt + 1}/{max_attempts})...")
+            
+            status_result = await self.get_post_status(post_submission_id)
+            
+            if 'error' in status_result:
+                logger.warning(f"Poll error: {status_result['error']}")
+                await asyncio.sleep(actual_interval)
+                continue
+            
+            status = status_result.get('status', '').lower()
+            public_url = status_result.get('publicUrl')
+            error_message = status_result.get('errorMessage')
+            
+            if status == 'published' and public_url:
+                logger.success(f"✓ Post published! URL: {public_url}")
+                return {
+                    'success': True,
+                    'status': 'published',
+                    'public_url': public_url,
+                    'post_submission_id': post_submission_id
+                }
+            elif status == 'failed' or error_message:
+                logger.error(f"Post failed: {error_message}")
+                return {
+                    'success': False,
+                    'status': 'failed',
+                    'error': error_message,
+                    'post_submission_id': post_submission_id
+                }
+            elif status in ['pending', 'processing', 'queued']:
+                logger.info(f"Post status: {status}, waiting...")
+                await asyncio.sleep(actual_interval)
+            else:
+                logger.warning(f"Unknown status: {status}")
+                await asyncio.sleep(actual_interval)
+        
+        logger.warning(f"Max polling attempts reached for {post_submission_id}")
+        return {
+            'success': False,
+            'status': 'timeout',
+            'error': 'Max polling attempts reached',
+            'post_submission_id': post_submission_id
+        }
+    
+    async def full_publish_with_url_tracking(
+        self,
+        file_path: Path,
+        account_id: str,
+        platform: str,
+        text: str,
+        media_id: str = None,
+        target_config: Optional[Dict] = None,
+        scheduled_time: Optional[str] = None,
+        cleanup_storage: bool = True,
+        use_supabase: bool = False,
+        poll_for_url: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Full publish flow with URL tracking:
+        1. Upload to cloud storage
+        2. Upload to Blotato
+        3. Publish to platform
+        4. Poll for public URL
+        5. Store URL for analytics
+        6. Cleanup storage
+        
+        Returns:
+            Dict with full result including public_url if available
+        """
+        # First do the standard publish flow
+        result = await self.full_publish_flow(
+            file_path=file_path,
+            account_id=account_id,
+            platform=platform,
+            text=text,
+            target_config=target_config,
+            scheduled_time=scheduled_time,
+            cleanup_storage=cleanup_storage,
+            use_supabase=use_supabase
+        )
+        
+        if not result['success']:
+            return result
+        
+        post_submission_id = result.get('post_submission_id')
+        
+        # Poll for URL if requested and we have a submission ID
+        if poll_for_url and post_submission_id:
+            logger.info("Step 5: Polling for public URL...")
+            url_result = await self.poll_for_post_url(post_submission_id)
+            
+            result['steps']['url_tracking'] = url_result
+            
+            if url_result.get('success'):
+                result['public_url'] = url_result.get('public_url')
+                
+                # Store in database for analytics tracking
+                if media_id:
+                    await self._store_post_record(
+                        media_id=media_id,
+                        platform=platform,
+                        post_submission_id=post_submission_id,
+                        public_url=url_result.get('public_url'),
+                        account_id=account_id,
+                        caption=text
+                    )
+        
+        return result
+    
+    async def _store_post_record(
+        self,
+        media_id: str,
+        platform: str,
+        post_submission_id: str,
+        public_url: str,
+        account_id: str,
+        caption: str = None
+    ) -> bool:
+        """
+        Store post record in database for analytics tracking
+        Uses the existing PlatformPost model
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    "http://localhost:5555/api/posted-content/record",
+                    json={
+                        "media_id": media_id,
+                        "platform": platform,
+                        "blotato_submission_id": post_submission_id,
+                        "platform_url": public_url,
+                        "blotato_account_id": account_id,
+                        "caption": caption,
+                        "status": "published"
+                    }
+                )
+                if response.status_code == 200:
+                    logger.success(f"✓ Post record stored for analytics tracking")
+                    return True
+                else:
+                    logger.warning(f"Failed to store post record: {response.text}")
+                    return False
+        except Exception as e:
+            logger.error(f"Error storing post record: {e}")
+            return False
+
+
 # Singleton instance
 _publish_service = None
 

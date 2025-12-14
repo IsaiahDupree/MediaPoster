@@ -519,8 +519,21 @@ class FullPublishResponse(BaseModel):
     """Response from full publish flow"""
     success: bool
     post_submission_id: Optional[str] = None
+    public_url: Optional[str] = None
     error: Optional[str] = None
     steps: dict = {}
+
+
+class FullPublishWithTrackingRequest(BaseModel):
+    """Request for full publish with URL tracking"""
+    media_id: str
+    blotato_account_id: str
+    platform: str
+    username: str
+    text: str = ""
+    cleanup_gdrive: bool = True
+    poll_for_url: bool = True
+    target_config: Optional[dict] = None
 
 
 @router.post("/posts/full-publish", response_model=FullPublishResponse)
@@ -614,6 +627,102 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
             success=False,
             error=str(e)
         )
+
+
+@router.post("/posts/full-publish-tracked", response_model=FullPublishResponse)
+async def full_publish_with_tracking(request: FullPublishWithTrackingRequest):
+    """
+    Full publish flow with URL tracking:
+    1. Get local file path from media_id
+    2. Upload to Google Drive (get public URL)
+    3. Upload to Blotato via /v2/media
+    4. Publish to platform via /v2/posts
+    5. Poll for public URL (with rate limit margin)
+    6. Store URL for analytics tracking
+    7. Delete from Google Drive after success
+    
+    This endpoint waits for the post to be published and returns the public URL.
+    Use this when you need the platform URL for analytics.
+    """
+    from pathlib import Path
+    import httpx
+    
+    try:
+        # Step 1: Get local file path from media_id via media-db API
+        async with httpx.AsyncClient(timeout=30) as client:
+            media_res = await client.get(f"http://localhost:5555/api/media-db/detail/{request.media_id}")
+            if media_res.status_code != 200:
+                return FullPublishResponse(
+                    success=False,
+                    error=f"Media not found: {request.media_id}"
+                )
+            
+            media_data = media_res.json()
+            file_path_str = media_data.get('file_path')
+            
+            if not file_path_str:
+                return FullPublishResponse(
+                    success=False,
+                    error=f"No file path for media: {request.media_id}"
+                )
+        
+        file_path = Path(file_path_str.strip())
+        
+        if not file_path.exists():
+            return FullPublishResponse(
+                success=False,
+                error=f"File not found: {file_path}"
+            )
+        
+        # Get platform-specific target config
+        platform_lower = request.platform.lower()
+        target_config = request.target_config or {}
+        
+        # Use full publish with URL tracking
+        from services.publish_service import get_publish_service
+        publish_service = get_publish_service()
+        
+        result = await publish_service.full_publish_with_url_tracking(
+            file_path=file_path,
+            account_id=request.blotato_account_id,
+            platform=platform_lower,
+            text=request.text,
+            media_id=request.media_id,
+            target_config=target_config,
+            cleanup_storage=request.cleanup_gdrive,
+            use_supabase=False,
+            poll_for_url=request.poll_for_url
+        )
+        
+        return FullPublishResponse(
+            success=result['success'],
+            post_submission_id=result.get('post_submission_id'),
+            public_url=result.get('public_url'),
+            error=result.get('error'),
+            steps=result.get('steps', {}),
+        )
+        
+    except Exception as e:
+        logger.error(f"Full publish with tracking failed: {e}")
+        return FullPublishResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@router.get("/posts/status/{submission_id}")
+async def get_post_status(submission_id: str):
+    """
+    Get the status of a published post by submission ID.
+    Returns status, publicUrl, and any error message.
+    
+    Rate Limit: 60 requests/minute
+    """
+    from services.publish_service import get_publish_service
+    publish_service = get_publish_service()
+    
+    result = await publish_service.get_post_status(submission_id)
+    return result
 
 
 # -------------------------------------------------------------------------

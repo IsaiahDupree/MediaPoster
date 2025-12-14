@@ -23,7 +23,7 @@ class PostedContentItem(BaseModel):
     id: str
     platform: str
     platform_post_id: str
-    platform_url: str
+    platform_url: Optional[str] = None  # URL may not be available immediately
     account_username: str
     local_content_id: Optional[str] = None
     title: Optional[str] = None
@@ -43,7 +43,7 @@ class PostRecordRequest(BaseModel):
     media_id: str
     platform: str
     blotato_submission_id: str
-    platform_url: str
+    platform_url: Optional[str] = None  # URL may not be available immediately
     blotato_account_id: str
     caption: Optional[str] = None
     status: str = "published"
@@ -155,6 +155,17 @@ async def get_posts_by_media(media_id: str):
     """Get all posts for a specific media item"""
     posts = [p for p in _posted_content_store if p.get('media_id') == media_id]
     return {"posts": posts, "count": len(posts)}
+
+
+@router.patch("/by-submission/{submission_id}/url")
+async def update_platform_url(submission_id: str, platform_url: str):
+    """Update the platform URL for a post after it's been published"""
+    for post in _posted_content_store:
+        if post.get('blotato_submission_id') == submission_id:
+            post['platform_url'] = platform_url
+            logger.info(f"✓ Updated platform URL for {submission_id}: {platform_url}")
+            return {"success": True, "platform_url": platform_url}
+    raise HTTPException(status_code=404, detail="Post not found")
 
 
 @router.post("")

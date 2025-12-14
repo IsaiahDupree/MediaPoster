@@ -46,8 +46,7 @@ class MediaStatusResponse(BaseModel):
     created_at: str
     updated_at: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class MediaDetailResponse(BaseModel):
@@ -162,16 +161,39 @@ async def get_video_metadata(file_path: str) -> dict:
 @router.get("/list", response_model=List[MediaStatusResponse])
 async def list_media(
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=50, le=200),
+    limit: int = Query(default=50, le=500),
     offset: int = Query(default=0, ge=0),
-    analyzed_only: bool = Query(default=False)
+    analyzed_only: bool = Query(default=False),
+    media_type: Optional[str] = Query(default=None, description="Filter by media type: 'video' or 'image'")
 ):
     """
     List all media from database.
     """
-    from sqlalchemy import text
+    from sqlalchemy import text, or_
     
-    query = select(Video).order_by(Video.created_at.desc()).offset(offset).limit(limit)
+    query = select(Video).order_by(Video.created_at.desc())
+    
+    # Filter by media type if specified
+    if media_type == 'video':
+        query = query.where(or_(
+            Video.source_uri.ilike('%.mov'),
+            Video.source_uri.ilike('%.mp4'),
+            Video.source_uri.ilike('%.avi'),
+            Video.source_uri.ilike('%.mkv'),
+            Video.source_uri.ilike('%.webm'),
+            Video.source_uri.ilike('%.m4v')
+        ))
+    elif media_type == 'image':
+        query = query.where(or_(
+            Video.source_uri.ilike('%.jpg'),
+            Video.source_uri.ilike('%.jpeg'),
+            Video.source_uri.ilike('%.png'),
+            Video.source_uri.ilike('%.gif'),
+            Video.source_uri.ilike('%.heic'),
+            Video.source_uri.ilike('%.webp')
+        ))
+    
+    query = query.offset(offset).limit(limit)
     
     result = await db.execute(query)
     videos = result.scalars().all()
@@ -528,10 +550,21 @@ async def run_analysis(video_id: str, file_path: str):
     # Expand path if needed
     file_path = os.path.expanduser(file_path) if file_path else None
     
-    # Check if file exists
-    if not file_path or not os.path.exists(file_path):
-        print(f"Error: File not found for {video_id}: {file_path}")
+    # Map host path to container path (for Docker)
+    container_path = map_host_to_container_path(file_path) if file_path else None
+    
+    # Try container path first, then original path
+    actual_path = None
+    if container_path and os.path.exists(container_path):
+        actual_path = container_path
+    elif file_path and os.path.exists(file_path):
+        actual_path = file_path
+    
+    if not actual_path:
+        print(f"Error: File not found for {video_id}: {file_path} (container: {container_path})")
         return
+    
+    file_path = actual_path
     
     async with async_session_maker() as db:
         try:
@@ -619,10 +652,27 @@ async def batch_analyze(
 # ENDPOINTS - THUMBNAIL
 # =============================================================================
 
+def map_host_to_container_path(host_path: str) -> str:
+    """Map host filesystem paths to Docker container paths."""
+    if not host_path:
+        return host_path
+    # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/import
+    import re
+    # Handle expanded home directory paths
+    pattern = r'^/Users/[^/]+/Documents/IphoneImport/(.*)$'
+    match = re.match(pattern, host_path)
+    if match:
+        return f"/media/import/{match.group(1)}"
+    # Handle ~ paths (shouldn't happen but just in case)
+    if host_path.startswith('~/Documents/IphoneImport/'):
+        return host_path.replace('~/Documents/IphoneImport/', '/media/import/')
+    return host_path
+
+
 @router.get("/thumbnail/{media_id}")
 async def get_thumbnail(
     media_id: str,
-    size: str = Query(default="medium", regex="^(small|medium|large)$"),
+    size: str = Query(default="medium", pattern="^(small|medium|large)$"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -640,16 +690,28 @@ async def get_thumbnail(
     if not video:
         raise HTTPException(status_code=404, detail="Media not found")
     
-    # Get thumbnail path
-    if video.thumbnail_path and Path(video.thumbnail_path).exists():
-        return FileResponse(video.thumbnail_path, media_type="image/jpeg")
+    # Get thumbnail path - check both original and mapped paths
+    if video.thumbnail_path:
+        thumb_path = video.thumbnail_path
+        if Path(thumb_path).exists():
+            return FileResponse(thumb_path, media_type="image/jpeg")
     
-    # Try to generate on-the-fly
-    if video.source_uri and Path(video.source_uri).exists():
+    # Try to generate on-the-fly from source file
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    # Check if source exists (try container path first, then original)
+    actual_source = None
+    if container_source and Path(container_source).exists():
+        actual_source = container_source
+    elif source_path and Path(source_path).exists():
+        actual_source = source_path
+    
+    if actual_source:
         from services.thumbnail_service import generate_thumbnail
-        thumb_path = generate_thumbnail(video.source_uri, size)
+        thumb_path = generate_thumbnail(actual_source, size)
         if thumb_path:
-            # Update database
+            # Update database with thumbnail path
             video.thumbnail_path = thumb_path
             await db.commit()
             return FileResponse(thumb_path, media_type="image/jpeg")
@@ -677,11 +739,21 @@ async def stream_video(
     if not video:
         raise HTTPException(status_code=404, detail="Media not found")
     
-    if not video.source_uri or not Path(video.source_uri).exists():
+    # Try container-mapped path first, then original path
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    actual_path = None
+    if container_source and Path(container_source).exists():
+        actual_path = container_source
+    elif source_path and Path(source_path).exists():
+        actual_path = source_path
+    
+    if not actual_path:
         raise HTTPException(status_code=404, detail="Video file not found")
     
     # Determine media type
-    ext = Path(video.source_uri).suffix.lower()
+    ext = Path(actual_path).suffix.lower()
     media_type_map = {
         '.mp4': 'video/mp4',
         '.mov': 'video/quicktime',
@@ -693,7 +765,64 @@ async def stream_video(
     media_type = media_type_map.get(ext, 'video/mp4')
     
     return FileResponse(
-        video.source_uri, 
+        actual_path, 
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
+
+
+# =============================================================================
+# ENDPOINTS - IMAGE
+# =============================================================================
+
+@router.get("/image/{media_id}")
+async def serve_image(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Serve full-size image file for display.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Try container-mapped path first, then original path
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    actual_path = None
+    if container_source and Path(container_source).exists():
+        actual_path = container_source
+    elif source_path and Path(source_path).exists():
+        actual_path = source_path
+    
+    if not actual_path:
+        raise HTTPException(status_code=404, detail="Image file not found")
+    
+    # Determine media type
+    ext = Path(actual_path).suffix.lower()
+    media_type_map = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.heic': 'image/heic',
+        '.heif': 'image/heif',
+    }
+    media_type = media_type_map.get(ext, 'image/jpeg')
+    
+    return FileResponse(
+        actual_path, 
         media_type=media_type,
         headers={"Cache-Control": "public, max-age=3600"}
     )
@@ -757,3 +886,260 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "database": "error",
             "error": str(e)
         }
+
+
+# =============================================================================
+# ENDPOINTS - ANALYSIS STORAGE & RETRIEVAL
+# =============================================================================
+
+class AnalysisSaveRequest(BaseModel):
+    """Request to save comprehensive analysis"""
+    transcript: Optional[str] = None
+    transcript_analysis: Optional[dict] = None
+    topics: Optional[List[str]] = None
+    hooks: Optional[List[str]] = None
+    tone: Optional[str] = None
+    pacing: Optional[str] = None
+    key_moments: Optional[dict] = None
+    visual_analysis: Optional[dict] = None
+    frame_analyses: Optional[list] = None
+    music_suggestion: Optional[dict] = None
+    platform_content: Optional[list] = None
+    deep_analysis: Optional[dict] = None
+    pre_social_score: Optional[float] = None
+    
+    model_config = {"from_attributes": True}
+
+
+class PostScoreUpdateRequest(BaseModel):
+    """Request to update post-social score after analytics"""
+    post_social_score: float
+    metrics: Optional[dict] = None  # Raw metrics used to calculate score
+    
+    model_config = {"from_attributes": True}
+
+
+@router.get("/analysis/{media_id}")
+async def get_analysis(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get full analysis for a media item including pre/post social scores.
+    Returns all stored analysis data that can be used across the app.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Get video with analysis
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Get analysis
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if not analysis:
+        return {
+            "media_id": media_id,
+            "has_analysis": False,
+            "message": "No analysis available. Run analysis first."
+        }
+    
+    return {
+        "media_id": media_id,
+        "has_analysis": True,
+        "transcript": analysis.transcript,
+        "transcript_analysis": analysis.transcript_analysis,
+        "topics": analysis.topics or [],
+        "hooks": analysis.hooks or [],
+        "tone": analysis.tone,
+        "pacing": analysis.pacing,
+        "key_moments": analysis.key_moments,
+        "visual_analysis": analysis.visual_analysis,
+        "frame_analyses": analysis.frame_analyses,
+        "platform_content": analysis.platform_content,
+        "deep_analysis": analysis.deep_analysis,
+        "pre_social_score": analysis.pre_social_score,
+        "post_social_score": analysis.post_social_score,
+        "post_social_updated_at": analysis.post_social_updated_at.isoformat() if analysis.post_social_updated_at else None,
+        "analysis_version": analysis.analysis_version,
+        "analyzed_at": analysis.analyzed_at.isoformat() if analysis.analyzed_at else None,
+        "updated_at": analysis.updated_at.isoformat() if analysis.updated_at else None,
+    }
+
+
+@router.put("/analysis/{media_id}")
+async def save_analysis(
+    media_id: str,
+    request: AnalysisSaveRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save or update comprehensive analysis for a media item.
+    This persists the analysis so it can be retrieved from other pages.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Check video exists
+    video_query = select(Video).where(Video.id == video_uuid)
+    video_result = await db.execute(video_query)
+    video = video_result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Get or create analysis
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if analysis:
+        # Update existing - save all fields
+        if request.transcript is not None:
+            analysis.transcript = request.transcript
+        if request.transcript_analysis is not None:
+            analysis.transcript_analysis = request.transcript_analysis
+        if request.topics is not None:
+            analysis.topics = request.topics
+        if request.hooks is not None:
+            analysis.hooks = request.hooks
+        if request.tone is not None:
+            analysis.tone = request.tone
+        if request.pacing is not None:
+            analysis.pacing = request.pacing
+        if request.key_moments is not None:
+            analysis.key_moments = request.key_moments
+        if request.visual_analysis is not None:
+            analysis.visual_analysis = request.visual_analysis
+        if request.frame_analyses is not None:
+            analysis.frame_analyses = request.frame_analyses
+        if request.music_suggestion is not None:
+            analysis.music_suggestion = request.music_suggestion
+        if request.platform_content is not None:
+            analysis.platform_content = request.platform_content
+        if request.deep_analysis is not None:
+            analysis.deep_analysis = request.deep_analysis
+        if request.pre_social_score is not None:
+            analysis.pre_social_score = request.pre_social_score
+        analysis.analysis_version = "3.0"
+    else:
+        # Create new with all fields
+        analysis = VideoAnalysis(
+            video_id=video_uuid,
+            transcript=request.transcript,
+            transcript_analysis=request.transcript_analysis,
+            topics=request.topics,
+            hooks=request.hooks,
+            tone=request.tone,
+            pacing=request.pacing,
+            key_moments=request.key_moments,
+            visual_analysis=request.visual_analysis,
+            frame_analyses=request.frame_analyses,
+            music_suggestion=request.music_suggestion,
+            platform_content=request.platform_content,
+            deep_analysis=request.deep_analysis,
+            pre_social_score=request.pre_social_score,
+            analysis_version="3.0"
+        )
+        db.add(analysis)
+    
+    await db.commit()
+    
+    return {
+        "status": "saved",
+        "media_id": media_id,
+        "pre_social_score": analysis.pre_social_score,
+        "updated_at": datetime.now().isoformat()
+    }
+
+
+@router.put("/analysis/{media_id}/post-score")
+async def update_post_social_score(
+    media_id: str,
+    request: PostScoreUpdateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update the post-social score after getting analytics back.
+    This is called after content is posted and metrics are collected.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Get analysis
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if not analysis:
+        raise HTTPException(status_code=404, detail="No analysis found for this media")
+    
+    # Update post score
+    analysis.post_social_score = request.post_social_score
+    analysis.post_social_updated_at = datetime.now()
+    
+    # Store metrics in deep_analysis if provided
+    if request.metrics:
+        existing_deep = analysis.deep_analysis or {}
+        existing_deep["post_metrics"] = request.metrics
+        analysis.deep_analysis = existing_deep
+    
+    await db.commit()
+    
+    return {
+        "status": "updated",
+        "media_id": media_id,
+        "pre_social_score": analysis.pre_social_score,
+        "post_social_score": analysis.post_social_score,
+        "score_delta": (analysis.post_social_score - analysis.pre_social_score) if analysis.pre_social_score else None,
+        "updated_at": analysis.post_social_updated_at.isoformat()
+    }
+
+
+@router.get("/analysis/{media_id}/scores")
+async def get_social_scores(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get just the pre and post social scores for a media item.
+    Lightweight endpoint for dashboards and lists.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if not analysis:
+        return {
+            "media_id": media_id,
+            "pre_social_score": None,
+            "post_social_score": None,
+            "has_analysis": False
+        }
+    
+    return {
+        "media_id": media_id,
+        "pre_social_score": analysis.pre_social_score,
+        "post_social_score": analysis.post_social_score,
+        "post_social_updated_at": analysis.post_social_updated_at.isoformat() if analysis.post_social_updated_at else None,
+        "has_analysis": True,
+        "score_delta": (analysis.post_social_score - analysis.pre_social_score) if (analysis.post_social_score and analysis.pre_social_score) else None
+    }

@@ -289,6 +289,10 @@ app.include_router(social_accounts.router, prefix="/api/social-accounts", tags=[
 from api.endpoints import youtube_analytics
 app.include_router(youtube_analytics.router, prefix="/api/youtube-analytics", tags=["YouTube Analytics"])
 
+# TikTok Analytics (Safari Automation)
+from api.endpoints import tiktok_analytics
+app.include_router(tiktok_analytics.router, prefix="/api/tiktok-analytics", tags=["TikTok Analytics"])
+
 # Blotato Test Page (Connectivity & Scrapers)
 from api.endpoints import blotato_test
 app.include_router(blotato_test.router, prefix="/api/blotato", tags=["Blotato Test"])

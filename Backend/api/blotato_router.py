@@ -594,7 +594,7 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
         if platform_lower == "tiktok":
             target_config = {
                 "privacy_level": "PUBLIC_TO_EVERYONE",
-                "is_ai_generated": True,
+                "is_ai_generated": False,  # User's own content, not AI generated
             }
         elif platform_lower == "instagram":
             target_config = {"media_type": "reel"}

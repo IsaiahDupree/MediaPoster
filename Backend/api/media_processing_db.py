@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Query, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Query, Depends, Request
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update, delete
@@ -722,11 +722,14 @@ async def get_thumbnail(
 @router.get("/video/{media_id}")
 async def stream_video(
     media_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Stream video file for playback.
+    Stream video file for playback with range request support.
     """
+    from fastapi.responses import StreamingResponse
+    
     try:
         video_uuid = uuid.UUID(media_id)
     except ValueError:
@@ -764,11 +767,58 @@ async def stream_video(
     }
     media_type = media_type_map.get(ext, 'video/mp4')
     
-    return FileResponse(
-        actual_path, 
-        media_type=media_type,
-        headers={"Cache-Control": "public, max-age=3600"}
-    )
+    file_path = Path(actual_path)
+    file_size = file_path.stat().st_size
+    
+    # Check for range header (needed for video seeking/streaming)
+    range_header = request.headers.get("range")
+    
+    if range_header:
+        # Parse range header
+        range_match = range_header.replace("bytes=", "").split("-")
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] else file_size - 1
+        
+        # Ensure valid range
+        if start >= file_size:
+            raise HTTPException(status_code=416, detail="Range not satisfiable")
+        
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+        
+        def iterfile():
+            with open(file_path, "rb") as f:
+                f.seek(start)
+                remaining = content_length
+                chunk_size = 1024 * 1024  # 1MB chunks
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+        
+        return StreamingResponse(
+            iterfile(),
+            status_code=206,
+            media_type=media_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+                "Cache-Control": "public, max-age=3600",
+            }
+        )
+    else:
+        # No range header - return full file
+        return FileResponse(
+            actual_path, 
+            media_type=media_type,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
 
 
 # =============================================================================

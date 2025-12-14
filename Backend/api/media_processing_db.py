@@ -1109,6 +1109,57 @@ async def update_post_social_score(
     }
 
 
+class CurationRequest(BaseModel):
+    """Request to update curation status"""
+    curation_status: str  # 'pending', 'approved', 'rejected'
+
+
+@router.put("/curate/{media_id}")
+async def update_curation_status(
+    media_id: str,
+    request: CurationRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update curation status for a media item (approve/reject for posting).
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Get or create analysis record to store curation
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if analysis:
+        # Store in key_moments as a workaround (or add curation_status column later)
+        current_key_moments = analysis.key_moments or {}
+        current_key_moments['curation_status'] = request.curation_status
+        current_key_moments['curated_at'] = datetime.now().isoformat()
+        analysis.key_moments = current_key_moments
+    else:
+        # Create new analysis with curation
+        analysis = VideoAnalysis(
+            video_id=video_uuid,
+            key_moments={
+                'curation_status': request.curation_status,
+                'curated_at': datetime.now().isoformat()
+            },
+            analysis_version="3.0"
+        )
+        db.add(analysis)
+    
+    await db.commit()
+    
+    return {
+        "status": "updated",
+        "media_id": media_id,
+        "curation_status": request.curation_status
+    }
+
+
 @router.get("/analysis/{media_id}/scores")
 async def get_social_scores(
     media_id: str,

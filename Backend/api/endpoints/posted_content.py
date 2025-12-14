@@ -239,18 +239,35 @@ async def update_platform_url(submission_id: str, platform_url: str, db: AsyncSe
 
 
 @router.post("")
-async def record_posted_content(item: PostedContentItem):
+async def record_posted_content(item: PostedContentItem, db: AsyncSession = Depends(get_db)):
     """
     Record a new piece of posted content (legacy endpoint).
     
     Called after successfully publishing to a platform via Blotato.
     """
-    post_record = item.dict()
-    post_record['posted_at'] = item.posted_at
-    _posted_content_store.append(post_record)
-    logger.info(f"Recording posted content: {item.platform} - {item.platform_post_id}")
-    
-    return {"success": True, "id": item.id}
+    try:
+        new_post = PostedContentModel(
+            platform=item.platform,
+            platform_post_id=item.platform_post_id,
+            platform_url=item.platform_url,
+            account_username=item.account_username,
+            media_id=uuid.UUID(item.local_content_id) if item.local_content_id else None,
+            caption=item.description,
+            status=item.status,
+            views=item.views,
+            likes=item.likes,
+            comments=item.comments,
+            shares=item.shares,
+        )
+        db.add(new_post)
+        await db.commit()
+        await db.refresh(new_post)
+        logger.info(f"Recording posted content: {item.platform} - {item.platform_post_id}")
+        return {"success": True, "id": str(new_post.id)}
+    except Exception as e:
+        logger.error(f"Error recording posted content: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =============================================================================
@@ -278,48 +295,46 @@ async def get_analytics_by_url(url: str):
 
 
 @router.get("/analytics/{post_id}")
-async def get_analytics_for_post(post_id: str):
+async def get_analytics_for_post(post_id: str, db: AsyncSession = Depends(get_db)):
     """
     Fetch live analytics for a stored post by its ID.
     Looks up the platform_url and fetches current metrics.
     """
     from services.analytics_service import get_external_analytics_fetcher
     
-    # Find the post
-    post = None
-    for p in _posted_content_store:
-        if p.get('id') == post_id:
-            post = p
-            break
+    # Find the post in database
+    query = select(PostedContentModel).where(PostedContentModel.id == uuid.UUID(post_id))
+    result = await db.execute(query)
+    post = result.scalar_one_or_none()
     
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     
-    platform_url = post.get('platform_url')
+    platform_url = post.platform_url
     if not platform_url:
         raise HTTPException(status_code=400, detail="Post has no platform URL")
     
     fetcher = get_external_analytics_fetcher()
-    result = await fetcher.fetch_analytics_by_url(platform_url)
+    analytics_result = await fetcher.fetch_analytics_by_url(platform_url)
     
     # Update stored metrics if successful
-    if result.get('success') and result.get('metrics'):
-        metrics = result['metrics']
-        post['views'] = metrics.get('views', post.get('views', 0))
-        post['likes'] = metrics.get('likes', post.get('likes', 0))
-        post['comments'] = metrics.get('comments', post.get('comments', 0))
-        post['shares'] = metrics.get('shares', post.get('shares', 0))
-        post['last_analytics_fetch'] = datetime.now().isoformat()
+    if analytics_result.get('success') and analytics_result.get('metrics'):
+        metrics = analytics_result['metrics']
+        post.views = metrics.get('views', post.views or 0)
+        post.likes = metrics.get('likes', post.likes or 0)
+        post.comments = metrics.get('comments', post.comments or 0)
+        post.shares = metrics.get('shares', post.shares or 0)
+        await db.commit()
     
     return {
         "post_id": post_id,
         "platform_url": platform_url,
-        "analytics": result
+        "analytics": analytics_result
     }
 
 
 @router.post("/analytics/refresh-all")
-async def refresh_all_analytics():
+async def refresh_all_analytics(db: AsyncSession = Depends(get_db)):
     """
     Refresh analytics for all stored posts.
     Rate limited to avoid API throttling.
@@ -330,8 +345,13 @@ async def refresh_all_analytics():
     fetcher = get_external_analytics_fetcher()
     results = []
     
-    for post in _posted_content_store:
-        platform_url = post.get('platform_url')
+    # Get all posts with platform URLs from database
+    query = select(PostedContentModel).where(PostedContentModel.platform_url.isnot(None))
+    db_result = await db.execute(query)
+    posts = db_result.scalars().all()
+    
+    for post in posts:
+        platform_url = post.platform_url
         if not platform_url:
             continue
         
@@ -339,28 +359,29 @@ async def refresh_all_analytics():
         
         if result.get('success') and result.get('metrics'):
             metrics = result['metrics']
-            post['views'] = metrics.get('views', post.get('views', 0))
-            post['likes'] = metrics.get('likes', post.get('likes', 0))
-            post['comments'] = metrics.get('comments', post.get('comments', 0))
-            post['shares'] = metrics.get('shares', post.get('shares', 0))
-            post['last_analytics_fetch'] = datetime.now().isoformat()
+            post.views = metrics.get('views', post.views or 0)
+            post.likes = metrics.get('likes', post.likes or 0)
+            post.comments = metrics.get('comments', post.comments or 0)
+            post.shares = metrics.get('shares', post.shares or 0)
             
             results.append({
-                "post_id": post.get('id'),
-                "platform": post.get('platform'),
+                "post_id": str(post.id),
+                "platform": post.platform,
                 "success": True,
                 "metrics": metrics
             })
         else:
             results.append({
-                "post_id": post.get('id'),
-                "platform": post.get('platform'),
+                "post_id": str(post.id),
+                "platform": post.platform,
                 "success": False,
                 "error": result.get('error')
             })
         
         # Rate limit: 1 request per second
         await asyncio.sleep(1)
+    
+    await db.commit()
     
     return {
         "refreshed": len(results),

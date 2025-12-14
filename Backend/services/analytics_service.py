@@ -31,6 +31,7 @@ class ExternalAnalyticsFetcher:
     def __init__(self):
         self.rapidapi_key = os.getenv("RAPIDAPI_KEY")
         self.rapidapi_tiktok_host = "tiktok-api6.p.rapidapi.com"
+        self.youtube_api_key = os.getenv("YOUTUBE_API_KEY")
         
         # Import usage tracker
         from services.api_usage_tracker import get_api_usage_tracker, APIProvider
@@ -254,6 +255,101 @@ class ExternalAnalyticsFetcher:
             )
             return {"error": str(e)}
     
+    async def fetch_youtube_analytics(self, video_url: str) -> Dict[str, Any]:
+        """
+        Fetch YouTube video analytics using YouTube Data API v3
+        
+        Args:
+            video_url: YouTube video URL
+            
+        Returns:
+            Dict with video metrics (views, likes, comments)
+        """
+        video_id = self.extract_youtube_video_id(video_url)
+        if not video_id:
+            return {"error": f"Could not extract video ID from URL: {video_url}"}
+        
+        if not self.youtube_api_key:
+            return {"error": "YOUTUBE_API_KEY not configured in environment"}
+        
+        # YouTube Data API v3 endpoint for video statistics
+        api_url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "statistics,snippet,contentDetails",
+            "id": video_id,
+            "key": self.youtube_api_key
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(api_url, params=params)
+                
+                if response.status_code == 403:
+                    error_data = response.json()
+                    error_msg = error_data.get("error", {}).get("message", "API quota exceeded or access denied")
+                    logger.error(f"YouTube API error: {error_msg}")
+                    return {"error": f"YouTube API: {error_msg}"}
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                items = data.get("items", [])
+                if not items:
+                    return {"error": f"Video not found: {video_id}"}
+                
+                video_data = items[0]
+                snippet = video_data.get("snippet", {})
+                stats = video_data.get("statistics", {})
+                content_details = video_data.get("contentDetails", {})
+                
+                # Parse duration (ISO 8601 format like PT1M30S)
+                duration_iso = content_details.get("duration", "PT0S")
+                duration_seconds = self._parse_youtube_duration(duration_iso)
+                
+                result = {
+                    "success": True,
+                    "platform": "youtube",
+                    "video_id": video_id,
+                    "video_url": video_url,
+                    "metrics": {
+                        "views": int(stats.get("viewCount", 0)),
+                        "likes": int(stats.get("likeCount", 0)),
+                        "comments": int(stats.get("commentCount", 0)),
+                        "shares": 0,  # YouTube API doesn't provide share count
+                        "favorites": int(stats.get("favoriteCount", 0)),
+                    },
+                    "video_info": {
+                        "title": snippet.get("title", ""),
+                        "description": snippet.get("description", "")[:500],
+                        "channel_title": snippet.get("channelTitle", ""),
+                        "published_at": snippet.get("publishedAt", ""),
+                        "duration": duration_seconds,
+                        "tags": snippet.get("tags", [])[:10],
+                    },
+                    "fetched_at": datetime.now().isoformat(),
+                }
+                
+                logger.info(f"✓ YouTube analytics fetched for {video_id}: {stats.get('viewCount', 0)} views")
+                return result
+                
+        except httpx.TimeoutException:
+            return {"error": "YouTube API request timed out"}
+        except Exception as e:
+            logger.error(f"YouTube analytics fetch error: {e}")
+            return {"error": str(e)}
+    
+    @staticmethod
+    def _parse_youtube_duration(duration_iso: str) -> int:
+        """Parse ISO 8601 duration (PT1H2M30S) to seconds"""
+        import re
+        match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_iso)
+        if not match:
+            return 0
+        hours = int(match.group(1) or 0)
+        minutes = int(match.group(2) or 0)
+        seconds = int(match.group(3) or 0)
+        return hours * 3600 + minutes * 60 + seconds
+    
     async def fetch_analytics_by_url(self, url: str) -> Dict[str, Any]:
         """
         Fetch analytics for any supported platform URL
@@ -279,12 +375,7 @@ class ExternalAnalyticsFetcher:
                 "media_id": self.extract_instagram_media_id(url)
             }
         elif platform == 'youtube':
-            # TODO: Implement YouTube analytics via official API or RapidAPI
-            return {
-                "error": "YouTube analytics not yet implemented",
-                "platform": "youtube",
-                "video_id": self.extract_youtube_video_id(url)
-            }
+            return await self.fetch_youtube_analytics(url)
         else:
             return {
                 "error": f"Analytics not yet supported for platform: {platform}",

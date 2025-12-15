@@ -1299,6 +1299,10 @@ class VideoAnalysis(Base):
     music_suggestion = Column(JSONB)  # Background music recommendation
     platform_content = Column(JSONB)  # Platform-specific titles/descriptions/hashtags
     
+    # Curation
+    curation_status = Column(Text)  # 'pending', 'approved', 'rejected'
+    curated_at = Column(TIMESTAMP(timezone=True))  # When curation decision was made
+    
     # Scores
     pre_social_score = Column(Float)  # Score before posting (predicted)
     post_social_score = Column(Float)  # Score after posting (actual performance)

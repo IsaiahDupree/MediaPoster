@@ -206,7 +206,7 @@ async def list_media(
         curation_status = None
         try:
             analysis_result = await db.execute(
-                text("SELECT video_id, transcript, topics, pre_social_score, key_moments FROM video_analysis WHERE video_id = :vid"),
+                text("SELECT video_id, transcript, topics, pre_social_score, curation_status FROM video_analysis WHERE video_id = :vid"),
                 {"vid": str(video.id)}
             )
             row = analysis_result.fetchone()
@@ -216,10 +216,7 @@ async def list_media(
                     "topics": row[2],
                     "pre_social_score": row[3]
                 }
-                # Extract curation_status from key_moments
-                key_moments = row[4]
-                if key_moments and isinstance(key_moments, dict):
-                    curation_status = key_moments.get('curation_status')
+                curation_status = row[4]
         except Exception:
             pass
         
@@ -1312,19 +1309,15 @@ async def update_curation_status(
     analysis = analysis_result.scalar_one_or_none()
     
     if analysis:
-        # Store in key_moments as a workaround (or add curation_status column later)
-        current_key_moments = analysis.key_moments or {}
-        current_key_moments['curation_status'] = request.curation_status
-        current_key_moments['curated_at'] = datetime.now().isoformat()
-        analysis.key_moments = current_key_moments
+        # Update curation status in dedicated column
+        analysis.curation_status = request.curation_status
+        analysis.curated_at = datetime.now()
     else:
         # Create new analysis with curation
         analysis = VideoAnalysis(
             video_id=video_uuid,
-            key_moments={
-                'curation_status': request.curation_status,
-                'curated_at': datetime.now().isoformat()
-            },
+            curation_status=request.curation_status,
+            curated_at=datetime.now(),
             analysis_version="3.0"
         )
         db.add(analysis)

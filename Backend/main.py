@@ -86,7 +86,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Connector initialization failed: {e}")
     
+    # Start the Post Scheduler background worker
+    post_scheduler = None
+    try:
+        from services.post_scheduler import PostScheduler
+        post_scheduler = PostScheduler()
+        await post_scheduler.start()
+        logger.success("✓ Post Scheduler started (checking every 60s)")
+    except Exception as e:
+        logger.warning(f"⚠️  Post Scheduler failed to start: {e}")
+    
     yield
+    
+    # Stop the scheduler on shutdown
+    if post_scheduler:
+        try:
+            await post_scheduler.stop()
+            logger.success("✓ Post Scheduler stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Post Scheduler: {e}")
     
     # Shutdown
     logger.info("Shutting down MediaPoster Backend")

@@ -1,6 +1,14 @@
 """
 Post Scheduler Service
-Background worker that publishes scheduled posts at their scheduled time
+Background worker that publishes scheduled posts at their scheduled time.
+
+Uses BackgroundPublisher to replicate the same verified flow as the frontend:
+1. Media verification
+2. Analysis/caption retrieval
+3. Account verification
+4. Full publish (Google Drive → Blotato → Platform)
+5. URL polling
+6. Posted content record storage
 """
 import os
 import asyncio
@@ -17,25 +25,34 @@ class PostScheduler:
     """
     Background scheduler that:
     1. Periodically checks for posts due to be published
-    2. Publishes via Blotato API
+    2. Uses BackgroundPublisher for verified publish flow (same as frontend)
     3. Updates status and handles retries
+    4. Polls for platform URLs and stores for analytics
     """
     
     def __init__(self):
         self.engine = create_engine(DATABASE_URL)
         self.blotato_api_key = os.getenv("BLOTATO_API_KEY")
-        self.blotato_base_url = "https://api.blotato.com/v2"
         self.is_running = False
         self.check_interval = 60  # Check every 60 seconds
         self.max_retries = 3
         self.retry_delay_minutes = 5
         self._task: Optional[asyncio.Task] = None
+        self._background_publisher = None
+    
+    @property
+    def background_publisher(self):
+        """Lazy load background publisher"""
+        if self._background_publisher is None:
+            from services.background_publisher import get_background_publisher
+            self._background_publisher = get_background_publisher()
+        return self._background_publisher
         
     # =========================================================================
     # SCHEDULER CONTROL
     # =========================================================================
     
-    def start(self):
+    async def start(self):
         """Start the background scheduler"""
         if self.is_running:
             logger.warning("Scheduler already running")
@@ -43,9 +60,9 @@ class PostScheduler:
             
         self.is_running = True
         self._task = asyncio.create_task(self._run_loop())
-        logger.info("📅 Post scheduler started")
+        logger.info("📅 Post scheduler started - checking every 60 seconds")
         
-    def stop(self):
+    async def stop(self):
         """Stop the background scheduler"""
         self.is_running = False
         if self._task:
@@ -53,12 +70,45 @@ class PostScheduler:
         logger.info("📅 Post scheduler stopped")
         
     async def _run_loop(self):
-        """Main scheduler loop"""
+        """Main scheduler loop with comprehensive logging"""
+        loop_count = 0
         while self.is_running:
+            loop_count += 1
+            now = datetime.now(timezone.utc)
+            
+            # Log scheduler status every loop
+            logger.info("=" * 60)
+            logger.info(f"[Scheduler] 🕐 Check #{loop_count} at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            
             try:
-                await self.process_due_posts()
+                # Get counts before processing
+                due_posts = self._get_due_posts(now)
+                upcoming = self._get_upcoming_posts(5)
+                
+                logger.info(f"[Scheduler] 📊 Due now: {len(due_posts)} | Upcoming: {len(upcoming)}")
+                
+                if due_posts:
+                    logger.info(f"[Scheduler] 🚀 Processing {len(due_posts)} due posts...")
+                    result = await self.process_due_posts()
+                    logger.info(f"[Scheduler] ✅ Result: {result['success']} success, {result['failed']} failed")
+                else:
+                    logger.info("[Scheduler] 💤 No posts due right now")
+                
+                # Show next upcoming posts
+                if upcoming:
+                    logger.info("[Scheduler] ⏳ Next up:")
+                    for p in upcoming[:3]:
+                        scheduled = datetime.fromisoformat(str(p['scheduled_at']).replace('Z', '+00:00')) if p.get('scheduled_at') else now
+                        diff = (scheduled - now).total_seconds()
+                        mins = int(diff // 60)
+                        secs = int(diff % 60)
+                        logger.info(f"   • {p.get('title', 'Untitled')[:25]} | {p.get('platform')} | T-{mins}m {secs}s")
+                
             except Exception as e:
-                logger.error(f"Scheduler error: {e}")
+                logger.error(f"[Scheduler] ❌ Error: {e}")
+            
+            logger.info(f"[Scheduler] 💤 Next check in {self.check_interval}s...")
+            logger.info("=" * 60)
             
             await asyncio.sleep(self.check_interval)
     
@@ -106,12 +156,14 @@ class PostScheduler:
     def _get_due_posts(self, now: datetime) -> List[Dict]:
         """Get all posts that are scheduled and due for publishing"""
         with self.engine.connect() as conn:
-            # Check both scheduled_posts table (new) and the schedule table
+            # Fetch scheduled posts due for publishing
+            # Include blotato_account_id for the unified publish flow
             result = conn.execute(text("""
                 SELECT 
                     id, content_id, title, caption, platform, 
                     account_id, account_username, scheduled_at,
-                    thumbnail_url, post_type, hashtags
+                    thumbnail_url, post_type, hashtags,
+                    COALESCE(blotato_account_id, account_id) as blotato_account_id
                 FROM scheduled_posts
                 WHERE status = 'scheduled'
                   AND scheduled_at <= :now
@@ -127,7 +179,7 @@ class PostScheduler:
                     "title": row[2],
                     "caption": row[3],
                     "platform": row[4],
-                    "account_id": row[5],
+                    "account_id": row[11],  # Use blotato_account_id (with fallback)
                     "account_username": row[6],
                     "scheduled_at": row[7],
                     "thumbnail_url": row[8],
@@ -137,12 +189,44 @@ class PostScheduler:
             
             return posts
     
+    def _get_upcoming_posts(self, limit: int = 5) -> List[Dict]:
+        """Get upcoming scheduled posts (not yet due)"""
+        now = datetime.now(timezone.utc)
+        with self.engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT id, title, platform, scheduled_at
+                FROM scheduled_posts
+                WHERE status = 'scheduled'
+                  AND scheduled_at > :now
+                ORDER BY scheduled_at ASC
+                LIMIT :limit
+            """), {"now": now, "limit": limit})
+            
+            posts = []
+            for row in result.fetchall():
+                posts.append({
+                    "id": row[0],
+                    "title": row[1],
+                    "platform": row[2],
+                    "scheduled_at": row[3],
+                })
+            return posts
+    
     # =========================================================================
-    # PUBLISHING
+    # PUBLISH LOGIC
     # =========================================================================
     
     async def _publish_post(self, post: Dict) -> Dict[str, Any]:
-        """Publish a single post via Blotato API"""
+        """
+        Publish a single scheduled post using BackgroundPublisher.
+        
+        This uses the SAME verified flow as the frontend:
+        1. Media verification
+        2. Analysis/caption retrieval  
+        3. Account verification
+        4. Full publish (GDrive → Blotato → Platform)
+        5. URL polling
+        """
         
         # Check if Blotato is configured
         if not self.blotato_api_key:
@@ -150,52 +234,59 @@ class PostScheduler:
             return await self._simulate_publish(post)
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                # Prepare the post data for Blotato
-                payload = {
-                    "platform": post["platform"],
-                    "caption": post["caption"] or "",
-                    "account_id": post["account_id"],
+            from services.background_publisher import PublishRequest, PublishStatus
+            
+            # Build publish request from scheduled post data
+            request = PublishRequest(
+                media_id=post["content_id"],
+                blotato_account_id=str(post["account_id"]),
+                platform=post["platform"],
+                username=post.get("account_username", ""),
+                caption=post.get("caption"),
+                title=post.get("title"),
+                hashtags=self._parse_hashtags(post.get("hashtags")),
+                poll_for_url=True,
+                cleanup_storage=True,
+            )
+            
+            logger.info(f"📤 Publishing scheduled post {post['id']} via BackgroundPublisher...")
+            
+            # Use BackgroundPublisher for the full verified flow
+            result = await self.background_publisher.publish(request)
+            
+            if result.success:
+                return {
+                    "success": True,
+                    "platform_post_id": result.post_submission_id,
+                    "platform_url": result.platform_url,
+                    "verification": result.verification,
+                    "steps": result.steps
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.error or "Publish failed",
+                    "verification": result.verification,
+                    "steps": result.steps
                 }
                 
-                # Add media URL if available
-                if post.get("thumbnail_url"):
-                    payload["media_url"] = post["thumbnail_url"]
-                
-                # Add hashtags
-                if post.get("hashtags"):
-                    if isinstance(post["hashtags"], list):
-                        payload["hashtags"] = post["hashtags"]
-                    elif isinstance(post["hashtags"], str):
-                        payload["hashtags"] = [h.strip() for h in post["hashtags"].split(",")]
-                
-                response = await client.post(
-                    f"{self.blotato_base_url}/posts",
-                    headers={
-                        "Authorization": f"Bearer {self.blotato_api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json=payload
-                )
-                
-                if response.status_code == 200 or response.status_code == 201:
-                    data = response.json()
-                    return {
-                        "success": True,
-                        "platform_post_id": data.get("post_id") or data.get("id"),
-                        "platform_url": data.get("url") or data.get("public_url"),
-                        "response": data
-                    }
-                else:
-                    return {
-                        "success": False,
-                        "error": f"Blotato API error: {response.status_code} - {response.text}"
-                    }
-                    
-        except httpx.TimeoutException:
-            return {"success": False, "error": "Blotato API timeout"}
         except Exception as e:
+            logger.error(f"Scheduler publish error: {e}")
             return {"success": False, "error": str(e)}
+    
+    def _parse_hashtags(self, hashtags) -> List[str]:
+        """Parse hashtags from various formats"""
+        if not hashtags:
+            return []
+        if isinstance(hashtags, list):
+            return hashtags
+        if isinstance(hashtags, str):
+            try:
+                import json
+                return json.loads(hashtags)
+            except:
+                return [h.strip() for h in hashtags.split(",") if h.strip()]
+        return []
     
     async def _simulate_publish(self, post: Dict) -> Dict[str, Any]:
         """Simulate publishing for testing when Blotato is not configured"""
@@ -246,13 +337,25 @@ class PostScheduler:
             """), {"id": post_id}).fetchone()
             
             if post_data:
+                # Handle hashtags - convert to proper format for JSONB column
+                hashtags_raw = post_data[4]
+                if hashtags_raw is None:
+                    hashtags_json = '[]'
+                elif isinstance(hashtags_raw, str):
+                    hashtags_json = hashtags_raw
+                elif isinstance(hashtags_raw, list):
+                    import json
+                    hashtags_json = json.dumps(hashtags_raw)
+                else:
+                    hashtags_json = '[]'
+                
                 conn.execute(text("""
                     INSERT INTO posted_content 
                     (platform, platform_post_id, platform_url, account_id, 
                      account_username, caption, hashtags, status, posted_at)
                     VALUES 
                     (:platform, :platform_post_id, :platform_url, :account_id,
-                     :account_username, :caption, :hashtags, 'published', NOW())
+                     :account_username, :caption, :hashtags::jsonb, 'published', NOW())
                 """), {
                     "platform": post_data[0],
                     "platform_post_id": result.get("platform_post_id"),
@@ -260,7 +363,7 @@ class PostScheduler:
                     "account_id": post_data[1],
                     "account_username": post_data[2],
                     "caption": post_data[3],
-                    "hashtags": post_data[4] if post_data[4] else "[]"
+                    "hashtags": hashtags_json
                 })
                 conn.commit()
     

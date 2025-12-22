@@ -3,12 +3,15 @@ Schedule API Endpoints
 CRUD operations for scheduled posts with calendar integration
 """
 import os
+import logging
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, text
 import json
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -30,6 +33,7 @@ class ScheduledPostCreate(BaseModel):
     scheduled_at: str
     post_type: str = "reel"
     thumbnail_url: Optional[str] = None
+    blotato_account_id: Optional[str] = None  # Blotato account ID for publishing
 
 
 class ScheduledPostUpdate(BaseModel):
@@ -38,6 +42,8 @@ class ScheduledPostUpdate(BaseModel):
     hashtags: Optional[List[str]] = None
     scheduled_at: Optional[str] = None
     status: Optional[str] = None
+    account_id: Optional[str] = None
+    account_username: Optional[str] = None
 
 
 class ScheduledPost(BaseModel):
@@ -67,7 +73,7 @@ def get_engine():
 
 
 def ensure_table_exists():
-    """Create scheduled_posts table if it doesn't exist"""
+    """Create scheduled_posts table if it doesn't exist, and add new columns"""
     engine = get_engine()
     with engine.connect() as conn:
         conn.execute(text("""
@@ -97,6 +103,27 @@ def ensure_table_exists():
             CREATE INDEX IF NOT EXISTS idx_scheduled_posts_status 
             ON scheduled_posts(status)
         """))
+        
+        # Add columns for unified publishing flow (if they don't exist)
+        # These support the BackgroundPublisher verification and tracking
+        try:
+            conn.execute(text("""
+                ALTER TABLE scheduled_posts 
+                ADD COLUMN IF NOT EXISTS blotato_account_id TEXT,
+                ADD COLUMN IF NOT EXISTS platform_post_id TEXT,
+                ADD COLUMN IF NOT EXISTS platform_url TEXT,
+                ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE,
+                ADD COLUMN IF NOT EXISTS error_message TEXT,
+                ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMP WITH TIME ZONE,
+                ADD COLUMN IF NOT EXISTS last_error TEXT,
+                ADD COLUMN IF NOT EXISTS verification_status JSONB,
+                ADD COLUMN IF NOT EXISTS scheduled_time TIMESTAMP WITH TIME ZONE
+            """))
+        except Exception as e:
+            # Columns might already exist - that's fine
+            logger.debug(f"Column add skipped (may already exist): {e}")
+        
         conn.commit()
 
 
@@ -142,7 +169,8 @@ async def list_scheduled_posts(
         SELECT 
             id, content_id, title, caption, hashtags, thumbnail_url,
             platform, account_id, account_username, account_avatar,
-            scheduled_at, status, post_type, created_at, updated_at
+            scheduled_at, status, post_type, created_at, updated_at,
+            platform_url, published_at
         FROM scheduled_posts
         WHERE {' AND '.join(where_clauses)}
         ORDER BY scheduled_at ASC
@@ -170,6 +198,8 @@ async def list_scheduled_posts(
             "postType": row[12],
             "createdAt": str(row[13]) if row[13] else None,
             "updatedAt": str(row[14]) if row[14] else None,
+            "platformUrl": row[15],
+            "publishedAt": str(row[16]) if row[16] else None,
         })
     
     return {"posts": posts, "total": len(posts)}
@@ -178,16 +208,20 @@ async def list_scheduled_posts(
 @router.post("/create")
 async def create_scheduled_post(post: ScheduledPostCreate):
     """Create a new scheduled post."""
+    ensure_table_exists()
     engine = get_engine()
+    
+    # If blotato_account_id not provided, try to look it up
+    blotato_id = post.blotato_account_id or post.account_id
     
     with engine.connect() as conn:
         result = conn.execute(text("""
             INSERT INTO scheduled_posts 
             (content_id, title, caption, hashtags, thumbnail_url, platform,
-             account_id, account_username, scheduled_time, scheduled_at, post_type, status)
+             account_id, account_username, blotato_account_id, scheduled_time, scheduled_at, post_type, status)
             VALUES 
             (:content_id, :title, :caption, :hashtags, :thumbnail_url, :platform,
-             :account_id, :account_username, :scheduled_time, :scheduled_at, :post_type, 'scheduled')
+             :account_id, :account_username, :blotato_account_id, :scheduled_time, :scheduled_at, :post_type, 'scheduled')
             RETURNING id
         """), {
             "content_id": post.content_id,
@@ -198,6 +232,7 @@ async def create_scheduled_post(post: ScheduledPostCreate):
             "platform": post.platform,
             "account_id": post.account_id,
             "account_username": post.account_username,
+            "blotato_account_id": blotato_id,
             "scheduled_time": post.scheduled_at,
             "scheduled_at": post.scheduled_at,
             "post_type": post.post_type,
@@ -246,6 +281,11 @@ async def get_scheduled_post(post_id: str):
 @router.put("/{post_id}")
 async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     """Update a scheduled post."""
+    logger.info(f"[UpdatePost] 📥 Received update for post_id={post_id}")
+    logger.info(f"[UpdatePost] 📄 Title: {update.title[:50] if update.title else 'None'}...")
+    logger.info(f"[UpdatePost] 📝 Caption length: {len(update.caption) if update.caption else 0}")
+    logger.info(f"[UpdatePost] 📅 Scheduled at: {update.scheduled_at}")
+    
     ensure_table_exists()
     engine = get_engine()
     
@@ -272,10 +312,21 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
         updates.append("status = :status")
         params["status"] = update.status
     
+    if update.account_id is not None:
+        updates.append("account_id = :account_id")
+        params["account_id"] = update.account_id
+    
+    if update.account_username is not None:
+        updates.append("account_username = :account_username")
+        params["account_username"] = update.account_username
+    
     if not updates:
+        logger.warning(f"[UpdatePost] ⚠️ No fields to update for post_id={post_id}")
         raise HTTPException(status_code=400, detail="No fields to update")
     
     updates.append("updated_at = NOW()")
+    
+    logger.info(f"[UpdatePost] 🔄 Updating fields: {updates}")
     
     with engine.connect() as conn:
         result = conn.execute(text(f"""
@@ -286,10 +337,13 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
         """), params)
         conn.commit()
         
-        if not result.fetchone():
+        row = result.fetchone()
+        if not row:
+            logger.error(f"[UpdatePost] ❌ Post not found: {post_id}")
             raise HTTPException(status_code=404, detail="Post not found")
     
-    return {"message": "Post updated successfully"}
+    logger.info(f"[UpdatePost] ✅ Successfully updated post_id={post_id}")
+    return {"message": "Post updated successfully", "id": post_id}
 
 
 @router.delete("/{post_id}")
@@ -513,3 +567,233 @@ async def get_posting_accounts():
             })
     
     return {"accounts": accounts}
+
+
+# =============================================================================
+# BACKGROUND PUBLISHER ENDPOINTS
+# =============================================================================
+
+class PublishNowRequest(BaseModel):
+    """Request to publish immediately using BackgroundPublisher"""
+    media_id: str
+    blotato_account_id: str
+    platform: str
+    username: str
+    caption: Optional[str] = None
+    title: Optional[str] = None
+    hashtags: Optional[List[str]] = None
+    poll_for_url: bool = True
+
+
+class VerifyPublishRequest(BaseModel):
+    """Request to verify a publish can succeed"""
+    media_id: str
+    blotato_account_id: str
+    platform: str
+    username: str
+
+
+@router.post("/publish-now")
+async def publish_now(request: PublishNowRequest):
+    """
+    Publish content immediately using the same verified flow as the frontend.
+    
+    This replicates the frontend flow:
+    1. Media verification
+    2. Analysis/caption retrieval
+    3. Account verification
+    4. Full publish (GDrive → Blotato → Platform)
+    5. URL polling
+    6. Posted content record storage
+    """
+    from services.background_publisher import get_background_publisher, PublishRequest
+    
+    publisher = get_background_publisher()
+    
+    pub_request = PublishRequest(
+        media_id=request.media_id,
+        blotato_account_id=request.blotato_account_id,
+        platform=request.platform,
+        username=request.username,
+        caption=request.caption,
+        title=request.title,
+        hashtags=request.hashtags,
+        poll_for_url=request.poll_for_url,
+    )
+    
+    result = await publisher.publish(pub_request)
+    
+    return {
+        "success": result.success,
+        "status": result.status.value,
+        "post_submission_id": result.post_submission_id,
+        "platform_url": result.platform_url,
+        "error": result.error,
+        "verification": result.verification,
+        "steps": result.steps,
+    }
+
+
+@router.post("/verify-publish")
+async def verify_publish(request: VerifyPublishRequest):
+    """
+    Verify that a publish will succeed without actually publishing.
+    
+    Checks:
+    1. Media exists and file is accessible
+    2. Analysis data exists
+    3. Blotato account is valid
+    """
+    from services.background_publisher import get_background_publisher
+    
+    publisher = get_background_publisher()
+    
+    # Run verification steps
+    media_check = await publisher.verify_media(request.media_id)
+    analysis_check = await publisher.verify_analysis(request.media_id)
+    account_check = await publisher.verify_account(
+        request.blotato_account_id,
+        request.platform,
+        request.username
+    )
+    
+    all_valid = (
+        media_check.get("valid", False) and
+        account_check.get("valid", False)
+    )
+    
+    return {
+        "valid": all_valid,
+        "media": media_check,
+        "analysis": {
+            "has_analysis": analysis_check.get("has_analysis", False),
+            "has_transcript": bool(analysis_check.get("transcript")),
+            "topics_count": len(analysis_check.get("topics", [])),
+        },
+        "account": account_check,
+    }
+
+
+@router.post("/{post_id}/publish")
+async def publish_scheduled_post(post_id: str):
+    """
+    Publish a scheduled post immediately (instead of waiting for scheduled time).
+    Uses the same verified flow as manual publishing.
+    """
+    ensure_table_exists()
+    engine = get_engine()
+    
+    # Get the scheduled post
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT 
+                id, content_id, title, caption, hashtags,
+                platform, account_id, account_username, status
+            FROM scheduled_posts WHERE id = :id
+        """), {"id": post_id}).fetchone()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    if row[8] != 'scheduled':
+        raise HTTPException(status_code=400, detail=f"Post is already {row[8]}")
+    
+    from services.background_publisher import get_background_publisher, PublishRequest
+    
+    publisher = get_background_publisher()
+    
+    # Parse hashtags
+    hashtags = row[4]
+    if isinstance(hashtags, str):
+        try:
+            hashtags = json.loads(hashtags)
+        except:
+            hashtags = []
+    
+    pub_request = PublishRequest(
+        media_id=row[1],  # content_id
+        blotato_account_id=str(row[6]),  # account_id
+        platform=row[5],  # platform
+        username=row[7] or "",  # account_username
+        caption=row[3],  # caption
+        title=row[2],  # title
+        hashtags=hashtags,
+        poll_for_url=True,
+    )
+    
+    result = await publisher.publish(pub_request)
+    
+    # Update the post status
+    with engine.connect() as conn:
+        if result.success:
+            conn.execute(text("""
+                UPDATE scheduled_posts
+                SET status = 'posted',
+                    platform_post_id = :post_id,
+                    platform_url = :url,
+                    published_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = :id
+            """), {
+                "id": post_id,
+                "post_id": result.post_submission_id,
+                "url": result.platform_url,
+            })
+        else:
+            conn.execute(text("""
+                UPDATE scheduled_posts
+                SET status = 'failed',
+                    error_message = :error,
+                    updated_at = NOW()
+                WHERE id = :id
+            """), {
+                "id": post_id,
+                "error": result.error,
+            })
+        conn.commit()
+    
+    return {
+        "success": result.success,
+        "status": result.status.value,
+        "post_submission_id": result.post_submission_id,
+        "platform_url": result.platform_url,
+        "error": result.error,
+        "verification": result.verification,
+    }
+
+
+@router.get("/scheduler/status")
+async def get_scheduler_status():
+    """Get the status of the background scheduler."""
+    from services.post_scheduler import get_scheduler
+    
+    scheduler = get_scheduler()
+    return scheduler.get_status()
+
+
+@router.get("/scheduler/queue")
+async def get_scheduler_queue(limit: int = Query(20, le=100)):
+    """Get the upcoming post queue."""
+    from services.post_scheduler import get_scheduler
+    
+    scheduler = get_scheduler()
+    return {"queue": scheduler.get_queue(limit=limit)}
+
+
+@router.post("/scheduler/process-now")
+async def process_due_posts_now():
+    """
+    Manually trigger processing of due posts.
+    Useful for testing or when you want immediate processing.
+    """
+    from services.post_scheduler import get_scheduler
+    
+    scheduler = get_scheduler()
+    result = await scheduler.process_due_posts()
+    
+    return {
+        "message": "Processed due posts",
+        "processed": result.get("processed", 0),
+        "success": result.get("success", 0),
+        "failed": result.get("failed", 0),
+    }

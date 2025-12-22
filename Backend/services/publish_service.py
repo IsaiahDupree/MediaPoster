@@ -444,17 +444,17 @@ class PublishService:
         self,
         post_submission_id: str,
         max_attempts: int = 30,
-        poll_interval_seconds: float = 2.0,
-        rate_limit_margin: float = 1.0
+        poll_interval_seconds: float = 5.0,
+        rate_limit_margin: float = 0.0
     ) -> Dict[str, Any]:
         """
         Poll Blotato API for post status until published or failed
         
         Args:
             post_submission_id: The submission ID from publish response
-            max_attempts: Maximum polling attempts (default 30 = ~1 minute)
-            poll_interval_seconds: Seconds between polls (default 2.0)
-            rate_limit_margin: Extra seconds to add for rate limit safety (default 1.0)
+            max_attempts: Maximum polling attempts (default 30 = 2.5 minutes)
+            poll_interval_seconds: Seconds between polls (default 5.0)
+            rate_limit_margin: Extra seconds to add for rate limit safety (default 0.0)
         
         Returns:
             Dict with status, publicUrl, platform info

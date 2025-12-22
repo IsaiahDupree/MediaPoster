@@ -12,7 +12,7 @@ from loguru import logger
 import sys
 
 from config import settings
-from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces
+from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces, trends
 from database.connection import init_db, close_db
 
 # Event Bus imports
@@ -326,6 +326,9 @@ app.include_router(email.router, prefix="/api/email", tags=["Email Service"])
 app.include_router(app_config.router, prefix="/api/config", tags=["Configuration"])
 app.include_router(calendar.router, prefix="/api", tags=["Calendar"])
 app.include_router(workspaces.router, prefix="/api/workspaces", tags=["Workspaces"])
+
+# Trends & Analytics (Standalone System)
+app.include_router(trends.router, prefix="/api", tags=["Trends & Analytics"])
 
 # Content Intelligence - Platform Publishing
 from api.endpoints import platform_publishing

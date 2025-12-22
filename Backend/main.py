@@ -15,6 +15,10 @@ from config import settings
 from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces
 from database.connection import init_db, close_db
 
+# Event Bus imports
+from services.event_bus import EventBus, Topics
+from services.workflow_manager import WorkflowManager
+
 # Configure logging
 logger.remove()
 logger.add(
@@ -86,6 +90,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Connector initialization failed: {e}")
     
+    # Initialize Event Bus and Workflow Manager
+    event_bus = None
+    workflow_manager = None
+    try:
+        event_bus = EventBus.get_instance()
+        event_bus.set_source("mediaposter-backend")
+        workflow_manager = WorkflowManager.get_instance(event_bus)
+        await event_bus.publish(Topics.SYSTEM_STARTUP, {"environment": settings.app_env})
+        logger.success("✓ Event Bus initialized")
+    except Exception as e:
+        logger.warning(f"⚠️  Event Bus initialization failed: {e}")
+    
     # Start the Post Scheduler background worker
     post_scheduler = None
     try:
@@ -105,6 +121,14 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Post Scheduler stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Post Scheduler: {e}")
+    
+    # Shutdown Event Bus
+    if event_bus:
+        try:
+            await event_bus.shutdown()
+            logger.success("✓ Event Bus shutdown")
+        except Exception as e:
+            logger.warning(f"⚠️  Error shutting down Event Bus: {e}")
     
     # Shutdown
     logger.info("Shutting down MediaPoster Backend")
@@ -402,6 +426,11 @@ app.include_router(blotato_test.router, prefix="/api/blotato", tags=["Blotato Te
 # Scheduling Workflow
 from api.endpoints import scheduling
 app.include_router(scheduling.router, prefix="/api/scheduling", tags=["Scheduling"])
+
+# Event Bus & Workflows (Pub/Sub Architecture)
+from api.endpoints import events, workflows
+app.include_router(events.router, prefix="/api", tags=["Events"])
+app.include_router(workflows.router, prefix="/api", tags=["Workflows"])
 
 # Dashboard Widgets
 from api.endpoints import dashboard

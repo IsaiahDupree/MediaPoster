@@ -631,6 +631,283 @@ async def add_to_backlog(idea: BacklogIdea):
         return {'id': str(result.fetchone()[0]), 'priority_score': int(priority)}
 
 
+@router.post("/backlog/{idea_id}/promote")
+async def promote_to_experiment(idea_id: str):
+    """Promote a backlog idea to a new experiment."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Get the idea
+        idea = conn.execute(text("""
+            SELECT hypothesis, target_metric FROM experiment_backlog WHERE id = :id
+        """), {'id': idea_id}).fetchone()
+        
+        if not idea:
+            raise HTTPException(status_code=404, detail="Idea not found")
+        
+        # Create experiment from idea
+        result = conn.execute(text("""
+            INSERT INTO experiments (
+                name, hypothesis, type, primary_metric, status
+            ) VALUES (
+                :name, :hypothesis, 'general', :metric, 'draft'
+            )
+            RETURNING id
+        """), {
+            'name': idea[0][:50] + '...' if len(idea[0]) > 50 else idea[0],
+            'hypothesis': idea[0],
+            'metric': idea[1] or 'hook_rate_3s',
+        })
+        
+        experiment_id = result.fetchone()[0]
+        
+        # Create default variants
+        conn.execute(text("""
+            INSERT INTO experiment_variants (experiment_id, name, description, is_control)
+            VALUES (:exp_id, 'A', 'Control variant', true),
+                   (:exp_id, 'B', 'Test variant', false)
+        """), {'exp_id': experiment_id})
+        
+        # Mark idea as promoted
+        conn.execute(text("""
+            UPDATE experiment_backlog SET status = 'promoted' WHERE id = :id
+        """), {'id': idea_id})
+        
+        conn.commit()
+        
+        return {'experiment_id': str(experiment_id), 'status': 'draft'}
+
+
+@router.post("/sync-metrics")
+async def sync_experiment_metrics():
+    """Sync metrics from posted content to running experiments."""
+    engine = get_engine()
+    
+    synced = 0
+    
+    with engine.connect() as conn:
+        # Get running experiments with their variants
+        experiments = conn.execute(text("""
+            SELECT e.id, e.primary_metric, v.id as variant_id, v.media_id
+            FROM experiments e
+            JOIN experiment_variants v ON v.experiment_id = e.id
+            WHERE e.status = 'running' AND v.media_id IS NOT NULL
+        """)).fetchall()
+        
+        for exp in experiments:
+            exp_id, metric, variant_id, media_id = exp
+            
+            # Get metrics from posted_content
+            metrics = conn.execute(text("""
+                SELECT 
+                    SUM(views) as views,
+                    SUM(likes) as likes,
+                    SUM(comments) as comments,
+                    SUM(shares) as shares,
+                    AVG(engagement_rate) as engagement_rate
+                FROM posted_content
+                WHERE local_content_id = :media_id OR platform_post_id = :media_id
+            """), {'media_id': str(media_id)}).fetchone()
+            
+            if metrics and metrics[0]:
+                views = int(metrics[0]) if metrics[0] else 0
+                likes = int(metrics[1]) if metrics[1] else 0
+                comments = int(metrics[2]) if metrics[2] else 0
+                
+                # Calculate primary metric value based on metric type
+                if metric == 'hook_rate_3s':
+                    # Estimate hook rate from engagement
+                    primary_value = min(100, (likes + comments) / max(views, 1) * 1000)
+                elif metric == 'comment_rate':
+                    primary_value = comments / max(views, 1) * 100
+                elif metric == 'share_rate':
+                    primary_value = int(metrics[3] or 0) / max(views, 1) * 100
+                else:
+                    primary_value = float(metrics[4]) if metrics[4] else 0
+                
+                conn.execute(text("""
+                    UPDATE experiment_variants
+                    SET views = :views, impressions = :views, 
+                        primary_metric_value = :metric_value,
+                        updated_at = NOW()
+                    WHERE id = :id
+                """), {
+                    'id': variant_id,
+                    'views': views,
+                    'metric_value': round(primary_value, 2),
+                })
+                synced += 1
+        
+        # Recalculate uplifts
+        conn.execute(text("""
+            UPDATE experiment_variants v
+            SET uplift_vs_control = 
+                CASE 
+                    WHEN v.is_control THEN 0
+                    ELSE COALESCE(
+                        ((v.primary_metric_value - ctrl.primary_metric_value) / NULLIF(ctrl.primary_metric_value, 0)) * 100,
+                        0
+                    )
+                END
+            FROM experiment_variants ctrl
+            WHERE ctrl.experiment_id = v.experiment_id 
+              AND ctrl.is_control = true
+              AND v.experiment_id IN (SELECT id FROM experiments WHERE status = 'running')
+        """))
+        
+        conn.commit()
+    
+    return {'synced_variants': synced}
+
+
+@router.post("/seed-demo-data")
+async def seed_demo_data():
+    """Seed demo experiments for testing."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Check if we already have experiments
+        count = conn.execute(text("SELECT COUNT(*) FROM experiments")).scalar()
+        if count and count > 0:
+            return {'message': 'Demo data already exists', 'count': count}
+        
+        # Create demo experiments
+        demos = [
+            {
+                'name': 'Pain Point Cold Open Test',
+                'hypothesis': 'Starting with a specific pain point will increase hook rate by 20%',
+                'type': 'hook',
+                'metric': 'hook_rate_3s',
+                'status': 'running',
+                'variants': [
+                    {'name': 'A', 'desc': 'Original hook', 'views': 12500, 'value': 65, 'control': True},
+                    {'name': 'B', 'desc': 'Pain Point Hook', 'views': 12800, 'value': 78, 'control': False},
+                ],
+            },
+            {
+                'name': 'Caption Length Test',
+                'hypothesis': 'Shorter captions (under 100 chars) will increase save rate',
+                'type': 'caption',
+                'metric': 'save_rate',
+                'status': 'completed',
+                'winner': 'B',
+                'uplift': 52,
+                'variants': [
+                    {'name': 'A', 'desc': 'Long Caption (250+ chars)', 'views': 15000, 'value': 2.1, 'control': True},
+                    {'name': 'B', 'desc': 'Short Caption (<100 chars)', 'views': 14800, 'value': 3.2, 'control': False},
+                ],
+            },
+            {
+                'name': 'CTA Keyword vs Link',
+                'hypothesis': 'Comment keyword CTA will drive more engagement than link CTA',
+                'type': 'cta',
+                'metric': 'comment_rate',
+                'status': 'running',
+                'variants': [
+                    {'name': 'A', 'desc': 'Link in Bio CTA', 'views': 8200, 'value': 1.8, 'control': True},
+                    {'name': 'B', 'desc': 'Comment TIPS for...', 'views': 8100, 'value': 4.2, 'control': False},
+                ],
+            },
+        ]
+        
+        created = 0
+        for demo in demos:
+            # Create experiment
+            result = conn.execute(text("""
+                INSERT INTO experiments (
+                    name, hypothesis, type, primary_metric, status,
+                    started_at, completed_at, uplift, confidence
+                ) VALUES (
+                    :name, :hypothesis, :type, :metric, :status,
+                    NOW() - INTERVAL '7 days',
+                    CASE WHEN :status = 'completed' THEN NOW() ELSE NULL END,
+                    :uplift, 
+                    CASE WHEN :status = 'completed' THEN 95 ELSE NULL END
+                )
+                RETURNING id
+            """), {
+                'name': demo['name'],
+                'hypothesis': demo['hypothesis'],
+                'type': demo['type'],
+                'metric': demo['metric'],
+                'status': demo['status'],
+                'uplift': demo.get('uplift'),
+            })
+            
+            exp_id = result.fetchone()[0]
+            winner_variant_id = None
+            
+            # Create variants
+            for v in demo['variants']:
+                vresult = conn.execute(text("""
+                    INSERT INTO experiment_variants (
+                        experiment_id, name, description, is_control,
+                        impressions, views, primary_metric_value, uplift_vs_control
+                    ) VALUES (
+                        :exp_id, :name, :desc, :control,
+                        :views, :views, :value,
+                        CASE WHEN :control THEN 0 ELSE ((:value - :control_value) / NULLIF(:control_value, 0)) * 100 END
+                    )
+                    RETURNING id
+                """), {
+                    'exp_id': exp_id,
+                    'name': v['name'],
+                    'desc': v['desc'],
+                    'control': v['control'],
+                    'views': v['views'],
+                    'value': v['value'],
+                    'control_value': demo['variants'][0]['value'],
+                })
+                
+                variant_id = vresult.fetchone()[0]
+                if demo.get('winner') == v['name']:
+                    winner_variant_id = variant_id
+            
+            # Set winner if completed
+            if winner_variant_id:
+                conn.execute(text("""
+                    UPDATE experiments SET winner_variant_id = :winner WHERE id = :id
+                """), {'winner': winner_variant_id, 'id': exp_id})
+                
+                conn.execute(text("""
+                    UPDATE experiment_variants SET is_winner = true WHERE id = :id
+                """), {'id': winner_variant_id})
+            
+            created += 1
+        
+        # Add backlog ideas
+        backlog_ideas = [
+            ('Adding subtitles will increase avg % viewed by 15%', 'avg_percent_viewed', 'M', 'S', 'L', 90),
+            ('Faster cold open will boost hook rate by 25%', 'hook_rate_3s', 'L', 'M', 'M', 75),
+            ('"Send to a friend" CTA will increase shares', 'share_rate', 'M', 'S', 'M', 67),
+            ('Posting at 6PM vs 9AM will improve engagement', 'save_rate', 'S', 'S', 'S', 33),
+        ]
+        
+        for idea in backlog_ideas:
+            conn.execute(text("""
+                INSERT INTO experiment_backlog (
+                    hypothesis, target_metric, expected_impact, effort, confidence, priority_score, source
+                ) VALUES (:h, :m, :i, :e, :c, :p, 'ai')
+            """), {'h': idea[0], 'm': idea[1], 'i': idea[2], 'e': idea[3], 'c': idea[4], 'p': idea[5]})
+        
+        # Add learnings
+        learnings = [
+            ('hooks', 'Pain point hooks outperform generic intros', 'hook_rate_3s', 20, ['tiktok', 'instagram']),
+            ('captions', 'Shorter captions drive higher save rates', 'save_rate', 52, ['instagram']),
+            ('cta', 'Comment-based CTAs drive 2x more engagement', 'comment_rate', 133, ['tiktok']),
+        ]
+        
+        for l in learnings:
+            conn.execute(text("""
+                INSERT INTO experiment_learnings (category, insight, metric, uplift, applies_to)
+                VALUES (:cat, :insight, :metric, :uplift, :applies)
+            """), {'cat': l[0], 'insight': l[1], 'metric': l[2], 'uplift': l[3], 'applies': l[4]})
+        
+        conn.commit()
+        
+        return {'created_experiments': created, 'backlog_ideas': len(backlog_ideas), 'learnings': len(learnings)}
+
+
 @router.post("/backlog/generate-ideas")
 async def generate_ideas():
     """Generate experiment ideas based on analytics and sentiment data."""

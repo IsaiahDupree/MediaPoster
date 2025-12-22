@@ -9,14 +9,24 @@ Uses BackgroundPublisher to replicate the same verified flow as the frontend:
 4. Full publish (Google Drive → Blotato → Platform)
 5. URL polling
 6. Posted content record storage
+
+EVENT-DRIVEN (Phase 3):
+- Emits scheduler.tick on each check cycle
+- Emits schedule.due for posts ready to publish
+- Emits publish.* events through the publish pipeline
+- All events tracked by WorkflowManager for visibility
 """
 import os
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
+from uuid import uuid4
 from sqlalchemy import create_engine, text
 from loguru import logger
 import httpx
+
+# Event Bus integration
+from services.event_bus import EventBus, Topics
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
@@ -39,6 +49,11 @@ class PostScheduler:
         self.retry_delay_minutes = 5
         self._task: Optional[asyncio.Task] = None
         self._background_publisher = None
+        self._check_count = 0
+        
+        # Event Bus integration
+        self.event_bus = EventBus.get_instance()
+        self.event_bus.set_source("post-scheduler")
     
     @property
     def background_publisher(self):
@@ -62,6 +77,16 @@ class PostScheduler:
         self._task = asyncio.create_task(self._run_loop())
         logger.info("📅 Post scheduler started - checking every 60 seconds")
         
+        # Emit scheduler started event
+        await self.event_bus.publish(
+            Topics.SCHEDULER_STARTED,
+            {
+                "check_interval": self.check_interval,
+                "max_retries": self.max_retries,
+                "blotato_configured": bool(self.blotato_api_key)
+            }
+        )
+        
     async def stop(self):
         """Stop the background scheduler"""
         self.is_running = False
@@ -69,16 +94,24 @@ class PostScheduler:
             self._task.cancel()
         logger.info("📅 Post scheduler stopped")
         
+        # Emit scheduler stopped event
+        await self.event_bus.publish(
+            Topics.SCHEDULER_STOPPED,
+            {
+                "total_checks": self._check_count,
+                "stopped_at": datetime.now(timezone.utc).isoformat()
+            }
+        )
+        
     async def _run_loop(self):
-        """Main scheduler loop with comprehensive logging"""
-        loop_count = 0
+        """Main scheduler loop with comprehensive logging and event emissions"""
         while self.is_running:
-            loop_count += 1
+            self._check_count += 1
             now = datetime.now(timezone.utc)
             
             # Log scheduler status every loop
             logger.info("=" * 60)
-            logger.info(f"[Scheduler] 🕐 Check #{loop_count} at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            logger.info(f"[Scheduler] 🕐 Check #{self._check_count} at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
             
             try:
                 # Get counts before processing
@@ -86,6 +119,17 @@ class PostScheduler:
                 upcoming = self._get_upcoming_posts(5)
                 
                 logger.info(f"[Scheduler] 📊 Due now: {len(due_posts)} | Upcoming: {len(upcoming)}")
+                
+                # Emit scheduler tick event
+                await self.event_bus.publish(
+                    Topics.SCHEDULER_TICK,
+                    {
+                        "check_number": self._check_count,
+                        "due_count": len(due_posts),
+                        "upcoming_count": len(upcoming),
+                        "timestamp": now.isoformat()
+                    }
+                )
                 
                 if due_posts:
                     logger.info(f"[Scheduler] 🚀 Processing {len(due_posts)} due posts...")
@@ -226,15 +270,69 @@ class PostScheduler:
         3. Account verification
         4. Full publish (GDrive → Blotato → Platform)
         5. URL polling
+        
+        Emits events throughout the process for workflow tracking.
         """
+        # Create correlation ID for this publish workflow
+        correlation_id = str(uuid4())
+        post_id = str(post["id"])
+        media_id = post.get("content_id")
+        platform = post.get("platform")
+        
+        # Emit schedule.due event
+        await self.event_bus.publish(
+            Topics.SCHEDULE_DUE,
+            {
+                "post_id": post_id,
+                "media_id": media_id,
+                "platform": platform,
+                "account_id": post.get("account_id"),
+                "title": post.get("title"),
+                "scheduled_at": str(post.get("scheduled_at"))
+            },
+            correlation_id=correlation_id
+        )
+        
+        # Emit publish.started event
+        await self.event_bus.publish(
+            Topics.PUBLISH_STARTED,
+            {
+                "post_id": post_id,
+                "media_id": media_id,
+                "platform": platform,
+                "step": "initializing"
+            },
+            correlation_id=correlation_id
+        )
         
         # Check if Blotato is configured
         if not self.blotato_api_key:
             logger.warning("Blotato API key not configured, simulating publish")
-            return await self._simulate_publish(post)
+            result = await self._simulate_publish(post)
+            
+            # Emit completion event for simulated publish
+            await self.event_bus.publish(
+                Topics.PUBLISH_COMPLETED,
+                {
+                    "post_id": post_id,
+                    "media_id": media_id,
+                    "platform": platform,
+                    "platform_url": result.get("platform_url"),
+                    "simulated": True
+                },
+                correlation_id=correlation_id
+            )
+            return result
         
         try:
             from services.background_publisher import PublishRequest, PublishStatus
+            
+            # Emit uploading event
+            await self.event_bus.publish(
+                Topics.PUBLISH_UPLOADING,
+                {"post_id": post_id, "media_id": media_id, "target": "cloud_storage"},
+                correlation_id=correlation_id
+            )
             
             # Build publish request from scheduled post data
             request = PublishRequest(
@@ -255,24 +353,66 @@ class PostScheduler:
             result = await self.background_publisher.publish(request)
             
             if result.success:
+                # Emit publish.completed event
+                await self.event_bus.publish(
+                    Topics.PUBLISH_COMPLETED,
+                    {
+                        "post_id": post_id,
+                        "media_id": media_id,
+                        "platform": platform,
+                        "platform_url": result.platform_url,
+                        "submission_id": result.post_submission_id,
+                        "steps": result.steps
+                    },
+                    correlation_id=correlation_id
+                )
+                
                 return {
                     "success": True,
                     "platform_post_id": result.post_submission_id,
                     "platform_url": result.platform_url,
                     "verification": result.verification,
-                    "steps": result.steps
+                    "steps": result.steps,
+                    "correlation_id": correlation_id
                 }
             else:
+                # Emit publish.failed event
+                await self.event_bus.publish(
+                    Topics.PUBLISH_FAILED,
+                    {
+                        "post_id": post_id,
+                        "media_id": media_id,
+                        "platform": platform,
+                        "error": result.error or "Publish failed",
+                        "steps": result.steps
+                    },
+                    correlation_id=correlation_id
+                )
+                
                 return {
                     "success": False,
                     "error": result.error or "Publish failed",
                     "verification": result.verification,
-                    "steps": result.steps
+                    "steps": result.steps,
+                    "correlation_id": correlation_id
                 }
                 
         except Exception as e:
             logger.error(f"Scheduler publish error: {e}")
-            return {"success": False, "error": str(e)}
+            
+            # Emit publish.failed event
+            await self.event_bus.publish(
+                Topics.PUBLISH_FAILED,
+                {
+                    "post_id": post_id,
+                    "media_id": media_id,
+                    "platform": platform,
+                    "error": str(e)
+                },
+                correlation_id=correlation_id
+            )
+            
+            return {"success": False, "error": str(e), "correlation_id": correlation_id}
     
     def _parse_hashtags(self, hashtags) -> List[str]:
         """Parse hashtags from various formats"""

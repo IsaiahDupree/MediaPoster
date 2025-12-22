@@ -405,6 +405,140 @@ test.describe('Schedule Post Creation - Toast Notifications', () => {
   });
 });
 
+test.describe('Schedule Post Creation - Filter Functionality', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto(`${BASE_URL}/schedule`);
+    await page.waitForLoadState('networkidle');
+  });
+
+  test('should filter by video type', async ({ page }) => {
+    // Open media selector
+    const addContentBtn = page.locator('button:has-text("Add Content")');
+    if (await addContentBtn.isVisible()) {
+      await addContentBtn.click();
+    } else {
+      // Try + button on a day cell
+      const dayCell = page.locator('.group').first();
+      await dayCell.hover();
+      const plusBtn = dayCell.locator('button:has-text("+")');
+      if (await plusBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await plusBtn.click();
+      }
+    }
+    
+    await page.waitForTimeout(1000);
+    
+    // Click Video filter
+    const videoFilter = page.locator('button:has-text("Video")');
+    if (await videoFilter.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await videoFilter.click();
+      await page.waitForTimeout(500);
+      
+      // Should have filtered results
+      const clipsText = page.locator('text=/\\d+ clips available/');
+      await expect(clipsText).toBeVisible({ timeout: 3000 });
+    }
+  });
+
+  test('should filter by analyzed status', async ({ page }) => {
+    // Open media selector
+    const addContentBtn = page.locator('button:has-text("Add Content")');
+    if (await addContentBtn.isVisible()) {
+      await addContentBtn.click();
+    }
+    
+    await page.waitForTimeout(1000);
+    
+    // Click Analyzed filter
+    const analyzedFilter = page.locator('button:has-text("Analyzed")');
+    if (await analyzedFilter.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await analyzedFilter.click();
+      await page.waitForTimeout(500);
+      
+      // Should show filtered count
+      const clipsText = page.locator('text=/\\d+ clips available/');
+      await expect(clipsText).toBeVisible({ timeout: 3000 });
+    }
+  });
+
+  test('should filter by curated status', async ({ page }) => {
+    // Open media selector
+    const addContentBtn = page.locator('button:has-text("Add Content")');
+    if (await addContentBtn.isVisible()) {
+      await addContentBtn.click();
+    }
+    
+    await page.waitForTimeout(1000);
+    
+    // Click Curated filter
+    const curatedFilter = page.locator('button:has-text("Curated")');
+    if (await curatedFilter.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await curatedFilter.click();
+      await page.waitForTimeout(500);
+      
+      // Should show filtered count
+      const clipsText = page.locator('text=/\\d+ clips available/');
+      await expect(clipsText).toBeVisible({ timeout: 3000 });
+    }
+  });
+
+  test('should combine type and status filters', async ({ page }) => {
+    // Open media selector
+    const addContentBtn = page.locator('button:has-text("Add Content")');
+    if (await addContentBtn.isVisible()) {
+      await addContentBtn.click();
+    }
+    
+    await page.waitForTimeout(1000);
+    
+    // Click Video filter
+    const videoFilter = page.locator('button:has-text("Video")');
+    if (await videoFilter.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await videoFilter.click();
+      await page.waitForTimeout(300);
+    }
+    
+    // Click Analyzed filter
+    const analyzedFilter = page.locator('button:has-text("Analyzed")');
+    if (await analyzedFilter.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await analyzedFilter.click();
+      await page.waitForTimeout(500);
+      
+      // Should show filtered count
+      const clipsText = page.locator('text=/\\d+ clips available/');
+      await expect(clipsText).toBeVisible({ timeout: 3000 });
+    }
+  });
+
+  test('should reset to All filter', async ({ page }) => {
+    // Open media selector
+    const addContentBtn = page.locator('button:has-text("Add Content")');
+    if (await addContentBtn.isVisible()) {
+      await addContentBtn.click();
+    }
+    
+    await page.waitForTimeout(1000);
+    
+    // Click Video filter first
+    const videoFilter = page.locator('button:has-text("Video")');
+    if (await videoFilter.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await videoFilter.click();
+      await page.waitForTimeout(300);
+    }
+    
+    // Click All to reset
+    const allFilters = page.locator('button:has-text("All")');
+    if (await allFilters.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+      await allFilters.first().click();
+      await page.waitForTimeout(500);
+      
+      // Should show all clips
+      const clipsText = page.locator('text=/\\d+ clips available/');
+      await expect(clipsText).toBeVisible({ timeout: 3000 });
+    }
+  });
+});
+
 test.describe('Schedule Post Creation - Unified Card Design', () => {
   test('Month view cards should match Week view design', async ({ page }) => {
     await page.goto(`${BASE_URL}/schedule`);

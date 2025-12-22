@@ -330,6 +330,10 @@ app.include_router(workspaces.router, prefix="/api/workspaces", tags=["Workspace
 # Trends & Analytics (Standalone System)
 app.include_router(trends.router, prefix="/api", tags=["Trends & Analytics"])
 
+# AI Video Generation
+from api.endpoints import ai_video
+app.include_router(ai_video.router, prefix="/api", tags=["AI Video Generation"])
+
 # Content Intelligence - Platform Publishing
 from api.endpoints import platform_publishing
 app.include_router(platform_publishing.router, prefix="/api/platform", tags=["Platform Publishing"])

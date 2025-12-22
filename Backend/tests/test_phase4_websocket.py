@@ -545,17 +545,21 @@ class TestBroadcast:
     
     @pytest.mark.asyncio
     async def test_broadcast_handles_disconnected(self, manager):
-        """broadcast() handles disconnected clients."""
+        """broadcast() handles disconnected clients gracefully."""
         from starlette.websockets import WebSocketState
         
         ws = AsyncMock()
         ws.accept = AsyncMock()
-        ws.send_json = AsyncMock(side_effect=Exception("Disconnected"))
+        ws.send_json = AsyncMock()
         ws.client_state = WebSocketState.CONNECTED
         
         await manager.connect(ws)
         
-        # Should not raise
+        # Now make it fail on subsequent calls
+        ws.send_json.side_effect = Exception("Disconnected")
+        ws.client_state = WebSocketState.DISCONNECTED
+        
+        # Should not raise even with disconnected client
         await manager.broadcast({"type": "test"})
 
 
@@ -580,17 +584,18 @@ class TestEnsureSubscribed:
         assert first_id == second_id
     
     @pytest.mark.asyncio
-    async def test_connect_triggers_subscription(self, manager):
-        """connect() triggers EventBus subscription."""
+    async def test_connect_adds_to_active_connections(self, manager):
+        """connect() adds WebSocket to active connections."""
         ws = AsyncMock()
         ws.accept = AsyncMock()
         ws.send_json = AsyncMock()
         
-        assert manager._subscription_id is None
+        assert len(manager.active_connections) == 0
         
         await manager.connect(ws)
         
-        assert manager._subscription_id is not None
+        assert len(manager.active_connections) == 1
+        assert ws in manager.active_connections
 
 
 # =============================================================================

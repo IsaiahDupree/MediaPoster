@@ -341,46 +341,46 @@ class TestTopicsPatternMatching:
     
     def test_matches_exact(self):
         """Exact pattern matches exact topic."""
-        assert Topics.matches("media.ingested", "media.ingested")
+        assert Topics.matches_pattern("media.ingested", "media.ingested")
     
     def test_matches_exact_no_match(self):
         """Exact pattern doesn't match different topic."""
-        assert not Topics.matches("media.ingested", "media.updated")
+        assert not Topics.matches_pattern("media.ingested", "media.updated")
     
     def test_matches_wildcard_all(self):
         """Wildcard * matches all topics."""
-        assert Topics.matches("media.ingested", "*")
-        assert Topics.matches("publish.completed", "*")
+        assert Topics.matches_pattern("*", "media.ingested")
+        assert Topics.matches_pattern("*", "publish.completed")
     
     def test_matches_prefix_wildcard(self):
         """Prefix wildcard matches topic prefix."""
-        assert Topics.matches("media.ingested", "media.*")
-        assert Topics.matches("media.analysis.completed", "media.*")
+        assert Topics.matches_pattern("media.*", "media.ingested")
+        assert Topics.matches_pattern("media.*", "media.analysis.completed")
     
     def test_matches_prefix_wildcard_no_match(self):
         """Prefix wildcard doesn't match different prefix."""
-        assert not Topics.matches("publish.started", "media.*")
+        assert not Topics.matches_pattern("media.*", "publish.started")
     
     def test_matches_suffix_wildcard(self):
         """Suffix wildcard matches topic suffix."""
-        assert Topics.matches("media.analysis.completed", "*.completed")
-        assert Topics.matches("publish.completed", "*.completed")
+        assert Topics.matches_pattern("*.completed", "media.analysis.completed")
+        assert Topics.matches_pattern("*.completed", "publish.completed")
     
     def test_matches_suffix_wildcard_no_match(self):
         """Suffix wildcard doesn't match different suffix."""
-        assert not Topics.matches("publish.started", "*.completed")
+        assert not Topics.matches_pattern("*.completed", "publish.started")
     
     def test_matches_case_sensitive(self):
         """Pattern matching is case sensitive."""
-        assert not Topics.matches("MEDIA.INGESTED", "media.ingested")
+        assert not Topics.matches_pattern("media.ingested", "MEDIA.INGESTED")
     
     def test_matches_empty_topic(self):
         """Empty topic handling."""
-        assert not Topics.matches("", "media.*")
+        assert not Topics.matches_pattern("media.*", "")
     
     def test_matches_empty_pattern(self):
         """Empty pattern handling."""
-        assert not Topics.matches("media.ingested", "")
+        assert not Topics.matches_pattern("", "media.ingested")
 
 
 # =============================================================================
@@ -419,49 +419,56 @@ class TestEventBusPublish:
         return EventBus.get_instance()
     
     @pytest.mark.asyncio
-    async def test_publish_returns_event(self, bus):
-        """publish returns Event object."""
-        event = await bus.publish("test.topic", {"key": "value"})
-        assert isinstance(event, Event)
+    async def test_publish_returns_event_id(self, bus):
+        """publish returns event ID string."""
+        event_id = await bus.publish("test.topic", {"key": "value"})
+        assert isinstance(event_id, str)
+        assert len(event_id) > 0
     
     @pytest.mark.asyncio
-    async def test_publish_sets_topic(self, bus):
-        """publish sets correct topic."""
-        event = await bus.publish("test.topic", {})
-        assert event.topic == "test.topic"
+    async def test_publish_logs_event(self, bus):
+        """publish logs the event."""
+        await bus.publish("test.topic", {})
+        stats = bus.get_stats()
+        assert stats["total_events_logged"] >= 1
     
     @pytest.mark.asyncio
-    async def test_publish_sets_payload(self, bus):
-        """publish sets correct payload."""
-        event = await bus.publish("test.topic", {"key": "value"})
-        assert event.payload == {"key": "value"}
+    async def test_publish_event_retrievable(self, bus):
+        """Published event can be retrieved from recent events."""
+        await bus.publish("test.topic", {"key": "value"})
+        recent = bus.get_recent_events(limit=5)
+        assert len(recent) >= 1
+        assert recent[0].topic == "test.topic"
     
     @pytest.mark.asyncio
-    async def test_publish_generates_id(self, bus):
-        """publish generates unique ID."""
-        event = await bus.publish("test.topic", {})
-        assert event.id is not None
-        assert len(event.id) > 0
+    async def test_publish_generates_unique_ids(self, bus):
+        """publish generates unique IDs."""
+        id1 = await bus.publish("test.topic", {})
+        id2 = await bus.publish("test.topic", {})
+        assert id1 != id2
     
     @pytest.mark.asyncio
-    async def test_publish_generates_correlation_id(self, bus):
-        """publish generates correlation_id if not provided."""
-        event = await bus.publish("test.topic", {})
-        assert event.correlation_id is not None
-    
-    @pytest.mark.asyncio
-    async def test_publish_uses_provided_correlation_id(self, bus):
+    async def test_publish_with_correlation_id(self, bus):
         """publish uses provided correlation_id."""
-        event = await bus.publish("test.topic", {}, correlation_id="my-corr-id")
-        assert event.correlation_id == "my-corr-id"
+        await bus.publish("test.topic", {}, correlation_id="my-corr-id")
+        recent = bus.get_recent_events(limit=1)
+        assert recent[0].correlation_id == "my-corr-id"
+    
+    @pytest.mark.asyncio
+    async def test_publish_auto_correlation_id(self, bus):
+        """publish generates correlation_id if not provided."""
+        await bus.publish("test.topic", {})
+        recent = bus.get_recent_events(limit=1)
+        assert recent[0].correlation_id is not None
     
     @pytest.mark.asyncio
     async def test_publish_sets_timestamp(self, bus):
         """publish sets timestamp."""
         before = datetime.now(timezone.utc)
-        event = await bus.publish("test.topic", {})
+        await bus.publish("test.topic", {})
         after = datetime.now(timezone.utc)
-        assert before <= event.timestamp <= after
+        recent = bus.get_recent_events(limit=1)
+        assert before <= recent[0].timestamp <= after
 
 
 class TestEventBusSubscribe:
@@ -473,29 +480,37 @@ class TestEventBusSubscribe:
         EventBus.reset_instance()
         return EventBus.get_instance()
     
-    def test_subscribe_returns_id(self, bus):
-        """subscribe returns subscription ID."""
-        sub_id = bus.subscribe("test.*", lambda e: None)
-        assert sub_id is not None
-        assert isinstance(sub_id, str)
+    def test_subscribe_adds_handler(self, bus):
+        """subscribe adds handler to subscribers."""
+        async def handler(e): pass
+        bus.subscribe("test.*", handler)
+        counts = bus.get_subscriber_count("test.*")
+        assert counts["test.*"] == 1
     
     def test_subscribe_multiple_patterns(self, bus):
         """Can subscribe to multiple patterns."""
-        sub1 = bus.subscribe("test1.*", lambda e: None)
-        sub2 = bus.subscribe("test2.*", lambda e: None)
-        assert sub1 != sub2
+        async def handler1(e): pass
+        async def handler2(e): pass
+        bus.subscribe("test1.*", handler1)
+        bus.subscribe("test2.*", handler2)
+        stats = bus.get_stats()
+        assert stats["subscriber_patterns"] == 2
     
     def test_subscribe_same_pattern_multiple(self, bus):
         """Can have multiple subscribers to same pattern."""
-        sub1 = bus.subscribe("test.*", lambda e: None)
-        sub2 = bus.subscribe("test.*", lambda e: None)
-        assert sub1 != sub2
+        async def handler1(e): pass
+        async def handler2(e): pass
+        bus.subscribe("test.*", handler1)
+        bus.subscribe("test.*", handler2)
+        counts = bus.get_subscriber_count("test.*")
+        assert counts["test.*"] == 2
     
     @pytest.mark.asyncio
     async def test_subscribe_receives_matching_events(self, bus):
         """Subscriber receives matching events."""
         received = []
-        bus.subscribe("test.*", lambda e: received.append(e))
+        async def handler(e): received.append(e)
+        bus.subscribe("test.*", handler)
         await bus.publish("test.event", {"data": 1})
         await asyncio.sleep(0.1)
         assert len(received) == 1
@@ -504,7 +519,8 @@ class TestEventBusSubscribe:
     async def test_subscribe_ignores_non_matching(self, bus):
         """Subscriber ignores non-matching events."""
         received = []
-        bus.subscribe("test.*", lambda e: received.append(e))
+        async def handler(e): received.append(e)
+        bus.subscribe("test.*", handler)
         await bus.publish("other.event", {"data": 1})
         await asyncio.sleep(0.1)
         assert len(received) == 0
@@ -513,7 +529,8 @@ class TestEventBusSubscribe:
     async def test_subscribe_wildcard_all(self, bus):
         """Wildcard * receives all events."""
         received = []
-        bus.subscribe("*", lambda e: received.append(e))
+        async def handler(e): received.append(e)
+        bus.subscribe("*", handler)
         await bus.publish("test.event", {})
         await bus.publish("other.event", {})
         await asyncio.sleep(0.1)
@@ -531,23 +548,29 @@ class TestEventBusUnsubscribe:
     
     def test_unsubscribe_removes_subscription(self, bus):
         """unsubscribe removes the subscription."""
-        sub_id = bus.subscribe("test.*", lambda e: None)
-        bus.unsubscribe(sub_id)
-        # Subscription should be removed
+        async def handler(e): pass
+        bus.subscribe("test.*", handler)
+        result = bus.unsubscribe("test.*", handler)
+        assert result is True
+        counts = bus.get_subscriber_count("test.*")
+        assert counts["test.*"] == 0
     
     @pytest.mark.asyncio
     async def test_unsubscribe_stops_receiving(self, bus):
         """After unsubscribe, no longer receives events."""
         received = []
-        sub_id = bus.subscribe("test.*", lambda e: received.append(e))
-        bus.unsubscribe(sub_id)
+        async def handler(e): received.append(e)
+        bus.subscribe("test.*", handler)
+        bus.unsubscribe("test.*", handler)
         await bus.publish("test.event", {})
         await asyncio.sleep(0.1)
         assert len(received) == 0
     
-    def test_unsubscribe_invalid_id(self, bus):
-        """unsubscribe with invalid ID doesn't crash."""
-        bus.unsubscribe("invalid-id")  # Should not raise
+    def test_unsubscribe_nonexistent_handler(self, bus):
+        """unsubscribe with non-existent handler returns False."""
+        async def handler(e): pass
+        result = bus.unsubscribe("test.*", handler)
+        assert result is False
 
 
 # =============================================================================
@@ -566,7 +589,7 @@ class TestEventBusErrorHandling:
     @pytest.mark.asyncio
     async def test_subscriber_exception_doesnt_crash(self, bus):
         """Exception in subscriber doesn't crash EventBus."""
-        def bad_handler(event):
+        async def bad_handler(event):
             raise ValueError("Handler error")
         
         bus.subscribe("test.*", bad_handler)
@@ -578,10 +601,10 @@ class TestEventBusErrorHandling:
         """Exception in one subscriber doesn't block others."""
         received = []
         
-        def bad_handler(event):
+        async def bad_handler(event):
             raise ValueError("Handler error")
         
-        def good_handler(event):
+        async def good_handler(event):
             received.append(event)
         
         bus.subscribe("test.*", bad_handler)
@@ -607,30 +630,33 @@ class TestEventBusErrorHandling:
     @pytest.mark.asyncio
     async def test_publish_empty_payload(self, bus):
         """Can publish with empty payload."""
-        event = await bus.publish("test.topic", {})
-        assert event.payload == {}
+        await bus.publish("test.topic", {})
+        recent = bus.get_recent_events(limit=1)
+        assert recent[0].payload == {}
     
     @pytest.mark.asyncio
     async def test_publish_none_correlation_id(self, bus):
         """Can publish with None correlation_id (auto-generated)."""
-        event = await bus.publish("test.topic", {}, correlation_id=None)
-        assert event.correlation_id is not None
+        await bus.publish("test.topic", {}, correlation_id=None)
+        recent = bus.get_recent_events(limit=1)
+        assert recent[0].correlation_id is not None
     
     @pytest.mark.asyncio
     async def test_concurrent_publish(self, bus):
         """Concurrent publishes work correctly."""
-        events = await asyncio.gather(*[
+        event_ids = await asyncio.gather(*[
             bus.publish(f"test.{i}", {"i": i})
             for i in range(100)
         ])
-        assert len(events) == 100
-        assert all(e.topic.startswith("test.") for e in events)
+        assert len(event_ids) == 100
+        assert all(isinstance(eid, str) for eid in event_ids)
     
     @pytest.mark.asyncio
     async def test_concurrent_subscribe_publish(self, bus):
         """Concurrent subscribe and publish work."""
         received = []
-        bus.subscribe("test.*", lambda e: received.append(e))
+        async def handler(e): received.append(e)
+        bus.subscribe("test.*", handler)
         
         await asyncio.gather(*[
             bus.publish("test.event", {"i": i})
@@ -652,21 +678,24 @@ class TestEventBusEdgeCases:
     @pytest.mark.asyncio
     async def test_publish_special_characters_topic(self, bus):
         """Publish with special characters in topic."""
-        event = await bus.publish("test.topic-with_chars", {})
-        assert event.topic == "test.topic-with_chars"
+        await bus.publish("test.topic-with_chars", {})
+        recent = bus.get_recent_events(limit=1)
+        assert recent[0].topic == "test.topic-with_chars"
     
     @pytest.mark.asyncio
     async def test_publish_long_topic(self, bus):
         """Publish with long topic name."""
         long_topic = "test." + "a" * 200
-        event = await bus.publish(long_topic, {})
-        assert event.topic == long_topic
+        await bus.publish(long_topic, {})
+        recent = bus.get_recent_events(limit=1)
+        assert recent[0].topic == long_topic
     
     @pytest.mark.asyncio
     async def test_high_volume_events(self, bus):
         """Handle high volume of events."""
         received = []
-        bus.subscribe("*", lambda e: received.append(e))
+        async def handler(e): received.append(e)
+        bus.subscribe("*", handler)
         
         for i in range(1000):
             await bus.publish("test.event", {"i": i})
@@ -676,15 +705,18 @@ class TestEventBusEdgeCases:
     
     def test_subscribe_empty_pattern(self, bus):
         """Subscribe with empty pattern."""
-        sub_id = bus.subscribe("", lambda e: None)
-        assert sub_id is not None
+        async def handler(e): pass
+        bus.subscribe("", handler)
+        counts = bus.get_subscriber_count("")
+        assert counts[""] == 1
     
     @pytest.mark.asyncio
     async def test_set_source(self, bus):
         """set_source changes event source."""
         bus.set_source("my-source")
-        event = await bus.publish("test.topic", {})
-        assert event.source == "my-source"
+        await bus.publish("test.topic", {})
+        recent = bus.get_recent_events(limit=1)
+        assert recent[0].source == "my-source"
 
 
 # =============================================================================
@@ -736,7 +768,7 @@ class TestEventBusStats:
     async def test_get_recent_events(self, bus):
         """get_recent_events returns recent events."""
         await bus.publish("test.topic", {"data": "test"})
-        recent = bus.get_recent_events(10)
+        recent = bus.get_recent_events(limit=10)
         assert len(recent) >= 1
     
     @pytest.mark.asyncio
@@ -744,7 +776,7 @@ class TestEventBusStats:
         """get_recent_events respects limit."""
         for i in range(20):
             await bus.publish("test.topic", {"i": i})
-        recent = bus.get_recent_events(5)
+        recent = bus.get_recent_events(limit=5)
         assert len(recent) <= 5
     
     @pytest.mark.asyncio
@@ -753,8 +785,8 @@ class TestEventBusStats:
         await bus.publish("test.a", {})
         await bus.publish("test.b", {})
         await bus.publish("other.c", {})
-        recent = bus.get_recent_events(10, topic_filter="test.*")
-        assert all("test" in e["topic"] for e in recent)
+        recent = bus.get_recent_events(limit=10, topic_pattern="test.*")
+        assert all("test" in e.topic for e in recent)
     
     def test_stats_has_topics_with_subscribers(self, bus):
         """Stats includes topics with subscribers."""

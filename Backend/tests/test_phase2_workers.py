@@ -203,9 +203,9 @@ class TestBaseWorkerEmit:
         """Worker can emit events."""
         worker = ConcreteWorker(event_bus)
         await worker.start()
-        event = await worker.emit("output.event", {"result": "success"})
-        assert event is not None
-        assert event.topic == "output.event"
+        event_id = await worker.emit("output.event", {"result": "success"})
+        assert event_id is not None
+        assert isinstance(event_id, str)
         await worker.stop()
     
     @pytest.mark.asyncio
@@ -213,8 +213,10 @@ class TestBaseWorkerEmit:
         """Worker emit includes correlation_id."""
         worker = ConcreteWorker(event_bus)
         await worker.start()
-        event = await worker.emit("output.event", {}, correlation_id="corr-123")
-        assert event.correlation_id == "corr-123"
+        event_id = await worker.emit("output.event", {}, correlation_id="corr-123")
+        assert isinstance(event_id, str)
+        recent = event_bus.get_recent_events(limit=1)
+        assert recent[0].correlation_id == "corr-123"
         await worker.stop()
     
     @pytest.mark.asyncio

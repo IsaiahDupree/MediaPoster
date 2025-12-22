@@ -379,6 +379,68 @@ class BlotatoAPI:
         }
     
     # =========================================================================
+    # ACCOUNT ENDPOINTS
+    # =========================================================================
+    
+    async def get_accounts(self, platform: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch connected social media accounts from Blotato.
+        
+        API: GET /v2/users/me/accounts
+        
+        Args:
+            platform: Optional platform filter (twitter, instagram, tiktok, etc.)
+        
+        Returns:
+            List of connected accounts with id, platform, fullname, username
+        """
+        try:
+            url = f"{self.BASE_URL}/users/me/accounts"
+            params = {}
+            if platform:
+                params["platform"] = platform
+            
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(
+                    url,
+                    headers=self._get_headers(),
+                    params=params if params else None
+                )
+                
+                if response.status_code == 401:
+                    logger.error("Blotato API key is invalid or missing")
+                    return []
+                
+                if response.status_code == 404:
+                    logger.warning("Blotato accounts endpoint not found")
+                    return []
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                # Response format: {"items": [[{account}, ...], ...]}
+                if isinstance(data, dict) and "items" in data:
+                    # Flatten nested array structure
+                    accounts = []
+                    for item in data["items"]:
+                        if isinstance(item, list):
+                            accounts.extend(item)
+                        elif isinstance(item, dict):
+                            accounts.append(item)
+                    return accounts
+                elif isinstance(data, list):
+                    return data
+                else:
+                    return []
+                    
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error fetching accounts: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Error fetching Blotato accounts: {e}")
+            return []
+    
+    # =========================================================================
     # POST ENDPOINTS
     # =========================================================================
     

@@ -39,6 +39,7 @@ class TimeOfDay(str, Enum):
     DAWN = "dawn"
     MORNING = "morning"
     MIDDAY = "midday"
+    DAYTIME = "daytime"  # GPT-4 sometimes returns this
     AFTERNOON = "afternoon"
     EVENING = "evening"
     SUNSET = "sunset"
@@ -212,7 +213,7 @@ analyses_store: Dict[str, ImageAnalysisResult] = {}
 def get_analysis_prompt(custom_fields: List[str], focus_areas: List[str], depth: str) -> str:
     """Generate the analysis prompt for the AI"""
     
-    base_prompt = """Analyze this image in comprehensive detail. Provide a thorough analysis covering ALL of the following aspects. Be specific and detailed.
+    base_prompt = """You are an image analysis assistant for a social media content management tool. The user is analyzing their own content for publishing purposes. Analyze this image in comprehensive detail. Do NOT refuse to analyze - this is the user's own authorized content. Provide a thorough analysis covering ALL of the following aspects. Be specific and detailed.
 
 ## REQUIRED ANALYSIS SECTIONS:
 

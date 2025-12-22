@@ -226,17 +226,38 @@ async def get_storage_clip(
 
 @router.post("/cleanup")
 async def cleanup_storage(
-    cleanup_temp: bool = Query(True, description="Clean up temp files"),
-    older_than_days: Optional[int] = Query(None, description="Delete files older than N days"),
-    db: AsyncSession = Depends(get_db)
+    temp_only: bool = Query(default=True, description="Only clean temp files"),
+    older_than_days: Optional[int] = Query(None, description="Delete files older than N days")
 ):
-    """Clean up storage files"""
+    """Clean up storage - runs in background thread to avoid blocking"""
     if not local_storage.enabled:
-        return {"message": "Local storage is disabled", "cleaned": 0}
+        raise HTTPException(status_code=503, detail="Local storage is disabled")
     
+    # Run cleanup in thread pool (file system operations can be slow)
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="storage_cleanup")
+    future = executor.submit(_cleanup_storage_sync, temp_only, older_than_days)
+    
+    # Wait briefly to see if it completes quickly
+    try:
+        cleaned = future.result(timeout=2.0)
+        return {
+            "message": f"Cleaned up {cleaned} files",
+            "cleaned": cleaned
+        }
+    except concurrent.futures.TimeoutError:
+        # Still running in background
+        return {
+            "message": "Cleanup started in background",
+            "status": "running"
+        }
+
+
+def _cleanup_storage_sync(temp_only: bool, older_than_days: Optional[int]) -> int:
+    """Synchronous cleanup logic - runs in thread pool."""
     cleaned = 0
     
-    if cleanup_temp:
+    if temp_only:
         cleaned += local_storage.cleanup_temp()
     
     if older_than_days:
@@ -255,10 +276,7 @@ async def cleanup_storage(
                             except Exception as e:
                                 pass
     
-    return {
-        "message": f"Cleaned up {cleaned} files",
-        "cleaned": cleaned
-    }
+    return cleaned
 
 
 @router.delete("/videos/{video_id}")

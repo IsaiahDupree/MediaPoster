@@ -450,18 +450,53 @@ async def scan_directory(
     """
     Scan a local directory for videos and images with detailed progress logging
     Supports duplicate detection and scan cancellation
+    Runs in thread pool to avoid blocking the app
     """
+    import concurrent.futures
+    
+    scan_id = str(uuid.uuid4())
+    _active_scans[scan_id] = {"cancelled": False, "status": "starting"}
+    
+    # Run scan in thread pool (non-blocking)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="video_scan")
+    executor.submit(_scan_directory_sync, scan_id, request.path, current_user_id)
+    
+    logger.info(f"[Video Scan] Started scan {scan_id} in thread pool")
+    
+    return {
+        "message": "Scan started in background",
+        "scan_id": scan_id,
+        "status": "running"
+    }
+
+
+def _scan_directory_sync(scan_id: str, scan_path: str, current_user_id: uuid.UUID):
+    """Sync wrapper for directory scan - runs in thread pool."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_scan_directory_async(scan_id, scan_path, current_user_id))
+    finally:
+        loop.close()
+
+
+async def _scan_directory_async(scan_id: str, scan_path: str, current_user_id: uuid.UUID):
+    """Actual scan logic - runs in separate event loop in thread."""
+    from database.connection import async_session_maker
     import os
     from pathlib import Path
     from loguru import logger
     import time
     
-    scan_id = str(uuid.uuid4())
-    _active_scans[scan_id] = {"cancelled": False, "status": "starting"}
+    if not async_session_maker:
+        logger.error("Database not initialized")
+        _active_scans[scan_id]["status"] = "failed"
+        return
     
     try:
         # Expand user path
-        scan_path = os.path.expanduser(request.path)
+        scan_path = os.path.expanduser(scan_path)
         path_obj = Path(scan_path)
         
         logger.info(f"[Video Scan] Starting scan with ID: {scan_id}")
@@ -544,10 +579,11 @@ async def scan_directory(
         from database.models import Video
         
         # Get all existing URIs for this user
-        result = await db.execute(
-            select(Video.source_uri).filter(Video.user_id == current_user_id)
-        )
-        existing_uris = set(result.scalars().all())
+        async with async_session_maker() as db:
+            result = await db.execute(
+                select(Video.source_uri).filter(Video.user_id == current_user_id)
+            )
+            existing_uris = set(result.scalars().all())
         logger.info(f"[Video Scan] Found {len(existing_uris)} existing media files in database")
         
         # Separate new vs duplicate files
@@ -599,21 +635,23 @@ async def scan_directory(
             BATCH_SIZE = 500
             total_added = 0
             
-            for i in range(0, len(new_videos), BATCH_SIZE):
-                if _active_scans[scan_id]["cancelled"]:
-                    logger.warning(f"[Video Scan] Scan cancelled by user")
-                    await db.rollback()
-                    return {"message": "Scan cancelled", "scan_id": scan_id, "cancelled": True}
+            async with async_session_maker() as db:
+                for i in range(0, len(new_videos), BATCH_SIZE):
+                    if _active_scans[scan_id]["cancelled"]:
+                        logger.warning(f"[Video Scan] Scan cancelled by user")
+                        await db.rollback()
+                        _active_scans[scan_id]["status"] = "cancelled"
+                        return
+                    
+                    batch = new_videos[i:i + BATCH_SIZE]
+                    db.add_all(batch)
+                    await db.commit()
+                    total_added += len(batch)
+                    
+                    progress_pct = (total_added / len(new_videos)) * 100
+                    logger.info(f"[Video Scan] Import progress: {total_added}/{len(new_videos)} ({progress_pct:.1f}%)")
                 
-                batch = new_videos[i:i + BATCH_SIZE]
-                db.add_all(batch)
-                await db.commit()
-                total_added += len(batch)
-                
-                progress_pct = (total_added / len(new_videos)) * 100
-                logger.info(f"[Video Scan] Import progress: {total_added}/{len(new_videos)} ({progress_pct:.1f}%)")
-            
-            logger.success(f"[Video Scan] Successfully added {total_added} new media files!")
+                logger.success(f"[Video Scan] Successfully added {total_added} new media files!")
         else:
             logger.info(f"[Video Scan] No new files to add - all files already in database")
         
@@ -626,21 +664,25 @@ async def scan_directory(
         logger.info(f"  - Duplicates skipped: {len(duplicate_files)}")
         logger.info(f"  - Duration: {total_time:.2f}s")
         
-        return {
-            "message": f"Scan complete! Found {len(found_files)} files, added {len(new_files)} new videos",
-            "scan_id": scan_id,
-            "stats": {
-                "total_found": len(found_files),
-                "videos": video_count,
-                "images": image_count,
-                "duplicates": len(duplicate_files),
-                "new_added": len(new_files),
-                "duration_seconds": round(total_time, 2)
-            }
+        _active_scans[scan_id]["status"] = "completed"
+        _active_scans[scan_id]["stats"] = {
+            "total_found": len(found_files),
+            "videos": video_count,
+            "images": image_count,
+            "duplicates": len(duplicate_files),
+            "new_added": len(new_files),
+            "duration_seconds": round(total_time, 2)
         }
     
+    except Exception as e:
+        logger.error(f"[Video Scan] Scan failed: {e}")
+        import traceback
+        traceback.print_exc()
+        _active_scans[scan_id]["status"] = "failed"
+        _active_scans[scan_id]["error"] = str(e)
+    
     finally:
-        # Clean up scan state
+        # Clean up scan state after delay
         if scan_id in _active_scans:
             del _active_scans[scan_id]
 
@@ -724,6 +766,7 @@ async def generate_thumbnails_batch(
     """
     from sqlalchemy import select
     from database.models import Video
+    import concurrent.futures
     
     # Limit batch size
     video_ids = request.video_ids[:request.max_videos]
@@ -734,13 +777,13 @@ async def generate_thumbnails_batch(
     )
     videos = result.scalars().all()
     
-    # Queue thumbnail generation for each
+    # Use thread pool for thumbnail generation (CPU-intensive FFmpeg operations)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=3, thread_name_prefix="thumbnail_gen")
+    
     for video in videos:
-        background_tasks.add_task(
-            _generate_thumbnail_task,
-            video_id=video.id,
-            video_path=video.source_uri
-        )
+        executor.submit(_generate_thumbnail_task_sync, video.id, video.source_uri)
+    
+    logger.info(f"Queued {len(videos)} videos for thumbnail generation in thread pool")
     
     return {
         "message": f"Queued {len(videos)} videos for thumbnail generation",
@@ -952,6 +995,17 @@ async def _analyze_video_task(
         logger.error(f"Analysis task failed for {video_id}: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _generate_thumbnail_task_sync(video_id: uuid.UUID, video_path: str):
+    """Sync wrapper for thumbnail generation - runs in thread pool."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_generate_thumbnail_task(video_id, video_path))
+    finally:
+        loop.close()
 
 
 # Background task for thumbnail generation

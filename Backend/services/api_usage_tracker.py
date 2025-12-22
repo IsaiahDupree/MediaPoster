@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class APIProvider(Enum):
-    """Supported API providers"""
+    """Supported API providers - Blotato social media platforms only"""
     RAPIDAPI_TIKTOK = "rapidapi_tiktok"
+    RAPIDAPI_TIKTOK_SCRAPER7 = "rapidapi_tiktok_scraper7"
     RAPIDAPI_INSTAGRAM = "rapidapi_instagram"
+    RAPIDAPI_INSTAGRAM_STATS = "rapidapi_instagram_stats"
     RAPIDAPI_YOUTUBE = "rapidapi_youtube"
     RAPIDAPI_TWITTER = "rapidapi_twitter"
     BLOTATO = "blotato"
@@ -146,11 +148,12 @@ RAPIDAPI_TWITTER_RATE_LIMITS = {
 }
 
 # =============================================================================
-# RapidAPI Instagram Scraper - from https://rapidapi.com/junioroangel/api/instagram-scraper
-# Host: instagram-scraper-api2.p.rapidapi.com
+# RapidAPI Instagram Looter2 (PRIMARY) - WORKING
+# Host: instagram-looter2.p.rapidapi.com
 # Last updated: Dec 2024
+# Note: instagram-scraper-api2 returns 401 "Blocked User" - DO NOT USE
 # =============================================================================
-RAPIDAPI_INSTAGRAM_HOST = "instagram-scraper-api2.p.rapidapi.com"
+RAPIDAPI_INSTAGRAM_HOST = "instagram-looter2.p.rapidapi.com"
 
 RAPIDAPI_INSTAGRAM_TIERS = {
     "basic": APITier("BASIC", monthly_limit=100, cost_usd=0.0),  # Free tier
@@ -160,18 +163,80 @@ RAPIDAPI_INSTAGRAM_TIERS = {
 }
 
 RAPIDAPI_INSTAGRAM_ENDPOINTS = {
-    "user_info": "/v1/info",                  # GET - User info by username
-    "user_posts": "/v1/posts",                # GET - User posts
-    "user_followers": "/v1/followers",        # GET - User followers
-    "user_following": "/v1/following",        # GET - User following
-    "post_info": "/v1/post_info",             # GET - Post details by shortcode
-    "post_likes": "/v1/likes",                # GET - Post likers
-    "post_comments": "/v1/comments",          # GET - Post comments
-    "search_users": "/v1/search_users",       # GET - Search users
-    "search_hashtag": "/v1/search_hashtag",   # GET - Search hashtag
-    "reels": "/v1/reels",                     # GET - User reels
-    "stories": "/v1/stories",                 # GET - User stories
-    "highlights": "/v1/highlights",           # GET - User highlights
+    "profile": "/profile",                    # GET - User profile with posts (VERIFIED WORKING)
+}
+
+# Instagram Statistics API (Secondary) - instagram-statistics-api.p.rapidapi.com
+RAPIDAPI_INSTAGRAM_STATS_HOST = "instagram-statistics-api.p.rapidapi.com"
+RAPIDAPI_INSTAGRAM_STATS_ENDPOINTS = {
+    "community": "/community",                # GET - Profile stats & engagement (VERIFIED WORKING)
+}
+
+# =============================================================================
+# RapidAPI TikTok Scraper7 (PRIMARY) - VERIFIED WORKING
+# Host: tiktok-scraper7.p.rapidapi.com
+# Last updated: Dec 2024
+# =============================================================================
+RAPIDAPI_TIKTOK_SCRAPER7_HOST = "tiktok-scraper7.p.rapidapi.com"
+
+RAPIDAPI_TIKTOK_SCRAPER7_TIERS = {
+    "basic": APITier("BASIC", monthly_limit=100, cost_usd=0.0),
+    "pro": APITier("PRO", monthly_limit=10000, cost_usd=15.0, overage_cost_per_call=0.002),
+    "ultra": APITier("ULTRA", monthly_limit=100000, cost_usd=50.0, overage_cost_per_call=0.001),
+}
+
+RAPIDAPI_TIKTOK_SCRAPER7_ENDPOINTS = {
+    "user_info": "/user/info",                # GET - User profile (VERIFIED WORKING)
+    "user_posts": "/user/posts",              # GET - User videos with metrics (VERIFIED WORKING)
+    "user_followers": "/user/followers",      # GET - Followers list (VERIFIED WORKING)
+    "user_following": "/user/following",      # GET - Following list (VERIFIED WORKING)
+    "music_info": "/music/info",              # GET - Music/sound info (VERIFIED WORKING)
+}
+
+RAPIDAPI_TIKTOK_SCRAPER7_RATE_LIMITS = {
+    "basic": 1,
+    "pro": 5,
+    "ultra": 10,
+}
+
+# =============================================================================
+# RapidAPI Google Maps Places - VERIFIED WORKING
+# Host: google-map-places.p.rapidapi.com
+# =============================================================================
+RAPIDAPI_GOOGLE_MAPS_HOST = "google-map-places.p.rapidapi.com"
+
+RAPIDAPI_GOOGLE_MAPS_TIERS = {
+    "basic": APITier("BASIC", monthly_limit=500, cost_usd=0.0),
+    "pro": APITier("PRO", monthly_limit=10000, cost_usd=10.0),
+}
+
+RAPIDAPI_GOOGLE_MAPS_ENDPOINTS = {
+    "textsearch": "/maps/api/place/textsearch/json",  # GET - Place search (VERIFIED WORKING)
+}
+
+RAPIDAPI_GOOGLE_MAPS_RATE_LIMITS = {
+    "basic": 1,
+    "pro": 5,
+}
+
+# =============================================================================
+# RapidAPI Amazon Data - VERIFIED WORKING
+# Host: real-time-amazon-data.p.rapidapi.com
+# =============================================================================
+RAPIDAPI_AMAZON_HOST = "real-time-amazon-data.p.rapidapi.com"
+
+RAPIDAPI_AMAZON_TIERS = {
+    "basic": APITier("BASIC", monthly_limit=100, cost_usd=0.0),
+    "pro": APITier("PRO", monthly_limit=10000, cost_usd=20.0),
+}
+
+RAPIDAPI_AMAZON_ENDPOINTS = {
+    "search": "/search",                      # GET - Product search (VERIFIED WORKING)
+}
+
+RAPIDAPI_AMAZON_RATE_LIMITS = {
+    "basic": 1,
+    "pro": 5,
 }
 
 RAPIDAPI_INSTAGRAM_RATE_LIMITS = {
@@ -218,33 +283,51 @@ RAPIDAPI_YOUTUBE_RATE_LIMITS = {
 # ALL PROVIDERS CONFIGURATION
 # =============================================================================
 ALL_API_PROVIDERS = {
+    # TikTok APIs
     APIProvider.RAPIDAPI_TIKTOK: {
         "host": "tiktok-api6.p.rapidapi.com",
-        "display_name": "RapidAPI TikTok",
+        "display_name": "RapidAPI TikTok (API6)",
         "tiers": RAPIDAPI_TIKTOK_TIERS,
         "endpoints": RAPIDAPI_TIKTOK_ENDPOINTS,
         "rate_limits": RAPIDAPI_TIKTOK_RATE_LIMITS,
     },
-    APIProvider.RAPIDAPI_TWITTER: {
-        "host": RAPIDAPI_TWITTER_HOST,
-        "display_name": "RapidAPI Twitter/X",
-        "tiers": RAPIDAPI_TWITTER_TIERS,
-        "endpoints": RAPIDAPI_TWITTER_ENDPOINTS,
-        "rate_limits": RAPIDAPI_TWITTER_RATE_LIMITS,
+    APIProvider.RAPIDAPI_TIKTOK_SCRAPER7: {
+        "host": RAPIDAPI_TIKTOK_SCRAPER7_HOST,
+        "display_name": "TikTok Scraper7 (PRIMARY ✓)",
+        "tiers": RAPIDAPI_TIKTOK_SCRAPER7_TIERS,
+        "endpoints": RAPIDAPI_TIKTOK_SCRAPER7_ENDPOINTS,
+        "rate_limits": RAPIDAPI_TIKTOK_SCRAPER7_RATE_LIMITS,
     },
+    # Instagram APIs
     APIProvider.RAPIDAPI_INSTAGRAM: {
         "host": RAPIDAPI_INSTAGRAM_HOST,
-        "display_name": "RapidAPI Instagram",
+        "display_name": "Instagram Looter2 (PRIMARY ✓)",
         "tiers": RAPIDAPI_INSTAGRAM_TIERS,
         "endpoints": RAPIDAPI_INSTAGRAM_ENDPOINTS,
         "rate_limits": RAPIDAPI_INSTAGRAM_RATE_LIMITS,
     },
+    APIProvider.RAPIDAPI_INSTAGRAM_STATS: {
+        "host": RAPIDAPI_INSTAGRAM_STATS_HOST,
+        "display_name": "Instagram Statistics",
+        "tiers": RAPIDAPI_INSTAGRAM_TIERS,
+        "endpoints": RAPIDAPI_INSTAGRAM_STATS_ENDPOINTS,
+        "rate_limits": RAPIDAPI_INSTAGRAM_RATE_LIMITS,
+    },
+    # YouTube API
     APIProvider.RAPIDAPI_YOUTUBE: {
         "host": RAPIDAPI_YOUTUBE_HOST,
-        "display_name": "RapidAPI YouTube",
+        "display_name": "YT-API (PRIMARY ✓)",
         "tiers": RAPIDAPI_YOUTUBE_TIERS,
         "endpoints": RAPIDAPI_YOUTUBE_ENDPOINTS,
         "rate_limits": RAPIDAPI_YOUTUBE_RATE_LIMITS,
+    },
+    # Twitter API
+    APIProvider.RAPIDAPI_TWITTER: {
+        "host": RAPIDAPI_TWITTER_HOST,
+        "display_name": "Twitter/X API",
+        "tiers": RAPIDAPI_TWITTER_TIERS,
+        "endpoints": RAPIDAPI_TWITTER_ENDPOINTS,
+        "rate_limits": RAPIDAPI_TWITTER_RATE_LIMITS,
     },
 }
 
@@ -381,18 +464,7 @@ class APIUsageTracker:
                 current_usage=0
             )
         
-        # Initialize YouTube budget
-        if APIProvider.RAPIDAPI_YOUTUBE.value not in self._budgets:
-            tier = RAPIDAPI_YOUTUBE_TIERS.get("basic")
-            self._budgets[APIProvider.RAPIDAPI_YOUTUBE.value] = MonthlyBudget(
-                provider=APIProvider.RAPIDAPI_YOUTUBE.value,
-                tier_name=tier.name,
-                monthly_limit=tier.monthly_limit,
-                monthly_cost=tier.cost_usd,
-                period_start=period_start,
-                period_end=period_end,
-                current_usage=0
-            )
+        # RapidAPI YouTube removed - using Google YouTube API directly
         
         self._save_data()
     

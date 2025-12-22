@@ -604,6 +604,10 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
                 "privacy_status": "public",
             }
         
+        # Use Google Drive for all platforms (Supabase project not configured)
+        # TODO: Switch to Supabase when project is properly configured
+        use_google_drive = True
+        
         result = await publish_service.full_publish_flow(
             file_path=file_path,
             account_id=request.blotato_account_id,
@@ -611,7 +615,7 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
             text=request.text,
             target_config=target_config,
             cleanup_storage=request.cleanup_gdrive,
-            use_supabase=False,  # Use Google Drive with API key (bypasses virus scan)
+            use_supabase=False,  # Use Google Drive for all platforms
         )
         
         # Record the post if successful

@@ -23,6 +23,32 @@ async_session_maker: Optional[async_sessionmaker] = None
 supabase_client: Optional[Client] = None
 
 
+def create_thread_local_session_maker():
+    """
+    Create a fresh async session maker for use in background threads.
+    Each thread running asyncio needs its own engine to avoid event loop conflicts.
+    """
+    db_url = settings.database_url
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    
+    thread_engine = create_async_engine(
+        db_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=2,  # Smaller pool for background tasks
+        max_overflow=5
+    )
+    
+    return async_sessionmaker(
+        thread_engine,
+        class_=AsyncSession,
+        expire_on_commit=False
+    )
+
+
 async def init_db():
     """Initialize database connections"""
     global engine, async_session_maker, supabase_client
@@ -38,7 +64,7 @@ async def init_db():
         
         engine = create_async_engine(
             db_url,
-            echo=settings.debug,
+            echo=False,  # Set to True only for debugging SQL queries
             pool_pre_ping=True,
             pool_size=10,
             max_overflow=20

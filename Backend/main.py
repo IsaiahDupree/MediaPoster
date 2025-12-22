@@ -4,7 +4,9 @@ Main application entry point
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+import os
 from contextlib import asynccontextmanager
 from loguru import logger
 import sys
@@ -28,6 +30,24 @@ logger.add(
 )
 
 
+def run_startup_checks():
+    """Run startup checks to ensure required services are running"""
+    try:
+        from scripts.startup_checks import ensure_postgres_running, parse_database_url
+        host, port = parse_database_url()
+        logger.info(f"🔍 Checking PostgreSQL at {host}:{port}...")
+        
+        if ensure_postgres_running(max_retries=3, wait_seconds=3):
+            logger.success("✓ PostgreSQL is running")
+            return True
+        else:
+            logger.error("❌ PostgreSQL could not be started")
+            return False
+    except Exception as e:
+        logger.warning(f"Startup checks skipped: {e}")
+        return True  # Continue anyway, let DB connection handle it
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events with error recovery"""
@@ -35,6 +55,9 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MediaPoster Backend")
     logger.info(f"Environment: {settings.app_env}")
     logger.info(f"Debug mode: {settings.debug}")
+    
+    # Run startup checks (ensure DB is running)
+    run_startup_checks()
     
     # Initialize database with retry logic
     max_db_retries = 5
@@ -97,6 +120,39 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Mount static files for thumbnails
+THUMBNAIL_DIR = "/tmp/mediaposter/thumbnails"
+if os.path.exists(THUMBNAIL_DIR):
+    app.mount("/thumbnails", StaticFiles(directory=THUMBNAIL_DIR), name="thumbnails")
+
+
+# Serve video files by ID
+@app.get("/api/media/video/{video_id}")
+async def serve_video(video_id: str):
+    """Serve video file by video ID from database"""
+    from sqlalchemy import create_engine, text
+    import mimetypes
+    
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+    engine = create_engine(DATABASE_URL)
+    
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT source_uri FROM videos WHERE id = :id"), {"id": video_id}).fetchone()
+        
+    if not result or not result[0]:
+        return JSONResponse(status_code=404, content={"error": "Video not found"})
+    
+    file_path = result[0]
+    if not os.path.exists(file_path):
+        return JSONResponse(status_code=404, content={"error": "Video file not found on disk"})
+    
+    mime_type, _ = mimetypes.guess_type(file_path)
+    return FileResponse(
+        file_path,
+        media_type=mime_type or "video/mp4",
+        filename=os.path.basename(file_path)
+    )
 
 
 # Health check
@@ -281,6 +337,30 @@ app.include_router(viral_analysis.router, prefix="/api", tags=["Viral Analysis"]
 from api.endpoints import social_analytics
 app.include_router(social_analytics.router, prefix="/api/social-analytics", tags=["Social Analytics"])
 
+# Platform Data Orchestrator (Unified Failover System)
+from api.endpoints import data_orchestrator
+app.include_router(data_orchestrator.router, prefix="/api/orchestrator", tags=["Data Orchestrator"])
+
+# Data Hydration (Centralized Data for All Pages)
+from api.endpoints import data_hydration
+app.include_router(data_hydration.router, prefix="/api/hydration", tags=["Data Hydration"])
+
+# Content Calendar & Schedule API
+from api.endpoints import schedule
+app.include_router(schedule.router, prefix="/api/schedule", tags=["Content Schedule"])
+
+# Post Scheduler (Background Worker)
+from api.endpoints import post_scheduler_api
+app.include_router(post_scheduler_api.router, prefix="/api/scheduler", tags=["Post Scheduler"])
+
+# Database Health Checks (Docker/Supabase)
+from api.endpoints import db_health
+app.include_router(db_health.router, prefix="/api/db-health", tags=["Database Health"])
+
+# Analyzed Content (for scheduling modal)
+from api.endpoints import analyzed_content
+app.include_router(analyzed_content.router, prefix="/api/analyzed-content", tags=["Analyzed Content"])
+
 # Social Media Accounts (RapidAPI Live Fetch)
 from api.endpoints import social_accounts
 app.include_router(social_accounts.router, prefix="/api/social-accounts", tags=["Social Accounts"])
@@ -328,6 +408,14 @@ app.include_router(goal_recommendations.router, tags=["Goal Recommendations"])
 # AI Coaching (Phase 3)
 from api.endpoints import coaching
 app.include_router(coaching.router, tags=["Coaching"])
+
+# Narrative Builder (AI Content Strategy)
+from api.endpoints import narrative_builder
+app.include_router(narrative_builder.router, tags=["Narrative Builder"])
+
+# Experiments (Growth Lab)
+from api.endpoints import experiments
+app.include_router(experiments.router, tags=["Experiments"])
 
 # Optimal Posting Times (Phase 4)
 from api.endpoints import optimal_posting_times
@@ -398,8 +486,9 @@ from api import comment_automation
 app.include_router(comment_automation.router, tags=["Comment Automation"])
 
 # Device Import (iOS/Android media import with duplicate detection)
-from routers import import_router
-app.include_router(import_router.router, tags=["Device Import"])
+# TODO: import_router module not found - commented out for now
+# from routers import import_router
+# app.include_router(import_router.router, tags=["Device Import"])
 
 
 # Error handlers

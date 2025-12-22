@@ -75,8 +75,8 @@ class RapidAPISocialFetcher:
                 "base_url": "https://youtube-v31.p.rapidapi.com",
             },
             Platform.INSTAGRAM: {
-                "host": "instagram-scraper-api2.p.rapidapi.com",
-                "base_url": "https://instagram-scraper-api2.p.rapidapi.com",
+                "host": "instagram-looter2.p.rapidapi.com",
+                "base_url": "https://instagram-looter2.p.rapidapi.com",
             },
             Platform.TIKTOK: {
                 "host": "tiktok-scraper7.p.rapidapi.com",
@@ -178,7 +178,7 @@ class RapidAPISocialFetcher:
                             
                             return AccountAnalytics(
                                 platform=Platform.YOUTUBE,
-                                username=snippet.get("customUrl", snippet.get("title", channel_id)),
+                                username=snippet.get("customUrl", snippet.get("title", channel_id_or_username)),
                                 followers_count=int(stats.get("subscriberCount", 0)),
                                 posts_count=int(stats.get("videoCount", 0)),
                                 total_views=int(stats.get("viewCount", 0)),
@@ -202,7 +202,7 @@ class RapidAPISocialFetcher:
                     headers=headers,
                     params={
                         "part": "snippet,statistics",
-                        "id": channel_id
+                        "id": channel_id_or_username
                     }
                 )
                 
@@ -215,7 +215,7 @@ class RapidAPISocialFetcher:
                         
                         return AccountAnalytics(
                             platform=Platform.YOUTUBE,
-                            username=snippet.get("customUrl", channel_id),
+                            username=snippet.get("customUrl", channel_id_or_username),
                             followers_count=int(stats.get("subscriberCount", 0)),
                             posts_count=int(stats.get("videoCount", 0)),
                             total_views=int(stats.get("viewCount", 0)),
@@ -228,36 +228,43 @@ class RapidAPISocialFetcher:
         except Exception as e:
             logger.error(f"Error fetching YouTube analytics: {e}")
         
-        return AccountAnalytics(platform=Platform.YOUTUBE, username=channel_id)
+        return AccountAnalytics(platform=Platform.YOUTUBE, username=channel_id_or_username)
     
     async def fetch_instagram_analytics(self, username: str) -> AccountAnalytics:
-        """Fetch Instagram profile analytics"""
+        """Fetch Instagram profile analytics using instagram-looter2 API"""
         try:
             config = self.api_configs[Platform.INSTAGRAM]
             headers = self._get_headers(Platform.INSTAGRAM)
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # Use /profile endpoint from instagram-looter2
                 response = await client.get(
-                    f"{config['base_url']}/v1/info",
+                    f"{config['base_url']}/profile",
                     headers=headers,
-                    params={"username_or_id_or_url": username}
+                    params={"username": username}
                 )
                 
                 if response.status_code == 200:
-                    data = response.json().get("data", {})
+                    data = response.json()
+                    user = data.get("user", data)  # Handle both response formats
+                    
+                    # Get follower/following counts
+                    followers = user.get("edge_followed_by", {}).get("count", 0) or user.get("follower_count", 0)
+                    following = user.get("edge_follow", {}).get("count", 0) or user.get("following_count", 0)
+                    posts = user.get("edge_owner_to_timeline_media", {}).get("count", 0) or user.get("media_count", 0)
                     
                     return AccountAnalytics(
                         platform=Platform.INSTAGRAM,
-                        username=data.get("username", username),
-                        followers_count=data.get("follower_count", 0),
-                        following_count=data.get("following_count", 0),
-                        posts_count=data.get("media_count", 0),
-                        is_verified=data.get("is_verified", False),
-                        bio=data.get("biography", ""),
-                        profile_pic_url=data.get("profile_pic_url_hd", ""),
+                        username=user.get("username", username),
+                        followers_count=followers,
+                        following_count=following,
+                        posts_count=posts,
+                        is_verified=user.get("is_verified", False),
+                        bio=user.get("biography", ""),
+                        profile_pic_url=user.get("profile_pic_url_hd", user.get("profile_pic_url", "")),
                     )
                 
-                logger.warning(f"Instagram API returned {response.status_code}")
+                logger.warning(f"Instagram API returned {response.status_code}: {response.text[:200]}")
                 
         except Exception as e:
             logger.error(f"Error fetching Instagram analytics: {e}")

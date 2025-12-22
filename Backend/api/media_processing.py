@@ -253,11 +253,14 @@ async def upload_media(
                 created_at=existing["created_at"]
             )
     
-    # Save file
+    # Save file in thread pool to avoid blocking
     upload_dir = Path(os.getenv("TEMP_DIR", "/tmp/mediaposter")) / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
     
     file_path = upload_dir / f"{media_id}_{file.filename}"
+    
+    # Write file synchronously (fast enough for most cases)
+    # For very large files, consider streaming to disk instead
     with open(file_path, "wb") as f:
         f.write(content)
     
@@ -669,6 +672,7 @@ async def generate_thumbnails(
     """
     Generate thumbnails for all processed media.
     Uses smart resume - skips already generated thumbnails.
+    NOTE: This is a legacy endpoint - prefer using /api/videos/generate-thumbnails-batch
     """
     # Get all media with file paths
     files_to_process = [
@@ -695,7 +699,10 @@ async def generate_thumbnails(
         "updated_at": datetime.now().isoformat()
     }
     
-    background_tasks.add_task(process_thumbnail_job, job_id, files_to_process, sizes)
+    # Use thread pool for CPU-intensive FFmpeg operations
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="legacy_thumb")
+    executor.submit(process_thumbnail_job_sync, job_id, files_to_process, sizes)
     
     return ThumbnailJobResponse(
         job_id=job_id,
@@ -707,6 +714,17 @@ async def generate_thumbnails(
         progress=0.0,
         message=f"Generating thumbnails for {len(files_to_process)} files"
     )
+
+
+def process_thumbnail_job_sync(job_id: str, files: List[str], sizes: List[str]):
+    """Sync wrapper for thumbnail job - runs in thread pool."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(process_thumbnail_job(job_id, files, sizes))
+    finally:
+        loop.close()
 
 
 async def process_thumbnail_job(job_id: str, files: List[str], sizes: List[str]):

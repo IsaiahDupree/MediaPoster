@@ -100,6 +100,7 @@ def generate_image_thumbnail(
 ) -> Optional[str]:
     """
     Generate a resized thumbnail from an image file.
+    Supports HEIC, JPEG, PNG, and other formats.
     
     Args:
         image_path: Path to the image file
@@ -122,15 +123,45 @@ def generate_image_thumbnail(
     if output.exists():
         return str(output)
     
+    ext = image_path.suffix.lower()
+    
     try:
-        # Use ffmpeg for image conversion with proper color handling
-        # -pix_fmt yuvj420p ensures proper color space for HEIC/JPEG
+        # For HEIC files, use macOS sips command (best color support)
+        if ext in {'.heic', '.heif'}:
+            return _generate_heic_thumbnail(str(image_path), str(output), width)
+        
+        # For other images, try PIL first (better quality), then ffmpeg
+        try:
+            from PIL import Image
+            with Image.open(str(image_path)) as img:
+                # Convert to RGB if needed (handles RGBA, P, etc.)
+                if img.mode in ('RGBA', 'P', 'LA'):
+                    img = img.convert('RGB')
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Calculate new height maintaining aspect ratio
+                ratio = width / img.width
+                new_height = int(img.height * ratio)
+                
+                # Resize with high quality
+                img_resized = img.resize((width, new_height), Image.Resampling.LANCZOS)
+                img_resized.save(str(output), 'JPEG', quality=90)
+                
+                if output.exists():
+                    return str(output)
+        except ImportError:
+            pass  # PIL not available, fall back to ffmpeg
+        except Exception as pil_error:
+            print(f"PIL error, falling back to ffmpeg: {pil_error}")
+        
+        # Fallback: Use ffmpeg for image conversion
         cmd = [
             'ffmpeg',
             '-y',
             '-i', str(image_path),
             '-vf', f'scale={width}:-1',
-            '-pix_fmt', 'yuvj420p',  # Preserve color information
+            '-pix_fmt', 'yuvj420p',
             '-q:v', '2',
             str(output)
         ]
@@ -148,6 +179,64 @@ def generate_image_thumbnail(
         
     except Exception as e:
         print(f"Error generating image thumbnail: {e}")
+        return None
+
+
+def _generate_heic_thumbnail(image_path: str, output_path: str, width: int = 400) -> Optional[str]:
+    """
+    Generate thumbnail from HEIC file using macOS sips command.
+    Preserves color information properly.
+    """
+    try:
+        # First convert HEIC to JPEG using sips (macOS built-in)
+        temp_jpeg = output_path.replace('.jpg', '_temp.jpg')
+        
+        # sips can convert HEIC to JPEG with proper color handling
+        convert_cmd = [
+            'sips',
+            '-s', 'format', 'jpeg',
+            '-s', 'formatOptions', '90',  # Quality
+            '--resampleWidth', str(width),
+            str(image_path),
+            '--out', temp_jpeg
+        ]
+        
+        result = subprocess.run(
+            convert_cmd,
+            capture_output=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0 and Path(temp_jpeg).exists():
+            # Rename to final output
+            Path(temp_jpeg).rename(output_path)
+            return output_path
+        
+        # Fallback: try pillow-heif if available
+        try:
+            from pillow_heif import register_heif_opener
+            from PIL import Image
+            
+            register_heif_opener()
+            
+            with Image.open(image_path) as img:
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                ratio = width / img.width
+                new_height = int(img.height * ratio)
+                img_resized = img.resize((width, new_height), Image.Resampling.LANCZOS)
+                img_resized.save(output_path, 'JPEG', quality=90)
+                
+                if Path(output_path).exists():
+                    return output_path
+        except ImportError:
+            print("pillow-heif not available, sips failed")
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error converting HEIC: {e}")
         return None
 
 

@@ -27,7 +27,7 @@ def initialize_adapters():
     
     try:
         # Import Blotato adapter
-        from .blotato import BlotatoAdapter
+        from .blotato_adapter import BlotatoAdapter
         blotato_adapter = BlotatoAdapter()
         registry.register(blotato_adapter)
         adapters_registered += 1

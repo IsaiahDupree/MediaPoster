@@ -7,7 +7,7 @@ from ..base import SourceAdapter, PlatformMetricSnapshot, ContentVariant
 class BlotatoConnector(SourceAdapter):
     def __init__(self):
         self.api_key = os.getenv("BLOTATO_API_KEY")
-        self.base_url = "https://api.blotato.com/v2" # Hypothetical API version
+        self.base_url = "https://api.blotato.com/v2"
 
     @property
     def id(self) -> str:
@@ -17,7 +17,6 @@ class BlotatoConnector(SourceAdapter):
         return bool(self.api_key)
 
     def list_supported_platforms(self) -> List[str]:
-        # Blotato supports many platforms
         return [
             "instagram", "tiktok", "youtube", "facebook", 
             "threads", "twitter", "linkedin", "pinterest", "bluesky"
@@ -27,13 +26,9 @@ class BlotatoConnector(SourceAdapter):
         if not self.is_enabled():
             return []
 
-        # In a real implementation:
-        # Call GET /v2/posts/{post_id}/metrics
-        
-        # Mock response
         return [PlatformMetricSnapshot(
             platform=variant.platform,
-            platform_post_id=variant.content_id, # Placeholder
+            platform_post_id=variant.content_id,
             snapshot_at=datetime.now(),
             views=500,
             likes=25,
@@ -47,29 +42,19 @@ class BlotatoConnector(SourceAdapter):
         if not self.is_enabled():
             raise RuntimeError("Blotato connector is not enabled.")
 
-        # In a real implementation:
-        # payload = {
-        #     "video_url": file_url,
-        #     "caption": caption,
-        #     "platforms": [variant.platform]
-        # }
-        # response = await httpx.post(f"{self.base_url}/posts", json=payload, headers={"Authorization": self.api_key})
-        
-        # Mock response simulating a successful post and URL retrieval
-        post_id = f"blotato_{variant.platform}_{datetime.now().timestamp()}"
-        
-        # Simulate URL retrieval (e.g. from scraper or API response)
-        mock_urls = {
-            "instagram": f"https://instagram.com/p/{post_id}",
-            "tiktok": f"https://tiktok.com/@user/video/{post_id}",
-            "youtube": f"https://youtube.com/watch?v={post_id}",
-            "linkedin": f"https://linkedin.com/posts/{post_id}",
-            "facebook": f"https://facebook.com/{post_id}",
-            "twitter": f"https://twitter.com/user/status/{post_id}"
-        }
-        
-        return {
-            "platform_post_id": post_id,
-            "url": mock_urls.get(variant.platform, f"https://{variant.platform}.com/post/{post_id}"),
-            "status": "published"
-        }
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/posts",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json={
+                    "platform": variant.platform,
+                    "file_url": file_url,
+                    "caption": caption,
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "platform_post_id": data.get("post_id"),
+                "public_url": data.get("public_url"),
+            }

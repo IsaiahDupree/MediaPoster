@@ -13,6 +13,9 @@ from loguru import logger
 class WhisperTranscriber:
     """Handle video transcription using Whisper API"""
     
+    # Image extensions that should never be processed for audio
+    IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic', '.heif', '.tiff', '.svg'}
+    
     def __init__(self, api_key: str = None):
         """
         Initialize transcriber
@@ -25,6 +28,39 @@ class WhisperTranscriber:
             raise ValueError("OPENAI_API_KEY not found in environment")
         
         self.client = OpenAI(api_key=self.api_key)
+    
+    def has_audio_stream(self, file_path: str) -> bool:
+        """
+        Check if a file has an audio stream using FFprobe
+        
+        Args:
+            file_path: Path to media file
+            
+        Returns:
+            True if file has audio stream, False otherwise
+        """
+        # Quick check: images never have audio
+        ext = Path(file_path).suffix.lower()
+        if ext in self.IMAGE_EXTENSIONS:
+            logger.info(f"Skipping audio check for image file: {ext}")
+            return False
+        
+        try:
+            cmd = [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "a",
+                "-show_entries", "stream=codec_type",
+                "-of", "csv=p=0",
+                file_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            has_audio = "audio" in result.stdout.lower()
+            logger.info(f"Audio stream check for {Path(file_path).name}: {has_audio}")
+            return has_audio
+        except Exception as e:
+            logger.warning(f"FFprobe check failed: {e}, assuming no audio")
+            return False
     
     def extract_audio(self, video_path: str) -> str:
         """
@@ -116,6 +152,17 @@ class WhisperTranscriber:
             dict with transcript and metadata
         """
         logger.info(f"Starting transcription for {Path(video_path).name}")
+        
+        # Check if file has audio before attempting extraction
+        if not self.has_audio_stream(video_path):
+            logger.warning(f"No audio stream found in {Path(video_path).name}, returning empty transcript")
+            return {
+                "text": "",
+                "language": None,
+                "duration": None,
+                "segments": [],
+                "no_audio": True
+            }
         
         # Extract audio
         audio_path = self.extract_audio(video_path)

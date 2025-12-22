@@ -19,11 +19,47 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.connection import get_db
 from database.models import Video, VideoAnalysis
+from loguru import logger
 
 router = APIRouter(prefix="/api/media-db", tags=["Media Processing (Database)"])
 
 # Default user ID for batch processing
 DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+# Global analysis job tracker
+_analysis_jobs = {}  # job_id -> {status, total, completed, current_video, videos: {id: {status, step, filename}}}
+
+def get_analysis_status():
+    """Get current analysis status."""
+    return _analysis_jobs
+
+def update_video_step(job_id: str, video_id: str, step: str, filename: str = None):
+    """Update individual video analysis step."""
+    if job_id and job_id in _analysis_jobs:
+        if video_id not in _analysis_jobs[job_id]["videos"]:
+            _analysis_jobs[job_id]["videos"][video_id] = {}
+        _analysis_jobs[job_id]["videos"][video_id]["step"] = step
+        _analysis_jobs[job_id]["videos"][video_id]["updated_at"] = datetime.now().isoformat()
+        if filename:
+            _analysis_jobs[job_id]["videos"][video_id]["filename"] = filename
+        _analysis_jobs[job_id]["current_video"] = video_id
+        _analysis_jobs[job_id]["current_step"] = step
+
+def update_analysis_status(job_id: str, **kwargs):
+    """Update analysis job status."""
+    if job_id not in _analysis_jobs:
+        _analysis_jobs[job_id] = {
+            "status": "running",
+            "total": 0,
+            "completed": 0,
+            "failed": 0,
+            "current_video": None,
+            "current_step": None,
+            "videos": {},
+            "started_at": datetime.now().isoformat()
+        }
+    _analysis_jobs[job_id].update(kwargs)
+    _analysis_jobs[job_id]["updated_at"] = datetime.now().isoformat()
 
 
 # =============================================================================
@@ -317,10 +353,10 @@ async def get_media_detail(
     )
 
 
-@router.get("/stats", response_model=IngestStatsResponse)
+@router.get("/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)):
     """
-    Get ingestion statistics.
+    Get ingestion statistics including analyzing count.
     """
     from sqlalchemy import func
     
@@ -344,13 +380,60 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     duration_result = await db.execute(duration_query)
     avg_duration = duration_result.scalar()
     
-    return IngestStatsResponse(
-        total_videos=total_videos,
-        analyzed_count=analyzed_count,
-        pending_analysis=total_videos - analyzed_count,
-        total_size_bytes=total_size,
-        avg_duration_sec=float(avg_duration) if avg_duration else None
-    )
+    # Get currently analyzing count from job tracker
+    analyzing_count = 0
+    for job in _analysis_jobs.values():
+        if job.get("status") == "running":
+            analyzing_count += job.get("total", 0) - job.get("completed", 0) - job.get("failed", 0)
+    
+    return {
+        "total_videos": total_videos,
+        "analyzed_count": analyzed_count,
+        "analyzing_count": analyzing_count,
+        "pending_analysis": total_videos - analyzed_count,
+        "total_size_bytes": total_size,
+        "avg_duration_sec": float(avg_duration) if avg_duration else None
+    }
+
+
+@router.get("/analysis-status")
+async def get_analysis_job_status():
+    """
+    Get detailed status of all analysis jobs including individual video progress.
+    """
+    jobs = []
+    for job_id, job in _analysis_jobs.items():
+        # Get recent video statuses (last 10)
+        videos_dict = job.get("videos", {})
+        recent_videos = []
+        for vid, info in list(videos_dict.items())[-10:]:
+            if isinstance(info, dict):
+                recent_videos.append({
+                    "id": vid,
+                    "step": info.get("step", "unknown"),
+                    "filename": info.get("filename", ""),
+                    "status": info.get("status", "processing")
+                })
+            else:
+                recent_videos.append({"id": vid, "status": str(info)})
+        
+        jobs.append({
+            "job_id": job_id,
+            "status": job.get("status"),
+            "total": job.get("total", 0),
+            "completed": job.get("completed", 0),
+            "failed": job.get("failed", 0),
+            "current_video": job.get("current_video"),
+            "current_step": job.get("current_step"),
+            "recent_videos": recent_videos,
+            "started_at": job.get("started_at"),
+            "updated_at": job.get("updated_at")
+        })
+    
+    return {
+        "active_jobs": len([j for j in jobs if j["status"] == "running"]),
+        "jobs": jobs
+    }
 
 
 # =============================================================================
@@ -427,8 +510,12 @@ async def batch_ingest(
     
     job_id = str(uuid.uuid4())
     
-    # Start background processing
-    background_tasks.add_task(process_batch_ingest, job_id, files, request.resume)
+    # Start in thread pool (non-blocking)
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="batch_ingest")
+    executor.submit(process_batch_ingest_sync, job_id, files, request.resume)
+    
+    print(f"Queued {total_files} files for batch ingest in thread pool")
     
     return BatchIngestResponse(
         job_id=job_id,
@@ -436,6 +523,17 @@ async def batch_ingest(
         status="started",
         message=f"Processing {total_files} files from {directory}"
     )
+
+
+def process_batch_ingest_sync(job_id: str, files: List[Path], resume: bool):
+    """Sync wrapper for batch ingest - runs in thread pool."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(process_batch_ingest(job_id, files, resume))
+    finally:
+        loop.close()
 
 
 async def process_batch_ingest(job_id: str, files: List[Path], resume: bool):
@@ -509,10 +607,12 @@ async def process_batch_ingest(job_id: str, files: List[Path], resume: bool):
 async def analyze_media(
     media_id: str,
     background_tasks: BackgroundTasks,
+    force: bool = Query(default=False, description="Force re-analysis even if already analyzed"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Start AI analysis for a media item.
+    Use force=true to re-analyze an already analyzed video.
     """
     try:
         video_uuid = uuid.UUID(media_id)
@@ -532,23 +632,67 @@ async def analyze_media(
     analysis_result = await db.execute(analysis_query)
     existing_analysis = analysis_result.scalar_one_or_none()
     
-    if existing_analysis:
+    if existing_analysis and not force:
         return {"status": "already_analyzed", "media_id": media_id}
     
-    # Start analysis in background
-    background_tasks.add_task(run_analysis, str(video_uuid), video.source_uri)
+    # If forcing re-analysis, delete existing analysis first
+    if existing_analysis and force:
+        await db.delete(existing_analysis)
+        await db.commit()
+        logger.info(f"[Re-Analysis] Deleted existing analysis for {media_id}")
+    
+    # Get the file path - prefer source_uri, fall back to file_path
+    file_path = video.source_uri or video.file_path
+    if not file_path:
+        raise HTTPException(status_code=400, detail="No file path available for this media")
+    
+    logger.info(f"[Analysis] Starting analysis for {media_id} at path: {file_path}")
+    
+    # Start analysis in thread pool (non-blocking)
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="single_analysis")
+    executor.submit(run_analysis_sync, str(video_uuid), file_path)
     
     return {"status": "analyzing", "media_id": media_id}
 
 
-async def run_analysis(video_id: str, file_path: str):
-    """Run AI analysis on a video using real VideoAnalyzer service."""
-    from database.connection import async_session_maker
+def run_analysis_sync(video_id: str, file_path: str, job_id: str = None):
+    """
+    Synchronous wrapper for analysis - runs in thread pool to avoid blocking event loop.
+    """
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_run_analysis_async(video_id, file_path, job_id))
+    finally:
+        loop.close()
+
+
+async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None):
+    """Run comprehensive AI analysis on a video using VideoAnalyzer + image analysis."""
+    from database.connection import create_thread_local_session_maker
     from config import settings
     import traceback
+    import httpx
+    from loguru import logger
     
-    if not async_session_maker:
-        print(f"Error: async_session_maker not initialized for {video_id}")
+    # Update job tracker
+    if job_id:
+        if job_id in _analysis_jobs:
+            _analysis_jobs[job_id]["videos"][video_id] = "starting"
+            _analysis_jobs[job_id]["current_video"] = video_id
+    
+    logger.info(f"[Analysis] Starting: {video_id}")
+    
+    # Create thread-local session maker to avoid event loop conflicts
+    try:
+        thread_session_maker = create_thread_local_session_maker()
+    except Exception as e:
+        logger.error(f"[Analysis] Failed to create database session: {e}")
+        if job_id and job_id in _analysis_jobs:
+            _analysis_jobs[job_id]["videos"][video_id] = "failed:no_db"
+            _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
         return
     
     # Expand path if needed
@@ -565,34 +709,131 @@ async def run_analysis(video_id: str, file_path: str):
         actual_path = file_path
     
     if not actual_path:
-        print(f"Error: File not found for {video_id}: {file_path} (container: {container_path})")
+        logger.warning(f"[Analysis] File not found for {video_id}: {file_path}")
+        if job_id and job_id in _analysis_jobs:
+            _analysis_jobs[job_id]["videos"][video_id] = "failed:file_not_found"
+            _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
         return
     
     file_path = actual_path
+    filename = Path(file_path).name
     
-    async with async_session_maker() as db:
+    # Update job tracker with initial status
+    if job_id and job_id in _analysis_jobs:
+        _analysis_jobs[job_id]["videos"][video_id] = {"status": "processing", "filename": filename}
+    update_video_step(job_id, video_id, "initializing", filename)
+    
+    async with thread_session_maker() as db:
         try:
             video_uuid = uuid.UUID(video_id)
             
-            # Try using real VideoAnalyzer if OpenAI key is available
-            if settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
+            # Determine if this is an image file (skip video analysis for images)
+            ext = Path(file_path).suffix.lower()
+            is_image = ext in {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp', '.gif', '.bmp', '.tiff'}
+            
+            if is_image:
+                update_video_step(job_id, video_id, "image_fallback", filename)
+                logger.info(f"[Analysis] Skipping video analysis for image: {video_id} ({ext})")
+                # Go straight to basic analysis for images
+            elif settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
                 try:
                     from services.video_analyzer import VideoAnalyzer
                     
+                    update_video_step(job_id, video_id, "1/4 Transcribing", filename)
+                    
                     analyzer = VideoAnalyzer(api_key=settings.openai_api_key)
+                    
+                    # Custom callback to update step progress
+                    def on_step(step_name):
+                        update_video_step(job_id, video_id, step_name, filename)
+                    
                     result = await analyzer.analyze_video(
                         video_id=video_uuid,
                         video_path=file_path,
                         db_session=db,
-                        metadata={"video_id": str(video_uuid)}
+                        metadata={"video_id": str(video_uuid)},
+                        on_step_callback=on_step
                     )
-                    print(f"Analysis complete for {video_id}: score={result.get('pre_social_score')}")
+                    logger.info(f"[Analysis] Complete for {video_id}: score={result.get('pre_social_score')}")
+                    
+                    # Always run deep image analysis - use thumbnail or extract frame
+                    update_video_step(job_id, video_id, "5/5 Deep Analysis", filename)
+                    try:
+                        async with httpx.AsyncClient(timeout=120.0) as client:
+                            thumb_url = f"http://localhost:5555/api/media-db/thumbnail/{video_id}?size=large"
+                            
+                            # Try to get thumbnail, generate if needed
+                            thumb_check = await client.head(thumb_url)
+                            if thumb_check.status_code != 200:
+                                # Generate thumbnail on-the-fly
+                                logger.info(f"[Deep Analysis] Generating thumbnail for {video_id}")
+                                try:
+                                    from services.thumbnail_generator import ThumbnailGenerator
+                                    thumb_gen = ThumbnailGenerator()
+                                    frames = thumb_gen.extract_frames(file_path, num_frames=1)
+                                    if frames:
+                                        # Save frame as temp thumbnail
+                                        import shutil
+                                        temp_thumb = f"/tmp/mediaposter/thumbnails/{video_id}_temp.jpg"
+                                        os.makedirs(os.path.dirname(temp_thumb), exist_ok=True)
+                                        shutil.copy(frames[0], temp_thumb)
+                                        # Update video with thumbnail path
+                                        await db.execute(
+                                            update(Video)
+                                            .where(Video.id == video_uuid)
+                                            .values(thumbnail_path=temp_thumb)
+                                        )
+                                        await db.commit()
+                                        logger.success(f"[Deep Analysis] Thumbnail generated for {video_id}")
+                                except Exception as thumb_err:
+                                    logger.warning(f"[Deep Analysis] Could not generate thumbnail: {thumb_err}")
+                            
+                            # Now run deep analysis
+                            deep_res = await client.post(
+                                "http://localhost:5555/api/image-analysis/analyze",
+                                json={
+                                    "image_url": thumb_url,
+                                    "custom_fields": ["scene_analysis", "composition", "mood", "colors"],
+                                    "focus_areas": ["content_quality", "engagement_potential"],
+                                    "depth": "comprehensive"
+                                },
+                                timeout=90.0
+                            )
+                            if deep_res.status_code == 200:
+                                deep_data = deep_res.json()
+                                # Update analysis with deep image data
+                                await db.execute(
+                                    update(VideoAnalysis)
+                                    .where(VideoAnalysis.video_id == video_uuid)
+                                    .values(visual_analysis={
+                                        **(result.get('visual_analysis') or {}),
+                                        "deep_analysis": deep_data
+                                    })
+                                )
+                                await db.commit()
+                                logger.success(f"[Deep Analysis] Complete for {video_id}")
+                            else:
+                                logger.warning(f"[Deep Analysis] Failed for {video_id}: status {deep_res.status_code}")
+                    except Exception as e:
+                        logger.warning(f"[Deep Analysis] Error for {video_id}: {e}")
+                    
+                    logger.success(f"[Analysis] Complete: {video_id}")
+                    
+                    # Update job tracker
+                    if job_id and job_id in _analysis_jobs:
+                        _analysis_jobs[job_id]["videos"][video_id] = "completed"
+                        _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                        # Check if job is complete
+                        job = _analysis_jobs[job_id]
+                        if job["completed"] + job.get("failed", 0) >= job["total"]:
+                            job["status"] = "completed"
+                            logger.success(f"[Batch Analysis] Job {job_id} completed: {job['completed']} succeeded, {job.get('failed', 0)} failed")
                     return
                     
                 except ImportError as e:
-                    print(f"VideoAnalyzer not available: {e}, using fallback")
+                    logger.warning(f"[Analysis] VideoAnalyzer not available: {e}, using fallback")
                 except Exception as e:
-                    print(f"VideoAnalyzer failed: {e}, using fallback")
+                    logger.warning(f"[Analysis] VideoAnalyzer failed for {video_id}: {e}, using fallback")
                     traceback.print_exc()
             
             # Fallback: Create basic analysis without AI
@@ -614,42 +855,129 @@ async def run_analysis(video_id: str, file_path: str):
             
             db.add(analysis)
             await db.commit()
-            print(f"Basic analysis complete for {video_id}")
+            logger.success(f"[Analysis] Complete: {video_id} (basic fallback)")
+            
+            # Update job tracker
+            if job_id and job_id in _analysis_jobs:
+                _analysis_jobs[job_id]["videos"][video_id] = "completed"
+                _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                # Check if job is complete
+                job = _analysis_jobs[job_id]
+                if job["completed"] + job.get("failed", 0) >= job["total"]:
+                    job["status"] = "completed"
+                    logger.success(f"[Batch Analysis] Job {job_id} completed: {job['completed']} succeeded, {job.get('failed', 0)} failed")
             
         except Exception as e:
-            print(f"Error analyzing {video_id}: {e}")
+            logger.error(f"[Analysis] Error for {video_id}: {e}")
             traceback.print_exc()
             await db.rollback()
+            
+            # Update job tracker
+            if job_id and job_id in _analysis_jobs:
+                _analysis_jobs[job_id]["videos"][video_id] = f"failed:{str(e)[:50]}"
+                _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
+                # Check if job is complete (even with failures)
+                job = _analysis_jobs[job_id]
+                if job["completed"] + job.get("failed", 0) >= job["total"]:
+                    job["status"] = "completed"
+                    logger.success(f"[Batch Analysis] Job {job_id} completed: {job['completed']} succeeded, {job.get('failed', 0)} failed")
 
 
 @router.post("/batch/analyze")
 async def batch_analyze(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=10, le=100)
+    limit: int = Query(default=100, le=500)
 ):
     """
-    Analyze all unanalyzed videos.
+    Analyze all unanalyzed videos that have valid source files.
     """
-    from sqlalchemy import and_, not_, exists
+    from sqlalchemy import and_, not_, exists, or_
     
-    # Find videos without analysis
+    # Video file extensions to include
+    VIDEO_EXTENSIONS = ['.mov', '.mp4', '.avi', '.mkv', '.webm', '.m4v', '.wmv', '.flv', '.3gp']
+    
+    # Find videos without analysis that have source_uri set AND are video files
     subquery = select(VideoAnalysis.video_id)
+    
+    # Build extension filter - source_uri must end with a video extension
+    ext_filters = [Video.source_uri.ilike(f'%{ext}') for ext in VIDEO_EXTENSIONS]
+    
     query = select(Video).where(
-        not_(Video.id.in_(subquery))
-    ).limit(limit)
+        and_(
+            not_(Video.id.in_(subquery)),
+            Video.source_uri.isnot(None),
+            Video.source_uri != '',
+            or_(*ext_filters)  # Must be a video file extension
+        )
+    ).order_by(Video.created_at.desc()).limit(limit)  # Match frontend sort order (newest first)
     
     result = await db.execute(query)
     videos = result.scalars().all()
     
+    from loguru import logger
+    logger.info(f"[Batch Analyze] Query returned {len(videos)} unanalyzed videos")
+    
     if not videos:
         return {"status": "no_pending", "count": 0}
     
-    # Start analysis for each
-    for video in videos:
-        background_tasks.add_task(run_analysis, str(video.id), video.source_uri)
+    # Filter to only actual video files with existing files (skip images)
+    VIDEO_EXTENSIONS = {'.mov', '.mp4', '.avi', '.mkv', '.webm', '.m4v', '.wmv', '.flv', '.3gp'}
+    valid_videos = []
+    skipped_images = 0
+    skipped_not_found = 0
     
-    return {"status": "started", "count": len(videos)}
+    for video in videos:
+        file_path = os.path.expanduser(video.source_uri) if video.source_uri else None
+        container_path = map_host_to_container_path(file_path) if file_path else None
+        
+        # Check file extension - skip images
+        ext = Path(file_path).suffix.lower() if file_path else ''
+        if ext not in VIDEO_EXTENSIONS:
+            skipped_images += 1
+            continue
+        
+        if (container_path and os.path.exists(container_path)) or (file_path and os.path.exists(file_path)):
+            valid_videos.append(video)
+        else:
+            skipped_not_found += 1
+            if skipped_not_found <= 3:
+                logger.warning(f"[Batch Analyze] File not found: {file_path}")
+    
+    logger.info(f"[Batch Analyze] Valid: {len(valid_videos)}, Skipped images: {skipped_images}, Not found: {skipped_not_found}")
+    
+    if skipped_images > 0:
+        print(f"Skipped {skipped_images} non-video files")
+    
+    if not valid_videos:
+        return {"status": "no_valid_files", "count": 0, "message": "No videos with valid source files found"}
+    
+    # Create job tracker
+    job_id = str(uuid.uuid4())
+    _analysis_jobs[job_id] = {
+        "status": "running",
+        "total": len(valid_videos),
+        "completed": 0,
+        "failed": 0,
+        "current_video": None,
+        "videos": {},
+        "started_at": datetime.now().isoformat()
+    }
+    
+    from loguru import logger
+    logger.info(f"[Batch Analysis] Job {job_id}: Starting analysis of {len(valid_videos)} videos")
+    
+    # Start analysis in thread pool (non-blocking)
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
+    
+    for video in valid_videos:
+        _analysis_jobs[job_id]["videos"][str(video.id)] = "queued"
+        executor.submit(run_analysis_sync, str(video.id), video.source_uri, job_id)
+    
+    logger.info(f"[Batch Analysis] Job {job_id}: Queued {len(valid_videos)} videos in thread pool")
+    
+    return {"status": "started", "count": len(valid_videos), "job_id": job_id}
 
 
 # =============================================================================
@@ -673,7 +1001,7 @@ def map_host_to_container_path(host_path: str) -> str:
     return host_path
 
 
-@router.get("/thumbnail/{media_id}")
+@router.api_route("/thumbnail/{media_id}", methods=["GET", "HEAD"])
 async def get_thumbnail(
     media_id: str,
     size: str = Query(default="medium", pattern="^(small|medium|large)$"),
@@ -681,6 +1009,7 @@ async def get_thumbnail(
 ):
     """
     Get thumbnail for a media item.
+    Supports HEAD requests for checking if thumbnail exists.
     """
     try:
         video_uuid = uuid.UUID(media_id)
@@ -874,36 +1203,59 @@ async def stream_transcoded_video(
     cached_path = cache_dir / f"{media_id}.mp4"
     
     if not cached_path.exists():
-        # Transcode using ffmpeg
+        # Transcode using ffmpeg - use temp file to avoid serving incomplete files
+        temp_path = cache_dir / f"{media_id}.tmp.mp4"
         try:
             cmd = [
                 "ffmpeg", "-y", "-i", str(actual_path),
                 "-c:v", "libx264",  # H.264 codec
-                "-preset", "fast",   # Fast encoding
+                "-preset", "veryfast",   # Faster encoding for large files
                 "-crf", "23",        # Quality (lower = better, 18-28 typical)
+                "-pix_fmt", "yuv420p",  # Force 8-bit color (browsers don't support 10-bit H.264)
                 "-c:a", "aac",       # AAC audio
                 "-b:a", "128k",      # Audio bitrate
                 "-movflags", "+faststart",  # Web optimized
                 "-max_muxing_queue_size", "1024",
-                str(cached_path)
+                str(temp_path)
             ]
             
-            process = subprocess.run(cmd, capture_output=True, timeout=300)
+            # Longer timeout for large files (10 minutes)
+            process = subprocess.run(cmd, capture_output=True, timeout=600)
             
             if process.returncode != 0:
-                # Fallback to original file
+                # Clean up temp file and fallback to original
+                if temp_path.exists():
+                    temp_path.unlink()
+                logger.warning(f"Transcoding failed for {media_id}: {process.stderr.decode()[:200]}")
                 return FileResponse(
                     actual_path,
                     media_type="video/quicktime",
                     headers={"Accept-Ranges": "bytes"}
                 )
-        except Exception as e:
-            # Fallback to original file
+            
+            # Rename temp to final only after successful transcoding
+            temp_path.rename(cached_path)
+            
+        except subprocess.TimeoutExpired:
+            # Clean up and fallback
+            if temp_path.exists():
+                temp_path.unlink()
+            logger.warning(f"Transcoding timeout for {media_id}")
             return FileResponse(
                 actual_path,
                 media_type="video/quicktime",
                 headers={"Accept-Ranges": "bytes"}
             )
+        except Exception as e:
+            # Clean up and fallback
+            if temp_path.exists():
+                temp_path.unlink()
+            logger.error(f"Transcoding error for {media_id}: {e}")
+            return FileResponse(
+                actual_path,
+                media_type="video/quicktime",
+                headers={"Accept-Ranges": "bytes"}
+                )
     
     # Serve the transcoded file with range support
     file_size = cached_path.stat().st_size
@@ -920,7 +1272,8 @@ async def stream_transcoded_video(
             with open(cached_path, "rb") as f:
                 f.seek(start)
                 remaining = content_length
-                chunk_size = 1024 * 1024
+                # Larger chunk size (2MB) for faster initial buffering
+                chunk_size = 2 * 1024 * 1024
                 while remaining > 0:
                     chunk = f.read(min(chunk_size, remaining))
                     if not chunk:
@@ -936,13 +1289,17 @@ async def stream_transcoded_video(
                 "Content-Range": f"bytes {start}-{end}/{file_size}",
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(content_length),
+                "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
             }
         )
     
     return FileResponse(
         str(cached_path),
         media_type="video/mp4",
-        headers={"Accept-Ranges": "bytes"}
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+        }
     )
 
 

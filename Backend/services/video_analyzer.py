@@ -41,7 +41,8 @@ class VideoAnalyzer:
         video_id: uuid.UUID,
         video_path: str,
         db_session,
-        metadata: dict = None
+        metadata: dict = None,
+        on_step_callback: callable = None
     ) -> dict:
         """
         Run complete video analysis pipeline
@@ -51,6 +52,7 @@ class VideoAnalyzer:
             video_path: Path to video file
             db_session: Async database session
             metadata: Optional video metadata (duration, title, etc.)
+            on_step_callback: Optional callback for step progress updates
             
         Returns:
             Complete analysis results
@@ -58,16 +60,22 @@ class VideoAnalyzer:
         from database.models import VideoAnalysis, Video
         from sqlalchemy import select, update
         
+        def notify_step(step_name):
+            if on_step_callback:
+                on_step_callback(step_name)
+        
         logger.info(f"Starting analysis for video {video_id}: {Path(video_path).name}")
         
         try:
             # Step 1: Transcribe video
             logger.info("Step 1/4: Transcribing with Whisper")
+            notify_step("1/4 Transcribing")
             transcript_data = self.transcriber.transcribe_video(video_path)
             transcript = transcript_data["text"]
             
             # Step 2: Visual Analysis & Thumbnail Selection
             logger.info("Step 2/4: Analyzing visuals (Frames + Thumbnail)")
+            notify_step("2/4 Analyzing visuals")
             visual_context = {}
             best_frame_score = 0.0
             
@@ -100,6 +108,7 @@ class VideoAnalyzer:
 
             # Step 3: Analyze content with GPT-4 (Transcript + Visuals)
             logger.info("Step 3/4: Analyzing content with GPT-4")
+            notify_step("3/4 GPT-4 Analysis")
             
             # Add visual context to metadata for GPT-4
             analysis_metadata = metadata or {}
@@ -113,6 +122,7 @@ class VideoAnalyzer:
             
             # Step 4: Save to database
             logger.info("Step 4/4: Saving to database")
+            notify_step("4/4 Saving")
             
             # Check if analysis record exists
             result = await db_session.execute(
@@ -129,7 +139,7 @@ class VideoAnalyzer:
                 "key_moments": analysis.get("key_moments", {}),
                 "visual_analysis": visual_context,
                 "music_suggestion": analysis.get("music_suggestion", {}),
-                "pre_social_score": analysis.get("viral_score", 0.0),
+                "pre_social_score": analysis.get("pre_social_score", analysis.get("viral_score", 0.0)),
                 "analysis_version": "2.0",
                 "analyzed_at": datetime.utcnow()
             }

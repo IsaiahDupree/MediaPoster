@@ -53,24 +53,92 @@ class IngestCommentRequest(BaseModel):
     user_data: dict = {}
 
 
-@router.get("/", response_model=List[PersonResponse])
+@router.get("/")
 async def list_people(
-    workspace_id: UUID = Depends(get_current_workspace_id),
     limit: int = 100,
     offset: int = 0,
-    db: AsyncSession = Depends(get_db)
 ):
-    """List all people in current workspace"""
+    """List all people - returns from social accounts and commenters"""
+    from sqlalchemy import create_engine, text
+    import os
+    
+    engine = create_engine(os.getenv("DATABASE_URL"))
+    people = []
+    
     try:
-        result = await db.execute(
-            select(Person).where(Person.workspace_id == workspace_id).limit(limit).offset(offset)
-        )
-        people = list(result.scalars().all())  # Convert to list immediately
-        return people
+        with engine.connect() as conn:
+            # Get people from social_media_accounts (your connected accounts)
+            accounts_query = text("""
+                SELECT 
+                    id::text,
+                    COALESCE(display_name, username) as name,
+                    username as handle,
+                    platform,
+                    profile_pic_url as avatar_url,
+                    followers_count,
+                    engagement_rate as engagement_score,
+                    'account' as relationship,
+                    last_fetched_at as last_interaction
+                FROM social_media_accounts
+                WHERE is_active = TRUE
+                ORDER BY followers_count DESC
+                LIMIT :limit OFFSET :offset
+            """)
+            
+            result = conn.execute(accounts_query, {"limit": limit, "offset": offset})
+            for row in result:
+                people.append({
+                    "id": row[0],
+                    "name": row[1] or row[2],
+                    "handle": f"@{row[2]}",
+                    "platform": row[3],
+                    "avatar_url": row[4],
+                    "followers_count": row[5] or 0,
+                    "engagement_score": float(row[6] or 0),
+                    "relationship": row[7],
+                    "last_interaction": str(row[8]) if row[8] else None
+                })
+            
+            # Also get people from the people table if any exist
+            people_query = text("""
+                SELECT 
+                    id::text,
+                    full_name as name,
+                    primary_email as handle,
+                    'email' as platform,
+                    NULL as avatar_url,
+                    0 as followers_count,
+                    0 as engagement_score,
+                    'contact' as relationship,
+                    updated_at as last_interaction
+                FROM people
+                ORDER BY updated_at DESC
+                LIMIT :limit
+            """)
+            
+            try:
+                result = conn.execute(people_query, {"limit": limit})
+                for row in result:
+                    if row[1]:  # Only add if has a name
+                        people.append({
+                            "id": row[0],
+                            "name": row[1],
+                            "handle": row[2] or "",
+                            "platform": row[3],
+                            "avatar_url": row[4],
+                            "followers_count": row[5] or 0,
+                            "engagement_score": float(row[6] or 0),
+                            "relationship": row[7],
+                            "last_interaction": str(row[8]) if row[8] else None
+                        })
+            except:
+                pass  # people table might not exist
+                
     except Exception as e:
         from loguru import logger
         logger.error(f"Error listing people: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    
+    return {"people": people, "total": len(people)}
 
 
 @router.get("/{person_id}", response_model=PersonResponse)

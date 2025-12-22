@@ -3,7 +3,7 @@ Posted Content API Endpoints
 Tracks content that has been published to social media platforms
 """
 
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Query, HTTPException, Depends, BackgroundTasks
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime, timedelta
@@ -212,6 +212,48 @@ async def get_posts_by_media(media_id: str, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error fetching posts by media ID: {e}")
         return {"posts": [], "count": 0}
+
+
+@router.patch("/{post_id}")
+async def update_post_metrics(
+    post_id: str,
+    views: Optional[int] = None,
+    likes: Optional[int] = None,
+    comments: Optional[int] = None,
+    shares: Optional[int] = None,
+    saves: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update metrics for a specific posted content record"""
+    try:
+        query = select(PostedContentModel).where(PostedContentModel.id == uuid.UUID(post_id))
+        result = await db.execute(query)
+        post = result.scalar_one_or_none()
+        
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        if views is not None:
+            post.views = views
+        if likes is not None:
+            post.likes = likes
+        if comments is not None:
+            post.comments = comments
+        if shares is not None:
+            post.shares = shares
+        if saves is not None:
+            post.saves = saves
+        
+        await db.commit()
+        
+        logger.info(f"✓ Updated metrics for {post_id}: views={views}, likes={likes}, comments={comments}")
+        return {"success": True, "id": post_id, "views": post.views, "likes": post.likes, "comments": post.comments}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating post metrics: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.patch("/by-submission/{submission_id}/url")
@@ -677,3 +719,91 @@ async def list_api_providers():
         })
     
     return {"providers": providers, "days_until_reset": days_until_reset}
+
+
+@router.post("/refresh-all-metrics")
+async def refresh_all_metrics(
+    background_tasks: BackgroundTasks,
+    platform: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Trigger a refresh of metrics for all posted content.
+    Fetches latest views/likes/comments from RapidAPI for each post.
+    
+    Args:
+        platform: Optional filter to only refresh specific platform
+        
+    Returns:
+        Status message and count of posts being refreshed
+    """
+    try:
+        # Get all posts with platform URLs
+        query = select(PostedContentModel).where(PostedContentModel.platform_url.isnot(None))
+        if platform:
+            query = query.where(func.lower(PostedContentModel.platform) == platform.lower())
+        
+        result = await db.execute(query)
+        posts = result.scalars().all()
+        
+        if not posts:
+            return {"success": True, "message": "No posts with URLs to refresh", "count": 0}
+        
+        # Start background task to refresh metrics
+        background_tasks.add_task(background_refresh_metrics, [str(p.id) for p in posts])
+        
+        return {
+            "success": True,
+            "message": f"Started refreshing metrics for {len(posts)} posts",
+            "count": len(posts),
+            "platforms": list(set(p.platform for p in posts))
+        }
+    except Exception as e:
+        logger.error(f"Error starting metrics refresh: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def background_refresh_metrics(post_ids: List[str]):
+    """Background task to refresh metrics for multiple posts"""
+    import asyncio
+    from database.connection import async_session_maker
+    from services.analytics_service import get_external_analytics_fetcher
+    
+    fetcher = get_external_analytics_fetcher()
+    
+    async with async_session_maker() as db:
+        for post_id in post_ids:
+            try:
+                query = select(PostedContentModel).where(PostedContentModel.id == uuid.UUID(post_id))
+                result = await db.execute(query)
+                post = result.scalar_one_or_none()
+                
+                if not post or not post.platform_url:
+                    continue
+                
+                # Fetch metrics from external API
+                metrics_result = await fetcher.fetch_analytics_by_url(post.platform_url)
+                
+                if metrics_result.get('success') and metrics_result.get('metrics'):
+                    metrics = metrics_result['metrics']
+                    post.views = metrics.get('views', post.views or 0)
+                    post.likes = metrics.get('likes', post.likes or 0)
+                    post.comments = metrics.get('comments', post.comments or 0)
+                    post.shares = metrics.get('shares', post.shares or 0)
+                    
+                    # Calculate engagement rate if we have follower count
+                    if metrics.get('follower_count') and metrics.get('follower_count') > 0:
+                        engagement = (post.likes + post.comments) / metrics['follower_count'] * 100
+                        post.engagement_rate = round(engagement, 2)
+                    
+                    logger.info(f"Updated metrics for post {post_id}: views={post.views}, likes={post.likes}")
+                
+                # Rate limit between API calls
+                await asyncio.sleep(1)
+                
+            except Exception as e:
+                logger.warning(f"Failed to refresh metrics for post {post_id}: {e}")
+                continue
+        
+        await db.commit()
+        logger.info(f"Completed refreshing metrics for {len(post_ids)} posts")

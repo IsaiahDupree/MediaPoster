@@ -428,9 +428,10 @@ from api.endpoints import scheduling
 app.include_router(scheduling.router, prefix="/api/scheduling", tags=["Scheduling"])
 
 # Event Bus & Workflows (Pub/Sub Architecture)
-from api.endpoints import events, workflows
+from api.endpoints import events, workflows, websocket
 app.include_router(events.router, prefix="/api", tags=["Events"])
 app.include_router(workflows.router, prefix="/api", tags=["Workflows"])
+app.include_router(websocket.router, prefix="/api", tags=["WebSocket"])
 
 # Dashboard Widgets
 from api.endpoints import dashboard

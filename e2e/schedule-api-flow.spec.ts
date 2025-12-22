@@ -226,10 +226,7 @@ test.describe('Scheduling Complete Flow', () => {
 
     // Step 1: Open modal
     const plusButton = page.locator('button:has-text("+")').first();
-    if (!await plusButton.isVisible({ timeout: 3000 })) {
-      test.skip();
-      return;
-    }
+    await expect(plusButton).toBeVisible({ timeout: 5000 });
     await plusButton.click();
     await page.waitForTimeout(1500);
 
@@ -239,10 +236,7 @@ test.describe('Scheduling Complete Flow', () => {
 
     // Step 3: Select first media item
     const mediaItem = page.locator('.cursor-pointer.group').first();
-    if (!await mediaItem.isVisible({ timeout: 3000 })) {
-      test.skip();
-      return;
-    }
+    await expect(mediaItem).toBeVisible({ timeout: 5000 });
     await mediaItem.click();
     await page.waitForTimeout(500);
 

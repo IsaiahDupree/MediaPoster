@@ -107,6 +107,10 @@ class MediaDetailResponse(BaseModel):
     pacing: Optional[str] = None
     visual_analysis: Optional[dict] = None
     analyzed_at: Optional[str] = None
+    # Deep analysis fields
+    deep_analysis: Optional[dict] = None
+    frame_analyses: Optional[list] = None
+    platform_content: Optional[list] = None
 
 
 class BatchIngestRequest(BaseModel):
@@ -313,7 +317,7 @@ async def get_media_detail(
     analysis = None
     try:
         analysis_result = await db.execute(
-            text("SELECT video_id, transcript, topics, hooks, tone, pacing, pre_social_score, visual_analysis, analyzed_at FROM video_analysis WHERE video_id = :vid"),
+            text("SELECT video_id, transcript, topics, hooks, tone, pacing, pre_social_score, visual_analysis, analyzed_at, deep_analysis, frame_analyses, platform_content FROM video_analysis WHERE video_id = :vid"),
             {"vid": str(video.id)}
         )
         row = analysis_result.fetchone()
@@ -326,7 +330,10 @@ async def get_media_detail(
                 "pacing": row[5],
                 "pre_social_score": row[6],
                 "visual_analysis": row[7],
-                "analyzed_at": row[8]
+                "analyzed_at": row[8],
+                "deep_analysis": row[9],
+                "frame_analyses": row[10],
+                "platform_content": row[11]
             }
     except Exception:
         pass
@@ -349,7 +356,10 @@ async def get_media_detail(
         tone=analysis["tone"] if analysis else None,
         pacing=analysis["pacing"] if analysis else None,
         visual_analysis=analysis["visual_analysis"] if analysis else None,
-        analyzed_at=analysis["analyzed_at"].isoformat() if analysis and analysis["analyzed_at"] else None
+        analyzed_at=analysis["analyzed_at"].isoformat() if analysis and analysis["analyzed_at"] else None,
+        deep_analysis=analysis["deep_analysis"] if analysis else None,
+        frame_analyses=analysis["frame_analyses"] if analysis else None,
+        platform_content=analysis["platform_content"] if analysis else None
     )
 
 
@@ -406,14 +416,19 @@ async def get_analysis_job_status():
         # Get recent video statuses (last 10)
         videos_dict = job.get("videos", {})
         recent_videos = []
-        for vid, info in list(videos_dict.items())[-10:]:
+        completed_videos = []
+        
+        for vid, info in list(videos_dict.items())[-20:]:
             if isinstance(info, dict):
-                recent_videos.append({
+                video_info = {
                     "id": vid,
                     "step": info.get("step", "unknown"),
                     "filename": info.get("filename", ""),
                     "status": info.get("status", "processing")
-                })
+                }
+                recent_videos.append(video_info)
+            elif info == "completed":
+                completed_videos.append({"id": vid, "status": "completed", "filename": ""})
             else:
                 recent_videos.append({"id": vid, "status": str(info)})
         
@@ -425,7 +440,9 @@ async def get_analysis_job_status():
             "failed": job.get("failed", 0),
             "current_video": job.get("current_video"),
             "current_step": job.get("current_step"),
+            "current_filename": job.get("current_filename"),
             "recent_videos": recent_videos,
+            "completed_videos": completed_videos[-5:],  # Last 5 completed
             "started_at": job.get("started_at"),
             "updated_at": job.get("updated_at")
         })
@@ -802,16 +819,32 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                             if deep_res.status_code == 200:
                                 deep_data = deep_res.json()
                                 # Update analysis with deep image data
+                                # Save to BOTH visual_analysis AND deep_analysis columns
+                                visual_analysis_data = result.get('visual_analysis') or {}
+                                visual_analysis_data["deep_analysis"] = deep_data
+                                
+                                # Extract visual summary for visual_analysis column
+                                if deep_data.get('detailed_description'):
+                                    visual_analysis_data['visual_summary'] = deep_data.get('detailed_description')
+                                if deep_data.get('scene_setting'):
+                                    visual_analysis_data['scene_description'] = deep_data.get('scene_setting')
+                                if deep_data.get('main_subjects'):
+                                    visual_analysis_data['objects_detected'] = deep_data.get('main_subjects')
+                                if deep_data.get('dominant_colors'):
+                                    visual_analysis_data['colors'] = deep_data.get('dominant_colors')
+                                if deep_data.get('overall_mood'):
+                                    visual_analysis_data['mood'] = deep_data.get('overall_mood')
+                                
                                 await db.execute(
                                     update(VideoAnalysis)
                                     .where(VideoAnalysis.video_id == video_uuid)
-                                    .values(visual_analysis={
-                                        **(result.get('visual_analysis') or {}),
-                                        "deep_analysis": deep_data
-                                    })
+                                    .values(
+                                        visual_analysis=visual_analysis_data,
+                                        deep_analysis=deep_data  # Save to dedicated column too
+                                    )
                                 )
                                 await db.commit()
-                                logger.success(f"[Deep Analysis] Complete for {video_id}")
+                                logger.success(f"[Deep Analysis] Complete for {video_id}: saved to both visual_analysis and deep_analysis columns")
                             else:
                                 logger.warning(f"[Deep Analysis] Failed for {video_id}: status {deep_res.status_code}")
                     except Exception as e:
@@ -819,10 +852,15 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                     
                     logger.success(f"[Analysis] Complete: {video_id}")
                     
-                    # Update job tracker
+                    # Update job tracker with filename
                     if job_id and job_id in _analysis_jobs:
-                        _analysis_jobs[job_id]["videos"][video_id] = "completed"
+                        _analysis_jobs[job_id]["videos"][video_id] = {
+                            "status": "completed",
+                            "filename": filename,
+                            "score": result.get('pre_social_score')
+                        }
                         _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                        logger.info(f"[Batch Analysis] ✅ Completed: {video_id} ({filename}) - score: {result.get('pre_social_score')}")
                         # Check if job is complete
                         job = _analysis_jobs[job_id]
                         if job["completed"] + job.get("failed", 0) >= job["total"]:
@@ -857,10 +895,15 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             await db.commit()
             logger.success(f"[Analysis] Complete: {video_id} (basic fallback)")
             
-            # Update job tracker
+            # Update job tracker with filename (fallback analysis)
             if job_id and job_id in _analysis_jobs:
-                _analysis_jobs[job_id]["videos"][video_id] = "completed"
+                _analysis_jobs[job_id]["videos"][video_id] = {
+                    "status": "completed",
+                    "filename": filename,
+                    "score": analysis.pre_social_score
+                }
                 _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                logger.info(f"[Batch Analysis] ✅ Completed (fallback): {video_id} ({filename})")
                 # Check if job is complete
                 job = _analysis_jobs[job_id]
                 if job["completed"] + job.get("failed", 0) >= job["total"]:
@@ -887,30 +930,62 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
 async def batch_analyze(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=100, le=500)
+    limit: int = Query(default=100, le=500),
+    include_incomplete: bool = Query(default=True, description="Include videos with incomplete analysis"),
+    force: bool = Query(default=False, description="Force re-analyze ALL videos including already analyzed ones")
 ):
     """
     Analyze all unanalyzed videos that have valid source files.
+    Also re-analyzes videos with incomplete analysis (no transcript/topics).
+    Use force=true to re-analyze ALL videos including already analyzed ones.
     """
     from sqlalchemy import and_, not_, exists, or_
+    from loguru import logger
     
     # Video file extensions to include
     VIDEO_EXTENSIONS = ['.mov', '.mp4', '.avi', '.mkv', '.webm', '.m4v', '.wmv', '.flv', '.3gp']
     
-    # Find videos without analysis that have source_uri set AND are video files
-    subquery = select(VideoAnalysis.video_id)
-    
     # Build extension filter - source_uri must end with a video extension
     ext_filters = [Video.source_uri.ilike(f'%{ext}') for ext in VIDEO_EXTENSIONS]
     
-    query = select(Video).where(
-        and_(
-            not_(Video.id.in_(subquery)),
-            Video.source_uri.isnot(None),
-            Video.source_uri != '',
-            or_(*ext_filters)  # Must be a video file extension
+    if force:
+        # Force mode: Include ALL videos regardless of analysis status
+        logger.info(f"[Batch Analyze] Force mode enabled - will re-analyze ALL videos")
+        query = select(Video).where(
+            and_(
+                Video.source_uri.isnot(None),
+                Video.source_uri != '',
+                or_(*ext_filters)  # Must be a video file extension
+            )
+        ).order_by(Video.created_at.desc()).limit(limit)
+    elif include_incomplete:
+        # Subquery for videos that have COMPLETE analysis (transcript or topics)
+        complete_analysis_subquery = select(VideoAnalysis.video_id).where(
+            or_(
+                VideoAnalysis.transcript.isnot(None),
+                VideoAnalysis.topics.isnot(None)
+            )
         )
-    ).order_by(Video.created_at.desc()).limit(limit)  # Match frontend sort order (newest first)
+        # Include videos without analysis OR with incomplete analysis
+        query = select(Video).where(
+            and_(
+                not_(Video.id.in_(complete_analysis_subquery)),
+                Video.source_uri.isnot(None),
+                Video.source_uri != '',
+                or_(*ext_filters)  # Must be a video file extension
+            )
+        ).order_by(Video.created_at.desc()).limit(limit)
+    else:
+        # Original behavior: only videos without any analysis record
+        subquery = select(VideoAnalysis.video_id)
+        query = select(Video).where(
+            and_(
+                not_(Video.id.in_(subquery)),
+                Video.source_uri.isnot(None),
+                Video.source_uri != '',
+                or_(*ext_filters)  # Must be a video file extension
+            )
+        ).order_by(Video.created_at.desc()).limit(limit)
     
     result = await db.execute(query)
     videos = result.scalars().all()

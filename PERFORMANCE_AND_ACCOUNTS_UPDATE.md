@@ -135,3 +135,4 @@ Navigate to `/accounts` in your frontend application.
 - View trends require analytics snapshots to be populated (run backfill scripts)
 - The accounts page automatically fetches data when an account is selected
 
+

@@ -1,18 +1,22 @@
 """
 Posted Media API
 Fetch all videos that have been posted to creators' connected accounts
+Includes Instagram sync to detect already-posted content
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, or_
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import uuid
+import os
+import hashlib
+from loguru import logger
 
 from database.connection import get_db
-from database.models import ScheduledPost, VideoClip, MediaCreationProject, PostedContent
+from database.models import ScheduledPost, VideoClip, MediaCreationProject, PostedContent, Video
 
 router = APIRouter(prefix="/api/posted-media", tags=["Posted Media"])
 
@@ -353,3 +357,259 @@ async def get_posted_media_detail(
         raise HTTPException(status_code=400, detail="Invalid post ID format")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# INSTAGRAM SYNC - Fetch posts from Instagram to detect duplicates
+# =============================================================================
+
+class InstagramSyncRequest(BaseModel):
+    """Request to sync Instagram posts"""
+    username: str
+    max_posts: int = 50
+
+
+class InstagramPostInfo(BaseModel):
+    """Instagram post information"""
+    post_id: str
+    shortcode: str
+    url: str
+    caption: Optional[str] = None
+    media_type: str
+    thumbnail_url: Optional[str] = None
+    likes: int = 0
+    comments: int = 0
+    views: int = 0
+    posted_at: Optional[datetime] = None
+    matched_media_id: Optional[str] = None  # If matched to local media
+    is_duplicate: bool = False
+
+
+class InstagramSyncResponse(BaseModel):
+    """Response from Instagram sync"""
+    username: str
+    total_posts_fetched: int
+    posts_synced: int
+    duplicates_found: int
+    posts: List[InstagramPostInfo]
+
+
+@router.post("/instagram/sync")
+async def sync_instagram_posts(
+    request: InstagramSyncRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sync posts from Instagram account to detect which local media has already been posted.
+    Uses RapidAPI Instagram service to fetch posts.
+    """
+    try:
+        from services.instagram_analytics import InstagramAnalytics
+        
+        logger.info(f"[Instagram Sync] Starting sync for @{request.username}")
+        
+        # Initialize Instagram analytics
+        ig = InstagramAnalytics()
+        
+        # Get user ID from username
+        user_id = await ig.get_user_id_from_username(request.username)
+        if not user_id:
+            raise HTTPException(status_code=404, detail=f"Instagram user @{request.username} not found")
+        
+        # Fetch user's media
+        media_data = await ig.get_user_media(user_id, max_items=request.max_posts)
+        ig_posts = media_data.get("items", [])
+        
+        logger.info(f"[Instagram Sync] Fetched {len(ig_posts)} posts from @{request.username}")
+        
+        # Get all local media for comparison
+        local_media_result = await db.execute(select(Video))
+        local_media = local_media_result.scalars().all()
+        
+        # Get existing posted content for this platform
+        existing_posts = await db.execute(
+            select(PostedContent).where(PostedContent.platform == "instagram")
+        )
+        existing_platform_posts = {p.platform_post_id: p for p in existing_posts.scalars().all()}
+        
+        synced_posts = []
+        duplicates_found = 0
+        posts_synced = 0
+        
+        for ig_post in ig_posts:
+            post_id = str(ig_post.get("media_id", ""))
+            shortcode = ig_post.get("shortcode", "")
+            caption = ig_post.get("caption", "") or ""
+            
+            # Check if already tracked
+            is_already_tracked = post_id in existing_platform_posts
+            
+            # Try to match with local media by caption similarity or filename
+            matched_media_id = None
+            is_duplicate = False
+            
+            for media in local_media:
+                # Match by caption containing filename (without extension)
+                filename_base = os.path.splitext(media.filename or "")[0].lower()
+                if filename_base and len(filename_base) > 3:
+                    if filename_base in caption.lower():
+                        matched_media_id = str(media.id)
+                        is_duplicate = True
+                        break
+                
+                # Match by existing media_id reference in PostedContent
+                if post_id in existing_platform_posts:
+                    existing = existing_platform_posts[post_id]
+                    if existing.media_id:
+                        matched_media_id = str(existing.media_id)
+                        is_duplicate = True
+                        break
+            
+            # If not already tracked, create PostedContent record
+            if not is_already_tracked and shortcode:
+                posted_at_ts = ig_post.get("taken_at")
+                posted_at = datetime.fromtimestamp(posted_at_ts, tz=timezone.utc) if posted_at_ts else None
+                
+                new_posted = PostedContent(
+                    platform="instagram",
+                    platform_post_id=post_id,
+                    platform_url=f"https://www.instagram.com/p/{shortcode}/",
+                    account_username=request.username,
+                    caption=caption[:500] if caption else None,
+                    views=ig_post.get("play_count", 0),
+                    likes=ig_post.get("like_count", 0),
+                    comments=ig_post.get("comment_count", 0),
+                    status="published",
+                    posted_at=posted_at,
+                    media_id=uuid.UUID(matched_media_id) if matched_media_id else None
+                )
+                db.add(new_posted)
+                posts_synced += 1
+            
+            if is_duplicate:
+                duplicates_found += 1
+            
+            # Build response item
+            posted_at_ts = ig_post.get("taken_at")
+            synced_posts.append(InstagramPostInfo(
+                post_id=post_id,
+                shortcode=shortcode,
+                url=f"https://www.instagram.com/p/{shortcode}/" if shortcode else "",
+                caption=caption[:200] if caption else None,
+                media_type="video" if ig_post.get("media_type") == 2 else "image",
+                thumbnail_url=ig_post.get("thumbnail_url"),
+                likes=ig_post.get("like_count", 0),
+                comments=ig_post.get("comment_count", 0),
+                views=ig_post.get("play_count", 0),
+                posted_at=datetime.fromtimestamp(posted_at_ts, tz=timezone.utc) if posted_at_ts else None,
+                matched_media_id=matched_media_id,
+                is_duplicate=is_duplicate
+            ))
+        
+        await db.commit()
+        
+        logger.success(f"[Instagram Sync] Synced {posts_synced} new posts, found {duplicates_found} duplicates")
+        
+        return InstagramSyncResponse(
+            username=request.username,
+            total_posts_fetched=len(ig_posts),
+            posts_synced=posts_synced,
+            duplicates_found=duplicates_found,
+            posts=synced_posts
+        )
+        
+    except ImportError as e:
+        logger.error(f"[Instagram Sync] Instagram service not available: {e}")
+        raise HTTPException(status_code=503, detail="Instagram service not configured. Check RAPIDAPI_KEY.")
+    except Exception as e:
+        logger.error(f"[Instagram Sync] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/instagram/check-duplicate/{media_id}")
+async def check_if_posted_to_instagram(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Check if a specific media item has already been posted to Instagram.
+    Returns matching Instagram posts if found.
+    """
+    try:
+        media_uuid = uuid.UUID(media_id)
+        
+        # Check PostedContent for this media on Instagram
+        result = await db.execute(
+            select(PostedContent).where(
+                PostedContent.media_id == media_uuid,
+                PostedContent.platform == "instagram"
+            )
+        )
+        posts = result.scalars().all()
+        
+        if posts:
+            return {
+                "media_id": media_id,
+                "is_posted": True,
+                "post_count": len(posts),
+                "posts": [
+                    {
+                        "platform_post_id": p.platform_post_id,
+                        "platform_url": p.platform_url,
+                        "posted_at": p.posted_at.isoformat() if p.posted_at else None,
+                        "views": p.views,
+                        "likes": p.likes,
+                        "comments": p.comments
+                    }
+                    for p in posts
+                ]
+            }
+        else:
+            return {
+                "media_id": media_id,
+                "is_posted": False,
+                "post_count": 0,
+                "posts": []
+            }
+            
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+
+
+@router.get("/instagram/posted-media")
+async def get_instagram_posted_media(
+    username: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all media that has been posted to Instagram.
+    Returns list of local media IDs that have Instagram posts.
+    """
+    query = select(PostedContent).where(
+        PostedContent.platform == "instagram",
+        PostedContent.media_id.isnot(None)
+    )
+    
+    if username:
+        query = query.where(PostedContent.account_username == username)
+    
+    result = await db.execute(query.order_by(desc(PostedContent.posted_at)))
+    posts = result.scalars().all()
+    
+    return {
+        "total": len(posts),
+        "posted_media_ids": list(set(str(p.media_id) for p in posts if p.media_id)),
+        "posts": [
+            {
+                "media_id": str(p.media_id) if p.media_id else None,
+                "platform_post_id": p.platform_post_id,
+                "platform_url": p.platform_url,
+                "caption": p.caption[:100] if p.caption else None,
+                "posted_at": p.posted_at.isoformat() if p.posted_at else None,
+                "views": p.views,
+                "likes": p.likes,
+                "comments": p.comments
+            }
+            for p in posts
+        ]
+    }

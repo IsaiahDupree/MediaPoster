@@ -1432,3 +1432,174 @@ async def generate_ideas():
     return {'generated': len(ideas), 'ideas': ideas}
 
 
+# =============================================================================
+# EXPERIMENTS SCHEDULER INTEGRATION
+# =============================================================================
+
+@router.post("/scheduler/create")
+async def create_scheduled_experiment(
+    name: str,
+    goal: str,
+    description: str = ""
+):
+    """Create a new AI-planned experiment."""
+    from services.experiments_scheduler import ExperimentsScheduler
+    
+    scheduler = ExperimentsScheduler()
+    
+    try:
+        experiment = await scheduler.create_experiment(
+            name=name,
+            goal=goal,
+            description=description
+        )
+        return {"success": True, "experiment": experiment.to_dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/scheduler/plan")
+async def plan_experiment(goal: str):
+    """Have AI agent plan an experiment for a goal."""
+    from services.experiments_scheduler import ExperimentAgent
+    
+    agent = ExperimentAgent()
+    
+    try:
+        # Get available resources
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT COUNT(*) FROM video_analysis WHERE pre_social_score >= 60
+            """)).fetchone()
+            video_count = result[0] if result else 0
+        
+        resources = {
+            "types": ["ugc", "edited"],
+            "video_count": video_count,
+            "tools": ["subtitles", "hooks", "trimming"]
+        }
+        
+        experiment = await agent.plan_experiment(goal, resources)
+        
+        return {
+            "success": True,
+            "experiment": experiment.to_dict(),
+            "hypotheses_count": len(experiment.hypotheses)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/scheduler/agent/actions")
+async def get_agent_actions():
+    """Get available agent actions."""
+    from services.experiments_scheduler import ExperimentAgent
+    
+    agent = ExperimentAgent()
+    return {"actions": agent.get_available_actions()}
+
+
+@router.post("/scheduler/{experiment_id}/start")
+async def start_scheduled_experiment(experiment_id: str):
+    """Start an experiment."""
+    from services.experiments_scheduler import ExperimentsScheduler
+    
+    scheduler = ExperimentsScheduler()
+    
+    try:
+        experiment = await scheduler.start_experiment(experiment_id)
+        return {"success": True, "experiment": experiment.to_dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/scheduler/{experiment_id}/analyze")
+async def analyze_experiment(experiment_id: str):
+    """Analyze experiment results."""
+    from services.experiments_scheduler import ExperimentsScheduler
+    
+    scheduler = ExperimentsScheduler()
+    
+    try:
+        experiment = await scheduler.get_experiment(experiment_id)
+        if not experiment:
+            return {"success": False, "error": "Experiment not found"}
+        
+        results = []
+        for hypothesis in experiment.hypotheses:
+            analyzed = await scheduler.analyze_hypothesis(hypothesis.id)
+            results.append(analyzed.to_dict())
+        
+        return {
+            "success": True,
+            "experiment_id": experiment_id,
+            "hypotheses": results
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/winners")
+async def get_experiment_winners(limit: int = 10):
+    """Get top performing experiment content."""
+    from services.experiments_scheduler import WinnerDetector
+    
+    detector = WinnerDetector()
+    
+    try:
+        winners = await detector.detect_winners()
+        return {
+            "success": True,
+            "winners": [w.to_dict() for w in winners[:limit]],
+            "count": len(winners)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/winners/promotion-candidates")
+async def get_promotion_candidates(limit: int = 10):
+    """Get winners ready for narrative promotion."""
+    from services.experiments_scheduler import WinnerDetector
+    
+    detector = WinnerDetector()
+    
+    try:
+        candidates = await detector.get_promotion_candidates(limit)
+        return {
+            "success": True,
+            "candidates": [c.to_dict() for c in candidates],
+            "count": len(candidates)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/winners/{winner_id}/promote")
+async def promote_winner(winner_id: str, narrative_goal_id: Optional[str] = None):
+    """Promote a winner to the narrative builder."""
+    from services.experiments_scheduler import WinnerDetector
+    
+    detector = WinnerDetector()
+    
+    try:
+        result = await detector.promote_to_narrative(winner_id, narrative_goal_id)
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/analytics/by-origin")
+async def get_analytics_by_origin():
+    """Get performance analytics grouped by post origin."""
+    from services.experiments_scheduler import ExperimentsScheduler
+    
+    scheduler = ExperimentsScheduler()
+    
+    try:
+        analytics = await scheduler.get_analytics_by_origin()
+        return {"success": True, "analytics": analytics}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+

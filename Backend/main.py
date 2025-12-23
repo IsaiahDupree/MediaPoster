@@ -338,6 +338,10 @@ app.include_router(ai_video.router, prefix="/api", tags=["AI Video Generation"])
 from api.endpoints import ai_video_generation
 app.include_router(ai_video_generation.router, tags=["AI Video Generation Pub/Sub"])
 
+# Comment Engagement & Automation with Pub/Sub (Audience, Fans, Inbox)
+from api.endpoints import comment_engagement
+app.include_router(comment_engagement.router, tags=["Comment Engagement"])
+
 # Knowledge Base (Rules, Templates, Playbooks)
 from api.endpoints import knowledge_base
 app.include_router(knowledge_base.router, prefix="/api", tags=["Knowledge Base"])

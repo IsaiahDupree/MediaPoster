@@ -34,6 +34,8 @@ from .hypothesis_engine import HypothesisEngine
 
 from .winner_detector import WinnerDetector
 
+from .pattern_learner import PatternLearner
+
 __all__ = [
     # Models
     'Experiment',
@@ -54,4 +56,5 @@ __all__ = [
     'ExperimentsScheduler',
     'HypothesisEngine',
     'WinnerDetector',
+    'PatternLearner',
 ]

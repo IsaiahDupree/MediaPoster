@@ -1603,3 +1603,102 @@ async def get_analytics_by_origin():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+
+# =============================================================================
+# PATTERN LEARNING ENDPOINTS
+# =============================================================================
+
+@router.get("/patterns")
+async def get_patterns(
+    pattern_type: Optional[str] = None,
+    min_confidence: float = 0.5,
+    limit: int = 20
+):
+    """Get learned content patterns."""
+    from services.experiments_scheduler import PatternLearner
+    
+    learner = PatternLearner()
+    
+    try:
+        patterns = await learner.get_patterns(
+            pattern_type=pattern_type,
+            min_confidence=min_confidence,
+            limit=limit
+        )
+        return {
+            "success": True,
+            "patterns": [p.to_dict() for p in patterns],
+            "count": len(patterns)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/patterns/extract/{experiment_id}")
+async def extract_patterns(experiment_id: str):
+    """Extract patterns from a completed experiment."""
+    from services.experiments_scheduler import PatternLearner
+    
+    learner = PatternLearner()
+    
+    try:
+        patterns = await learner.extract_patterns_from_experiment(experiment_id)
+        return {
+            "success": True,
+            "patterns": [p.to_dict() for p in patterns],
+            "count": len(patterns)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/patterns/recommend")
+async def recommend_patterns(
+    content_type: str = "hook",
+    pillar: Optional[str] = None,
+    target_metric: str = "engagement_rate"
+):
+    """Get pattern recommendations for content creation."""
+    from services.experiments_scheduler import PatternLearner
+    
+    learner = PatternLearner()
+    
+    try:
+        patterns = await learner.recommend_patterns_for_content(
+            content_type=content_type,
+            pillar=pillar,
+            target_metric=target_metric
+        )
+        return {
+            "success": True,
+            "recommendations": [p.to_dict() for p in patterns],
+            "count": len(patterns)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/frameworks/create")
+async def create_framework(
+    name: str,
+    pattern_ids: List[str],
+    pillars: List[str] = []
+):
+    """Create a content framework from patterns."""
+    from services.experiments_scheduler import PatternLearner
+    
+    learner = PatternLearner()
+    
+    try:
+        framework = await learner.generate_framework(
+            name=name,
+            pattern_ids=pattern_ids,
+            pillars=pillars
+        )
+        return {
+            "success": True,
+            "framework": framework.to_dict()
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+

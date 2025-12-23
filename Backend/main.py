@@ -578,6 +578,10 @@ app.include_router(system.router, prefix="/api/system", tags=["System Health"])
 from api.endpoints import agent_panel
 app.include_router(agent_panel.router, tags=["Agent Panel"])
 
+# Automation Center (Unified agent scheduling and runs)
+from api.endpoints import automation
+app.include_router(automation.router, tags=["Automation Center"])
+
 # Device Import (iOS/Android media import with duplicate detection)
 # TODO: import_router module not found - commented out for now
 # from routers import import_router

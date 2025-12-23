@@ -548,6 +548,10 @@ app.include_router(rapidapi_metrics.router, tags=["RapidAPI Metrics"])
 from api import comment_automation
 app.include_router(comment_automation.router, tags=["Comment Automation"])
 
+# System Health & Metrics (Phase 9)
+from api.endpoints import system
+app.include_router(system.router, prefix="/api/system", tags=["System Health"])
+
 # Device Import (iOS/Android media import with duplicate detection)
 # TODO: import_router module not found - commented out for now
 # from routers import import_router

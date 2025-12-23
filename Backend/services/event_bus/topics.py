@@ -101,6 +101,54 @@ class Topics:
     NOTIFICATION_SENT = "notification.sent"               # Notification delivered
     
     # =========================================================================
+    # HYDRATION (State Management)
+    # =========================================================================
+    HYDRATION_SNAPSHOT_READY = "mp.hydration.evt.snapshot_ready"  # Fresh state available
+    HYDRATION_FEATURES_READY = "mp.hydration.evt.features_ready"  # Derived features computed
+    
+    # =========================================================================
+    # NARRATIVE BUILDER (Mainline Brain)
+    # =========================================================================
+    NARRATIVE_PLAN_REQUESTED = "mp.narrative.cmd.plan"            # Request new plan
+    NARRATIVE_PLAN_GENERATED = "mp.narrative.evt.plan_generated"  # Plan ready
+    NARRATIVE_GOAL_UPDATED = "mp.narrative.evt.goal_updated"      # Goal progress changed
+    
+    # =========================================================================
+    # EXPERIMENTS (Research Brain)
+    # =========================================================================
+    EXPERIMENT_PLAN_RUN = "mp.experiments.cmd.plan_run"           # Start experiment
+    EXPERIMENT_RUN_STARTED = "mp.experiments.evt.run_started"     # Run began
+    EXPERIMENT_VARIANT_CREATED = "mp.experiments.evt.variant_created"  # Variant scheduled
+    EXPERIMENT_RUN_COMPLETED = "mp.experiments.evt.run_completed" # Run finished
+    EXPERIMENT_METRICS_READY = "mp.experiments.evt.metrics_ready" # Metrics collected
+    
+    # =========================================================================
+    # KNOWLEDGE BASE (Rules & Learnings)
+    # =========================================================================
+    RULE_CREATED = "mp.rules.evt.rule_created"                    # New rule from experiment
+    RULE_UPDATED = "mp.rules.evt.rule_updated"                    # Rule confidence updated
+    RULE_DEPRECATED = "mp.rules.evt.rule_deprecated"              # Rule no longer valid
+    TEMPLATE_CREATED = "mp.rules.evt.template_created"            # New template
+    PLAYBOOK_ACTIVATED = "mp.rules.evt.playbook_activated"        # Playbook in use
+    
+    # =========================================================================
+    # SCHEDULER (Execution)
+    # =========================================================================
+    SCHEDULER_CREATE_ITEMS = "mp.scheduler.cmd.create_items"      # Create schedule items
+    SCHEDULER_UPDATE_ITEM = "mp.scheduler.cmd.update_item"        # Update item
+    SCHEDULER_CANCEL_ITEM = "mp.scheduler.cmd.cancel_item"        # Cancel item
+    SCHEDULER_ITEM_SCHEDULED = "mp.scheduler.evt.item_scheduled"  # Item scheduled
+    SCHEDULER_ITEM_DUE = "mp.scheduler.evt.item_due"              # Time reached
+    SCHEDULER_ITEM_CANCELED = "mp.scheduler.evt.item_canceled"    # Item canceled
+    
+    # =========================================================================
+    # UI / REALTIME
+    # =========================================================================
+    UI_TOAST = "mp.ui.evt.toast"                                  # Show notification
+    UI_INVALIDATE_CACHE = "mp.ui.evt.invalidate"                  # Cache invalidation
+    UI_ACTIVITY_FEED = "mp.ui.evt.activity"                       # Activity feed item
+    
+    # =========================================================================
     # SYSTEM
     # =========================================================================
     SYSTEM_STARTUP = "system.startup"                     # Backend started

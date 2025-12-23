@@ -334,6 +334,10 @@ app.include_router(trends.router, prefix="/api", tags=["Trends & Analytics"])
 from api.endpoints import ai_video
 app.include_router(ai_video.router, prefix="/api", tags=["AI Video Generation"])
 
+# Knowledge Base (Rules, Templates, Playbooks)
+from api.endpoints import knowledge_base
+app.include_router(knowledge_base.router, prefix="/api", tags=["Knowledge Base"])
+
 # Content Intelligence - Platform Publishing
 from api.endpoints import platform_publishing
 app.include_router(platform_publishing.router, prefix="/api/platform", tags=["Platform Publishing"])

@@ -414,3 +414,105 @@ def update_job_status(job_id: str, status: str, **kwargs):
     if job:
         job["status"] = status
         job.update(kwargs)
+
+
+# =============================================================================
+# SUBTITLE GENERATION ENDPOINTS
+# =============================================================================
+
+class SubtitleRequest(BaseModel):
+    """Request to add subtitles to a clip."""
+    clip_id: Optional[str] = None
+    video_path: Optional[str] = None
+    text: str
+    start_time: float = 0.0
+    end_time: float = 30.0
+    font_size: int = 48
+    font_color: str = "#FFFFFF"
+    words_per_subtitle: int = 3
+
+
+@router.post("/subtitles/generate")
+async def generate_subtitles(request: SubtitleRequest) -> Dict[str, Any]:
+    """
+    Generate and burn subtitles into a video clip.
+    """
+    from services.clip_extraction import SubtitleGenerator, SubtitleConfig
+    
+    # Resolve video path
+    video_path = request.video_path
+    
+    if request.clip_id and not video_path:
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT clip_path FROM video_clips WHERE id = :id"),
+                {"id": request.clip_id}
+            ).fetchone()
+            if result:
+                video_path = result[0]
+    
+    if not video_path or not Path(video_path).exists():
+        return {"success": False, "error": "Video file not found"}
+    
+    config = SubtitleConfig(
+        font_size=request.font_size,
+        font_color=request.font_color,
+        words_per_subtitle=request.words_per_subtitle
+    )
+    
+    generator = SubtitleGenerator(config=config)
+    
+    try:
+        success, output_path = await generator.add_subtitles_to_clip(
+            video_path=video_path,
+            text=request.text,
+            start_time=request.start_time,
+            end_time=request.end_time
+        )
+        
+        return {
+            "success": success,
+            "output_path": output_path,
+            "original_path": video_path
+        }
+    except Exception as e:
+        logger.error(f"Subtitle generation failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/subtitles/preview")
+async def preview_subtitles(
+    text: str,
+    words_per_subtitle: int = 3,
+    start_time: float = 0.0,
+    end_time: float = 30.0
+) -> Dict[str, Any]:
+    """
+    Preview subtitle segments without burning.
+    """
+    from services.clip_extraction import SubtitleGenerator, SubtitleConfig
+    
+    config = SubtitleConfig(words_per_subtitle=words_per_subtitle)
+    generator = SubtitleGenerator(config=config)
+    
+    # Estimate word timings
+    words = generator.estimate_word_timings(text, start_time, end_time)
+    segments = generator.group_into_segments(words)
+    
+    # Generate SRT content
+    srt_content = generator.generate_srt(segments)
+    
+    return {
+        "segments": [
+            {
+                "text": s.text,
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "duration": s.duration
+            }
+            for s in segments
+        ],
+        "srt_content": srt_content,
+        "total_segments": len(segments)
+    }

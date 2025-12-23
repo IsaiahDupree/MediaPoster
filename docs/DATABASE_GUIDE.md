@@ -47,10 +47,18 @@ supabase stop
 ### Media/Content Tables
 | Table | Description |
 |-------|-------------|
-| `videos` | Video files imported from iPhone/local storage |
+| `videos` | Video files imported from iPhone/local storage (918 videos) |
 | `content_items` | Content pieces ready for publishing |
 | `analyzed_videos` | Videos that have been analyzed |
 | `original_videos` | Source video files |
+| `posted_content` | Content posted to social platforms |
+
+### Social Media Tables
+| Table | Description |
+|-------|-------------|
+| `social_media_accounts` | Connected social platform accounts |
+| `social_accounts` | Platform account credentials |
+| `social_posts_analytics` | Analytics data for posts |
 
 ### Automation Tables
 | Table | Description |

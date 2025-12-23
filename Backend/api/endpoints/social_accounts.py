@@ -29,7 +29,7 @@ engine = create_engine(DATABASE_URL)
 # ============================================================================
 
 class ConnectedAccountResponse(BaseModel):
-    id: int
+    id: Any  # UUID or int depending on source
     platform: str
     username: str
     display_name: Optional[str]

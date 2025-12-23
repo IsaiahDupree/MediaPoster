@@ -10,12 +10,30 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 import logging
 import uuid
 import json
+import os
 
-from database import get_db_connection
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+
+_engine = None
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_engine(DATABASE_URL)
+    return _engine
+
+def get_db_connection():
+    """Get a database connection from the engine."""
+    try:
+        engine = get_engine()
+        return engine.connect()
+    except Exception as e:
+        logging.error(f"Failed to get DB connection: {e}")
+        return None
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

@@ -9,11 +9,29 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 import logging
 import uuid
+import os
 
-from database import get_db_connection
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+
+_engine = None
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_engine(DATABASE_URL)
+    return _engine
+
+def get_db_connection():
+    """Get a database connection from the engine."""
+    try:
+        engine = get_engine()
+        return engine.connect()
+    except Exception as e:
+        logger.error(f"Failed to get DB connection: {e}")
+        return None
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -108,98 +126,94 @@ class PlaybookCreate(BaseModel):
 
 async def ensure_kb_tables():
     """Create KB tables if they don't exist."""
-    conn = get_db_connection()
-    if not conn:
-        return
-    
+    engine = get_engine()
     try:
-        # Check if kb_rules exists
-        result = conn.execute(text("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'kb_rules'
-            )
-        """)).fetchone()
-        
-        if not result[0]:
-            # Tables will be created by migration, create minimal versions for now
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS kb_rules (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    rule_type VARCHAR(50) NOT NULL,
-                    name VARCHAR(255),
-                    description TEXT,
-                    conditions JSONB DEFAULT '{}'::jsonb,
-                    recommendation TEXT NOT NULL,
-                    expected_lift DECIMAL(5,2),
-                    confidence DECIMAL(3,2),
-                    sample_size INTEGER,
-                    last_validated TIMESTAMPTZ,
-                    source_experiment_id UUID,
-                    status VARCHAR(20) DEFAULT 'active',
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ DEFAULT NOW()
+        with engine.connect() as conn:
+            # Check if kb_rules exists
+            result = conn.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'kb_rules'
                 )
-            """))
+            """)).fetchone()
             
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS kb_templates (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    template_type VARCHAR(50) NOT NULL,
-                    name VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    content TEXT NOT NULL,
-                    variables JSONB DEFAULT '[]'::jsonb,
-                    performance_score DECIMAL(5,2),
-                    usage_count INTEGER DEFAULT 0,
-                    best_for JSONB DEFAULT '{}'::jsonb,
-                    status VARCHAR(20) DEFAULT 'active',
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ DEFAULT NOW()
-                )
-            """))
-            
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS kb_constraints (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    constraint_type VARCHAR(50) NOT NULL,
-                    name VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    scope VARCHAR(50) NOT NULL,
-                    scope_value VARCHAR(255),
-                    threshold_value DECIMAL(10,2) NOT NULL,
-                    threshold_unit VARCHAR(50),
-                    window_days INTEGER,
-                    priority INTEGER DEFAULT 50,
-                    status VARCHAR(20) DEFAULT 'active',
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ DEFAULT NOW()
-                )
-            """))
-            
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS kb_playbooks (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    name VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    use_case VARCHAR(50),
-                    rule_ids UUID[] DEFAULT '{}',
-                    template_ids UUID[] DEFAULT '{}',
-                    constraint_ids UUID[] DEFAULT '{}',
-                    config JSONB DEFAULT '{}'::jsonb,
-                    usage_count INTEGER DEFAULT 0,
-                    status VARCHAR(20) DEFAULT 'active',
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ DEFAULT NOW()
-                )
-            """))
-            
-            conn.commit()
-            logger.info("Created KB tables")
+            if not result[0]:
+                # Tables will be created by migration, create minimal versions for now
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS kb_rules (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        rule_type VARCHAR(50) NOT NULL,
+                        name VARCHAR(255),
+                        description TEXT,
+                        conditions JSONB DEFAULT '{}'::jsonb,
+                        recommendation TEXT NOT NULL,
+                        expected_lift DECIMAL(5,2),
+                        confidence DECIMAL(3,2),
+                        sample_size INTEGER,
+                        last_validated TIMESTAMPTZ,
+                        source_experiment_id UUID,
+                        status VARCHAR(20) DEFAULT 'active',
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """))
+                
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS kb_templates (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        template_type VARCHAR(50) NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        description TEXT,
+                        content TEXT NOT NULL,
+                        variables JSONB DEFAULT '[]'::jsonb,
+                        performance_score DECIMAL(5,2),
+                        usage_count INTEGER DEFAULT 0,
+                        best_for JSONB DEFAULT '{}'::jsonb,
+                        status VARCHAR(20) DEFAULT 'active',
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """))
+                
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS kb_constraints (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        constraint_type VARCHAR(50) NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        description TEXT,
+                        scope VARCHAR(50) NOT NULL,
+                        scope_value VARCHAR(255),
+                        threshold_value DECIMAL(10,2) NOT NULL,
+                        threshold_unit VARCHAR(50),
+                        window_days INTEGER,
+                        priority INTEGER DEFAULT 50,
+                        status VARCHAR(20) DEFAULT 'active',
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """))
+                
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS kb_playbooks (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        name VARCHAR(255) NOT NULL,
+                        description TEXT,
+                        use_case VARCHAR(50),
+                        rule_ids UUID[] DEFAULT '{}',
+                        template_ids UUID[] DEFAULT '{}',
+                        constraint_ids UUID[] DEFAULT '{}',
+                        config JSONB DEFAULT '{}'::jsonb,
+                        usage_count INTEGER DEFAULT 0,
+                        status VARCHAR(20) DEFAULT 'active',
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """))
+                
+                conn.commit()
+                logger.info("Created KB tables")
     except Exception as e:
         logger.error(f"Error ensuring KB tables: {e}")
-    finally:
-        conn.close()
 
 
 # =============================================================================

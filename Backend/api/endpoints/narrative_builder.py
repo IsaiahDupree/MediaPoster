@@ -700,7 +700,7 @@ async def update_narrative_goal(goal_id: str, updates: Dict[str, Any]):
 # =============================================================================
 
 @router.get("/plan/7-day")
-async def get_seven_day_plan():
+async def get_seven_day_plan(use_demo: bool = True):
     """Generate a 7-day content plan based on goals, rules, and opportunities."""
     engine = get_engine()
     
@@ -785,10 +785,51 @@ async def get_seven_day_plan():
                 except:
                     pass
     except Exception as e:
-        # Database connection failed - return empty plan
+        # Database connection failed - use demo data
         pass
     
-    # 6. Generate 7-day plan (works even with empty data)
+    # Generate demo content if no real data and use_demo is True
+    if use_demo and not candidates:
+        demo_content = [
+            ('demo-1', 'Morning Routine Tips', 92, ['lifestyle', 'productivity'], 'tiktok'),
+            ('demo-2', 'Quick Recipe: 5-Min Breakfast', 88, ['food', 'cooking'], 'instagram'),
+            ('demo-3', 'Workspace Setup Tour', 85, ['tech', 'productivity'], 'youtube'),
+            ('demo-4', 'Day in My Life Vlog', 82, ['lifestyle', 'vlog'], 'tiktok'),
+            ('demo-5', 'Product Review: New Gadget', 80, ['tech', 'review'], 'youtube'),
+            ('demo-6', 'Fitness Challenge Update', 78, ['fitness', 'health'], 'instagram'),
+            ('demo-7', 'Behind the Scenes', 76, ['creative', 'bts'], 'tiktok'),
+            ('demo-8', 'Q&A Session Highlights', 74, ['engagement', 'community'], 'instagram'),
+            ('demo-9', 'Tutorial: Quick Edit Tips', 72, ['education', 'editing'], 'youtube'),
+            ('demo-10', 'Weekend Recap', 70, ['lifestyle', 'vlog'], 'tiktok'),
+            ('demo-11', 'Trending Sound Challenge', 68, ['trend', 'viral'], 'tiktok'),
+            ('demo-12', 'Mini Documentary', 66, ['storytelling', 'creative'], 'youtube'),
+            ('demo-13', 'Collaboration Teaser', 64, ['collab', 'promo'], 'instagram'),
+            ('demo-14', 'Tips & Tricks Compilation', 62, ['education', 'tips'], 'tiktok'),
+        ]
+        candidates = demo_content
+        
+        # Demo rules
+        if not rules:
+            rules = [
+                {'id': 'rule-1', 'type': 'hook', 'recommendation': 'Start with a question hook', 'lift': 15, 'confidence': 0.85},
+                {'id': 'rule-2', 'type': 'timing', 'recommendation': 'Post between 6-9 PM for max engagement', 'lift': 12, 'confidence': 0.78},
+                {'id': 'rule-3', 'type': 'format', 'recommendation': 'Keep videos under 60 seconds', 'lift': 10, 'confidence': 0.72},
+            ]
+        
+        # Demo opportunities
+        if not opportunities:
+            opportunities = [
+                {'id': 'trend-1', 'title': 'Trending Audio: Viral Sound', 'score': 85, 'priority': 'high', 'actions': ['Use trending sound', 'Create duet']},
+            ]
+        
+        # Demo accounts
+        if not mainline_accounts:
+            mainline_accounts = [
+                {'id': 'acc-1', 'platform': 'tiktok', 'handle': '@mainaccount'},
+                {'id': 'acc-2', 'platform': 'instagram', 'handle': '@mainaccount'},
+            ]
+    
+    # 6. Generate 7-day plan
     plan_days = []
     candidate_idx = 0
     
@@ -799,7 +840,7 @@ async def get_seven_day_plan():
         # Determine posts for this day based on cadence
         posts_today = 2  # Default
         if goals:
-            cadence = goals[0][4] or {}
+            cadence = goals[0][4] if len(goals[0]) > 4 else {}
             if isinstance(cadence, dict):
                 posts_today = cadence.get('target_per_day', 2)
         
@@ -809,9 +850,22 @@ async def get_seven_day_plan():
                 cand = candidates[candidate_idx]
                 candidate_idx += 1
                 
-                # Determine best platform
-                platform = 'tiktok'
-                if goals and goals[0][3]:
+                # Handle both DB rows and demo tuples
+                if isinstance(cand, tuple):
+                    content_id = cand[0]
+                    content_title = cand[1]
+                    content_score = cand[2] if len(cand) > 2 else 70
+                    topics = cand[3] if len(cand) > 3 else []
+                    platform = cand[4] if len(cand) > 4 else 'tiktok'
+                else:
+                    content_id = str(cand[0])
+                    content_title = cand[1]
+                    content_score = int(cand[2]) if cand[2] else 0
+                    topics = cand[3] or []
+                    platform = 'tiktok'
+                
+                # Override platform from goals if available
+                if goals and len(goals[0]) > 3 and goals[0][3]:
                     platform_mix = goals[0][3]
                     if isinstance(platform_mix, dict) and platform_mix:
                         platform = max(platform_mix.items(), key=lambda x: x[1])[0]
@@ -825,10 +879,10 @@ async def get_seven_day_plan():
                 
                 post = {
                     'slot': post_num + 1,
-                    'content_id': str(cand[0]),
-                    'content_title': cand[1],
-                    'content_score': int(cand[2]) if cand[2] else 0,
-                    'topics': cand[3] or [],
+                    'content_id': str(content_id),
+                    'content_title': content_title,
+                    'content_score': content_score,
+                    'topics': topics,
                     'platform': platform,
                     'suggested_time': time_slot,
                     'type': 'trend_reactive' if trend_slot else 'planned',

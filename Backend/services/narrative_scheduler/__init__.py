@@ -13,6 +13,7 @@ from .models import NarrativeGoal, NarrativePillar, SchedulingConstraints
 from .scheduler import NarrativeScheduler
 from .ai_classifier import AIContentClassifier, AIScheduleJustifier
 from .reflection_system import ReflectionSystem, WeeklyReflection
+from .content_orchestration import NarrativeContentOrchestrator, ContentBriefFromNarrative
 
 __all__ = [
     'NarrativeReasoningEngine',
@@ -24,4 +25,6 @@ __all__ = [
     'AIScheduleJustifier',
     'ReflectionSystem',
     'WeeklyReflection',
+    'NarrativeContentOrchestrator',
+    'ContentBriefFromNarrative',
 ]

@@ -543,6 +543,95 @@ async def trigger_reflection(schedule_id: str):
 
 
 # =============================================================================
+# CONTENT ORCHESTRATION ENDPOINTS
+# =============================================================================
+
+@router.post("/orchestrate")
+async def orchestrate_content(
+    goal_id: Optional[str] = None,
+    count: int = Query(7, le=14, description="Number of content pieces to generate")
+):
+    """
+    Orchestrate content creation from narrative goals.
+    
+    Generates briefs, scripts, and clip plans based on narrative goals and pillars.
+    """
+    from services.narrative_scheduler.content_orchestration import NarrativeContentOrchestrator
+    
+    scheduler = NarrativeScheduler()
+    orchestrator = NarrativeContentOrchestrator()
+    
+    try:
+        # Load goal and pillars
+        goal = await scheduler._load_goal(goal_id)
+        if not goal:
+            goal = scheduler._get_default_goal()
+        
+        pillars = await scheduler._load_pillars(goal.id) if goal_id else []
+        if not pillars:
+            pillars = scheduler._get_default_pillars()
+        
+        # Generate briefs
+        briefs = await orchestrator.generate_content_briefs_from_goal(
+            goal=goal,
+            pillars=pillars,
+            count=count
+        )
+        
+        return {
+            "success": True,
+            "briefs_count": len(briefs),
+            "briefs": [b.to_dict() for b in briefs],
+            "goal": goal.goal_statement,
+            "pillars": [p.name for p in pillars]
+        }
+    except Exception as e:
+        logger.error(f"[API] Content orchestration failed: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@router.post("/orchestrate/script")
+async def generate_script_from_brief(brief_data: Dict[str, Any]):
+    """Generate a video script from a content brief."""
+    from services.narrative_scheduler.content_orchestration import (
+        NarrativeContentOrchestrator, 
+        ContentBriefFromNarrative
+    )
+    
+    orchestrator = NarrativeContentOrchestrator()
+    
+    # Convert dict to brief
+    brief = ContentBriefFromNarrative(
+        narrative_goal_id=brief_data.get("narrative_goal_id", ""),
+        pillar=brief_data.get("pillar", ""),
+        topic=brief_data.get("topic", ""),
+        hook=brief_data.get("hook", ""),
+        key_points=brief_data.get("key_points", []),
+        call_to_action=brief_data.get("call_to_action", ""),
+        target_duration_seconds=brief_data.get("target_duration_seconds", 30),
+        target_platforms=brief_data.get("target_platforms", ["tiktok"]),
+        tone=brief_data.get("tone", "engaging"),
+    )
+    
+    try:
+        script = await orchestrator.convert_brief_to_script(brief)
+        return {
+            "success": True,
+            "script": script,
+            "brief_id": brief.id
+        }
+    except Exception as e:
+        logger.error(f"[API] Script generation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+# =============================================================================
 # TEMPLATE ENDPOINTS
 # =============================================================================
 

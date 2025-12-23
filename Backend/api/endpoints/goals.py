@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from pydantic import BaseModel, UUID4
+from pydantic import BaseModel
+from uuid import UUID
 from datetime import datetime
 
 from database.connection import get_db
@@ -25,8 +26,8 @@ class GoalUpdate(BaseModel):
     end_date: Optional[datetime] = None
 
 class GoalResponse(BaseModel):
-    id: UUID4
-    user_id: UUID4
+    id: UUID
+    user_id: UUID
     goal_type: str
     goal_name: str
     target_metrics: dict
@@ -67,7 +68,7 @@ async def get_goals(
 
 @router.patch("/{goal_id}", response_model=GoalResponse)
 async def update_goal(
-    goal_id: UUID4,
+    goal_id: UUID,
     goal_update: GoalUpdate,
     db: AsyncSession = Depends(get_db)
 ):
@@ -79,7 +80,7 @@ async def update_goal(
 
 @router.delete("/{goal_id}")
 async def delete_goal(
-    goal_id: UUID4,
+    goal_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
     service = GoalsService(db)
@@ -88,7 +89,7 @@ async def delete_goal(
 
 @router.post("/{goal_id}/refresh-progress")
 async def refresh_goal_progress(
-    goal_id: UUID4,
+    goal_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
     service = GoalsService(db)

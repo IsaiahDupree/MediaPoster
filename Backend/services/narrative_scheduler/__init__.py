@@ -11,6 +11,8 @@ This module provides AI-powered content scheduling based on:
 from .reasoning_engine import NarrativeReasoningEngine
 from .models import NarrativeGoal, NarrativePillar, SchedulingConstraints
 from .scheduler import NarrativeScheduler
+from .ai_classifier import AIContentClassifier, AIScheduleJustifier
+from .reflection_system import ReflectionSystem, WeeklyReflection
 
 __all__ = [
     'NarrativeReasoningEngine',
@@ -18,4 +20,8 @@ __all__ = [
     'NarrativePillar',
     'SchedulingConstraints',
     'NarrativeScheduler',
+    'AIContentClassifier',
+    'AIScheduleJustifier',
+    'ReflectionSystem',
+    'WeeklyReflection',
 ]

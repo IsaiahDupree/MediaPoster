@@ -523,13 +523,23 @@ async def get_learnings(
 @router.post("/reflect")
 async def trigger_reflection(schedule_id: str):
     """Trigger reflection analysis for a completed schedule"""
-    # This would analyze performance and generate learnings
-    # For now, return a placeholder
-    return {
-        "message": "Reflection triggered",
-        "schedule_id": schedule_id,
-        "status": "pending"
-    }
+    from services.narrative_scheduler.reflection_system import ReflectionSystem
+    
+    reflection_system = ReflectionSystem()
+    
+    try:
+        reflection = await reflection_system.generate_weekly_reflection(schedule_id)
+        return {
+            "success": True,
+            "reflection": reflection.to_dict()
+        }
+    except Exception as e:
+        logger.error(f"[API] Reflection failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "schedule_id": schedule_id
+        }
 
 
 # =============================================================================

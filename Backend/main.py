@@ -574,6 +574,10 @@ app.include_router(comment_automation.router, tags=["Comment Automation"])
 from api.endpoints import system
 app.include_router(system.router, prefix="/api/system", tags=["System Health"])
 
+# Agent Panel (AI Agent monitoring and control)
+from api.endpoints import agent_panel
+app.include_router(agent_panel.router, tags=["Agent Panel"])
+
 # Device Import (iOS/Android media import with duplicate detection)
 # TODO: import_router module not found - commented out for now
 # from routers import import_router

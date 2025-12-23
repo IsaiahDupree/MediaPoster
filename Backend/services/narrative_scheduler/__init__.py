@@ -14,6 +14,7 @@ from .scheduler import NarrativeScheduler
 from .ai_classifier import AIContentClassifier, AIScheduleJustifier
 from .reflection_system import ReflectionSystem, WeeklyReflection
 from .content_orchestration import NarrativeContentOrchestrator, ContentBriefFromNarrative
+from .weekly_automation import WeeklyAutomation, AutomationConfig, trigger_weekly_cycle
 
 __all__ = [
     'NarrativeReasoningEngine',
@@ -27,4 +28,7 @@ __all__ = [
     'WeeklyReflection',
     'NarrativeContentOrchestrator',
     'ContentBriefFromNarrative',
+    'WeeklyAutomation',
+    'AutomationConfig',
+    'trigger_weekly_cycle',
 ]

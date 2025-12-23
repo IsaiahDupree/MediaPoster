@@ -543,6 +543,66 @@ async def trigger_reflection(schedule_id: str):
 
 
 # =============================================================================
+# WEEKLY AUTOMATION ENDPOINTS
+# =============================================================================
+
+@router.post("/automation/weekly-cycle")
+async def trigger_full_weekly_cycle(goal_id: Optional[str] = None):
+    """
+    Trigger a full weekly automation cycle:
+    1. Reflect on past week's performance
+    2. Generate learnings
+    3. Create new 7-day plan with learnings applied
+    """
+    from services.narrative_scheduler.weekly_automation import WeeklyAutomation
+    
+    automation = WeeklyAutomation()
+    
+    try:
+        result = await automation.run_full_weekly_cycle(goal_id)
+        return result
+    except Exception as e:
+        logger.error(f"[API] Weekly cycle failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/automation/reflect")
+async def trigger_reflection_only():
+    """Trigger weekly reflection without generating a new plan."""
+    from services.narrative_scheduler.weekly_automation import WeeklyAutomation
+    
+    automation = WeeklyAutomation()
+    
+    try:
+        result = await automation.run_weekly_reflection()
+        return result
+    except Exception as e:
+        logger.error(f"[API] Reflection trigger failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/automation/generate-plan")
+async def trigger_plan_generation(
+    goal_id: Optional[str] = None,
+    apply_learnings: bool = True
+):
+    """Generate next week's plan with optional learning application."""
+    from services.narrative_scheduler.weekly_automation import WeeklyAutomation
+    
+    automation = WeeklyAutomation()
+    
+    try:
+        result = await automation.generate_next_week_plan(
+            goal_id=goal_id,
+            apply_learnings=apply_learnings
+        )
+        return result
+    except Exception as e:
+        logger.error(f"[API] Plan generation trigger failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# =============================================================================
 # CONTENT ORCHESTRATION ENDPOINTS
 # =============================================================================
 

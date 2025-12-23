@@ -142,6 +142,18 @@ class Topics:
     SCHEDULER_ITEM_CANCELED = "mp.scheduler.evt.item_canceled"    # Item canceled
     
     # =========================================================================
+    # TRENDS (Opportunity Signals)
+    # =========================================================================
+    TREND_SYNC_PROVIDER = "mp.trends.cmd.sync_provider"           # Trigger provider pull
+    TREND_RAW_INGESTED = "mp.trends.evt.raw_ingested"             # Raw payload stored
+    TREND_NORMALIZED_READY = "mp.trends.evt.normalized_ready"     # Normalized items ready
+    TREND_CLUSTER_READY = "mp.trends.evt.cluster_ready"           # Cluster computed
+    TREND_OPPORTUNITY_READY = "mp.trends.evt.opportunity_ready"   # Scored opportunity
+    TREND_ALERT = "mp.trends.evt.alert"                           # Big spike / time-sensitive
+    TREND_BRIEF_READY = "mp.briefs.evt.trend_brief_ready"         # Brief generated
+    TREND_ASSET_MATCHED = "mp.trends.evt.asset_matched"           # Assets matched to trend
+    
+    # =========================================================================
     # UI / REALTIME
     # =========================================================================
     UI_TOAST = "mp.ui.evt.toast"                                  # Show notification

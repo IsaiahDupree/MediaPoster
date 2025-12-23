@@ -16,6 +16,7 @@ from .reflection_system import ReflectionSystem, WeeklyReflection
 from .content_orchestration import NarrativeContentOrchestrator, ContentBriefFromNarrative
 from .weekly_automation import WeeklyAutomation, AutomationConfig, trigger_weekly_cycle
 from .clip_integration import ClipSchedulingIntegration, ClipCandidate
+from .autonomous_planner import AutonomousNarrativePlanner, get_planner
 
 __all__ = [
     'NarrativeReasoningEngine',
@@ -34,4 +35,6 @@ __all__ = [
     'trigger_weekly_cycle',
     'ClipSchedulingIntegration',
     'ClipCandidate',
+    'AutonomousNarrativePlanner',
+    'get_planner',
 ]

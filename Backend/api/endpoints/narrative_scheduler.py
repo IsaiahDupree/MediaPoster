@@ -888,3 +888,146 @@ async def apply_template(template_id: str):
         "message": f"Template {template_id} applied",
         "status": "success"
     }
+
+
+# =============================================================================
+# AUTONOMOUS NARRATIVE PLANNER ENDPOINTS
+# =============================================================================
+
+@router.get("/autonomous/status")
+async def get_autonomous_planner_status():
+    """
+    Get status of the autonomous narrative planner.
+    Shows readiness, current draft, and reasoning chain.
+    """
+    from services.narrative_scheduler.autonomous_planner import get_planner
+    
+    planner = get_planner()
+    
+    try:
+        status = await planner.get_status()
+        return {"success": True, **status}
+    except Exception as e:
+        logger.error(f"[API] Autonomous status error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/autonomous/run-cycle")
+async def run_autonomous_cycle():
+    """
+    Manually trigger one autonomous planning cycle.
+    The planner will analyze content and generate a draft plan if ready.
+    """
+    from services.narrative_scheduler.autonomous_planner import get_planner
+    
+    planner = get_planner()
+    
+    try:
+        status = await planner.run_once()
+        return {"success": True, "message": "Cycle completed", **status}
+    except Exception as e:
+        logger.error(f"[API] Autonomous cycle error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/autonomous/draft")
+async def get_draft_plan():
+    """
+    Get the current draft plan awaiting human approval.
+    Returns full plan details including days, posts, and reasoning.
+    """
+    from services.narrative_scheduler.autonomous_planner import get_planner
+    
+    planner = get_planner()
+    
+    try:
+        draft = await planner.get_draft_plan()
+        if draft:
+            return {"success": True, "draft": draft}
+        return {"success": True, "draft": None, "message": "No draft plan available"}
+    except Exception as e:
+        logger.error(f"[API] Get draft error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/autonomous/approve")
+async def approve_draft_plan(plan_id: Optional[str] = None):
+    """
+    HUMAN APPROVAL: Approve the current draft plan.
+    Only after approval will the plan be eligible for scheduling.
+    """
+    from services.narrative_scheduler.autonomous_planner import get_planner
+    
+    planner = get_planner()
+    
+    try:
+        result = await planner.approve_plan(plan_id)
+        return result
+    except Exception as e:
+        logger.error(f"[API] Approve plan error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/autonomous/reject")
+async def reject_draft_plan(plan_id: Optional[str] = None, reason: str = ""):
+    """
+    HUMAN REJECTION: Reject the current draft plan.
+    Planner will generate a new plan on next cycle.
+    """
+    from services.narrative_scheduler.autonomous_planner import get_planner
+    
+    planner = get_planner()
+    
+    try:
+        result = await planner.reject_plan(plan_id, reason)
+        return result
+    except Exception as e:
+        logger.error(f"[API] Reject plan error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/autonomous/schedule-approved")
+async def schedule_approved_plan():
+    """
+    Schedule the approved plan.
+    This ONLY works after human approval - posts are created in scheduled_posts table.
+    """
+    from services.narrative_scheduler.autonomous_planner import get_planner
+    
+    planner = get_planner()
+    
+    try:
+        result = await planner.schedule_approved_plan()
+        return result
+    except Exception as e:
+        logger.error(f"[API] Schedule approved error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/autonomous/readiness")
+async def check_plan_readiness():
+    """
+    Check if there's enough content to generate a 7-day plan.
+    Returns detailed readiness metrics and missing requirements.
+    """
+    from services.narrative_scheduler.autonomous_planner import get_planner
+    
+    planner = get_planner()
+    
+    try:
+        readiness = await planner.check_readiness()
+        return {
+            "success": True,
+            "is_ready": readiness.is_ready,
+            "readiness_score": readiness.readiness_score,
+            "metrics": {
+                "analyzed_videos": readiness.analyzed_videos,
+                "high_performers": readiness.high_performers,
+                "active_pillars": readiness.active_pillars,
+                "candidates_available": readiness.candidates_available
+            },
+            "missing_requirements": readiness.missing_requirements
+        }
+    except Exception as e:
+        logger.error(f"[API] Readiness check error: {e}")
+        return {"success": False, "error": str(e)}

@@ -287,33 +287,121 @@ async def _run_extraction_sync(
         return
     
     try:
-        from services.clip_extraction_service import ClipExtractionService
+        # Try new ClipExtractor first
+        from services.clip_extraction import ClipExtractor, ExtractionConfig
         
-        service = ClipExtractionService(
-            font_size=request.options.font_size,
-            font_color=request.options.font_color
-        )
-        
-        def progress_callback(pct: int, step: str):
-            job["progress"] = pct
-            job["step"] = step
-        
-        result = await service.extract_clips(
-            video_path=video_path,
-            output_dir=Path(request.output_dir) if request.output_dir else None,
-            progress_callback=progress_callback,
+        config = ExtractionConfig(
             min_clip_duration=request.options.min_clip_duration,
             max_clip_duration=request.options.max_clip_duration,
-            max_clips=request.options.max_clips
+            target_clips=request.options.max_clips
         )
         
-        if result.success:
-            job["status"] = "completed"
-            job["clips_count"] = len(result.clips)
-            job["completed_at"] = datetime.now().isoformat()
-        else:
+        extractor = ClipExtractor(config=config)
+        
+        # Get transcript from video analysis
+        engine = get_engine()
+        transcript = ""
+        video_duration = 60.0
+        topics = []
+        
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT va.transcript, va.topics, v.duration_sec
+                    FROM video_analysis va
+                    JOIN videos v ON v.id = va.video_id
+                    WHERE va.video_id = :media_id
+                """),
+                {"media_id": media_id}
+            ).fetchone()
+            
+            if result:
+                transcript = result[0] or ""
+                topics = result[1] if isinstance(result[1], list) else []
+                video_duration = float(result[2]) if result[2] else 60.0
+        
+        job["step"] = "analyzing_transcript"
+        job["progress"] = 20
+        
+        # Run extraction
+        output_dir = request.output_dir or f"/tmp/clips/{media_id}"
+        
+        clips = await extractor.extract_clips_from_video(
+            video_id=media_id,
+            video_path=video_path,
+            transcript=transcript,
+            video_duration=video_duration,
+            output_dir=output_dir,
+            topics=topics
+        )
+        
+        job["progress"] = 80
+        job["step"] = "saving_clips"
+        
+        # Save clips to database
+        completed_clips = [c for c in clips if c.status == "completed"]
+        
+        with engine.connect() as conn:
+            for clip in completed_clips:
+                conn.execute(text("""
+                    INSERT INTO video_clips (id, source_video_id, clip_path, 
+                        start_time_sec, end_time_sec, clip_type, metadata)
+                    VALUES (:id, :source_id, :path, :start, :end, 'extracted', :metadata)
+                    ON CONFLICT (id) DO NOTHING
+                """), {
+                    "id": clip.id,
+                    "source_id": media_id,
+                    "path": clip.output_path,
+                    "start": clip.segment.start_time if clip.segment else 0,
+                    "end": clip.segment.end_time if clip.segment else 0,
+                    "metadata": {
+                        "text": clip.segment.text if clip.segment else "",
+                        "relevance_score": clip.segment.relevance_score if clip.segment else 0,
+                        "reasoning": clip.segment.reasoning if clip.segment else "",
+                        "filename": os.path.basename(clip.output_path) if clip.output_path else ""
+                    }
+                })
+            conn.commit()
+        
+        job["status"] = "completed"
+        job["clips_count"] = len(completed_clips)
+        job["completed_at"] = datetime.now().isoformat()
+        job["progress"] = 100
+        job["step"] = "done"
+        
+    except ImportError:
+        # Fallback to old service
+        try:
+            from services.clip_extraction_service import ClipExtractionService
+            
+            service = ClipExtractionService(
+                font_size=request.options.font_size,
+                font_color=request.options.font_color
+            )
+            
+            def progress_callback(pct: int, step: str):
+                job["progress"] = pct
+                job["step"] = step
+            
+            result = await service.extract_clips(
+                video_path=video_path,
+                output_dir=Path(request.output_dir) if request.output_dir else None,
+                progress_callback=progress_callback,
+                min_clip_duration=request.options.min_clip_duration,
+                max_clip_duration=request.options.max_clip_duration,
+                max_clips=request.options.max_clips
+            )
+            
+            if result.success:
+                job["status"] = "completed"
+                job["clips_count"] = len(result.clips)
+                job["completed_at"] = datetime.now().isoformat()
+            else:
+                job["status"] = "failed"
+                job["error"] = result.error
+        except Exception as e2:
             job["status"] = "failed"
-            job["error"] = result.error
+            job["error"] = str(e2)
             
     except Exception as e:
         job["status"] = "failed"

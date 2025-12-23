@@ -429,6 +429,8 @@ app.include_router(analyzed_content.router, prefix="/api/analyzed-content", tags
 # Social Media Accounts (RapidAPI Live Fetch)
 from api.endpoints import social_accounts
 app.include_router(social_accounts.router, prefix="/api/social-accounts", tags=["Social Accounts"])
+# Also register at /api/social for frontend compatibility
+app.include_router(social_accounts.router, prefix="/api/social", tags=["Social Accounts"])
 
 # YouTube Analytics (Google Cloud Console / YouTube Data API v3)
 from api.endpoints import youtube_analytics
@@ -559,6 +561,10 @@ app.include_router(content_pipeline.router, tags=["Content Pipeline"])
 # RapidAPI Metrics (Multi-API Instagram/LinkedIn with rate limit management)
 from api import rapidapi_metrics
 app.include_router(rapidapi_metrics.router, tags=["RapidAPI Metrics"])
+
+# AI Narrative Scheduler (Goal-based content scheduling with AI reasoning)
+from api.endpoints import narrative_scheduler
+app.include_router(narrative_scheduler.router, tags=["Narrative Scheduler"])
 
 # Comment Automation (AI-powered comment engagement across platforms)
 from api import comment_automation

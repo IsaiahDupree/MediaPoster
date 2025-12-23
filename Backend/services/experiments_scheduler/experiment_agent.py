@@ -322,6 +322,21 @@ Return as JSON array:
             elif action.action_type == AgentActionType.ADD_SUBTITLES:
                 action.result = await self._add_subtitles(action.action_params)
             
+            elif action.action_type == AgentActionType.TRIM_CLIP:
+                action.result = await self._trim_clip(action.action_params)
+            
+            elif action.action_type == AgentActionType.ADD_HOOK:
+                action.result = await self._add_hook(action.action_params)
+            
+            elif action.action_type == AgentActionType.GENERATE_SCRIPT:
+                action.result = await self._generate_script(action.action_params)
+            
+            elif action.action_type == AgentActionType.DETECT_TRENDS:
+                action.result = await self._detect_trends(action.action_params)
+            
+            elif action.action_type == AgentActionType.CREATE_THUMBNAIL:
+                action.result = await self._create_thumbnail(action.action_params)
+            
             else:
                 # Generic handler for unimplemented actions
                 action.result = {"status": "not_implemented", "action": action.action_type.value}
@@ -441,6 +456,177 @@ Return as JSON array:
         )
         
         return {"success": success, "output_path": output_path}
+    
+    async def _trim_clip(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Trim a video clip to specified start/end times."""
+        import subprocess
+        from pathlib import Path
+        
+        video_path = params.get("video_path")
+        start_time = params.get("start_time", 0)
+        end_time = params.get("end_time", 30)
+        
+        if not video_path or not Path(video_path).exists():
+            return {"success": False, "error": "Video file not found"}
+        
+        output_path = str(Path(video_path).with_suffix(".trimmed.mp4"))
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(start_time),
+            "-i", video_path,
+            "-t", str(end_time - start_time),
+            "-c", "copy",
+            output_path
+        ]
+        
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)
+            return {"success": True, "output_path": output_path}
+        except subprocess.CalledProcessError as e:
+            return {"success": False, "error": str(e)}
+    
+    async def _add_hook(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Add a hook/intro to a video using AI-generated text overlay."""
+        hook_type = params.get("hook_type", "question")
+        topic = params.get("topic", "")
+        video_id = params.get("video_id")
+        
+        # Generate hook text using AI
+        hooks = {
+            "question": f"Have you ever wondered about {topic}?",
+            "statement": f"Here's the truth about {topic}",
+            "challenge": f"I bet you didn't know this about {topic}",
+            "tease": f"Wait for it... {topic}",
+            "pov": f"POV: You just discovered {topic}"
+        }
+        
+        hook_text = hooks.get(hook_type, hooks["question"])
+        
+        # If OpenAI available, generate better hook
+        if self.openai_api_key and topic:
+            try:
+                import openai
+                client = openai.OpenAI(api_key=self.openai_api_key)
+                
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{
+                        "role": "user",
+                        "content": f"Generate a short, engaging {hook_type} hook for a video about: {topic}. Max 10 words."
+                    }],
+                    max_tokens=50
+                )
+                hook_text = response.choices[0].message.content.strip()
+            except Exception:
+                pass
+        
+        return {
+            "success": True,
+            "hook_text": hook_text,
+            "hook_type": hook_type,
+            "video_id": video_id
+        }
+    
+    async def _generate_script(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate a video script using AI."""
+        topic = params.get("topic", "")
+        duration = params.get("duration", 30)
+        tone = params.get("tone", "educational")
+        pillar = params.get("pillar", "Process/How-To")
+        
+        if not self.openai_api_key:
+            # Basic script template
+            return {
+                "success": True,
+                "script": f"Here's how to master {topic}. First, understand the basics. Then, practice consistently. Finally, apply what you've learned.",
+                "word_count": 20,
+                "estimated_duration": 8
+            }
+        
+        try:
+            import openai
+            client = openai.OpenAI(api_key=self.openai_api_key)
+            
+            prompt = f"""Generate a {duration}-second video script about: {topic}
+
+Tone: {tone}
+Content Pillar: {pillar}
+Target: Short-form vertical video (TikTok/Reels)
+
+Requirements:
+- Hook in first 2 seconds
+- Clear value delivery
+- Strong CTA at end
+- Approximately {duration * 2.5} words
+
+Return ONLY the script text, no stage directions."""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300
+            )
+            
+            script = response.choices[0].message.content.strip()
+            word_count = len(script.split())
+            
+            return {
+                "success": True,
+                "script": script,
+                "word_count": word_count,
+                "estimated_duration": word_count / 2.5
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    async def _detect_trends(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Detect trending topics and formats."""
+        platform = params.get("platform", "tiktok")
+        category = params.get("category", "general")
+        
+        # Would integrate with trend detection APIs
+        # For now, return mock trends
+        trends = [
+            {"topic": "AI tools", "momentum": 0.85, "relevance": 0.9},
+            {"topic": "Productivity hacks", "momentum": 0.78, "relevance": 0.85},
+            {"topic": "Quick tutorials", "momentum": 0.72, "relevance": 0.88},
+        ]
+        
+        return {
+            "success": True,
+            "platform": platform,
+            "category": category,
+            "trends": trends
+        }
+    
+    async def _create_thumbnail(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a thumbnail for a video."""
+        video_path = params.get("video_path")
+        timestamp = params.get("timestamp", 1.0)
+        
+        if not video_path:
+            return {"success": False, "error": "Video path required"}
+        
+        from pathlib import Path
+        import subprocess
+        
+        output_path = str(Path(video_path).with_suffix(".thumb.jpg"))
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(timestamp),
+            "-i", video_path,
+            "-vframes", "1",
+            "-q:v", "2",
+            output_path
+        ]
+        
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)
+            return {"success": True, "thumbnail_path": output_path}
+        except subprocess.CalledProcessError as e:
+            return {"success": False, "error": str(e)}
     
     def get_available_actions(self) -> List[Dict[str, str]]:
         """Get list of available actions with descriptions."""

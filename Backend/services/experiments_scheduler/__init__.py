@@ -36,6 +36,13 @@ from .winner_detector import WinnerDetector
 
 from .pattern_learner import PatternLearner
 
+from .autonomous_runner import (
+    AutonomousExperimentRunner,
+    get_runner,
+    start_autonomous_runner,
+    stop_autonomous_runner
+)
+
 __all__ = [
     # Models
     'Experiment',
@@ -57,4 +64,10 @@ __all__ = [
     'HypothesisEngine',
     'WinnerDetector',
     'PatternLearner',
+    
+    # Autonomous Runner
+    'AutonomousExperimentRunner',
+    'get_runner',
+    'start_autonomous_runner',
+    'stop_autonomous_runner',
 ]

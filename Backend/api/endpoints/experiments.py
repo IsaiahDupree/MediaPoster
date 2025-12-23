@@ -2110,6 +2110,126 @@ async def get_system_status():
     return status
 
 
+# =============================================================================
+# AUTONOMOUS RUNNER ENDPOINTS
+# =============================================================================
+
+@router.get("/autonomous/status")
+async def get_autonomous_status():
+    """Get autonomous experiment runner status."""
+    from services.experiments_scheduler import get_runner
+    
+    runner = get_runner()
+    
+    try:
+        status = await runner.get_status()
+        return {"success": True, **status}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/autonomous/run-cycle")
+async def run_autonomous_cycle():
+    """Manually trigger one autonomous cycle."""
+    from services.experiments_scheduler import get_runner
+    
+    runner = get_runner()
+    
+    try:
+        status = await runner.run_once()
+        return {"success": True, "message": "Cycle completed", **status}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/autonomous/enable")
+async def enable_autonomous_mode(enabled: bool = True):
+    """Enable or disable autonomous experiment starting."""
+    from services.experiments_scheduler import get_runner
+    
+    runner = get_runner()
+    runner.set_auto_start(enabled)
+    
+    return {
+        "success": True,
+        "auto_start_enabled": enabled,
+        "message": f"Autonomous mode {'enabled' if enabled else 'disabled'}"
+    }
+
+
+@router.post("/autonomous/settings")
+async def update_autonomous_settings(
+    min_priority: Optional[int] = None,
+    max_concurrent: Optional[int] = None
+):
+    """Update autonomous runner settings."""
+    from services.experiments_scheduler import get_runner
+    
+    runner = get_runner()
+    
+    if min_priority is not None:
+        runner.set_min_priority(min_priority)
+    
+    if max_concurrent is not None:
+        runner.max_concurrent = max_concurrent
+    
+    return {
+        "success": True,
+        "min_priority": runner.min_priority,
+        "max_concurrent": runner.max_concurrent
+    }
+
+
+@router.get("/autonomous/backlog")
+async def get_experiment_backlog():
+    """Get prioritized experiment backlog for autonomous running."""
+    from services.experiments_scheduler import get_runner
+    
+    runner = get_runner()
+    
+    try:
+        candidates = await runner.scan_backlog()
+        return {
+            "success": True,
+            "candidates": [
+                {
+                    "id": c.id,
+                    "hypothesis": c.hypothesis,
+                    "target_metric": c.target_metric,
+                    "impact": c.impact,
+                    "effort": c.effort,
+                    "confidence": c.confidence,
+                    "priority_score": c.priority_score,
+                    "status": c.status
+                }
+                for c in candidates
+            ],
+            "count": len(candidates)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/autonomous/start-top")
+async def auto_start_top_experiments(count: int = 1):
+    """Automatically start the top N priority experiments."""
+    from services.experiments_scheduler import get_runner
+    
+    runner = get_runner()
+    
+    try:
+        candidates = await runner.scan_backlog()
+        started = await runner._auto_start_experiments(candidates, count)
+        
+        return {
+            "success": True,
+            "started": started,
+            "message": f"Auto-started {started} experiments"
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @router.post("/pipeline/sync-learnings")
 async def sync_learnings_to_narrative():
     """

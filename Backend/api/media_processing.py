@@ -645,6 +645,99 @@ async def get_thumbnail(
         raise HTTPException(status_code=500, detail=f"Thumbnail error: {str(e)}")
 
 
+@router.get("/thumbnail-file")
+async def get_thumbnail_file(
+    path: str = Query(..., description="Path to thumbnail file on disk")
+):
+    """
+    Serve a thumbnail file from a disk path.
+    Used by schedule page for posts with stored thumbnail_url paths.
+    """
+    from pathlib import Path as FilePath
+    
+    # Security: only allow paths in known directories
+    allowed_prefixes = ['/tmp/mediaposter/thumbnails/', '/thumbnails/']
+    
+    # Normalize path
+    normalized = path.replace('\\', '/')
+    
+    # Check if path is allowed
+    is_allowed = any(normalized.startswith(prefix) for prefix in allowed_prefixes)
+    if not is_allowed:
+        raise HTTPException(status_code=403, detail="Access to this path is not allowed")
+    
+    file_path = FilePath(normalized)
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail file not found")
+    
+    # Determine content type
+    suffix = file_path.suffix.lower()
+    content_types = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg', 
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp'
+    }
+    content_type = content_types.get(suffix, 'image/jpeg')
+    
+    return FileResponse(
+        str(file_path),
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
+@router.get("/video-file")
+async def get_video_file(
+    path: str = Query(..., description="Path to video file on disk")
+):
+    """
+    Serve a video file from a disk path.
+    Used by schedule page for posts with stored video_source_uri paths.
+    """
+    from pathlib import Path as FilePath
+    
+    # Security: only allow paths in known directories
+    allowed_prefixes = [
+        '/Users/',  # macOS user directories
+        '/tmp/mediaposter/',
+        '/home/',  # Linux user directories
+    ]
+    
+    # Normalize path
+    normalized = path.replace('\\', '/')
+    
+    # Check if path is allowed
+    is_allowed = any(normalized.startswith(prefix) for prefix in allowed_prefixes)
+    if not is_allowed:
+        raise HTTPException(status_code=403, detail="Access to this path is not allowed")
+    
+    file_path = FilePath(normalized)
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    # Determine content type
+    suffix = file_path.suffix.lower()
+    content_types = {
+        '.mp4': 'video/mp4',
+        '.mov': 'video/quicktime',
+        '.m4v': 'video/x-m4v',
+        '.avi': 'video/x-msvideo',
+        '.mkv': 'video/x-matroska',
+        '.webm': 'video/webm'
+    }
+    content_type = content_types.get(suffix, 'video/mp4')
+    
+    return FileResponse(
+        str(file_path),
+        media_type=content_type,
+        headers={"Accept-Ranges": "bytes"}
+    )
+
+
 # =============================================================================
 # THUMBNAIL GENERATION
 # =============================================================================

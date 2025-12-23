@@ -95,10 +95,20 @@ def ensure_table_exists():
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
         """))
-        conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_scheduled_posts_scheduled_at 
-            ON scheduled_posts(scheduled_at)
-        """))
+        # Create index - handle both column name variants
+        try:
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_scheduled_posts_scheduled_time 
+                ON scheduled_posts(scheduled_time)
+            """))
+        except Exception:
+            try:
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_scheduled_posts_scheduled_at 
+                    ON scheduled_posts(scheduled_at)
+                """))
+            except Exception:
+                pass  # Index may already exist or column doesn't exist
         conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_scheduled_posts_status 
             ON scheduled_posts(status)
@@ -150,11 +160,11 @@ async def list_scheduled_posts(
     params = {"limit": limit}
     
     if start_date:
-        where_clauses.append("scheduled_at >= :start_date")
+        where_clauses.append("scheduled_time >= :start_date")
         params["start_date"] = start_date
     
     if end_date:
-        where_clauses.append("scheduled_at <= :end_date")
+        where_clauses.append("scheduled_time <= :end_date")
         params["end_date"] = end_date
     
     if platform:
@@ -165,15 +175,20 @@ async def list_scheduled_posts(
         where_clauses.append("status = :status")
         params["status"] = status
     
+    # Use actual column names from scheduled_posts table
+    # Join with videos to get source_uri for video playback
     query = f"""
         SELECT 
-            id, content_id, title, caption, hashtags, thumbnail_url,
-            platform, account_id, account_username, account_avatar,
-            scheduled_at, status, post_type, created_at, updated_at,
-            platform_url, published_at
-        FROM scheduled_posts
+            sp.id, sp.clip_id, sp.content_variant_id, sp.platform, 
+            sp.platform_account_id, sp.scheduled_time, sp.status,
+            sp.platform_post_id, sp.platform_url, sp.created_at, sp.updated_at, sp.published_at,
+            sp.title, sp.caption, sp.hashtags, sp.account_username, sp.thumbnail_url,
+            COALESCE(sp.video_source_uri, v.source_uri) as video_source_uri,
+            COALESCE(sp.content_id, sp.clip_id::text) as media_ref_id
+        FROM scheduled_posts sp
+        LEFT JOIN videos v ON v.id::text = sp.content_id
         WHERE {' AND '.join(where_clauses)}
-        ORDER BY scheduled_at ASC
+        ORDER BY sp.scheduled_time ASC
         LIMIT :limit
     """
     
@@ -182,24 +197,50 @@ async def list_scheduled_posts(
     
     posts = []
     for row in rows:
+        content_id = str(row[18]) if row[18] else (str(row[1]) if row[1] else None)  # media_ref_id
+        thumbnail = row[16]  # thumbnail_url from scheduled_posts
+        video_source = row[17]  # video_source_uri
+        
+        # Build thumbnail URL from stored path
+        thumbnail_url = None
+        if thumbnail:
+            # Handle both relative and absolute paths
+            if thumbnail.startswith('/tmp/') or thumbnail.startswith('/thumbnails/'):
+                thumbnail_url = f'/api/media/thumbnail-file?path={thumbnail}'
+            elif thumbnail.startswith('/'):
+                thumbnail_url = thumbnail
+            else:
+                thumbnail_url = f'/api/media/thumbnail-file?path={thumbnail}'
+        
+        # Build video URL from source path
+        video_url = None
+        if video_source:
+            video_url = f'/api/media/video-file?path={video_source}'
+        elif content_id:
+            video_url = f'/api/media-db/video/{content_id}'
+        
         posts.append({
             "id": str(row[0]),
-            "contentId": row[1],
-            "title": row[2],
-            "caption": row[3],
-            "hashtags": row[4] if isinstance(row[4], list) else json.loads(row[4] or '[]'),
-            "thumbnailUrl": row[5],
-            "platform": row[6],
-            "accountId": row[7],
-            "accountUsername": row[8],
-            "accountAvatar": row[9],
-            "scheduledAt": str(row[10]) if row[10] else None,
-            "status": row[11],
-            "postType": row[12],
-            "createdAt": str(row[13]) if row[13] else None,
-            "updatedAt": str(row[14]) if row[14] else None,
-            "platformUrl": row[15],
-            "publishedAt": str(row[16]) if row[16] else None,
+            "content_id": content_id,
+            "media_id": content_id,
+            "title": row[12] or "Untitled",
+            "caption": row[13] or "",
+            "hashtags": row[14] if isinstance(row[14], list) else [],
+            "thumbnail_url": thumbnail_url,
+            "thumbnail_path": thumbnail_url,
+            "video_url": video_url,
+            "video_source_uri": video_source,
+            "platform": row[3],
+            "account_id": str(row[4]) if row[4] else None,
+            "account_username": row[15],
+            "account_avatar": None,
+            "scheduled_at": str(row[5]) if row[5] else None,
+            "status": row[6],
+            "post_type": "reel",
+            "created_at": str(row[9]) if row[9] else None,
+            "updated_at": str(row[10]) if row[10] else None,
+            "platform_url": row[8],
+            "published_at": str(row[11]) if row[11] else None,
         })
     
     return {"posts": posts, "total": len(posts)}
@@ -252,9 +293,9 @@ async def get_scheduled_post(post_id: str):
     with engine.connect() as conn:
         row = conn.execute(text("""
             SELECT 
-                id, content_id, title, caption, hashtags, thumbnail_url,
-                platform, account_id, account_username, account_avatar,
-                scheduled_at, status, post_type, created_at, updated_at
+                id, clip_id, content_variant_id, platform, 
+                platform_account_id, scheduled_time, status,
+                platform_post_id, platform_url, created_at, updated_at
             FROM scheduled_posts WHERE id = :id
         """), {"id": post_id}).fetchone()
     
@@ -263,18 +304,18 @@ async def get_scheduled_post(post_id: str):
     
     return {
         "id": str(row[0]),
-        "contentId": row[1],
-        "title": row[2],
-        "caption": row[3],
-        "hashtags": row[4] if isinstance(row[4], list) else json.loads(row[4] or '[]'),
-        "thumbnailUrl": row[5],
-        "platform": row[6],
-        "accountId": row[7],
-        "accountUsername": row[8],
-        "accountAvatar": row[9],
-        "scheduledAt": str(row[10]) if row[10] else None,
-        "status": row[11],
-        "postType": row[12],
+        "contentId": str(row[1]) if row[1] else (str(row[2]) if row[2] else None),
+        "title": None,
+        "caption": None,
+        "hashtags": [],
+        "thumbnailUrl": None,
+        "platform": row[3],
+        "accountId": str(row[4]) if row[4] else None,
+        "accountUsername": None,
+        "accountAvatar": None,
+        "scheduledAt": str(row[5]) if row[5] else None,
+        "status": row[6],
+        "postType": "reel",
     }
 
 
@@ -292,33 +333,20 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     updates = []
     params = {"id": post_id}
     
-    if update.title is not None:
-        updates.append("title = :title")
-        params["title"] = update.title
-    
-    if update.caption is not None:
-        updates.append("caption = :caption")
-        params["caption"] = update.caption
-    
-    if update.hashtags is not None:
-        updates.append("hashtags = :hashtags")
-        params["hashtags"] = json.dumps(update.hashtags)
+    # Note: title, caption, hashtags columns don't exist in ORM model
+    # These updates are kept for backwards compatibility but may not work
     
     if update.scheduled_at is not None:
-        updates.append("scheduled_at = :scheduled_at")
-        params["scheduled_at"] = update.scheduled_at
+        updates.append("scheduled_time = :scheduled_time")
+        params["scheduled_time"] = update.scheduled_at
     
     if update.status is not None:
         updates.append("status = :status")
         params["status"] = update.status
     
     if update.account_id is not None:
-        updates.append("account_id = :account_id")
-        params["account_id"] = update.account_id
-    
-    if update.account_username is not None:
-        updates.append("account_username = :account_username")
-        params["account_username"] = update.account_username
+        updates.append("platform_account_id = :platform_account_id")
+        params["platform_account_id"] = update.account_id
     
     if not updates:
         logger.warning(f"[UpdatePost] ⚠️ No fields to update for post_id={post_id}")
@@ -373,7 +401,7 @@ async def reschedule_post(post_id: str, new_time: str = Query(..., description="
     with engine.connect() as conn:
         result = conn.execute(text("""
             UPDATE scheduled_posts 
-            SET scheduled_at = :new_time, updated_at = NOW()
+            SET scheduled_time = :new_time, updated_at = NOW()
             WHERE id = :id AND status = 'scheduled'
             RETURNING id
         """), {"id": post_id, "new_time": new_time})
@@ -403,7 +431,7 @@ async def get_schedule_stats():
         week_start = datetime.now() - timedelta(days=datetime.now().weekday())
         week_posts = conn.execute(text("""
             SELECT COUNT(*) FROM scheduled_posts
-            WHERE scheduled_at >= :week_start AND scheduled_at < :week_end
+            WHERE scheduled_time >= :week_start AND scheduled_time < :week_end
         """), {
             "week_start": week_start,
             "week_end": week_start + timedelta(days=7)
@@ -419,7 +447,7 @@ async def get_schedule_stats():
         
         # Queue length (days until last scheduled post)
         last_scheduled = conn.execute(text("""
-            SELECT MAX(scheduled_at) FROM scheduled_posts WHERE status = 'scheduled'
+            SELECT MAX(scheduled_time) FROM scheduled_posts WHERE status = 'scheduled'
         """)).scalar()
         
         queue_days = 0
@@ -454,10 +482,10 @@ async def get_calendar_week(
     with engine.connect() as conn:
         rows = conn.execute(text("""
             SELECT 
-                id, title, platform, account_username, scheduled_at, status, thumbnail_url
+                id, platform, platform_account_id, scheduled_time, status
             FROM scheduled_posts
-            WHERE scheduled_at >= :start AND scheduled_at < :end
-            ORDER BY scheduled_at ASC
+            WHERE scheduled_time >= :start AND scheduled_time < :end
+            ORDER BY scheduled_time ASC
         """), {"start": week_start, "end": week_end}).fetchall()
     
     # Organize by day
@@ -468,16 +496,16 @@ async def get_calendar_week(
         days[day_str] = []
     
     for row in rows:
-        day_str = row[4].strftime("%Y-%m-%d")
+        day_str = row[3].strftime("%Y-%m-%d")
         if day_str in days:
             days[day_str].append({
                 "id": str(row[0]),
-                "title": row[1],
-                "platform": row[2],
-                "accountUsername": row[3],
-                "scheduledAt": str(row[4]),
-                "status": row[5],
-                "thumbnailUrl": row[6],
+                "title": None,
+                "platform": row[1],
+                "accountUsername": None,
+                "scheduledAt": str(row[3]),
+                "status": row[4],
+                "thumbnailUrl": None,
             })
     
     return {
@@ -505,10 +533,10 @@ async def get_calendar_month(
     with engine.connect() as conn:
         rows = conn.execute(text("""
             SELECT 
-                id, title, platform, account_username, scheduled_at, status
+                id, platform, platform_account_id, scheduled_time, status
             FROM scheduled_posts
-            WHERE scheduled_at >= :start AND scheduled_at < :end
-            ORDER BY scheduled_at ASC
+            WHERE scheduled_time >= :start AND scheduled_time < :end
+            ORDER BY scheduled_time ASC
         """), {"start": month_start, "end": month_end}).fetchall()
     
     # Organize by day
@@ -519,15 +547,15 @@ async def get_calendar_month(
         current += timedelta(days=1)
     
     for row in rows:
-        day_str = row[4].strftime("%Y-%m-%d")
+        day_str = row[3].strftime("%Y-%m-%d")
         if day_str in days:
             days[day_str].append({
                 "id": str(row[0]),
-                "title": row[1],
-                "platform": row[2],
-                "accountUsername": row[3],
-                "scheduledAt": str(row[4]),
-                "status": row[5],
+                "title": None,
+                "platform": row[1],
+                "accountUsername": None,
+                "scheduledAt": str(row[3]),
+                "status": row[4],
             })
     
     return {

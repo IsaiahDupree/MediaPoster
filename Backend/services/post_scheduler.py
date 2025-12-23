@@ -201,17 +201,15 @@ class PostScheduler:
         """Get all posts that are scheduled and due for publishing"""
         with self.engine.connect() as conn:
             # Fetch scheduled posts due for publishing
-            # Include blotato_account_id for the unified publish flow
+            # Uses actual column names from scheduled_posts table
             result = conn.execute(text("""
                 SELECT 
-                    id, content_id, title, caption, platform, 
-                    account_id, account_username, scheduled_at,
-                    thumbnail_url, post_type, hashtags,
-                    COALESCE(blotato_account_id, account_id) as blotato_account_id
+                    id, clip_id, content_variant_id, platform, 
+                    platform_account_id, scheduled_time, status
                 FROM scheduled_posts
                 WHERE status = 'scheduled'
-                  AND scheduled_at <= :now
-                ORDER BY scheduled_at ASC
+                  AND scheduled_time <= :now
+                ORDER BY scheduled_time ASC
                 LIMIT 50
             """), {"now": now})
             
@@ -219,16 +217,11 @@ class PostScheduler:
             for row in result.fetchall():
                 posts.append({
                     "id": row[0],
-                    "content_id": row[1],
-                    "title": row[2],
-                    "caption": row[3],
-                    "platform": row[4],
-                    "account_id": row[11],  # Use blotato_account_id (with fallback)
-                    "account_username": row[6],
-                    "scheduled_at": row[7],
-                    "thumbnail_url": row[8],
-                    "post_type": row[9],
-                    "hashtags": row[10],
+                    "content_id": row[1] or row[2],  # Use clip_id or content_variant_id
+                    "platform": row[3],
+                    "account_id": row[4],
+                    "scheduled_at": row[5],
+                    "status": row[6],
                 })
             
             return posts
@@ -238,11 +231,11 @@ class PostScheduler:
         now = datetime.now(timezone.utc)
         with self.engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT id, title, platform, scheduled_at
+                SELECT id, platform, scheduled_time
                 FROM scheduled_posts
                 WHERE status = 'scheduled'
-                  AND scheduled_at > :now
-                ORDER BY scheduled_at ASC
+                  AND scheduled_time > :now
+                ORDER BY scheduled_time ASC
                 LIMIT :limit
             """), {"now": now, "limit": limit})
             
@@ -250,9 +243,8 @@ class PostScheduler:
             for row in result.fetchall():
                 posts.append({
                     "id": row[0],
-                    "title": row[1],
-                    "platform": row[2],
-                    "scheduled_at": row[3],
+                    "platform": row[1],
+                    "scheduled_at": row[2],
                 })
             return posts
     

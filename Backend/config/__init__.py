@@ -35,12 +35,16 @@ class Settings(BaseSettings):
         return self.openai_api_key
     
     # Supabase
-    supabase_url: str = Field(..., env="SUPABASE_URL")
-    supabase_key: str = Field(..., env="SUPABASE_KEY")
+    supabase_url: str = Field(default="http://127.0.0.1:54321", env="SUPABASE_URL")
+    supabase_key: str = Field(default="", env="SUPABASE_KEY")
     supabase_jwt_secret: Optional[str] = Field(None, env="SUPABASE_JWT_SECRET")
+    supabase_studio_url: str = Field(default="http://127.0.0.1:54323", env="SUPABASE_STUDIO_URL")
+    supabase_inbucket_url: str = Field(default="http://127.0.0.1:54324", env="SUPABASE_INBUCKET_URL")
+    supabase_db_port: int = Field(default=54322, env="SUPABASE_DB_PORT")
     
     # Database
-    database_url: str = Field(..., env="DATABASE_URL")
+    database_url: str = Field(default="postgresql://postgres:postgres@127.0.0.1:54322/postgres", env="DATABASE_URL")
+    database_url_async: str = Field(default="postgresql+asyncpg://postgres:postgres@127.0.0.1:54322/postgres", env="DATABASE_URL_ASYNC")
     
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
@@ -62,6 +66,13 @@ class Settings(BaseSettings):
     pinterest_usernames: str = Field(default="", env="PINTEREST_USERNAMES")
     medium_usernames: str = Field(default="", env="MEDIUM_USERNAMES")
     
+    # Server Configuration
+    backend_host: str = Field(default="0.0.0.0", env="BACKEND_HOST")
+    backend_port: int = Field(default=5555, env="BACKEND_PORT")
+    backend_url: str = Field(default="http://localhost:5555", env="BACKEND_URL")
+    frontend_url: str = Field(default="http://localhost:5557", env="FRONTEND_URL")
+    dashboard_url: str = Field(default="http://localhost:5557", env="DASHBOARD_URL")
+    
     # Application Settings
     app_env: str = Field(default="development", env="APP_ENV")
     debug: bool = Field(default=True, env="DEBUG")
@@ -69,7 +80,6 @@ class Settings(BaseSettings):
     max_video_size_mb: int = Field(default=5000, env="MAX_VIDEO_SIZE_MB")  # Supports large iPhone videos
     temp_dir: str = Field(default="/tmp/mediaposter", env="TEMP_DIR")
     working_dir: str = Field(default="./workspace", env="WORKING_DIR")
-    frontend_url: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
     
     # Processing Settings
     max_concurrent_jobs: int = Field(default=3, env="MAX_CONCURRENT_JOBS")

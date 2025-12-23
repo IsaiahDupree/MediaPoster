@@ -380,15 +380,23 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     analyzed_result = await db.execute(analyzed_query)
     analyzed_count = analyzed_result.scalar() or 0
     
-    # Total size
-    size_query = select(func.sum(Video.file_size))
-    size_result = await db.execute(size_query)
-    total_size = size_result.scalar() or 0
+    # Total size (handle missing column gracefully)
+    total_size = 0
+    try:
+        size_query = select(func.sum(Video.file_size))
+        size_result = await db.execute(size_query)
+        total_size = size_result.scalar() or 0
+    except Exception:
+        await db.rollback()  # Rollback failed transaction before continuing
     
     # Average duration
-    duration_query = select(func.avg(Video.duration_sec))
-    duration_result = await db.execute(duration_query)
-    avg_duration = duration_result.scalar()
+    avg_duration = None
+    try:
+        duration_query = select(func.avg(Video.duration_sec))
+        duration_result = await db.execute(duration_query)
+        avg_duration = duration_result.scalar()
+    except Exception:
+        await db.rollback()
     
     # Get currently analyzing count from job tracker
     analyzing_count = 0

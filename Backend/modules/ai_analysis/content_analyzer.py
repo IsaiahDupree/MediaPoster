@@ -3,7 +3,7 @@ Content Analyzer
 Combines all AI analysis modules for comprehensive video understanding
 """
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from loguru import logger
 import json
 

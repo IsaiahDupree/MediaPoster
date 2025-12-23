@@ -2,7 +2,7 @@
 Narrative Service Handlers
 ===========================
 Service handlers for Narrative Builder topics.
-Emits step and event timeline entries for Agent Panel.
+Integrates with AutonomousNarrativePlanner and emits events for Agent Panel.
 """
 
 import logging
@@ -14,6 +14,16 @@ from ..dispatcher import TOPICS
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "NarrativePlannerService"
+
+# Lazy import to avoid circular dependencies
+def get_planner():
+    """Get the autonomous narrative planner instance."""
+    try:
+        from services.narrative_scheduler import get_planner as _get_planner
+        return _get_planner()
+    except ImportError as e:
+        logger.warning(f"[NarrativeService] Could not import planner: {e}")
+        return None
 
 
 async def run_narrative_generate_plan(run_id: str, payload: Dict[str, Any]):

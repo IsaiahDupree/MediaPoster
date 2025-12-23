@@ -1,0 +1,267 @@
+{
+  "version": "1.0",
+  "description": "Test templates for AI Narrative Scheduling System",
+  
+  "narrative_goals": [
+    {
+      "id": "goal_tech_educator",
+      "name": "Tech Educator Authority",
+      "goal_statement": "Position myself as the go-to expert for DIY electronics projects, driving subscribers to my course waitlist",
+      "primary_cta": "waitlist",
+      "target_audience": "Beginner makers aged 25-45 interested in electronics",
+      "time_horizon": "next_7_days",
+      "success_metrics": {
+        "target_followers": 500,
+        "target_engagement_rate": 5.0,
+        "target_conversions": 50
+      }
+    },
+    {
+      "id": "goal_lifestyle_brand",
+      "name": "Lifestyle Brand Builder",
+      "goal_statement": "Build an authentic lifestyle brand that resonates with young professionals seeking work-life balance",
+      "primary_cta": "follow",
+      "target_audience": "Young professionals 22-35 in urban areas",
+      "time_horizon": "next_30_days",
+      "success_metrics": {
+        "target_followers": 1000,
+        "target_engagement_rate": 4.0
+      }
+    },
+    {
+      "id": "goal_product_launch",
+      "name": "Product Launch Campaign",
+      "goal_statement": "Generate buzz and pre-orders for upcoming product launch through educational content",
+      "primary_cta": "purchase",
+      "target_audience": "Existing followers interested in the product category",
+      "time_horizon": "next_7_days",
+      "success_metrics": {
+        "target_conversions": 100,
+        "target_engagement_rate": 6.0
+      }
+    }
+  ],
+  
+  "narrative_pillars": {
+    "default_set": [
+      {
+        "name": "Pain Points",
+        "description": "Address audience struggles and challenges they face",
+        "pillar_type": "value",
+        "color": "#ef4444",
+        "target_percentage": 20,
+        "keywords": ["problem", "struggle", "frustrated", "challenge", "difficult", "stuck"]
+      },
+      {
+        "name": "Social Proof",
+        "description": "Testimonials, results, and credibility builders",
+        "pillar_type": "proof",
+        "color": "#f59e0b",
+        "target_percentage": 15,
+        "keywords": ["results", "success", "testimonial", "review", "before after", "transformation"]
+      },
+      {
+        "name": "Process/How-To",
+        "description": "Educational content showing expertise and teaching skills",
+        "pillar_type": "value",
+        "color": "#3b82f6",
+        "target_percentage": 25,
+        "keywords": ["how to", "tutorial", "step by step", "guide", "learn", "tips", "trick"]
+      },
+      {
+        "name": "Personality",
+        "description": "Behind-the-scenes, authentic moments that build connection",
+        "pillar_type": "value",
+        "color": "#a855f7",
+        "target_percentage": 15,
+        "keywords": ["behind the scenes", "day in life", "personal", "story", "journey", "real"]
+      },
+      {
+        "name": "Product/Service",
+        "description": "Direct product showcases and demonstrations",
+        "pillar_type": "cta",
+        "color": "#f97316",
+        "target_percentage": 10,
+        "keywords": ["product", "service", "offering", "available", "new release", "launch"]
+      },
+      {
+        "name": "Promotion/CTA",
+        "description": "Clear calls-to-action driving specific behaviors",
+        "pillar_type": "cta",
+        "color": "#10b981",
+        "target_percentage": 10,
+        "keywords": ["sign up", "subscribe", "join", "download", "buy", "get", "link in bio"]
+      },
+      {
+        "name": "Education",
+        "description": "Industry knowledge and thought leadership",
+        "pillar_type": "value",
+        "color": "#06b6d4",
+        "target_percentage": 5,
+        "keywords": ["industry", "trends", "insight", "analysis", "future", "prediction"]
+      }
+    ],
+    
+    "educator_set": [
+      {"name": "Pain Points", "pillar_type": "value", "target_percentage": 20, "color": "#ef4444"},
+      {"name": "Social Proof", "pillar_type": "proof", "target_percentage": 15, "color": "#f59e0b"},
+      {"name": "Process/How-To", "pillar_type": "value", "target_percentage": 30, "color": "#3b82f6"},
+      {"name": "Personality", "pillar_type": "value", "target_percentage": 15, "color": "#a855f7"},
+      {"name": "Education", "pillar_type": "value", "target_percentage": 20, "color": "#06b6d4"}
+    ],
+    
+    "influencer_set": [
+      {"name": "Personality", "pillar_type": "value", "target_percentage": 35, "color": "#a855f7"},
+      {"name": "Trends", "pillar_type": "value", "target_percentage": 25, "color": "#ec4899"},
+      {"name": "Social Proof", "pillar_type": "proof", "target_percentage": 20, "color": "#f59e0b"},
+      {"name": "Promotion/CTA", "pillar_type": "cta", "target_percentage": 20, "color": "#10b981"}
+    ]
+  },
+  
+  "content_mix_targets": {
+    "balanced": {"value": 60, "proof": 20, "cta": 20},
+    "authority": {"value": 70, "proof": 20, "cta": 10},
+    "sales": {"value": 40, "proof": 30, "cta": 30}
+  },
+  
+  "scheduling_constraints": [
+    {
+      "id": "constraints_aggressive",
+      "name": "Aggressive Growth",
+      "enabled_platforms": ["tiktok", "instagram", "youtube"],
+      "max_posts_per_day": 5,
+      "min_posts_per_day": 3,
+      "posting_windows": {
+        "tiktok": ["07:00", "12:00", "17:00", "21:00"],
+        "instagram": ["08:00", "12:00", "18:00"],
+        "youtube": ["14:00"]
+      },
+      "min_pre_social_score": 50,
+      "max_same_pillar_consecutive": 2
+    },
+    {
+      "id": "constraints_balanced",
+      "name": "Balanced Approach",
+      "enabled_platforms": ["tiktok", "instagram"],
+      "max_posts_per_day": 3,
+      "min_posts_per_day": 2,
+      "posting_windows": {
+        "tiktok": ["12:00", "18:00", "21:00"],
+        "instagram": ["09:00", "17:00"]
+      },
+      "min_pre_social_score": 60,
+      "max_same_pillar_consecutive": 2
+    },
+    {
+      "id": "constraints_conservative",
+      "name": "Quality Focus",
+      "enabled_platforms": ["tiktok", "instagram"],
+      "max_posts_per_day": 2,
+      "min_posts_per_day": 1,
+      "posting_windows": {
+        "tiktok": ["12:00", "18:00"],
+        "instagram": ["09:00", "17:00"]
+      },
+      "min_pre_social_score": 75,
+      "max_same_pillar_consecutive": 1
+    }
+  ],
+  
+  "ai_reasoning_examples": [
+    {
+      "scenario": "New creator with tech content",
+      "context": {
+        "goal": "Build authority in DIY electronics",
+        "available_videos": 50,
+        "analyzed_videos": 30,
+        "pillars": ["Process/How-To", "Pain Points", "Education"]
+      },
+      "reasoning_chain": [
+        {
+          "step": 1,
+          "thought": "Creator wants to establish authority. Process/How-To content is best for demonstrating expertise.",
+          "decision": "Prioritize Process/How-To at 40% of schedule"
+        },
+        {
+          "step": 2,
+          "thought": "No posting history means no performance data. Use video analysis scores as primary selection criteria.",
+          "decision": "Select top 14 videos by pre_social_score across pillars"
+        },
+        {
+          "step": 3,
+          "thought": "Need to balance discovery (TikTok) with engagement (Instagram).",
+          "decision": "60% TikTok, 40% Instagram distribution"
+        }
+      ],
+      "expected_schedule": {
+        "total_posts": 14,
+        "by_pillar": {"Process/How-To": 6, "Pain Points": 4, "Education": 4},
+        "by_platform": {"tiktok": 8, "instagram": 6}
+      }
+    },
+    {
+      "scenario": "Week 2 with underperforming pillar",
+      "context": {
+        "goal": "Drive waitlist signups",
+        "previous_week": {
+          "Pain Points": {"posts": 4, "avg_engagement": 2.1, "verdict": "underperformed"},
+          "Process/How-To": {"posts": 5, "avg_engagement": 5.8, "verdict": "exceeded"}
+        }
+      },
+      "reasoning_chain": [
+        {
+          "step": 1,
+          "thought": "Pain Points content significantly underperformed (2.1% vs 4.2% average). Need to investigate why.",
+          "decision": "Review Pain Points videos - they focus on problems without solutions"
+        },
+        {
+          "step": 2,
+          "thought": "Process/How-To exceeded expectations. This aligns with audience interest in learning.",
+          "decision": "Increase Process/How-To allocation from 35% to 45%"
+        },
+        {
+          "step": 3,
+          "thought": "Instead of cutting Pain Points entirely, pivot to 'Problem + Quick Solution' format.",
+          "decision": "Reduce Pain Points to 15%, but pair each with solution-oriented hook"
+        }
+      ],
+      "learning_generated": {
+        "id": "L001",
+        "insight": "Audience prefers actionable content over pure problem identification",
+        "confidence": 0.82,
+        "application": "All Pain Points content must include solution teaser"
+      }
+    }
+  ],
+  
+  "reflection_templates": {
+    "weekly_review": {
+      "sections": [
+        "goal_progress",
+        "pillar_performance",
+        "platform_performance",
+        "top_performers",
+        "underperformers",
+        "learnings",
+        "next_week_adjustments"
+      ],
+      "metrics_to_track": [
+        "total_views",
+        "total_engagement",
+        "avg_engagement_rate",
+        "followers_gained",
+        "conversions",
+        "best_posting_times",
+        "content_duration_performance"
+      ]
+    },
+    "learning_categories": [
+      "content_format",
+      "pillar_performance",
+      "timing_optimization",
+      "platform_specific",
+      "audience_behavior",
+      "cta_effectiveness"
+    ]
+  }
+}

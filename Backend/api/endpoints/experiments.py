@@ -283,8 +283,52 @@ async def list_experiments(
 
 
 # =============================================================================
-# LEARNINGS ENDPOINTS (must be before /{experiment_id} route)
+# STATIC ROUTES (must be before /{experiment_id} route)
 # =============================================================================
+
+@router.get("/experiment-accounts")
+async def get_experiment_accounts():
+    """Get accounts available for experiments (EXPERIMENT_ARM role only)."""
+    engine = get_engine()
+    
+    try:
+        with engine.connect() as conn:
+            # Check if account_role column exists
+            try:
+                result = conn.execute(text("""
+                    SELECT id, platform, handle, account_role
+                    FROM social_accounts
+                    WHERE account_role = 'EXPERIMENT_ARM' AND is_active = true
+                    ORDER BY platform, handle
+                """)).fetchall()
+            except:
+                # Fallback if account_role doesn't exist yet
+                try:
+                    result = conn.execute(text("""
+                        SELECT id, platform, handle, 'EXPERIMENT_ARM' as account_role
+                        FROM social_accounts
+                        WHERE is_active = true
+                        ORDER BY platform, handle
+                    """)).fetchall()
+                except:
+                    # Table might not exist at all
+                    return {'accounts': [], 'count': 0}
+            
+            accounts = [
+                {
+                    'id': str(row[0]),
+                    'platform': row[1],
+                    'handle': row[2],
+                    'account_role': row[3]
+                }
+                for row in result
+            ]
+            
+            return {'accounts': accounts, 'count': len(accounts)}
+    except Exception as e:
+        # Return empty list on any database error
+        return {'accounts': [], 'count': 0, 'error': str(e)}
+
 
 @router.get("/learnings")
 async def get_learnings():
@@ -937,50 +981,6 @@ async def seed_demo_data():
 # =============================================================================
 # PHASE 2: ACCOUNT ROLE FILTERING
 # =============================================================================
-
-@router.get("/experiment-accounts")
-async def get_experiment_accounts():
-    """Get accounts available for experiments (EXPERIMENT_ARM role only)."""
-    engine = get_engine()
-    
-    try:
-        with engine.connect() as conn:
-            # Check if account_role column exists
-            try:
-                result = conn.execute(text("""
-                    SELECT id, platform, handle, account_role
-                    FROM social_accounts
-                    WHERE account_role = 'EXPERIMENT_ARM' AND is_active = true
-                    ORDER BY platform, handle
-                """)).fetchall()
-            except:
-                # Fallback if account_role doesn't exist yet
-                try:
-                    result = conn.execute(text("""
-                        SELECT id, platform, handle, 'EXPERIMENT_ARM' as account_role
-                        FROM social_accounts
-                        WHERE is_active = true
-                        ORDER BY platform, handle
-                    """)).fetchall()
-                except:
-                    # Table might not exist at all
-                    return {'accounts': [], 'count': 0}
-            
-            accounts = [
-                {
-                    'id': str(row[0]),
-                    'platform': row[1],
-                    'handle': row[2],
-                    'account_role': row[3]
-                }
-                for row in result
-            ]
-            
-            return {'accounts': accounts, 'count': len(accounts)}
-    except Exception as e:
-        # Return empty list on any database error
-        return {'accounts': [], 'count': 0, 'error': str(e)}
-
 
 @router.patch("/accounts/{account_id}/role")
 async def update_account_role(account_id: str, role: str = 'EXPERIMENT_ARM'):

@@ -818,3 +818,113 @@ async def unified_pipeline_stats():
         stats["error"] = str(e)
     
     return stats
+
+
+# =============================================================================
+# BATCH PROCESSING ENDPOINTS
+# =============================================================================
+
+# In-memory batch tracking
+_batch_processor = None
+
+def get_batch_processor():
+    global _batch_processor
+    if _batch_processor is None:
+        from services.batch_processor import BatchProcessor
+        _batch_processor = BatchProcessor(max_concurrent=3)
+    return _batch_processor
+
+
+class BatchConfig(BaseModel):
+    name: str = "Batch Processing"
+    video_paths: List[str] = []
+    from_database: bool = False
+    min_score: int = 60
+    limit: int = 20
+    extract_clips: bool = True
+    add_subtitles: bool = True
+    auto_schedule: bool = True
+    max_clips_per_video: int = 5
+
+
+@router.post("/batch/create")
+async def create_batch(config: BatchConfig, background_tasks: BackgroundTasks):
+    """
+    Create and start a batch processing job.
+    
+    Can process videos from:
+    - Explicit paths (video_paths)
+    - Database query (from_database=True)
+    """
+    from fastapi import BackgroundTasks
+    
+    processor = get_batch_processor()
+    
+    try:
+        if config.from_database:
+            batch = await processor.create_batch_from_database(
+                name=config.name,
+                min_score=config.min_score,
+                limit=config.limit,
+                extract_clips=config.extract_clips,
+                add_subtitles=config.add_subtitles,
+                auto_schedule=config.auto_schedule,
+                max_clips_per_video=config.max_clips_per_video
+            )
+        else:
+            batch = await processor.create_batch(
+                video_paths=config.video_paths,
+                name=config.name,
+                extract_clips=config.extract_clips,
+                add_subtitles=config.add_subtitles,
+                auto_schedule=config.auto_schedule,
+                max_clips_per_video=config.max_clips_per_video
+            )
+        
+        if batch.total_videos == 0:
+            return {"success": False, "error": "No valid videos found"}
+        
+        # Run batch in background
+        background_tasks.add_task(processor.run_batch, batch.id)
+        
+        return {
+            "success": True,
+            "batch_id": batch.id,
+            "total_videos": batch.total_videos,
+            "status": "started"
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/batch/{batch_id}")
+async def get_batch_status(batch_id: str):
+    """Get batch processing status."""
+    processor = get_batch_processor()
+    batch = processor.get_batch(batch_id)
+    
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    return batch.to_dict()
+
+
+@router.get("/batch")
+async def list_batches(limit: int = Query(20, le=50)):
+    """List recent batch jobs."""
+    processor = get_batch_processor()
+    batches = processor.list_batches(limit=limit)
+    
+    return {
+        "batches": [b.to_dict() for b in batches],
+        "total": len(batches)
+    }
+
+
+@router.post("/batch/{batch_id}/cancel")
+async def cancel_batch(batch_id: str):
+    """Cancel a running batch."""
+    processor = get_batch_processor()
+    processor.cancel_batch(batch_id)
+    
+    return {"success": True, "batch_id": batch_id, "status": "cancelled"}

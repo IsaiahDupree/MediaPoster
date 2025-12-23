@@ -2025,6 +2025,91 @@ async def run_complete_experiment(
 from services.experiments_scheduler.experiment_agent import AgentAction, AgentActionType
 
 
+@router.get("/system/status")
+async def get_system_status():
+    """
+    Get unified system status for experiments, narrative, and content systems.
+    """
+    engine = get_engine()
+    
+    status = {
+        "healthy": True,
+        "timestamp": datetime.now().isoformat(),
+        "systems": {}
+    }
+    
+    with engine.connect() as conn:
+        # Experiments System
+        exp_active = conn.execute(text(
+            "SELECT COUNT(*) FROM experiments WHERE status = 'active'"
+        )).scalar() or 0
+        exp_total = conn.execute(text("SELECT COUNT(*) FROM experiments")).scalar() or 0
+        hyp_passed = conn.execute(text(
+            "SELECT COUNT(*) FROM hypotheses WHERE status = 'passed'"
+        )).scalar() or 0
+        patterns = conn.execute(text(
+            "SELECT COUNT(*) FROM content_patterns WHERE is_active = TRUE"
+        )).scalar() or 0
+        
+        status["systems"]["experiments"] = {
+            "status": "healthy",
+            "active_experiments": exp_active,
+            "total_experiments": exp_total,
+            "passed_hypotheses": hyp_passed,
+            "learned_patterns": patterns
+        }
+        
+        # Content System
+        videos = conn.execute(text("SELECT COUNT(*) FROM videos")).scalar() or 0
+        analyzed = conn.execute(text("SELECT COUNT(*) FROM video_analysis")).scalar() or 0
+        high_score = conn.execute(text(
+            "SELECT COUNT(*) FROM video_analysis WHERE pre_social_score >= 70"
+        )).scalar() or 0
+        
+        status["systems"]["content"] = {
+            "status": "healthy",
+            "total_videos": videos,
+            "analyzed_videos": analyzed,
+            "high_scoring_videos": high_score
+        }
+        
+        # Scheduling System
+        scheduled = conn.execute(text(
+            "SELECT COUNT(*) FROM scheduled_posts WHERE status = 'pending'"
+        )).scalar() or 0
+        posted = conn.execute(text(
+            "SELECT COUNT(*) FROM scheduled_posts WHERE status = 'posted'"
+        )).scalar() or 0
+        
+        # Posts by origin
+        origin_counts = {}
+        origin_result = conn.execute(text("""
+            SELECT COALESCE(origin_type, 'user'), COUNT(*)
+            FROM scheduled_posts GROUP BY origin_type
+        """))
+        for row in origin_result:
+            origin_counts[row[0] or 'user'] = row[1]
+        
+        status["systems"]["scheduling"] = {
+            "status": "healthy",
+            "pending_posts": scheduled,
+            "posted_count": posted,
+            "by_origin": origin_counts
+        }
+        
+        # Weekly Schedules
+        weekly = conn.execute(text(
+            "SELECT COUNT(*) FROM weekly_schedules WHERE status = 'active'"
+        )).scalar() or 0
+        
+        status["systems"]["narrative"] = {
+            "status": "healthy",
+            "active_weekly_schedules": weekly
+        }
+    
+    return status
+
+
 @router.post("/pipeline/sync-learnings")
 async def sync_learnings_to_narrative():
     """

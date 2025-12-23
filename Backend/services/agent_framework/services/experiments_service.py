@@ -2,16 +2,85 @@
 Experiments Service Handlers
 =============================
 Service handlers for Experiments Scheduler topics.
-Emits step and event timeline entries for Agent Panel.
+Integrates with experiments database and emits timeline events for Agent Panel.
 """
 
+import os
+import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+from uuid import uuid4
+
+from sqlalchemy import create_engine, text
 
 from ..run_manager import get_run_manager
 from ..dispatcher import TOPICS
 
 logger = logging.getLogger(__name__)
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+
+
+def get_active_experiments() -> List[Dict]:
+    """Fetch active experiments from database."""
+    engine = create_engine(DATABASE_URL)
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT e.id, e.name, e.experiment_type, e.goal,
+                    (SELECT COUNT(*) FROM hypotheses h WHERE h.experiment_id = e.id) as hypothesis_count
+                FROM experiments e
+                WHERE e.status = 'active'
+                ORDER BY e.created_at DESC
+                LIMIT 10
+            """))
+            return [{"id": str(r[0]), "name": r[1], "type": r[2], "goal": r[3], "hypotheses": r[4]} for r in result]
+    except Exception as e:
+        logger.warning(f"[ExperimentsService] Could not fetch experiments: {e}")
+        return []
+
+
+def get_running_hypotheses() -> List[Dict]:
+    """Fetch running hypotheses for analysis."""
+    engine = create_engine(DATABASE_URL)
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT h.id, h.statement, h.success_metric, h.success_threshold, h.min_sample_size,
+                    e.name as experiment_name
+                FROM hypotheses h
+                JOIN experiments e ON h.experiment_id = e.id
+                WHERE h.status = 'running'
+                LIMIT 20
+            """))
+            return [{"id": str(r[0]), "statement": r[1], "metric": r[2], "threshold": r[3], 
+                     "min_samples": r[4], "experiment": r[5]} for r in result]
+    except Exception as e:
+        logger.warning(f"[ExperimentsService] Could not fetch hypotheses: {e}")
+        return []
+
+
+def create_content_pattern(pattern_type: str, description: str, avg_improvement: float, 
+                           confidence: float, experiment_id: str) -> Optional[str]:
+    """Create a new content pattern from experiment learnings."""
+    engine = create_engine(DATABASE_URL)
+    pattern_id = str(uuid4())
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO content_patterns (id, pattern_type, description, avg_improvement, 
+                    confidence, supporting_experiments, sample_size, is_active)
+                VALUES (:id, :type, :desc, :improvement, :confidence, ARRAY[:exp_id]::uuid[], 1, true)
+            """), {
+                "id": pattern_id, "type": pattern_type, "desc": description,
+                "improvement": avg_improvement, "confidence": confidence, "exp_id": experiment_id
+            })
+            conn.commit()
+            return pattern_id
+    except Exception as e:
+        logger.warning(f"[ExperimentsService] Could not create pattern: {e}")
+        return None
 
 
 async def run_experiments_plan(run_id: str, payload: Dict[str, Any]):

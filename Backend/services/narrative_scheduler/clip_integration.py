@@ -107,33 +107,36 @@ class ClipSchedulingIntegration:
         
         with self.engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT vc.id, vc.source_video_id, vc.clip_path, 
-                       vc.start_time_sec, vc.end_time_sec, vc.metadata
+                SELECT vc.id, vc.video_id, vc.rendered_url, 
+                       vc.start_time, vc.end_time, vc.ai_reasoning
                 FROM video_clips vc
                 WHERE vc.clip_type = 'extracted'
                 AND NOT EXISTS (
                     SELECT 1 FROM scheduled_posts sp 
                     WHERE sp.clip_id = vc.id
                 )
-                ORDER BY (vc.metadata->>'relevance_score')::float DESC NULLS LAST
+                ORDER BY vc.ai_score DESC NULLS LAST
                 LIMIT :limit
             """), {"limit": limit})
             
             for row in result:
-                metadata = row[5] or {}
-                relevance = float(metadata.get("relevance_score", 0.5))
+                ai_reasoning = row[5] or ""
+                # Use a default relevance score since we're filtering by ai_score
+                relevance = 0.7
                 
                 if relevance >= min_relevance:
+                    start_time = float(row[3]) if row[3] else 0
+                    end_time = float(row[4]) if row[4] else 30
                     clip = ClipCandidate(
                         id=str(row[0]),
                         source_video_id=str(row[1]) if row[1] else "",
                         clip_path=row[2] or "",
-                        start_time=float(row[3]) if row[3] else 0,
-                        end_time=float(row[4]) if row[4] else 0,
-                        duration=float(row[4] - row[3]) if row[3] and row[4] else 30,
-                        text=metadata.get("text", ""),
+                        start_time=start_time,
+                        end_time=end_time,
+                        duration=end_time - start_time if end_time > start_time else 30,
+                        text=ai_reasoning[:200] if ai_reasoning else "",
                         relevance_score=relevance,
-                        reasoning=metadata.get("reasoning", "")
+                        reasoning=ai_reasoning
                     )
                     clips.append(clip)
         

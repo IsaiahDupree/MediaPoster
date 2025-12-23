@@ -705,12 +705,17 @@ async def get_seven_day_plan():
     engine = get_engine()
     
     with engine.connect() as conn:
-        # 1. Get active goals
-        goals = conn.execute(text("""
-            SELECT id, name, content_pillars, platform_mix, posting_cadence
-            FROM narrative_goals WHERE status = 'active'
-            ORDER BY priority DESC LIMIT 3
-        """)).fetchall()
+        # 1. Get active goals (with fallback if table/columns don't exist)
+        goals = []
+        try:
+            goals = conn.execute(text("""
+                SELECT id, name, content_pillars, platform_mix, posting_cadence
+                FROM narrative_goals WHERE status = 'active'
+                ORDER BY priority DESC LIMIT 3
+            """)).fetchall()
+        except Exception as e:
+            # Table or column might not exist yet
+            pass
         
         # 2. Get applicable KB rules
         rules = []

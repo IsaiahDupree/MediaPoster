@@ -428,19 +428,23 @@ async def get_trend_alerts(
     limit: int = Query(default=20, le=50)
 ):
     """Get trend alerts."""
-    supabase = get_supabase()
-    
-    query = supabase.table("trend_alerts").select("*")
-    
-    if unread_only:
-        query = query.eq("is_read", False)
-    
-    query = query.eq("is_dismissed", False)
-    query = query.order("created_at", desc=True)
-    query = query.limit(limit)
-    
-    result = query.execute()
-    return {"alerts": result.data, "count": len(result.data)}
+    try:
+        supabase = get_supabase()
+        
+        query = supabase.table("trend_alerts").select("*")
+        
+        if unread_only:
+            query = query.eq("is_read", False)
+        
+        query = query.eq("is_dismissed", False)
+        query = query.order("created_at", desc=True)
+        query = query.limit(limit)
+        
+        result = query.execute()
+        return {"alerts": result.data, "count": len(result.data)}
+    except Exception as e:
+        # Return empty list if table doesn't exist or other error
+        return {"alerts": [], "count": 0, "error": str(e)}
 
 
 @router.post("/alerts/{alert_id}/read")

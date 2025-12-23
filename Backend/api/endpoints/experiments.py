@@ -943,35 +943,43 @@ async def get_experiment_accounts():
     """Get accounts available for experiments (EXPERIMENT_ARM role only)."""
     engine = get_engine()
     
-    with engine.connect() as conn:
-        # Check if account_role column exists
-        try:
-            result = conn.execute(text("""
-                SELECT id, platform, handle, account_role
-                FROM social_accounts
-                WHERE account_role = 'EXPERIMENT_ARM' AND is_active = true
-                ORDER BY platform, handle
-            """)).fetchall()
-        except:
-            # Fallback if account_role doesn't exist yet
-            result = conn.execute(text("""
-                SELECT id, platform, handle, 'EXPERIMENT_ARM' as account_role
-                FROM social_accounts
-                WHERE is_active = true
-                ORDER BY platform, handle
-            """)).fetchall()
-        
-        accounts = [
-            {
-                'id': str(row[0]),
-                'platform': row[1],
-                'handle': row[2],
-                'account_role': row[3]
-            }
-            for row in result
-        ]
-        
-        return {'accounts': accounts, 'count': len(accounts)}
+    try:
+        with engine.connect() as conn:
+            # Check if account_role column exists
+            try:
+                result = conn.execute(text("""
+                    SELECT id, platform, handle, account_role
+                    FROM social_accounts
+                    WHERE account_role = 'EXPERIMENT_ARM' AND is_active = true
+                    ORDER BY platform, handle
+                """)).fetchall()
+            except:
+                # Fallback if account_role doesn't exist yet
+                try:
+                    result = conn.execute(text("""
+                        SELECT id, platform, handle, 'EXPERIMENT_ARM' as account_role
+                        FROM social_accounts
+                        WHERE is_active = true
+                        ORDER BY platform, handle
+                    """)).fetchall()
+                except:
+                    # Table might not exist at all
+                    return {'accounts': [], 'count': 0}
+            
+            accounts = [
+                {
+                    'id': str(row[0]),
+                    'platform': row[1],
+                    'handle': row[2],
+                    'account_role': row[3]
+                }
+                for row in result
+            ]
+            
+            return {'accounts': accounts, 'count': len(accounts)}
+    except Exception as e:
+        # Return empty list on any database error
+        return {'accounts': [], 'count': 0, 'error': str(e)}
 
 
 @router.patch("/accounts/{account_id}/role")

@@ -16,6 +16,50 @@ from loguru import logger
 
 router = APIRouter()
 
+
+# =============================================================================
+# QUEUE ENDPOINTS
+# =============================================================================
+
+@router.get("/queue/pending")
+async def get_pending_queue():
+    """Get pending posts in the publishing queue."""
+    try:
+        from sqlalchemy import create_engine, text
+        import os
+        
+        DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+        engine = create_engine(DATABASE_URL)
+        
+        with engine.connect() as conn:
+            try:
+                result = conn.execute(text("""
+                    SELECT id, platform, scheduled_time, status, caption
+                    FROM scheduled_posts
+                    WHERE status IN ('scheduled', 'pending', 'queued')
+                    AND scheduled_time > NOW()
+                    ORDER BY scheduled_time ASC
+                    LIMIT 50
+                """)).fetchall()
+                
+                posts = [
+                    {
+                        'id': str(row[0]),
+                        'platform': row[1],
+                        'scheduled_time': row[2].isoformat() if row[2] else None,
+                        'status': row[3],
+                        'caption': row[4]
+                    }
+                    for row in result
+                ]
+                return {'pending': posts, 'count': len(posts)}
+            except Exception as e:
+                # Table might not exist
+                return {'pending': [], 'count': 0}
+    except Exception as e:
+        return {'pending': [], 'count': 0, 'error': str(e)}
+
+
 class ScheduleRequest(BaseModel):
     clip_id: uuid.UUID
     platforms: List[str]

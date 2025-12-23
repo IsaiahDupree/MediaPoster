@@ -5,13 +5,21 @@ Extracts engaging short-form clips from long-form videos.
 
 Based on SupoClip architecture:
 1. Transcribe video with word-level timing (AssemblyAI)
-2. AI analysis to find compelling segments
+2. AI analysis to find compelling segments (configurable provider)
 3. Smart crop with face detection
 4. Render clips with subtitles
+
+AI Provider Configuration:
+    Set AI_PROVIDER=openai|mock in environment
+    Set OPENAI_API_KEY for OpenAI
+    Use mock provider for testing
 
 Usage:
     service = ClipExtractionService()
     result = await service.extract_clips(video_path, output_dir)
+    
+    # For testing with mock provider:
+    service = ClipExtractionService(ai_provider="mock")
 """
 
 import asyncio
@@ -73,7 +81,7 @@ class ClipExtractionService:
     
     Pipeline:
         1. Transcription (AssemblyAI with word-level timing)
-        2. AI Segment Selection (find engaging moments)
+        2. AI Segment Selection (configurable provider: openai, mock)
         3. Smart Cropping (face-centered 9:16)
         4. Clip Rendering (with subtitles)
     """
@@ -81,21 +89,30 @@ class ClipExtractionService:
     def __init__(
         self,
         assemblyai_key: Optional[str] = None,
-        openai_key: Optional[str] = None,
+        ai_provider: Optional[str] = None,
         output_dir: Optional[Path] = None,
         font_family: str = "Arial",
         font_size: int = 24,
         font_color: str = "#FFFFFF"
     ):
         self.assemblyai_key = assemblyai_key or os.getenv("ASSEMBLYAI_API_KEY")
-        self.openai_key = openai_key or os.getenv("OPENAI_API_KEY")
+        self.ai_provider_name = ai_provider or os.getenv("AI_PROVIDER", "openai")
         self.output_dir = output_dir or Path("./clips")
         self.font_family = font_family
         self.font_size = font_size
         self.font_color = font_color
+        self._ai_provider = None
         
         # Ensure output directory exists
         self.output_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _get_ai_provider(self):
+        """Get configured AI provider (lazy load)."""
+        if self._ai_provider is None:
+            from services.ai_providers import get_ai_provider
+            self._ai_provider = get_ai_provider(self.ai_provider_name)
+            logger.info(f"Using AI provider: {self._ai_provider.name}")
+        return self._ai_provider
     
     async def extract_clips(
         self,
@@ -301,11 +318,47 @@ class ClipExtractionService:
         max_duration: int = 60,
         max_segments: int = 7
     ) -> List[TranscriptSegment]:
-        """Use AI to identify engaging segments from transcript."""
+        """Use AI provider to identify engaging segments from transcript."""
+        try:
+            # Use configured AI provider
+            provider = self._get_ai_provider()
+            
+            analysis = await provider.analyze_transcript(
+                transcript=formatted_transcript,
+                min_duration=min_duration,
+                max_duration=max_duration,
+                max_segments=max_segments
+            )
+            
+            # Convert provider segments to our format
+            segments = []
+            for seg in analysis.segments:
+                segments.append(TranscriptSegment(
+                    start_time=seg.start_time,
+                    end_time=seg.end_time,
+                    text=seg.text,
+                    relevance_score=seg.relevance_score,
+                    reasoning=seg.reasoning
+                ))
+            
+            return segments
+            
+        except Exception as e:
+            logger.warning(f"AI segment identification failed: {e}, using fallback")
+            return await self._fallback_segment_detection(formatted_transcript, min_duration, max_duration)
+    
+    async def _identify_segments_legacy(
+        self,
+        formatted_transcript: str,
+        min_duration: int = 10,
+        max_duration: int = 60,
+        max_segments: int = 7
+    ) -> List[TranscriptSegment]:
+        """Legacy: Use OpenAI directly to identify segments (deprecated)."""
         try:
             from openai import OpenAI
             
-            client = OpenAI(api_key=self.openai_key)
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             
             system_prompt = f"""You are an expert at analyzing video transcripts to find engaging segments for short-form content.
 

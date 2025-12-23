@@ -13,6 +13,7 @@ moviepy==1.0.3
 # AI/ML
 openai>=1.0.0
 numpy>=1.24.0
+assemblyai>=0.23.0  # Speech-to-text with word-level timing for clip extraction
 
 # Cloud & Publishing (Phase 4)
 google-auth>=2.23.0

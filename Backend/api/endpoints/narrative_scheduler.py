@@ -603,6 +603,87 @@ async def trigger_plan_generation(
 
 
 # =============================================================================
+# CLIP SCHEDULING ENDPOINTS
+# =============================================================================
+
+@router.post("/clips/auto-schedule")
+async def auto_schedule_clips(goal_id: Optional[str] = None):
+    """
+    Automatically schedule extracted clips based on narrative goals.
+    
+    1. Loads unscheduled extracted clips
+    2. Classifies into narrative pillars
+    3. Ranks by goal alignment
+    4. Generates and saves schedule
+    """
+    from services.narrative_scheduler.clip_integration import ClipSchedulingIntegration
+    
+    integration = ClipSchedulingIntegration()
+    
+    try:
+        result = await integration.auto_schedule_clips(goal_id)
+        return result
+    except Exception as e:
+        logger.error(f"[API] Clip auto-scheduling failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/clips/unscheduled")
+async def get_unscheduled_clips(limit: int = Query(20, le=50)):
+    """Get extracted clips that haven't been scheduled yet."""
+    from services.narrative_scheduler.clip_integration import ClipSchedulingIntegration
+    
+    integration = ClipSchedulingIntegration()
+    
+    try:
+        clips = await integration.load_unscheduled_clips(min_relevance=0.3, limit=limit)
+        return {
+            "clips": [c.to_dict() for c in clips],
+            "count": len(clips)
+        }
+    except Exception as e:
+        logger.error(f"[API] Failed to load unscheduled clips: {e}")
+        return {"clips": [], "count": 0, "error": str(e)}
+
+
+@router.post("/clips/classify")
+async def classify_clips(clip_ids: List[str] = None):
+    """Classify clips into narrative pillars."""
+    from services.narrative_scheduler.clip_integration import ClipSchedulingIntegration
+    
+    integration = ClipSchedulingIntegration()
+    scheduler = NarrativeScheduler()
+    
+    try:
+        # Load clips
+        clips = await integration.load_unscheduled_clips(limit=50)
+        
+        if clip_ids:
+            clips = [c for c in clips if c.id in clip_ids]
+        
+        # Load pillars
+        pillars = scheduler._get_default_pillars()
+        
+        # Classify
+        classified = await integration.classify_clips_into_pillars(clips, pillars)
+        
+        return {
+            "classified": len(classified),
+            "clips": [
+                {
+                    "id": c.id,
+                    "pillar": c.pillar,
+                    "confidence": c.pillar_confidence,
+                    "text": c.text[:100]
+                } for c in classified
+            ]
+        }
+    except Exception as e:
+        logger.error(f"[API] Clip classification failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# =============================================================================
 # CONTENT ORCHESTRATION ENDPOINTS
 # =============================================================================
 

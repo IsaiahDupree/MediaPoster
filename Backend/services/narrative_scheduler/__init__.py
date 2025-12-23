@@ -15,6 +15,7 @@ from .ai_classifier import AIContentClassifier, AIScheduleJustifier
 from .reflection_system import ReflectionSystem, WeeklyReflection
 from .content_orchestration import NarrativeContentOrchestrator, ContentBriefFromNarrative
 from .weekly_automation import WeeklyAutomation, AutomationConfig, trigger_weekly_cycle
+from .clip_integration import ClipSchedulingIntegration, ClipCandidate
 
 __all__ = [
     'NarrativeReasoningEngine',
@@ -31,4 +32,6 @@ __all__ = [
     'WeeklyAutomation',
     'AutomationConfig',
     'trigger_weekly_cycle',
+    'ClipSchedulingIntegration',
+    'ClipCandidate',
 ]

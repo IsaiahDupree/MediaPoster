@@ -704,141 +704,155 @@ async def get_seven_day_plan():
     """Generate a 7-day content plan based on goals, rules, and opportunities."""
     engine = get_engine()
     
-    with engine.connect() as conn:
-        # 1. Get active goals (with fallback if table/columns don't exist)
-        goals = []
-        try:
-            goals = conn.execute(text("""
-                SELECT id, name, content_pillars, platform_mix, posting_cadence
-                FROM narrative_goals WHERE status = 'active'
-                ORDER BY priority DESC LIMIT 3
-            """)).fetchall()
-        except Exception as e:
-            # Table or column might not exist yet
-            pass
-        
-        # 2. Get applicable KB rules
-        rules = []
-        try:
-            rules_result = conn.execute(text("""
-                SELECT id, rule_type, recommendation, expected_lift, confidence
-                FROM kb_rules WHERE status = 'active'
-                ORDER BY confidence DESC LIMIT 10
-            """)).fetchall()
-            rules = [{'id': str(r[0]), 'type': r[1], 'recommendation': r[2], 
-                     'lift': float(r[3]) if r[3] else 0, 'confidence': float(r[4]) if r[4] else 0}
-                    for r in rules_result]
-        except:
-            pass
-        
-        # 3. Get trend opportunities
-        opportunities = []
-        try:
-            opp_result = conn.execute(text("""
-                SELECT id, title, opportunity_score, priority, recommended_actions
-                FROM trend_opportunities 
-                WHERE status = 'new' AND window_end > NOW()
-                ORDER BY opportunity_score DESC LIMIT 5
-            """)).fetchall()
-            opportunities = [{'id': str(o[0]), 'title': o[1], 'score': float(o[2]) if o[2] else 0,
-                            'priority': o[3], 'actions': o[4] or []}
-                           for o in opp_result]
-        except:
-            pass
-        
-        # 4. Get candidate content
-        candidates = conn.execute(text("""
-            SELECT v.id, v.file_name, va.pre_social_score, va.topics, va.pillar_tags,
-                   COALESCE(cam.total_posts, 0) as post_count,
-                   cam.last_posted_at
-            FROM videos v
-            INNER JOIN video_analysis va ON v.id = va.video_id
-            LEFT JOIN creative_asset_metrics cam ON v.id = cam.video_id
-            WHERE va.pre_social_score >= 50
-            AND (cam.total_posts IS NULL OR cam.total_posts < 5)
-            AND (cam.last_posted_at IS NULL OR cam.last_posted_at < NOW() - INTERVAL '7 days')
-            ORDER BY va.pre_social_score DESC
-            LIMIT 30
-        """)).fetchall()
-        
-        # 5. Get MAINLINE accounts
-        mainline_accounts = []
-        try:
-            accounts = conn.execute(text("""
-                SELECT id, platform, handle FROM social_accounts
-                WHERE account_role = 'MAINLINE' AND is_active = true
-            """)).fetchall()
-            mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
-        except:
-            # Fallback if account_role doesn't exist
-            accounts = conn.execute(text("""
-                SELECT id, platform, handle FROM social_accounts WHERE is_active = true
-            """)).fetchall()
-            mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
-        
-        # 6. Generate 7-day plan
-        plan_days = []
-        candidate_idx = 0
-        
-        for day_offset in range(7):
-            day_date = datetime.now() + timedelta(days=day_offset)
-            day_name = day_date.strftime('%A')
+    # Initialize all variables with defaults
+    goals = []
+    rules = []
+    opportunities = []
+    candidates = []
+    mainline_accounts = []
+    
+    try:
+        with engine.connect() as conn:
+            # 1. Get active goals (with fallback if table/columns don't exist)
+            try:
+                goals = conn.execute(text("""
+                    SELECT id, name, content_pillars, platform_mix, posting_cadence
+                    FROM narrative_goals WHERE status = 'active'
+                    ORDER BY priority DESC LIMIT 3
+                """)).fetchall()
+            except:
+                pass
             
-            # Determine posts for this day based on cadence
-            posts_today = 2  # Default
-            if goals:
-                cadence = goals[0][4] or {}
+            # 2. Get applicable KB rules
+            try:
+                rules_result = conn.execute(text("""
+                    SELECT id, rule_type, recommendation, expected_lift, confidence
+                    FROM kb_rules WHERE status = 'active'
+                    ORDER BY confidence DESC LIMIT 10
+                """)).fetchall()
+                rules = [{'id': str(r[0]), 'type': r[1], 'recommendation': r[2], 
+                         'lift': float(r[3]) if r[3] else 0, 'confidence': float(r[4]) if r[4] else 0}
+                        for r in rules_result]
+            except:
+                pass
+            
+            # 3. Get trend opportunities
+            try:
+                opp_result = conn.execute(text("""
+                    SELECT id, title, opportunity_score, priority, recommended_actions
+                    FROM trend_opportunities 
+                    WHERE status = 'new' AND window_end > NOW()
+                    ORDER BY opportunity_score DESC LIMIT 5
+                """)).fetchall()
+                opportunities = [{'id': str(o[0]), 'title': o[1], 'score': float(o[2]) if o[2] else 0,
+                                'priority': o[3], 'actions': o[4] or []}
+                               for o in opp_result]
+            except:
+                pass
+            
+            # 4. Get candidate content
+            try:
+                candidates = conn.execute(text("""
+                    SELECT v.id, v.file_name, va.pre_social_score, va.topics, va.pillar_tags,
+                           COALESCE(cam.total_posts, 0) as post_count,
+                           cam.last_posted_at
+                    FROM videos v
+                    INNER JOIN video_analysis va ON v.id = va.video_id
+                    LEFT JOIN creative_asset_metrics cam ON v.id = cam.video_id
+                    WHERE va.pre_social_score >= 50
+                    AND (cam.total_posts IS NULL OR cam.total_posts < 5)
+                    AND (cam.last_posted_at IS NULL OR cam.last_posted_at < NOW() - INTERVAL '7 days')
+                    ORDER BY va.pre_social_score DESC
+                    LIMIT 30
+                """)).fetchall()
+            except:
+                pass
+            
+            # 5. Get MAINLINE accounts
+            try:
+                accounts = conn.execute(text("""
+                    SELECT id, platform, handle FROM social_accounts
+                    WHERE account_role = 'MAINLINE' AND is_active = true
+                """)).fetchall()
+                mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
+            except:
+                # Fallback if account_role doesn't exist
+                try:
+                    accounts = conn.execute(text("""
+                        SELECT id, platform, handle FROM social_accounts WHERE is_active = true
+                    """)).fetchall()
+                    mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
+                except:
+                    pass
+    except Exception as e:
+        # Database connection failed - return empty plan
+        pass
+    
+    # 6. Generate 7-day plan (works even with empty data)
+    plan_days = []
+    candidate_idx = 0
+    
+    for day_offset in range(7):
+        day_date = datetime.now() + timedelta(days=day_offset)
+        day_name = day_date.strftime('%A')
+        
+        # Determine posts for this day based on cadence
+        posts_today = 2  # Default
+        if goals:
+            cadence = goals[0][4] or {}
+            if isinstance(cadence, dict):
                 posts_today = cadence.get('target_per_day', 2)
-            
-            day_posts = []
-            for post_num in range(min(posts_today, 3)):
-                if candidate_idx < len(candidates):
-                    cand = candidates[candidate_idx]
-                    candidate_idx += 1
-                    
-                    # Determine best platform
-                    platform = 'tiktok'
-                    if goals and goals[0][3]:
-                        platform_mix = goals[0][3]
-                        platform = max(platform_mix.items(), key=lambda x: x[1])[0] if platform_mix else 'tiktok'
-                    
-                    # Determine time slot
-                    time_slots = ['9:00 AM', '12:00 PM', '6:00 PM']
-                    time_slot = time_slots[post_num % len(time_slots)]
-                    
-                    # Check if trend-reactive slot
-                    trend_slot = day_offset == 0 and post_num == 0 and opportunities
-                    
-                    post = {
-                        'slot': post_num + 1,
-                        'content_id': str(cand[0]),
-                        'content_title': cand[1],
-                        'content_score': int(cand[2]) if cand[2] else 0,
-                        'topics': cand[3] or [],
-                        'platform': platform,
-                        'suggested_time': time_slot,
-                        'type': 'trend_reactive' if trend_slot else 'planned',
-                        'trend_opportunity': opportunities[0] if trend_slot else None,
-                        'applicable_rules': [r for r in rules if r['type'] in ['hook', 'timing']][:2]
-                    }
-                    day_posts.append(post)
-            
-            plan_days.append({
-                'date': day_date.strftime('%Y-%m-%d'),
-                'day_name': day_name,
-                'posts': day_posts,
-                'total_posts': len(day_posts)
-            })
         
-        return {
-            'plan': plan_days,
-            'total_posts': sum(d['total_posts'] for d in plan_days),
-            'goals_applied': [{'id': str(g[0]), 'name': g[1]} for g in goals],
-            'rules_applied': len(rules),
-            'trend_opportunities': len(opportunities),
-            'mainline_accounts': mainline_accounts,
-            'generated_at': datetime.now().isoformat()
-        }
+        day_posts = []
+        for post_num in range(min(posts_today, 3)):
+            if candidate_idx < len(candidates):
+                cand = candidates[candidate_idx]
+                candidate_idx += 1
+                
+                # Determine best platform
+                platform = 'tiktok'
+                if goals and goals[0][3]:
+                    platform_mix = goals[0][3]
+                    if isinstance(platform_mix, dict) and platform_mix:
+                        platform = max(platform_mix.items(), key=lambda x: x[1])[0]
+                
+                # Determine time slot
+                time_slots = ['9:00 AM', '12:00 PM', '6:00 PM']
+                time_slot = time_slots[post_num % len(time_slots)]
+                
+                # Check if trend-reactive slot
+                trend_slot = day_offset == 0 and post_num == 0 and opportunities
+                
+                post = {
+                    'slot': post_num + 1,
+                    'content_id': str(cand[0]),
+                    'content_title': cand[1],
+                    'content_score': int(cand[2]) if cand[2] else 0,
+                    'topics': cand[3] or [],
+                    'platform': platform,
+                    'suggested_time': time_slot,
+                    'type': 'trend_reactive' if trend_slot else 'planned',
+                    'trend_opportunity': opportunities[0] if trend_slot else None,
+                    'applicable_rules': [r for r in rules if r.get('type') in ['hook', 'timing']][:2]
+                }
+                day_posts.append(post)
+        
+        plan_days.append({
+            'date': day_date.strftime('%Y-%m-%d'),
+            'day_name': day_name,
+            'posts': day_posts,
+            'total_posts': len(day_posts)
+        })
+    
+    return {
+        'plan': plan_days,
+        'total_posts': sum(d['total_posts'] for d in plan_days),
+        'goals_applied': [{'id': str(g[0]), 'name': g[1]} for g in goals] if goals else [],
+        'rules_applied': len(rules),
+        'trend_opportunities': len(opportunities),
+        'mainline_accounts': mainline_accounts,
+        'generated_at': datetime.now().isoformat()
+    }
 
 
 # =============================================================================

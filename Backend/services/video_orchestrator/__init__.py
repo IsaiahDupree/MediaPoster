@@ -1,16 +1,7 @@
 """
-Video Orchestrator Service
+Video Orchestrator Package
 ==========================
-Sora-first video generation with Director/SceneCrafter/Assessor workflow.
-
-Supports long-form video creation (up to 5 minutes) by:
-1. Breaking scripts into manageable clips
-2. Generating via Sora API (with fallback providers)
-3. Assessing quality and retrying failures
-4. Assembling final timeline
-
-Usage:
-    from services.video_orchestrator import VideoOrchestrator
+Orchestrates video generation across multiple AI providers.
     
     orchestrator = VideoOrchestrator()
     plan = await orchestrator.create_clip_plan(script, brief)
@@ -65,6 +56,12 @@ from .schemas import (
     RenderResponse,
 )
 
+from .narrative_bridge import (
+    NarrativeVideoBridge,
+    NarrativeVideoBrief,
+    GeneratedVideoContent,
+)
+
 __all__ = [
     # Enums
     "ProviderName",
@@ -109,4 +106,9 @@ __all__ = [
     "ClipRunResponse",
     "AssessmentResponse",
     "RenderResponse",
+    
+    # Narrative Bridge
+    "NarrativeVideoBridge",
+    "NarrativeVideoBrief",
+    "GeneratedVideoContent",
 ]

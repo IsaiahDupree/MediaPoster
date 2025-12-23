@@ -773,6 +773,87 @@ async def generate_script_from_brief(brief_data: Dict[str, Any]):
 
 
 # =============================================================================
+# VIDEO GENERATION BRIDGE ENDPOINTS
+# =============================================================================
+
+@router.post("/video/generate")
+async def generate_video_content(
+    goal_statement: str = "Build engagement and grow following",
+    pillar: str = "Process/How-To",
+    primary_cta: str = "follow",
+    target_audience: str = "general",
+    target_duration: int = 30
+):
+    """
+    Generate video content from narrative goal.
+    
+    Full pipeline: goal → brief → script → clip plan → provider payloads
+    """
+    try:
+        from services.video_orchestrator.narrative_bridge import NarrativeVideoBridge
+        
+        bridge = NarrativeVideoBridge()
+        
+        result = await bridge.full_generation_pipeline(
+            goal_statement=goal_statement,
+            pillar=pillar,
+            primary_cta=primary_cta,
+            target_audience=target_audience,
+            target_duration=target_duration
+        )
+        
+        return {
+            "success": True,
+            "content": result.to_dict(),
+            "script": result.script,
+            "clips_count": len(result.clips),
+            "total_duration": result.total_duration_seconds
+        }
+    except Exception as e:
+        logger.error(f"[API] Video generation failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/video/script")
+async def generate_video_script(
+    topic: str,
+    hook: str = "",
+    key_points: List[str] = None,
+    call_to_action: str = "Follow for more!",
+    tone: str = "engaging",
+    target_duration: int = 30
+):
+    """Generate a video script from topic and key points."""
+    try:
+        from services.video_orchestrator.narrative_bridge import (
+            NarrativeVideoBridge, 
+            NarrativeVideoBrief
+        )
+        
+        bridge = NarrativeVideoBridge()
+        
+        brief = NarrativeVideoBrief(
+            topic=topic,
+            hook=hook or f"Here's something about {topic}...",
+            key_points=key_points or ["Key insight 1", "Key insight 2"],
+            call_to_action=call_to_action,
+            tone=tone,
+            target_duration_seconds=target_duration
+        )
+        
+        script = await bridge.generate_script_from_brief(brief)
+        
+        return {
+            "success": True,
+            "script": script,
+            "brief": brief.to_dict()
+        }
+    except Exception as e:
+        logger.error(f"[API] Script generation failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# =============================================================================
 # TEMPLATE ENDPOINTS
 # =============================================================================
 

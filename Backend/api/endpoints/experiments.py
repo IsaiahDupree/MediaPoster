@@ -1702,3 +1702,283 @@ async def create_framework(
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+
+# =============================================================================
+# EXPERIMENT DASHBOARD ENDPOINTS
+# =============================================================================
+
+@router.get("/dashboard/overview")
+async def get_dashboard_overview():
+    """Get experiments dashboard overview."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Active experiments
+        active_exp = conn.execute(text(
+            "SELECT COUNT(*) FROM experiments WHERE status = 'active'"
+        )).scalar() or 0
+        
+        # Total experiments
+        total_exp = conn.execute(text(
+            "SELECT COUNT(*) FROM experiments"
+        )).scalar() or 0
+        
+        # Passed hypotheses
+        passed_hyp = conn.execute(text(
+            "SELECT COUNT(*) FROM hypotheses WHERE status = 'passed'"
+        )).scalar() or 0
+        
+        # Failed hypotheses
+        failed_hyp = conn.execute(text(
+            "SELECT COUNT(*) FROM hypotheses WHERE status = 'failed'"
+        )).scalar() or 0
+        
+        # Learned patterns
+        patterns = conn.execute(text(
+            "SELECT COUNT(*) FROM content_patterns WHERE is_active = TRUE"
+        )).scalar() or 0
+        
+        # Winners detected
+        winners = conn.execute(text(
+            "SELECT COUNT(*) FROM experiment_winners"
+        )).scalar() or 0
+        
+        # Posts by origin
+        origin_stats = {}
+        origin_result = conn.execute(text("""
+            SELECT COALESCE(origin_type, 'user') as origin, COUNT(*) 
+            FROM scheduled_posts 
+            GROUP BY origin_type
+        """))
+        for row in origin_result:
+            origin_stats[row[0]] = row[1]
+    
+    return {
+        "success": True,
+        "overview": {
+            "experiments": {
+                "active": active_exp,
+                "total": total_exp
+            },
+            "hypotheses": {
+                "passed": passed_hyp,
+                "failed": failed_hyp,
+                "pass_rate": passed_hyp / max(passed_hyp + failed_hyp, 1)
+            },
+            "patterns_learned": patterns,
+            "winners_detected": winners,
+            "posts_by_origin": origin_stats
+        }
+    }
+
+
+@router.get("/dashboard/recent-experiments")
+async def get_recent_experiments(limit: int = 10):
+    """Get recent experiments with status."""
+    engine = get_engine()
+    
+    experiments = []
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT e.id, e.name, e.goal, e.status, e.created_at,
+                   COUNT(h.id) as hypothesis_count,
+                   SUM(CASE WHEN h.status = 'passed' THEN 1 ELSE 0 END) as passed_count
+            FROM experiments e
+            LEFT JOIN hypotheses h ON h.experiment_id = e.id
+            GROUP BY e.id, e.name, e.goal, e.status, e.created_at
+            ORDER BY e.created_at DESC
+            LIMIT :limit
+        """), {"limit": limit})
+        
+        for row in result:
+            experiments.append({
+                "id": str(row[0]),
+                "name": row[1],
+                "goal": row[2],
+                "status": row[3],
+                "created_at": row[4].isoformat() if row[4] else None,
+                "hypothesis_count": row[5] or 0,
+                "passed_count": row[6] or 0
+            })
+    
+    return {"success": True, "experiments": experiments}
+
+
+@router.get("/dashboard/hypothesis-results")
+async def get_hypothesis_results(limit: int = 20):
+    """Get hypothesis results with improvements."""
+    engine = get_engine()
+    
+    hypotheses = []
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT h.id, h.statement, h.status, h.actual_improvement,
+                   h.confidence_level, h.success_threshold, h.learnings,
+                   e.name as experiment_name
+            FROM hypotheses h
+            LEFT JOIN experiments e ON e.id = h.experiment_id
+            WHERE h.status IN ('passed', 'failed', 'inconclusive')
+            ORDER BY h.updated_at DESC NULLS LAST
+            LIMIT :limit
+        """), {"limit": limit})
+        
+        for row in result:
+            hypotheses.append({
+                "id": str(row[0]),
+                "statement": row[1],
+                "status": row[2],
+                "actual_improvement": float(row[3]) if row[3] else None,
+                "confidence_level": float(row[4]) if row[4] else None,
+                "success_threshold": float(row[5]) if row[5] else 1.2,
+                "learnings": row[6],
+                "experiment_name": row[7]
+            })
+    
+    return {"success": True, "hypotheses": hypotheses}
+
+
+@router.get("/dashboard/top-patterns")
+async def get_top_patterns(limit: int = 10):
+    """Get top performing content patterns."""
+    from services.experiments_scheduler import PatternLearner
+    
+    learner = PatternLearner()
+    
+    try:
+        patterns = await learner.get_patterns(min_confidence=0.5, limit=limit)
+        return {
+            "success": True,
+            "patterns": [p.to_dict() for p in patterns]
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/dashboard/winner-leaderboard")
+async def get_winner_leaderboard(limit: int = 10):
+    """Get top winners ranked by performance."""
+    engine = get_engine()
+    
+    winners = []
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT w.id, w.video_id, w.ranking_score, w.winner_type,
+                   w.promoted_to_narrative, w.performance_metrics,
+                   e.name as experiment_name
+            FROM experiment_winners w
+            LEFT JOIN experiments e ON e.id = w.experiment_id
+            ORDER BY w.ranking_score DESC
+            LIMIT :limit
+        """), {"limit": limit})
+        
+        for row in result:
+            winners.append({
+                "id": str(row[0]),
+                "video_id": str(row[1]) if row[1] else None,
+                "ranking_score": float(row[2]) if row[2] else 0,
+                "winner_type": row[3],
+                "promoted_to_narrative": row[4],
+                "performance_metrics": row[5] or {},
+                "experiment_name": row[6]
+            })
+    
+    return {"success": True, "winners": winners}
+
+
+# =============================================================================
+# EXPERIMENT-TO-NARRATIVE PIPELINE
+# =============================================================================
+
+@router.post("/pipeline/promote-winners")
+async def promote_winners_to_narrative(
+    min_ranking_score: float = 0.7,
+    max_promotions: int = 5,
+    narrative_goal_id: Optional[str] = None
+):
+    """Promote top experiment winners to narrative builder."""
+    from services.experiments_scheduler import WinnerDetector
+    
+    detector = WinnerDetector()
+    
+    promoted = []
+    errors = []
+    
+    try:
+        # Get promotion candidates
+        candidates = await detector.get_promotion_candidates(limit=max_promotions)
+        
+        for candidate in candidates:
+            if candidate.ranking_score >= min_ranking_score:
+                try:
+                    result = await detector.promote_to_narrative(
+                        candidate.id, 
+                        narrative_goal_id
+                    )
+                    if result.get("success"):
+                        promoted.append({
+                            "winner_id": candidate.id,
+                            "video_id": candidate.video_id,
+                            "narrative_post_id": result.get("narrative_post_id")
+                        })
+                except Exception as e:
+                    errors.append({
+                        "winner_id": candidate.id,
+                        "error": str(e)
+                    })
+        
+        return {
+            "success": True,
+            "promoted_count": len(promoted),
+            "promoted": promoted,
+            "errors": errors
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/pipeline/sync-learnings")
+async def sync_learnings_to_narrative():
+    """
+    Sync experiment learnings to narrative builder.
+    
+    Updates narrative pillars with successful patterns.
+    """
+    from services.experiments_scheduler import PatternLearner
+    
+    learner = PatternLearner()
+    engine = get_engine()
+    
+    synced_patterns = []
+    
+    try:
+        # Get high-confidence patterns
+        patterns = await learner.get_patterns(min_confidence=0.7, limit=20)
+        
+        # Update learnings table for narrative use
+        with engine.connect() as conn:
+            for pattern in patterns:
+                try:
+                    conn.execute(text("""
+                        INSERT INTO learnings (id, content_id, learning_type, 
+                            insight, confidence, created_at)
+                        VALUES (gen_random_uuid(), NULL, 'experiment_pattern',
+                            :insight, :confidence, NOW())
+                        ON CONFLICT DO NOTHING
+                    """), {
+                        "insight": f"Pattern: {pattern.name} - {pattern.description}. "
+                                   f"Avg improvement: {pattern.avg_improvement:.1%}",
+                        "confidence": pattern.confidence
+                    })
+                    synced_patterns.append(pattern.name)
+                except Exception:
+                    pass
+            conn.commit()
+        
+        return {
+            "success": True,
+            "synced_count": len(synced_patterns),
+            "patterns": synced_patterns
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+

@@ -3,7 +3,7 @@ Content Pipeline API
 Handles automated content sourcing, analysis, approval, scheduling, and publishing.
 """
 
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta

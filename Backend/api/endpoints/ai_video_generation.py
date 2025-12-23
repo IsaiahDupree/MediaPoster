@@ -649,3 +649,187 @@ async def get_templates():
             }
         ]
     }
+
+
+@router.get("/styles")
+async def get_style_presets():
+    """Get available style presets."""
+    engine = get_engine()
+    
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT id, name, description, icon, keywords, color_gradient, category
+                FROM ai_style_presets
+                ORDER BY is_system DESC, usage_count DESC
+            """)).fetchall()
+            
+            return {
+                'styles': [
+                    {
+                        'id': row[0],
+                        'name': row[1],
+                        'description': row[2],
+                        'icon': row[3],
+                        'keywords': row[4],
+                        'color': row[5],
+                        'category': row[6]
+                    }
+                    for row in result
+                ]
+            }
+    except Exception as e:
+        # Return default styles if table doesn't exist
+        return {
+            'styles': [
+                {'id': 'cinematic', 'name': 'Cinematic', 'icon': '🎬', 'keywords': '35mm film, cinematic lighting'},
+                {'id': 'photorealistic', 'name': 'Photorealistic', 'icon': '📷', 'keywords': '8K, photorealistic'},
+                {'id': 'anime', 'name': 'Anime', 'icon': '🎨', 'keywords': 'anime style, hand-drawn'},
+                {'id': 'cyberpunk', 'name': 'Cyberpunk', 'icon': '🌃', 'keywords': 'cyberpunk, neon lights'},
+                {'id': 'dreamy', 'name': 'Dreamy', 'icon': '☁️', 'keywords': 'soft focus, ethereal glow'},
+            ]
+        }
+
+
+@router.get("/camera-motions")
+async def get_camera_motions():
+    """Get available camera motion presets."""
+    engine = get_engine()
+    
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT id, name, description, icon, keywords
+                FROM ai_camera_motions
+                ORDER BY id
+            """)).fetchall()
+            
+            return {
+                'motions': [
+                    {
+                        'id': row[0],
+                        'name': row[1],
+                        'description': row[2],
+                        'icon': row[3],
+                        'keywords': row[4]
+                    }
+                    for row in result
+                ]
+            }
+    except Exception as e:
+        # Return default motions if table doesn't exist
+        return {
+            'motions': [
+                {'id': 'static', 'name': 'Static', 'icon': '⏸️', 'keywords': 'static shot'},
+                {'id': 'slow_pan', 'name': 'Slow Pan', 'icon': '↔️', 'keywords': 'slow pan'},
+                {'id': 'dolly_in', 'name': 'Dolly In', 'icon': '🎯', 'keywords': 'dolly in'},
+                {'id': 'orbit', 'name': 'Orbit', 'icon': '🔄', 'keywords': 'orbit shot'},
+                {'id': 'drone', 'name': 'Drone', 'icon': '🚁', 'keywords': 'drone shot, aerial'},
+            ]
+        }
+
+
+@router.get("/characters")
+async def list_characters():
+    """Get saved characters for the user."""
+    engine = get_engine()
+    
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT id, name, description, avatar_emoji, attributes, usage_count, created_at
+                FROM ai_characters
+                ORDER BY usage_count DESC, created_at DESC
+                LIMIT 50
+            """)).fetchall()
+            
+            return {
+                'characters': [
+                    {
+                        'id': str(row[0]),
+                        'name': row[1],
+                        'description': row[2],
+                        'avatar': row[3] or '👤',
+                        'attributes': row[4] or {},
+                        'usage_count': row[5],
+                        'created_at': str(row[6]) if row[6] else None
+                    }
+                    for row in result
+                ]
+            }
+    except Exception as e:
+        # Return empty list if table doesn't exist
+        return {'characters': []}
+
+
+class CharacterCreate(BaseModel):
+    name: str
+    description: str
+    avatar: Optional[str] = '👤'
+    attributes: Optional[Dict[str, Any]] = {}
+
+
+@router.post("/characters")
+async def create_character(character: CharacterCreate):
+    """Create a new character."""
+    engine = get_engine()
+    
+    try:
+        with engine.connect() as conn:
+            # Ensure table exists
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS ai_characters (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    avatar_emoji TEXT DEFAULT '👤',
+                    attributes JSONB DEFAULT '{}',
+                    usage_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            
+            result = conn.execute(text("""
+                INSERT INTO ai_characters (name, description, avatar_emoji, attributes)
+                VALUES (:name, :description, :avatar, :attributes)
+                RETURNING id
+            """), {
+                'name': character.name,
+                'description': character.description,
+                'avatar': character.avatar,
+                'attributes': json.dumps(character.attributes)
+            })
+            
+            conn.commit()
+            char_id = result.fetchone()[0]
+            
+            return {
+                'id': str(char_id),
+                'name': character.name,
+                'description': character.description,
+                'avatar': character.avatar,
+                'attributes': character.attributes,
+                'message': 'Character created successfully'
+            }
+    except Exception as e:
+        logger.error(f"Error creating character: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/characters/{character_id}")
+async def delete_character(character_id: str):
+    """Delete a character."""
+    engine = get_engine()
+    
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                DELETE FROM ai_characters WHERE id = :id
+            """), {'id': character_id})
+            conn.commit()
+            
+            return {'message': 'Character deleted', 'id': character_id}
+    except Exception as e:
+        logger.error(f"Error deleting character: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

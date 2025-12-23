@@ -64,9 +64,9 @@ class ExperimentsScheduler:
         with self.engine.connect() as conn:
             conn.execute(text("""
                 INSERT INTO experiments (id, name, description, goal, status, 
-                    target_accounts, resource_types)
+                    target_accounts, resource_types, type, primary_metric, hypothesis)
                 VALUES (:id, :name, :description, :goal, :status, 
-                    :target_accounts, :resource_types)
+                    :target_accounts, :resource_types, :type, :primary_metric, :hypothesis)
             """), {
                 "id": experiment.id,
                 "name": experiment.name,
@@ -74,7 +74,10 @@ class ExperimentsScheduler:
                 "goal": experiment.goal,
                 "status": experiment.status.value,
                 "target_accounts": experiment.target_accounts,
-                "resource_types": experiment.resource_types
+                "resource_types": experiment.resource_types,
+                "type": "content_test",
+                "primary_metric": "engagement_rate",
+                "hypothesis": experiment.goal
             })
             conn.commit()
         
@@ -121,7 +124,7 @@ class ExperimentsScheduler:
         with self.engine.connect() as conn:
             conn.execute(text("""
                 UPDATE experiments 
-                SET status = 'active', start_date = NOW()
+                SET status = 'active', started_at = NOW()
                 WHERE id = :id
             """), {"id": experiment_id})
             
@@ -143,7 +146,7 @@ class ExperimentsScheduler:
         """Get experiment by ID."""
         with self.engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT id, name, description, goal, status, start_date, end_date,
+                SELECT id, name, description, goal, status, started_at, completed_at,
                     success_criteria, target_accounts, resource_types, results, learnings
                 FROM experiments WHERE id = :id
             """), {"id": experiment_id}).fetchone()

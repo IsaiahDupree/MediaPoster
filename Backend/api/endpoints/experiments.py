@@ -1936,6 +1936,95 @@ async def promote_winners_to_narrative(
         return {"success": False, "error": str(e)}
 
 
+@router.post("/pipeline/run-experiment")
+async def run_complete_experiment(
+    goal: str,
+    min_score: int = 60,
+    videos_per_variant: int = 5,
+    platform: str = "tiktok"
+):
+    """
+    Run a complete experiment end-to-end.
+    
+    1. Plans experiment with AI
+    2. Selects content from library
+    3. Schedules control and variant posts
+    4. Returns experiment for monitoring
+    """
+    from services.experiments_scheduler import (
+        ExperimentAgent, ExperimentsScheduler
+    )
+    
+    agent = ExperimentAgent()
+    scheduler = ExperimentsScheduler()
+    
+    try:
+        # Step 1: Plan experiment
+        resources = {"types": ["ugc"], "tools": ["subtitles", "hooks"]}
+        experiment = await agent.plan_experiment(goal, resources)
+        
+        # Step 2: Save to database
+        saved_exp = await scheduler.create_experiment(
+            name=experiment.name,
+            goal=experiment.goal,
+            description=f"Auto-generated experiment for: {goal}"
+        )
+        
+        # Step 3: Add hypotheses
+        for hyp in experiment.hypotheses:
+            hyp.experiment_id = saved_exp.id
+            await scheduler.add_hypothesis(saved_exp.id, hyp)
+        
+        # Step 4: Browse content library
+        action = await agent.execute_action(
+            AgentAction(
+                experiment_id=saved_exp.id,
+                action_type=AgentActionType.BROWSE_UGC_LIBRARY,
+                action_params={"min_score": min_score, "limit": videos_per_variant * 2}
+            )
+        )
+        
+        videos = action.result.get("videos", [])
+        
+        # Step 5: Split into control and variant
+        control_ids = [v["id"] for v in videos[::2]][:videos_per_variant]
+        variant_ids = [v["id"] for v in videos[1::2]][:videos_per_variant]
+        
+        # Step 6: Schedule posts (if we have videos)
+        scheduled = {"control": 0, "variant": 0}
+        if control_ids and variant_ids and experiment.hypotheses:
+            hyp = experiment.hypotheses[0]
+            result = await scheduler.schedule_experiment_posts(
+                experiment_id=saved_exp.id,
+                hypothesis_id=hyp.id,
+                control_video_ids=control_ids,
+                variant_video_ids=variant_ids,
+                platform=platform
+            )
+            scheduled = {
+                "control": len(result.get("control_posts", [])),
+                "variant": len(result.get("variant_posts", []))
+            }
+        
+        # Step 7: Start experiment
+        await scheduler.start_experiment(saved_exp.id)
+        
+        return {
+            "success": True,
+            "experiment_id": saved_exp.id,
+            "hypotheses_count": len(experiment.hypotheses),
+            "videos_found": len(videos),
+            "scheduled": scheduled,
+            "status": "active"
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+from services.experiments_scheduler.experiment_agent import AgentAction, AgentActionType
+
+
 @router.post("/pipeline/sync-learnings")
 async def sync_learnings_to_narrative():
     """

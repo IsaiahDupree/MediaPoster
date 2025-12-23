@@ -524,6 +524,10 @@ app.include_router(blotato_router.router, tags=["Blotato API"])
 from api import ai_chat
 app.include_router(ai_chat.router, tags=["AI Chat"])
 
+# Video Orchestrator (Sora-first video generation)
+from api.endpoints import video_orchestrator
+app.include_router(video_orchestrator.router, prefix="/api", tags=["Video Orchestrator"])
+
 # Analytics Comparison (Cross-account and cross-platform)
 from api import analytics_compare
 app.include_router(analytics_compare.router, tags=["Analytics Compare"])

@@ -22,6 +22,15 @@ from .background_scheduler import (
     stop_background_agents
 )
 
+from .run_manager import (
+    RunManager,
+    RunStatus,
+    StepStatus,
+    EventSeverity,
+    StepDefinition,
+    get_run_manager
+)
+
 __all__ = [
     'AgentEventBus',
     'AgentEvent',
@@ -35,4 +44,10 @@ __all__ = [
     'get_scheduler',
     'start_background_agents',
     'stop_background_agents',
+    'RunManager',
+    'RunStatus',
+    'StepStatus',
+    'EventSeverity',
+    'StepDefinition',
+    'get_run_manager',
 ]

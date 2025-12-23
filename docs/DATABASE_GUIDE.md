@@ -105,8 +105,15 @@ python scripts/ingest_iphone_media.py
 
 ## ⚠️ Critical Warnings
 
-### DO NOT RUN: `supabase db reset`
-This command **DELETES ALL DATA** in the database. Avoid unless you intend to wipe everything and re-run migrations + ingestion.
+### 🚨 NEVER RUN: `supabase db reset`
+This command **PERMANENTLY DELETES ALL DATA** including:
+- **AI analysis results** (transcriptions, scores, thumbnails) - costs real money to regenerate
+- All ingested video metadata
+- All scheduled posts and analytics
+
+**Cost impact:** Previous analysis of 7,450 files cost ~$10+ in OpenAI API calls.
+
+**If migrations are needed**, use `supabase db push` instead - it applies changes without data loss.
 
 ### Database Backups
 Before any major operations:

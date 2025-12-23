@@ -687,3 +687,134 @@ async def reset_mock_data():
     _saved_for_later = {}
     _init_mock_data()
     return {"status": "reset", "queue_size": len(_content_queue)}
+
+
+# =============================================================================
+# UNIFIED PIPELINE ENDPOINTS (AI Narrative Integration)
+# =============================================================================
+
+@router.post("/unified/quick-schedule")
+async def unified_quick_schedule(
+    count: int = Query(7, le=14, description="Number of posts to schedule"),
+    platforms: List[str] = Query(["tiktok", "instagram"])
+):
+    """
+    Quick scheduling using AI narrative planning.
+    
+    Uses existing analyzed videos and default narrative settings.
+    """
+    try:
+        from services.narrative_scheduler import NarrativeScheduler
+        from services.narrative_scheduler.clip_integration import ClipSchedulingIntegration
+        
+        scheduler = NarrativeScheduler()
+        clip_integration = ClipSchedulingIntegration()
+        
+        # Generate plan with defaults
+        plan = await scheduler.generate_7_day_plan(use_defaults=True)
+        
+        # Try to add clips if available
+        clips_result = await clip_integration.auto_schedule_clips()
+        
+        return {
+            "success": True,
+            "plan_id": plan.id,
+            "posts_scheduled": plan.total_posts,
+            "clips_added": clips_result.get("clips_scheduled", 0),
+            "reasoning_steps": len(plan.reasoning_chain)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/unified/generate-week")
+async def unified_generate_week(
+    goal_statement: str = "Build engagement and grow following",
+    primary_cta: str = "follow",
+    posts_per_day: int = 2,
+    generate_new_content: bool = False
+):
+    """
+    Generate a full week of content using AI narrative planning.
+    """
+    results = {
+        "goal": goal_statement,
+        "briefs_generated": 0,
+        "scripts_generated": 0,
+        "posts_scheduled": 0
+    }
+    
+    try:
+        from services.narrative_scheduler import NarrativeScheduler
+        scheduler = NarrativeScheduler()
+        
+        plan = await scheduler.generate_7_day_plan(use_defaults=True)
+        results["plan_id"] = plan.id
+        results["reasoning_steps"] = len(plan.reasoning_chain)
+        
+        if generate_new_content:
+            from services.narrative_scheduler.content_orchestration import NarrativeContentOrchestrator
+            orchestrator = NarrativeContentOrchestrator()
+            
+            goal = scheduler._get_default_goal()
+            pillars = scheduler._get_default_pillars()
+            
+            briefs = await orchestrator.generate_content_briefs_from_goal(
+                goal=goal,
+                pillars=pillars,
+                count=posts_per_day * 7
+            )
+            results["briefs_generated"] = len(briefs)
+        
+        from services.narrative_scheduler.clip_integration import ClipSchedulingIntegration
+        clip_integration = ClipSchedulingIntegration()
+        
+        clips_result = await clip_integration.auto_schedule_clips()
+        results["clips_scheduled"] = clips_result.get("clips_scheduled", 0)
+        results["posts_scheduled"] = plan.total_posts
+        results["success"] = True
+        
+    except Exception as e:
+        results["success"] = False
+        results["error"] = str(e)
+    
+    return results
+
+
+@router.get("/unified/stats")
+async def unified_pipeline_stats():
+    """Get unified content pipeline statistics."""
+    from sqlalchemy import create_engine, text
+    import os
+    
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+    engine = create_engine(DATABASE_URL)
+    
+    stats = {
+        "videos_analyzed": 0,
+        "clips_extracted": 0,
+        "posts_scheduled": 0,
+        "posts_published": 0,
+        "plans_generated": 0
+    }
+    
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM video_analysis"))
+            stats["videos_analyzed"] = result.fetchone()[0]
+            
+            result = conn.execute(text("SELECT COUNT(*) FROM video_clips WHERE clip_type = 'extracted'"))
+            stats["clips_extracted"] = result.fetchone()[0]
+            
+            result = conn.execute(text("SELECT COUNT(*) FROM scheduled_posts WHERE status = 'pending'"))
+            stats["posts_scheduled"] = result.fetchone()[0]
+            
+            result = conn.execute(text("SELECT COUNT(*) FROM scheduled_posts WHERE status IN ('published', 'posted')"))
+            stats["posts_published"] = result.fetchone()[0]
+            
+            result = conn.execute(text("SELECT COUNT(*) FROM weekly_schedules"))
+            stats["plans_generated"] = result.fetchone()[0]
+    except Exception as e:
+        stats["error"] = str(e)
+    
+    return stats

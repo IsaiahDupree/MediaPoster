@@ -47,6 +47,9 @@ class VideoGenerationRequest(BaseModel):
     settings: Dict[str, Any] = Field(default_factory=dict)
     generate_title: bool = True
     generate_description: bool = True
+    style_preset: Optional[str] = None
+    camera_motion: Optional[str] = None
+    character_ids: Optional[List[str]] = None
 
 
 class VideoGenerationResponse(BaseModel):
@@ -88,7 +91,13 @@ def ensure_tables():
                     job_id UUID NOT NULL,
                     provider VARCHAR(50) NOT NULL,
                     prompt TEXT NOT NULL,
+                    enhanced_prompt TEXT,
                     settings JSONB DEFAULT '{}'::jsonb,
+                    
+                    -- Style and motion
+                    style_preset VARCHAR(50),
+                    camera_motion VARCHAR(50),
+                    character_ids UUID[],
                     
                     -- Status tracking
                     status VARCHAR(20) DEFAULT 'queued',
@@ -98,10 +107,17 @@ def ensure_tables():
                     -- Output
                     output_url TEXT,
                     thumbnail_url TEXT,
+                    duration_seconds DECIMAL(10, 2),
+                    resolution VARCHAR(20),
+                    aspect_ratio VARCHAR(10),
+                    file_size_bytes BIGINT,
                     
                     -- AI-generated metadata
                     ai_title TEXT,
                     ai_description TEXT,
+                    
+                    -- Link to media library
+                    video_id UUID,
                     
                     -- Timestamps
                     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -305,18 +321,33 @@ async def generate_video(request: VideoGenerationRequest, background_tasks: Back
     duration = request.settings.get('duration', '10s')
     estimated_time = duration_map.get(duration, 60)
     
+    # Extract style/motion from settings if present
+    style_preset = request.settings.get('style') or request.style_preset
+    camera_motion = request.settings.get('camera_motion') or request.camera_motion
+    character_ids = request.settings.get('characters') or request.character_ids
+    duration = request.settings.get('duration', '10s')
+    resolution = request.settings.get('resolution', '1080p')
+    aspect_ratio = request.settings.get('aspect_ratio', '16:9')
+    
     try:
         with engine.connect() as conn:
             conn.execute(text("""
                 INSERT INTO ai_video_generations 
-                (id, job_id, provider, prompt, settings, status, progress)
-                VALUES (:id, :job_id, :provider, :prompt, :settings, 'queued', 0)
+                (id, job_id, provider, prompt, enhanced_prompt, settings, style_preset, 
+                 camera_motion, resolution, aspect_ratio, status, progress)
+                VALUES (:id, :job_id, :provider, :prompt, :enhanced_prompt, :settings, 
+                        :style_preset, :camera_motion, :resolution, :aspect_ratio, 'queued', 0)
             """), {
                 'id': gen_id,
                 'job_id': job_id,
                 'provider': request.provider,
                 'prompt': request.prompt,
-                'settings': json.dumps(request.settings)
+                'enhanced_prompt': request.prompt,  # Frontend sends enhanced prompt
+                'settings': json.dumps(request.settings),
+                'style_preset': style_preset,
+                'camera_motion': camera_motion,
+                'resolution': resolution,
+                'aspect_ratio': aspect_ratio
             })
             conn.commit()
         

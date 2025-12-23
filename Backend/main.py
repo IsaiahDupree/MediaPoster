@@ -508,6 +508,10 @@ app.include_router(storage.router, prefix="/api", tags=["Storage Management"])
 from api import media_processing
 app.include_router(media_processing.router, tags=["Media Processing"])
 
+# Clip Extraction (Long-form to Short-form, SupoClip-style)
+from api.endpoints import clip_extraction
+app.include_router(clip_extraction.router, prefix="/api", tags=["Clip Extraction"])
+
 # Database-backed Media Processing (persists to Supabase)
 from api import media_processing_db
 app.include_router(media_processing_db.router, tags=["Media Processing (Database)"])

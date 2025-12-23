@@ -95,6 +95,19 @@ class Topics:
     AI_GENERATION_FAILED = "ai.generation.failed"         # Generation error
     
     # =========================================================================
+    # CLIP EXTRACTION (Long-form to Short-form)
+    # =========================================================================
+    CLIP_EXTRACTION_REQUESTED = "clip.extraction.requested"     # Request to extract clips
+    CLIP_EXTRACTION_STARTED = "clip.extraction.started"         # Worker picked up job
+    CLIP_EXTRACTION_PROGRESS = "clip.extraction.progress"       # Progress update
+    CLIP_TRANSCRIPT_COMPLETED = "clip.extraction.transcript"    # Transcript ready
+    CLIP_SEGMENTS_IDENTIFIED = "clip.extraction.segments"       # AI found segments
+    CLIP_RENDERING_STARTED = "clip.extraction.rendering"        # Rendering clips
+    CLIP_SINGLE_COMPLETED = "clip.extraction.clip_done"         # One clip finished
+    CLIP_EXTRACTION_COMPLETED = "clip.extraction.completed"     # All clips done
+    CLIP_EXTRACTION_FAILED = "clip.extraction.failed"           # Extraction error
+    
+    # =========================================================================
     # NOTIFICATIONS
     # =========================================================================
     NOTIFICATION_CREATED = "notification.created"         # New notification

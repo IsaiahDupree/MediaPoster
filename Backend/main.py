@@ -510,6 +510,10 @@ app.include_router(storage.router, prefix="/api", tags=["Storage Management"])
 from api import media_processing
 app.include_router(media_processing.router, tags=["Media Processing"])
 
+# Media Provider Service (Centralized media serving & streaming)
+from api.endpoints import media_provider
+app.include_router(media_provider.router, tags=["Media Provider"])
+
 # Clip Extraction (Long-form to Short-form, SupoClip-style)
 from api.endpoints import clip_extraction
 app.include_router(clip_extraction.router, prefix="/api", tags=["Clip Extraction"])

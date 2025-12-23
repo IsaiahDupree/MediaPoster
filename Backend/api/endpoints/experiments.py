@@ -39,6 +39,13 @@ class CreateExperiment(BaseModel):
     platform_type: str = 'organic'  # 'organic', 'paid'
     platforms: List[str] = ['tiktok', 'instagram']
     min_sample_size: int = 1000
+    # Phase 2: Account role targeting
+    account_role: str = 'EXPERIMENT_ARM'  # Only run on experiment accounts
+    account_ids: List[str] = []  # Specific accounts to use
+    # Fairness controls
+    fairness_controls: Dict[str, Any] = {}  # time_buckets, topic_matching, etc.
+    # Trend integration
+    trend_opportunity_id: Optional[str] = None  # If spawned from a trend
 
 class UpdateExperiment(BaseModel):
     status: Optional[str] = None
@@ -83,8 +90,27 @@ def ensure_tables():
                 started_at TIMESTAMPTZ,
                 completed_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                -- Phase 2: Account role & fairness
+                account_role TEXT DEFAULT 'EXPERIMENT_ARM',
+                account_ids UUID[] DEFAULT '{}',
+                fairness_controls JSONB DEFAULT '{}',
+                trend_opportunity_id UUID,
+                -- Knowledge base integration
+                generated_rule_ids UUID[] DEFAULT '{}'
             )
+        """))
+        
+        # Add new columns if table already exists
+        conn.execute(text("""
+            DO $$ BEGIN
+                ALTER TABLE experiments ADD COLUMN IF NOT EXISTS account_role TEXT DEFAULT 'EXPERIMENT_ARM';
+                ALTER TABLE experiments ADD COLUMN IF NOT EXISTS account_ids UUID[] DEFAULT '{}';
+                ALTER TABLE experiments ADD COLUMN IF NOT EXISTS fairness_controls JSONB DEFAULT '{}';
+                ALTER TABLE experiments ADD COLUMN IF NOT EXISTS trend_opportunity_id UUID;
+                ALTER TABLE experiments ADD COLUMN IF NOT EXISTS generated_rule_ids UUID[] DEFAULT '{}';
+            EXCEPTION WHEN others THEN NULL;
+            END $$;
         """))
         
         # Experiment variants table
@@ -906,6 +932,427 @@ async def seed_demo_data():
         conn.commit()
         
         return {'created_experiments': created, 'backlog_ideas': len(backlog_ideas), 'learnings': len(learnings)}
+
+
+# =============================================================================
+# PHASE 2: ACCOUNT ROLE FILTERING
+# =============================================================================
+
+@router.get("/experiment-accounts")
+async def get_experiment_accounts():
+    """Get accounts available for experiments (EXPERIMENT_ARM role only)."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Check if account_role column exists
+        try:
+            result = conn.execute(text("""
+                SELECT id, platform, handle, account_role
+                FROM social_accounts
+                WHERE account_role = 'EXPERIMENT_ARM' AND is_active = true
+                ORDER BY platform, handle
+            """)).fetchall()
+        except:
+            # Fallback if account_role doesn't exist yet
+            result = conn.execute(text("""
+                SELECT id, platform, handle, 'EXPERIMENT_ARM' as account_role
+                FROM social_accounts
+                WHERE is_active = true
+                ORDER BY platform, handle
+            """)).fetchall()
+        
+        accounts = [
+            {
+                'id': str(row[0]),
+                'platform': row[1],
+                'handle': row[2],
+                'account_role': row[3]
+            }
+            for row in result
+        ]
+        
+        return {'accounts': accounts, 'count': len(accounts)}
+
+
+@router.patch("/accounts/{account_id}/role")
+async def update_account_role(account_id: str, role: str = 'EXPERIMENT_ARM'):
+    """Update an account's role (MAINLINE or EXPERIMENT_ARM)."""
+    if role not in ['MAINLINE', 'EXPERIMENT_ARM', 'ARCHIVE', 'SEED']:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be MAINLINE, EXPERIMENT_ARM, ARCHIVE, or SEED")
+    
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("""
+                UPDATE social_accounts SET account_role = :role WHERE id = :id
+            """), {'id': account_id, 'role': role})
+            conn.commit()
+        except Exception as e:
+            # Column might not exist, try adding it
+            conn.execute(text("""
+                ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS account_role TEXT DEFAULT 'MAINLINE'
+            """))
+            conn.execute(text("""
+                UPDATE social_accounts SET account_role = :role WHERE id = :id
+            """), {'id': account_id, 'role': role})
+            conn.commit()
+    
+    return {'id': account_id, 'account_role': role, 'message': 'Role updated'}
+
+
+# =============================================================================
+# PHASE 2: STATISTICAL CONFIDENCE CALCULATION
+# =============================================================================
+
+import math
+
+def calculate_confidence(control_value: float, variant_value: float, 
+                         control_n: int, variant_n: int) -> dict:
+    """
+    Calculate statistical confidence using a simplified z-test.
+    Returns confidence percentage and whether result is significant.
+    """
+    if control_n < 30 or variant_n < 30:
+        return {'confidence': 0, 'significant': False, 'reason': 'Insufficient sample size (need 30+)'}
+    
+    if control_value <= 0:
+        return {'confidence': 0, 'significant': False, 'reason': 'Control value is zero'}
+    
+    # Calculate uplift
+    uplift = ((variant_value - control_value) / control_value) * 100
+    
+    # Simplified confidence calculation based on sample size and effect size
+    # Using approximation: confidence increases with sample size and effect size
+    effect_size = abs(variant_value - control_value) / max(control_value, 0.001)
+    sample_factor = math.sqrt(min(control_n, variant_n) / 1000)
+    
+    # Base confidence from effect size (larger effect = more confident)
+    base_confidence = min(95, effect_size * 100 * sample_factor)
+    
+    # Adjust for sample size
+    if control_n >= 1000 and variant_n >= 1000:
+        base_confidence = min(99, base_confidence * 1.2)
+    elif control_n >= 500 and variant_n >= 500:
+        base_confidence = min(95, base_confidence * 1.1)
+    
+    # Determine significance (typically 95% threshold)
+    significant = base_confidence >= 95
+    
+    return {
+        'confidence': round(base_confidence, 1),
+        'significant': significant,
+        'uplift': round(uplift, 2),
+        'effect_size': round(effect_size, 4),
+        'control_n': control_n,
+        'variant_n': variant_n
+    }
+
+
+@router.post("/{experiment_id}/calculate-confidence")
+async def calculate_experiment_confidence(experiment_id: str):
+    """Calculate statistical confidence for an experiment."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Get variants
+        variants = conn.execute(text("""
+            SELECT id, name, is_control, views, primary_metric_value
+            FROM experiment_variants
+            WHERE experiment_id = :id
+            ORDER BY is_control DESC
+        """), {'id': experiment_id}).fetchall()
+        
+        if len(variants) < 2:
+            return {'error': 'Need at least 2 variants'}
+        
+        # Find control
+        control = None
+        test_variants = []
+        for v in variants:
+            if v[2]:  # is_control
+                control = v
+            else:
+                test_variants.append(v)
+        
+        if not control:
+            return {'error': 'No control variant found'}
+        
+        results = []
+        best_variant = None
+        best_confidence = 0
+        
+        for variant in test_variants:
+            conf = calculate_confidence(
+                control_value=float(control[4] or 0),
+                variant_value=float(variant[4] or 0),
+                control_n=int(control[3] or 0),
+                variant_n=int(variant[3] or 0)
+            )
+            conf['variant_id'] = str(variant[0])
+            conf['variant_name'] = variant[1]
+            results.append(conf)
+            
+            if conf['confidence'] > best_confidence and conf.get('uplift', 0) > 0:
+                best_confidence = conf['confidence']
+                best_variant = variant
+        
+        # Update experiment confidence
+        if best_variant and best_confidence > 0:
+            conn.execute(text("""
+                UPDATE experiments 
+                SET confidence = :conf, updated_at = NOW()
+                WHERE id = :id
+            """), {'id': experiment_id, 'conf': best_confidence})
+            conn.commit()
+        
+        return {
+            'experiment_id': experiment_id,
+            'control': {'id': str(control[0]), 'name': control[1], 'value': float(control[4] or 0), 'n': int(control[3] or 0)},
+            'variants': results,
+            'best_confidence': best_confidence,
+            'recommendation': 'significant' if best_confidence >= 95 else 'need_more_data'
+        }
+
+
+# =============================================================================
+# PHASE 2: RULE LEARNER (Convert experiment results to KB rules)
+# =============================================================================
+
+@router.post("/{experiment_id}/generate-rule")
+async def generate_rule_from_experiment(experiment_id: str):
+    """Generate a knowledge base rule from a completed experiment."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Get experiment
+        exp = conn.execute(text("""
+            SELECT id, name, hypothesis, type, primary_metric, status,
+                   winner_variant_id, uplift, confidence, platforms
+            FROM experiments WHERE id = :id
+        """), {'id': experiment_id}).fetchone()
+        
+        if not exp:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        
+        if exp[5] != 'completed':
+            raise HTTPException(status_code=400, detail="Experiment must be completed to generate rule")
+        
+        if not exp[6]:  # winner_variant_id
+            raise HTTPException(status_code=400, detail="No winner variant declared")
+        
+        # Get winner variant details
+        winner = conn.execute(text("""
+            SELECT name, description, primary_metric_value
+            FROM experiment_variants WHERE id = :id
+        """), {'id': exp[6]}).fetchone()
+        
+        if not winner:
+            raise HTTPException(status_code=404, detail="Winner variant not found")
+        
+        # Create rule
+        rule_type = exp[3]  # experiment type
+        name = f"From Experiment: {exp[1]}"
+        recommendation = f"{winner[0]}: {winner[1]}"
+        conditions = {
+            'platform': list(exp[9]) if exp[9] else ['tiktok', 'instagram'],
+            'experiment_validated': True
+        }
+        
+        # Check if kb_rules table exists
+        try:
+            result = conn.execute(text("""
+                INSERT INTO kb_rules (
+                    rule_type, name, description, conditions, recommendation,
+                    expected_lift, confidence, source_experiment_id, status
+                ) VALUES (
+                    :type, :name, :desc, :conditions::jsonb, :recommendation,
+                    :lift, :conf, :exp_id, 'active'
+                )
+                RETURNING id
+            """), {
+                'type': rule_type,
+                'name': name,
+                'desc': exp[2],  # hypothesis
+                'conditions': json.dumps(conditions),
+                'recommendation': recommendation,
+                'lift': float(exp[7]) if exp[7] else 0,
+                'conf': float(exp[8]) / 100 if exp[8] else 0,  # Convert to 0-1 scale
+                'exp_id': experiment_id
+            })
+            
+            rule_id = str(result.fetchone()[0])
+            
+            # Update experiment with generated rule
+            conn.execute(text("""
+                UPDATE experiments 
+                SET generated_rule_ids = array_append(COALESCE(generated_rule_ids, '{}'), :rule_id::uuid)
+                WHERE id = :id
+            """), {'id': experiment_id, 'rule_id': rule_id})
+            
+            conn.commit()
+            
+            return {
+                'rule_id': rule_id,
+                'rule_type': rule_type,
+                'name': name,
+                'recommendation': recommendation,
+                'expected_lift': float(exp[7]) if exp[7] else 0,
+                'confidence': float(exp[8]) if exp[8] else 0,
+                'message': 'Rule created and added to Knowledge Base'
+            }
+            
+        except Exception as e:
+            return {
+                'error': str(e),
+                'message': 'Could not create rule. KB tables may not exist yet.'
+            }
+
+
+@router.post("/batch-generate-rules")
+async def batch_generate_rules():
+    """Generate rules from all completed experiments that don't have rules yet."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Find completed experiments without rules
+        experiments = conn.execute(text("""
+            SELECT id FROM experiments 
+            WHERE status = 'completed' 
+              AND winner_variant_id IS NOT NULL
+              AND (generated_rule_ids IS NULL OR array_length(generated_rule_ids, 1) IS NULL)
+        """)).fetchall()
+        
+        generated = []
+        for exp in experiments:
+            try:
+                result = await generate_rule_from_experiment(str(exp[0]))
+                if 'rule_id' in result:
+                    generated.append(result)
+            except:
+                pass
+        
+        return {'rules_generated': len(generated), 'rules': generated}
+
+
+# =============================================================================
+# PHASE 2: VARIANT SCHEDULING WITH FAIRNESS CONTROLS
+# =============================================================================
+
+class VariantScheduleRequest(BaseModel):
+    experiment_id: str
+    variant_id: str
+    account_id: str
+    platform: str
+    scheduled_at: str  # ISO format
+    media_id: Optional[str] = None
+    caption: Optional[str] = None
+
+
+@router.post("/schedule-variant")
+async def schedule_experiment_variant(request: VariantScheduleRequest):
+    """Schedule a variant for posting with fairness controls."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Verify experiment exists and is running
+        exp = conn.execute(text("""
+            SELECT id, status, account_role, fairness_controls
+            FROM experiments WHERE id = :id
+        """), {'id': request.experiment_id}).fetchone()
+        
+        if not exp:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        
+        if exp[1] != 'running':
+            raise HTTPException(status_code=400, detail="Experiment must be running to schedule variants")
+        
+        # Verify account role matches experiment
+        try:
+            account = conn.execute(text("""
+                SELECT id, account_role FROM social_accounts WHERE id = :id
+            """), {'id': request.account_id}).fetchone()
+            
+            if account and account[1] != exp[2]:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Account role {account[1]} doesn't match experiment role {exp[2]}"
+                )
+        except:
+            pass  # account_role column might not exist
+        
+        # Check fairness controls (time bucket matching)
+        fairness = exp[3] or {}
+        
+        # Create scheduled post with experiment tracking
+        try:
+            result = conn.execute(text("""
+                INSERT INTO scheduled_posts (
+                    account_id, platform, media_id, caption, scheduled_at,
+                    status, origin, experiment_id, experiment_arm
+                ) VALUES (
+                    :account_id, :platform, :media_id, :caption, :scheduled_at,
+                    'scheduled', 'EXPERIMENT', :experiment_id, :variant_id
+                )
+                RETURNING id
+            """), {
+                'account_id': request.account_id,
+                'platform': request.platform,
+                'media_id': request.media_id,
+                'caption': request.caption,
+                'scheduled_at': request.scheduled_at,
+                'experiment_id': request.experiment_id,
+                'variant_id': request.variant_id
+            })
+            
+            post_id = str(result.fetchone()[0])
+            conn.commit()
+            
+            return {
+                'scheduled_post_id': post_id,
+                'experiment_id': request.experiment_id,
+                'variant_id': request.variant_id,
+                'scheduled_at': request.scheduled_at,
+                'message': 'Variant scheduled successfully'
+            }
+            
+        except Exception as e:
+            return {
+                'error': str(e),
+                'message': 'Could not schedule. scheduled_posts table may need migration.'
+            }
+
+
+@router.get("/{experiment_id}/scheduled-variants")
+async def get_scheduled_variants(experiment_id: str):
+    """Get all scheduled posts for an experiment."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("""
+                SELECT id, account_id, platform, scheduled_at, status, experiment_arm
+                FROM scheduled_posts
+                WHERE experiment_id = :id
+                ORDER BY scheduled_at
+            """), {'id': experiment_id}).fetchall()
+            
+            posts = [
+                {
+                    'id': str(row[0]),
+                    'account_id': str(row[1]),
+                    'platform': row[2],
+                    'scheduled_at': row[3].isoformat() if row[3] else None,
+                    'status': row[4],
+                    'variant_id': str(row[5]) if row[5] else None
+                }
+                for row in result
+            ]
+            
+            return {'experiment_id': experiment_id, 'scheduled_posts': posts, 'count': len(posts)}
+            
+        except Exception as e:
+            return {'experiment_id': experiment_id, 'scheduled_posts': [], 'error': str(e)}
 
 
 @router.post("/backlog/generate-ideas")

@@ -1283,37 +1283,29 @@ class Video(Base):
 
 
 class VideoAnalysis(Base):
-    """AI Analysis for Video Library"""
+    """AI Analysis for Video Library - Matches actual database schema"""
     __tablename__ = "video_analysis"
     
     video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id", ondelete="CASCADE"), primary_key=True)
     transcript = Column(Text)
-    transcript_analysis = Column(JSONB)  # Summary short/long, key points, sentiment
     topics = Column(ARRAY(Text))
     hooks = Column(ARRAY(Text))
     tone = Column(Text)
     pacing = Column(Text)
     key_moments = Column(JSONB)
-    visual_analysis = Column(JSONB)  # Visual context from frames
-    frame_analyses = Column(JSONB)  # Array of frame analysis at timestamps
-    music_suggestion = Column(JSONB)  # Background music recommendation
-    platform_content = Column(JSONB)  # Platform-specific titles/descriptions/hashtags
-    
-    # Curation
-    curation_status = Column(Text)  # 'pending', 'approved', 'rejected'
-    curated_at = Column(TIMESTAMP(timezone=True))  # When curation decision was made
-    
-    # Scores
-    pre_social_score = Column(Float)  # Score before posting (predicted)
-    post_social_score = Column(Float)  # Score after posting (actual performance)
-    post_social_updated_at = Column(TIMESTAMP(timezone=True))  # When post score was last updated
-    
-    # Deep AI analysis results
-    deep_analysis = Column(JSONB)  # Full image/video analysis from OpenAI
-    
+    pre_social_score = Column(Numeric)  # Score before posting (predicted)
     analysis_version = Column(Text)
     analyzed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Deep analysis columns (added via migration)
+    visual_analysis = Column(JSONB)  # Frame-by-frame visual analysis
+    deep_analysis = Column(JSONB)  # Comprehensive deep analysis from GPT-4 Vision
+    frame_analyses = Column(JSONB)  # Individual frame analysis data
+    platform_content = Column(JSONB)  # Platform-specific content recommendations
+    detected_hook = Column(Text)  # Best detected hook phrase
+    music_suggestion = Column(JSONB)  # AI-suggested music recommendations
+    pillar_tags = Column(ARRAY(Text))  # Content pillar categorization
+    format_tags = Column(ARRAY(Text))  # Format tags
     
     # Relationships
     video = relationship("Video", back_populates="analysis")

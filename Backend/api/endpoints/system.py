@@ -8,8 +8,10 @@ from fastapi import APIRouter
 from datetime import datetime, timedelta
 from typing import Optional
 import os
+from loguru import logger
 
 from sqlalchemy import create_engine, text
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 
@@ -149,8 +151,8 @@ async def get_overview_metrics():
                 SELECT COUNT(*) FROM narrative_goals WHERE status = 'active'
             """)).scalar()
             metrics["narrative_builder"]["active_goals"] = goals or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"narrative_goals query failed: {e}")
         
         try:
             rules = conn.execute(text("""
@@ -158,8 +160,8 @@ async def get_overview_metrics():
             """)).scalar()
             metrics["narrative_builder"]["kb_rules_applied"] = rules or 0
             metrics["experiments"]["total_learnings"] = rules or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"kb_rules query failed: {e}")
         
         try:
             trends = conn.execute(text("""
@@ -167,8 +169,8 @@ async def get_overview_metrics():
                 WHERE status = 'active' AND priority = 'high'
             """)).scalar()
             metrics["narrative_builder"]["trend_opportunities"] = trends or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"trend_opportunities query failed: {e}")
         
         # Experiments metrics
         try:
@@ -180,8 +182,8 @@ async def get_overview_metrics():
             """)).scalar()
             metrics["experiments"]["running"] = running or 0
             metrics["experiments"]["completed"] = completed or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"experiments query failed: {e}")
         
         # Calendar metrics
         try:
@@ -201,8 +203,8 @@ async def get_overview_metrics():
             metrics["calendar"]["experiment_pending"] = experiment or 0
             metrics["calendar"]["manual_pending"] = manual or 0
             metrics["narrative_builder"]["scheduled_posts"] = mainline or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"scheduled_posts query failed: {e}")
         
         # Today's posts
         try:
@@ -212,19 +214,19 @@ async def get_overview_metrics():
                 AND DATE(scheduled_at) = CURRENT_DATE
             """)).scalar()
             metrics["calendar"]["today_posts"] = today or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"today_posts query failed: {e}")
         
         # Content metrics
         try:
             total = conn.execute(text("SELECT COUNT(*) FROM videos")).scalar()
             analyzed = conn.execute(text("""
-                SELECT COUNT(*) FROM videos WHERE analyzed = true
+                SELECT COUNT(*) FROM video_analysis
             """)).scalar()
             metrics["content"]["total_videos"] = total or 0
             metrics["content"]["analyzed"] = analyzed or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"videos count query failed: {e}")
         
         try:
             high_performers = conn.execute(text("""
@@ -232,8 +234,8 @@ async def get_overview_metrics():
                 WHERE pre_social_score >= 80
             """)).scalar()
             metrics["content"]["high_performers"] = high_performers or 0
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"high_performers query failed: {e}")
     
     return {
         "timestamp": datetime.utcnow().isoformat(),
@@ -261,8 +263,8 @@ async def get_two_brain_metrics():
                     account_roles[role] = row[1]
                 else:
                     account_roles["other"] += row[1]
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"account_roles query failed: {e}")
         
         # Get KB rules by type
         kb_rules_by_type = {}
@@ -275,8 +277,8 @@ async def get_two_brain_metrics():
             """)).fetchall()
             for row in result:
                 kb_rules_by_type[row[0]] = row[1]
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"kb_rules_by_type query failed: {e}")
         
         # Get post distribution by origin
         posts_by_origin = {"NARRATIVE": 0, "EXPERIMENT": 0, "MANUAL": 0}
@@ -291,8 +293,8 @@ async def get_two_brain_metrics():
                 origin = row[0] or "MANUAL"
                 if origin in posts_by_origin:
                     posts_by_origin[origin] = row[1]
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"posts_by_origin query failed: {e}")
         
         return {
             "timestamp": datetime.utcnow().isoformat(),

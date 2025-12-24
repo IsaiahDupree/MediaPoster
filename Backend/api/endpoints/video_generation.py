@@ -9,6 +9,7 @@ from loguru import logger
 
 from modules.ai.video_model_factory import VideoModelFactory, create_video_model
 from modules.ai.video_model_interface import VideoGenerationRequest, VideoGenerationJob, VideoStatus
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/video-generation", tags=["AI Video Generation"])
 
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/video-generation", tags=["AI Video Generation"])
 
 class CreateVideoRequest(BaseModel):
     prompt: str
-   provider: str = "sora"  # sora, runway, pika, luma
+    provider: str = "sora"  # sora, runway, pika, luma
     model_variant: Optional[str] = None
     width: int = 1280
     height: int = 720
@@ -88,6 +89,19 @@ async def create_video_generation(request: CreateVideoRequest):
         
         # Start generation
         job = model.create_video(gen_request)
+        
+        # Emit AI_GENERATION_REQUESTED event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.AI_GENERATION_REQUESTED, {
+                "job_id": job.job_id,
+                "provider": request.provider,
+                "prompt": request.prompt[:100],
+                "duration_seconds": request.duration_seconds,
+            })
+            logger.info(f"[PubSub] Emitted AI_GENERATION_REQUESTED for {job.job_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit video gen event: {e}")
         
         return VideoJobResponse(
             job_id=job.job_id,

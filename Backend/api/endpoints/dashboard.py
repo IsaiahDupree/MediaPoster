@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from database.connection import get_db
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 

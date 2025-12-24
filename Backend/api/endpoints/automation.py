@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from datetime import datetime
 import logging
+import json
 
 router = APIRouter(prefix="/api/automation", tags=["Automation Center"])
 logger = logging.getLogger(__name__)
@@ -108,17 +109,35 @@ async def get_schedules(agent_type: Optional[str] = None):
 async def toggle_schedule(schedule_id: str, enabled: bool = True):
     """Enable or disable a schedule."""
     from sqlalchemy import create_engine, text
+    from fastapi import HTTPException
     import os
+    from uuid import UUID
+    
+    # Validate UUID format
+    try:
+        UUID(schedule_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid schedule ID format")
     
     DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
     engine = create_engine(DATABASE_URL)
     
-    with engine.connect() as conn:
-        conn.execute(text("""
-            UPDATE agent_schedules SET enabled = :enabled, updated_at = NOW()
-            WHERE id = :id
-        """), {"id": schedule_id, "enabled": enabled})
-        conn.commit()
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                UPDATE agent_schedules SET enabled = :enabled, updated_at = NOW()
+                WHERE id = :id
+                RETURNING id
+            """), {"id": schedule_id, "enabled": enabled})
+            conn.commit()
+            
+            if result.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Schedule not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Handle database errors gracefully
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
     return {"success": True, "enabled": enabled}
 
@@ -128,6 +147,7 @@ async def run_schedule_now(schedule_id: str):
     """Immediately trigger a scheduled task."""
     from services.agent_framework import get_run_manager
     from sqlalchemy import create_engine, text
+    from uuid import uuid4
     import os
     
     DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
@@ -136,7 +156,7 @@ async def run_schedule_now(schedule_id: str):
     # Get schedule info
     with engine.connect() as conn:
         result = conn.execute(text("""
-            SELECT agent_type, config_json FROM agent_schedules WHERE id = :id
+            SELECT agent_type, topic, config_json FROM agent_schedules WHERE id = :id
         """), {"id": schedule_id})
         row = result.fetchone()
         
@@ -144,7 +164,8 @@ async def run_schedule_now(schedule_id: str):
             return {"success": False, "error": "Schedule not found"}
         
         agent_type = row[0]
-        config = row[1] or {}
+        topic = row[1]
+        config = row[2] or {}
     
     # Create a run
     run_manager = get_run_manager()
@@ -153,6 +174,19 @@ async def run_schedule_now(schedule_id: str):
         schedule_id=schedule_id,
         context=config
     )
+    
+    # Enqueue job for processing
+    with engine.connect() as conn:
+        conn.execute(text("""
+            INSERT INTO agent_queue (id, run_id, topic, payload_json, status)
+            VALUES (:id, :run_id, :topic, :payload, 'queued')
+        """), {
+            "id": str(uuid4()),
+            "run_id": run_id,
+            "topic": topic,
+            "payload": json.dumps({"schedule_id": schedule_id, "config": config})
+        })
+        conn.commit()
     
     return {"success": True, "run_id": run_id, "message": "Run queued"}
 
@@ -230,22 +264,44 @@ async def get_run_artifacts(run_id: str):
 async def pause_run(run_id: str):
     """Pause a running run."""
     from services.agent_framework import get_run_manager
+    from fastapi import HTTPException
+    from uuid import UUID
     
-    run_manager = get_run_manager()
-    run_manager.pause_run(run_id)
+    # Validate UUID format
+    try:
+        UUID(run_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid run ID format")
     
-    return {"success": True, "message": "Run paused"}
+    try:
+        run_manager = get_run_manager()
+        run_manager.pause_run(run_id)
+        return {"success": True, "message": "Run paused"}
+    except Exception as e:
+        # Handle gracefully if run doesn't exist or other errors
+        return {"success": False, "error": str(e)}
 
 
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run(run_id: str):
     """Cancel a run."""
     from services.agent_framework import get_run_manager
+    from fastapi import HTTPException
+    from uuid import UUID
     
-    run_manager = get_run_manager()
-    run_manager.cancel_run(run_id)
+    # Validate UUID format
+    try:
+        UUID(run_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid run ID format")
     
-    return {"success": True, "message": "Run canceled"}
+    try:
+        run_manager = get_run_manager()
+        run_manager.cancel_run(run_id)
+        return {"success": True, "message": "Run canceled"}
+    except Exception as e:
+        # Handle gracefully if run doesn't exist or other errors
+        return {"success": False, "error": str(e)}
 
 
 @router.post("/runs/{run_id}/retry")

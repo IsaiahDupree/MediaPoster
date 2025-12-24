@@ -111,3 +111,4 @@ Backend/automation/tests/test_output/logs/
 Backend/automation/tests/screenshots/
 Backend/.env.backup*
 Backend/token.pickle
+Backend/thumbnails/

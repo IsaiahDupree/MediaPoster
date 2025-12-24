@@ -8,11 +8,14 @@ from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 import os
+import logging
 from pathlib import Path
 
 from database.connection import get_db
 from services.thumbnail_generator import ThumbnailGenerator, PLATFORM_DIMENSIONS
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

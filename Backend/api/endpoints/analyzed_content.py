@@ -7,6 +7,8 @@ from sqlalchemy import create_engine, text
 from typing import Optional, List
 import os
 
+from services.event_bus import EventBus, Topics
+
 router = APIRouter()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
@@ -63,18 +65,13 @@ async def list_analyzed_content(
                 v.duration_sec,
                 v.thumbnail_path,
                 va.pre_social_score,
-                va.curation_status,
                 va.analyzed_at,
                 va.hooks,
                 va.topics,
                 va.transcript,
-                va.visual_analysis,
                 va.tone,
                 va.pacing,
-                va.key_moments,
-                va.transcript_analysis,
-                va.music_suggestion,
-                va.deep_analysis
+                va.key_moments
             FROM videos v
             INNER JOIN video_analysis va ON v.id = va.video_id
             WHERE {where_sql}
@@ -116,18 +113,13 @@ async def list_analyzed_content(
                 "duration_sec": row[2],
                 "thumbnail_path": thumb_path,
                 "score": int(row[4]) if row[4] else None,
-                "curation_status": row[5] or "pending",
-                "analyzed_at": str(row[6]) if row[6] else None,
-                "hooks": row[7] if row[7] else [],
-                "topics": row[8] if row[8] else [],
-                "transcript": row[9] if row[9] else None,
-                "visual_analysis": row[10] if row[10] else None,
-                "tone": row[11] if row[11] else None,
-                "pacing": row[12] if row[12] else None,
-                "key_moments": row[13] if row[13] else [],
-                "transcript_analysis": row[14] if row[14] else None,
-                "music_suggestion": row[15] if row[15] else None,
-                "deep_analysis": row[16] if row[16] else None,
+                "analyzed_at": str(row[5]) if row[5] else None,
+                "hooks": row[6] if row[6] else [],
+                "topics": row[7] if row[7] else [],
+                "transcript": row[8] if row[8] else None,
+                "tone": row[9] if row[9] else None,
+                "pacing": row[10] if row[10] else None,
+                "key_moments": row[11] if row[11] else [],
                 "scheduled_count": 0,  # TODO: join with scheduled_posts
             })
         

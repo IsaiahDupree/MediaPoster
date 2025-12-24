@@ -9,10 +9,13 @@ from pydantic import BaseModel
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+import logging
 
 from database.connection import get_db
 from middleware.workspace_context import get_current_workspace_id
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # --- Pydantic Models ---

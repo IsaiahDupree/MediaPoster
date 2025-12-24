@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db
 from database.models import Video, VideoAnalysis
 from loguru import logger
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/api/media-db", tags=["Media Processing (Database)"])
 
@@ -111,6 +112,11 @@ class MediaDetailResponse(BaseModel):
     deep_analysis: Optional[dict] = None
     frame_analyses: Optional[list] = None
     platform_content: Optional[list] = None
+    key_moments: Optional[dict] = None
+    detected_hook: Optional[str] = None
+    music_suggestion: Optional[dict] = None
+    pillar_tags: Optional[List[str]] = None
+    format_tags: Optional[List[str]] = None
 
 
 class BatchIngestRequest(BaseModel):
@@ -243,10 +249,9 @@ async def list_media(
     for video in videos:
         # Try to get analysis with raw SQL to handle schema differences
         analysis = None
-        curation_status = None
         try:
             analysis_result = await db.execute(
-                text("SELECT video_id, transcript, topics, pre_social_score, curation_status FROM video_analysis WHERE video_id = :vid"),
+                text("SELECT video_id, transcript, topics, pre_social_score FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
                 {"vid": str(video.id)}
             )
             row = analysis_result.fetchone()
@@ -254,11 +259,10 @@ async def list_media(
                 analysis = {
                     "transcript": row[1],
                     "topics": row[2],
-                    "pre_social_score": row[3]
+                    "pre_social_score": float(row[3]) if row[3] else None
                 }
-                curation_status = row[4]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to fetch analysis for video {video.id}: {e}")
         
         status = "analyzed" if analysis else "ingested"
         
@@ -274,7 +278,7 @@ async def list_media(
             pre_social_score=analysis["pre_social_score"] if analysis else None,
             transcript=analysis["transcript"] if analysis else None,
             topics=analysis["topics"] if analysis else None,
-            curation_status=curation_status,
+            curation_status=None,  # Column doesn't exist in current schema
             created_at=video.created_at.isoformat() if video.created_at else "",
             updated_at=video.updated_at.isoformat() if video.updated_at else None
         ))
@@ -289,17 +293,34 @@ async def get_media_detail(
 ):
     """
     Get detailed information about a specific media item.
+    Supports lookup by ID or by filename (without extension).
     """
-    from sqlalchemy import text
+    from sqlalchemy import text, or_
     
+    video = None
+    
+    # Try as UUID first
     try:
         video_uuid = uuid.UUID(media_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid media ID format")
+        query = select(Video).where(Video.id == video_uuid)
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
+    except ValueError as e:
+        logger.debug(f"Silent exception: {e}")
     
-    query = select(Video).where(Video.id == video_uuid)
-    result = await db.execute(query)
-    video = result.scalar_one_or_none()
+    # If not found by ID, try by filename
+    if not video:
+        # Try matching filename with or without extension
+        query = select(Video).where(
+            or_(
+                Video.file_name == media_id,
+                Video.file_name == f"{media_id}.mp4",
+                Video.file_name == f"{media_id}.mov",
+                Video.file_name.like(f"{media_id}%")
+            )
+        )
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
     
     if not video:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -313,11 +334,14 @@ async def get_media_detail(
         elif ext in ['mp4', 'mov', 'avi', 'mkv', 'webm']:
             media_type = "video"
     
-    # Get analysis with raw SQL to handle schema differences
+    # Get analysis with raw SQL - only select columns that exist in the table
     analysis = None
     try:
         analysis_result = await db.execute(
-            text("SELECT video_id, transcript, topics, hooks, tone, pacing, pre_social_score, visual_analysis, analyzed_at, deep_analysis, frame_analyses, platform_content FROM video_analysis WHERE video_id = :vid"),
+            text("""SELECT video_id, transcript, topics, hooks, tone, pacing, pre_social_score, 
+                    key_moments, analyzed_at, visual_analysis, deep_analysis, frame_analyses,
+                    platform_content, detected_hook, music_suggestion, pillar_tags, format_tags
+                    FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"""),
             {"vid": str(video.id)}
         )
         row = analysis_result.fetchone()
@@ -328,15 +352,20 @@ async def get_media_detail(
                 "hooks": row[3],
                 "tone": row[4],
                 "pacing": row[5],
-                "pre_social_score": row[6],
-                "visual_analysis": row[7],
+                "pre_social_score": float(row[6]) if row[6] else None,
+                "key_moments": row[7],
                 "analyzed_at": row[8],
-                "deep_analysis": row[9],
-                "frame_analyses": row[10],
-                "platform_content": row[11]
+                "visual_analysis": row[9],
+                "deep_analysis": row[10],
+                "frame_analyses": row[11],
+                "platform_content": row[12],
+                "detected_hook": row[13],
+                "music_suggestion": row[14],
+                "pillar_tags": row[15],
+                "format_tags": row[16],
             }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to fetch analysis for {video.id}: {e}")
     
     return MediaDetailResponse(
         media_id=str(video.id),
@@ -356,10 +385,15 @@ async def get_media_detail(
         tone=analysis["tone"] if analysis else None,
         pacing=analysis["pacing"] if analysis else None,
         visual_analysis=analysis["visual_analysis"] if analysis else None,
-        analyzed_at=analysis["analyzed_at"].isoformat() if analysis and analysis["analyzed_at"] else None,
-        deep_analysis=analysis["deep_analysis"] if analysis else None,
+        deep_analysis=analysis["deep_analysis"] if analysis else None,  # Always include deep analysis
         frame_analyses=analysis["frame_analyses"] if analysis else None,
-        platform_content=analysis["platform_content"] if analysis else None
+        platform_content=analysis["platform_content"] if analysis else None,
+        key_moments=analysis["key_moments"] if analysis else None,
+        detected_hook=analysis["detected_hook"] if analysis else None,
+        music_suggestion=analysis["music_suggestion"] if analysis else None,
+        pillar_tags=analysis["pillar_tags"] if analysis else None,
+        format_tags=analysis["format_tags"] if analysis else None,
+        analyzed_at=analysis["analyzed_at"].isoformat() if analysis and analysis["analyzed_at"] else None,
     )
 
 
@@ -504,6 +538,25 @@ async def ingest_single_file(
     await db.commit()
     await db.refresh(video)
     
+    # Emit media.ingested event for event-driven processing (e.g., thumbnail generation)
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(
+            Topics.MEDIA_INGESTED,
+            {
+                "media_id": str(video.id),
+                "file_path": str(path),
+                "file_name": path.name,
+                "file_size": path.stat().st_size,
+                "duration_sec": metadata.get('duration_sec'),
+                "media_type": "video" if path.suffix.lower() in {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm'} else "image"
+            },
+            correlation_id=f"ingest-{video.id}"
+        )
+        logger.info(f"📢 Emitted media.ingested event for {video.id}")
+    except Exception as e:
+        logger.warning(f"Failed to emit media.ingested event: {e}")
+    
     return {"status": "ingested", "media_id": str(video.id)}
 
 
@@ -562,13 +615,14 @@ def process_batch_ingest_sync(job_id: str, files: List[Path], resume: bool):
 
 
 async def process_batch_ingest(job_id: str, files: List[Path], resume: bool):
-    """Process batch ingestion in background with thumbnail generation."""
+    """Process batch ingestion in background with event-driven thumbnail generation."""
     from database.connection import async_session_maker
-    from services.thumbnail_service import generate_thumbnail
     
     if not async_session_maker:
         print("Database not initialized")
         return
+    
+    event_bus = EventBus.get_instance()
     
     async with async_session_maker() as db:
         for file_path in files:
@@ -579,30 +633,30 @@ async def process_batch_ingest(job_id: str, files: List[Path], resume: bool):
                     existing_result = await db.execute(existing_query)
                     existing_video = existing_result.scalar_one_or_none()
                     if existing_video:
-                        # Generate thumbnail if missing
+                        # Emit event for existing video (in case thumbnail is missing)
                         if not existing_video.thumbnail_path:
                             try:
-                                thumb_path = generate_thumbnail(str(file_path), "medium")
-                                if thumb_path:
-                                    existing_video.thumbnail_path = thumb_path
-                                    await db.commit()
-                                    print(f"Generated thumbnail for existing: {file_path.name}")
+                                await event_bus.publish(
+                                    Topics.MEDIA_INGESTED,
+                                    {
+                                        "media_id": str(existing_video.id),
+                                        "file_path": str(file_path),
+                                        "file_name": file_path.name,
+                                        "file_size": file_path.stat().st_size,
+                                        "duration_sec": existing_video.duration_sec,
+                                        "media_type": "video" if file_path.suffix.lower() in {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm'} else "image"
+                                    },
+                                    correlation_id=f"batch-ingest-{existing_video.id}"
+                                )
+                                print(f"Emitted event for existing video (missing thumbnail): {file_path.name}")
                             except Exception as e:
-                                print(f"Thumbnail generation failed for {file_path.name}: {e}")
+                                print(f"Failed to emit event for existing video: {e}")
                         continue
                 
                 # Get metadata
                 metadata = await get_video_metadata(str(file_path))
                 
-                # Generate thumbnail immediately
-                thumbnail_path = None
-                try:
-                    thumbnail_path = generate_thumbnail(str(file_path), "medium")
-                    print(f"Generated thumbnail: {thumbnail_path}")
-                except Exception as e:
-                    print(f"Thumbnail generation failed for {file_path.name}: {e}")
-                
-                # Create video record with thumbnail
+                # Create video record (thumbnail will be generated by worker)
                 video = Video(
                     user_id=DEFAULT_USER_ID,
                     source_type="local",
@@ -611,13 +665,30 @@ async def process_batch_ingest(job_id: str, files: List[Path], resume: bool):
                     file_size=file_path.stat().st_size,
                     duration_sec=metadata.get('duration_sec'),
                     resolution=metadata.get('resolution'),
-                    aspect_ratio=metadata.get('aspect_ratio'),
-                    thumbnail_path=thumbnail_path
+                    aspect_ratio=metadata.get('aspect_ratio')
                 )
                 
                 db.add(video)
                 await db.commit()
-                print(f"Ingested: {file_path.name}")
+                await db.refresh(video)
+                
+                # Emit media.ingested event for event-driven thumbnail generation
+                try:
+                    await event_bus.publish(
+                        Topics.MEDIA_INGESTED,
+                        {
+                            "media_id": str(video.id),
+                            "file_path": str(file_path),
+                            "file_name": file_path.name,
+                            "file_size": file_path.stat().st_size,
+                            "duration_sec": metadata.get('duration_sec'),
+                            "media_type": "video" if file_path.suffix.lower() in {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm'} else "image"
+                        },
+                        correlation_id=f"batch-ingest-{video.id}"
+                    )
+                    print(f"Ingested and emitted event: {file_path.name}")
+                except Exception as e:
+                    print(f"Failed to emit event for {file_path.name}: {e}")
                 
             except Exception as e:
                 print(f"Error ingesting {file_path}: {e}")
@@ -636,8 +707,10 @@ async def analyze_media(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Start AI analysis for a media item.
+    Start comprehensive AI analysis for a media item (includes transcript, topics, visual analysis, and deep image analysis).
     Use force=true to re-analyze an already analyzed video.
+    
+    This endpoint performs full deep analysis every time - there is no "light" analysis mode.
     """
     try:
         video_uuid = uuid.UUID(media_id)
@@ -673,6 +746,23 @@ async def analyze_media(
     
     logger.info(f"[Analysis] Starting analysis for {media_id} at path: {file_path}")
     
+    # Emit analysis requested event
+    try:
+        from services.event_bus import EventBus, Topics
+        event_bus = EventBus.get_instance()
+        event_bus.set_source("media-api")
+        await event_bus.publish(
+            Topics.ANALYSIS_REQUESTED,
+            {
+                "media_id": media_id,
+                "filename": video.file_name,
+                "force": force
+            },
+            correlation_id=media_id
+        )
+    except Exception as e:
+        logger.debug(f"Failed to emit analysis requested event: {e}")
+    
     # Start analysis in thread pool (non-blocking)
     import concurrent.futures
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="single_analysis")
@@ -701,6 +791,11 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
     import traceback
     import httpx
     from loguru import logger
+    from services.event_bus import EventBus, Topics
+    
+    # Get event bus instance
+    event_bus = EventBus.get_instance()
+    event_bus.set_source("media-analysis")
     
     # Update job tracker
     if job_id:
@@ -709,6 +804,17 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             _analysis_jobs[job_id]["current_video"] = video_id
     
     logger.info(f"[Analysis] Starting: {video_id}")
+    
+    # Emit analysis started event
+    await event_bus.publish(
+        Topics.ANALYSIS_STARTED,
+        {
+            "media_id": video_id,
+            "job_id": job_id,
+            "filename": Path(file_path).name if file_path else None
+        },
+        correlation_id=video_id
+    )
     
     # Create thread-local session maker to avoid event loop conflicts
     try:
@@ -768,9 +874,58 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                     
                     analyzer = VideoAnalyzer(api_key=settings.openai_api_key)
                     
-                    # Custom callback to update step progress
+                    # Custom callback to update step progress and emit events
+                    step_progress_map = {
+                        "1/4 Transcribing": (25, Topics.TRANSCRIPT_STARTED),
+                        "2/4 Analyzing": (50, Topics.VISUAL_STARTED),
+                        "3/4 Processing": (75, Topics.AI_ANALYSIS_STARTED),
+                        "4/4 Finalizing": (90, None),
+                        "5/5 Analysis": (100, None)
+                    }
+                    
+                    async def emit_step_event(step_name):
+                        """Emit event for analysis step"""
+                        try:
+                            from services.event_bus import EventBus, Topics
+                            event_bus = EventBus.get_instance()
+                            progress, topic = step_progress_map.get(step_name, (0, None))
+                            
+                            # Emit general progress event
+                            await event_bus.publish(
+                                Topics.ANALYSIS_PROGRESS,
+                                {
+                                    "media_id": video_id,
+                                    "step": step_name,
+                                    "progress": progress,
+                                    "job_id": job_id
+                                },
+                                correlation_id=video_id
+                            )
+                            
+                            # Emit specific step event if available
+                            if topic:
+                                await event_bus.publish(
+                                    topic,
+                                    {
+                                        "media_id": video_id,
+                                        "step": step_name,
+                                        "job_id": job_id
+                                    },
+                                    correlation_id=video_id
+                                )
+                        except Exception as e:
+                            logger.debug(f"Failed to emit step event: {e}")
+                    
                     def on_step(step_name):
+                        """Synchronous callback wrapper"""
                         update_video_step(job_id, video_id, step_name, filename)
+                        # Emit event asynchronously (fire and forget)
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                asyncio.create_task(emit_step_event(step_name))
+                        except Exception:
+                            pass
                     
                     result = await analyzer.analyze_video(
                         video_id=video_uuid,
@@ -781,8 +936,8 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                     )
                     logger.info(f"[Analysis] Complete for {video_id}: score={result.get('pre_social_score')}")
                     
-                    # Always run deep image analysis - use thumbnail or extract frame
-                    update_video_step(job_id, video_id, "5/5 Deep Analysis", filename)
+                    # Always run comprehensive image analysis as part of full analysis
+                    update_video_step(job_id, video_id, "5/5 Analysis", filename)
                     try:
                         async with httpx.AsyncClient(timeout=120.0) as client:
                             thumb_url = f"http://localhost:5555/api/media-db/thumbnail/{video_id}?size=large"
@@ -791,7 +946,7 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                             thumb_check = await client.head(thumb_url)
                             if thumb_check.status_code != 200:
                                 # Generate thumbnail on-the-fly
-                                logger.info(f"[Deep Analysis] Generating thumbnail for {video_id}")
+                                logger.info(f"[Analysis] Generating thumbnail for {video_id}")
                                 try:
                                     from services.thumbnail_generator import ThumbnailGenerator
                                     thumb_gen = ThumbnailGenerator()
@@ -809,11 +964,11 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                                             .values(thumbnail_path=temp_thumb)
                                         )
                                         await db.commit()
-                                        logger.success(f"[Deep Analysis] Thumbnail generated for {video_id}")
+                                        logger.success(f"[Analysis] Thumbnail generated for {video_id}")
                                 except Exception as thumb_err:
-                                    logger.warning(f"[Deep Analysis] Could not generate thumbnail: {thumb_err}")
+                                    logger.warning(f"[Analysis] Could not generate thumbnail: {thumb_err}")
                             
-                            # Now run deep analysis
+                            # Run comprehensive image analysis (always part of full analysis)
                             deep_res = await client.post(
                                 "http://localhost:5555/api/image-analysis/analyze",
                                 json={
@@ -852,13 +1007,33 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                                     )
                                 )
                                 await db.commit()
-                                logger.success(f"[Deep Analysis] Complete for {video_id}: saved to both visual_analysis and deep_analysis columns")
+                                logger.success(f"[Analysis] Complete for {video_id}: saved to both visual_analysis and deep_analysis columns")
                             else:
-                                logger.warning(f"[Deep Analysis] Failed for {video_id}: status {deep_res.status_code}")
+                                logger.warning(f"[Analysis] Image analysis failed for {video_id}: status {deep_res.status_code}")
                     except Exception as e:
-                        logger.warning(f"[Deep Analysis] Error for {video_id}: {e}")
+                        logger.warning(f"[Analysis] Image analysis error for {video_id}: {e}")
                     
                     logger.success(f"[Analysis] Complete: {video_id}")
+                    
+                    # Emit analysis completed event
+                    try:
+                        from services.event_bus import EventBus, Topics
+                        event_bus = EventBus.get_instance()
+                        await event_bus.publish(
+                            Topics.ANALYSIS_COMPLETED,
+                            {
+                                "media_id": video_id,
+                                "job_id": job_id,
+                                "filename": filename,
+                                "pre_social_score": result.get('pre_social_score'),
+                                "has_transcript": bool(result.get('transcript')),
+                                "topics_count": len(result.get('topics', [])),
+                                "hooks_count": len(result.get('hooks', []))
+                            },
+                            correlation_id=video_id
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to emit completion event: {e}")
                     
                     # Update job tracker with filename
                     if job_id and job_id in _analysis_jobs:
@@ -903,6 +1078,24 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             await db.commit()
             logger.success(f"[Analysis] Complete: {video_id} (basic fallback)")
             
+            # Emit analysis completed event (fallback)
+            try:
+                from services.event_bus import EventBus, Topics
+                event_bus = EventBus.get_instance()
+                await event_bus.publish(
+                    Topics.ANALYSIS_COMPLETED,
+                    {
+                        "media_id": video_id,
+                        "job_id": job_id,
+                        "filename": filename,
+                        "pre_social_score": analysis.pre_social_score,
+                        "fallback": True
+                    },
+                    correlation_id=video_id
+                )
+            except Exception as e:
+                logger.debug(f"Failed to emit completion event: {e}")
+            
             # Update job tracker with filename (fallback analysis)
             if job_id and job_id in _analysis_jobs:
                 _analysis_jobs[job_id]["videos"][video_id] = {
@@ -922,6 +1115,23 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             logger.error(f"[Analysis] Error for {video_id}: {e}")
             traceback.print_exc()
             await db.rollback()
+            
+            # Emit analysis failed event
+            try:
+                from services.event_bus import EventBus, Topics
+                event_bus = EventBus.get_instance()
+                await event_bus.publish(
+                    Topics.ANALYSIS_FAILED,
+                    {
+                        "media_id": video_id,
+                        "job_id": job_id,
+                        "error": str(e),
+                        "filename": filename
+                    },
+                    correlation_id=video_id
+                )
+            except Exception as fail_event_err:
+                logger.debug(f"Failed to emit failure event: {fail_event_err}")
             
             # Update job tracker
             if job_id and job_id in _analysis_jobs:
@@ -1542,19 +1752,39 @@ async def get_analysis(
     """
     Get full analysis for a media item including pre/post social scores.
     Returns all stored analysis data that can be used across the app.
+    Supports lookup by ID or by filename.
     """
+    from sqlalchemy import or_
+    
+    video = None
+    video_uuid = None
+    
+    # Try as UUID first
     try:
         video_uuid = uuid.UUID(media_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid media ID format")
+        query = select(Video).where(Video.id == video_uuid)
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
+    except ValueError as e:
+        logger.debug(f"Silent exception: {e}")
     
-    # Get video with analysis
-    query = select(Video).where(Video.id == video_uuid)
-    result = await db.execute(query)
-    video = result.scalar_one_or_none()
+    # If not found by ID, try by filename
+    if not video:
+        query = select(Video).where(
+            or_(
+                Video.file_name == media_id,
+                Video.file_name == f"{media_id}.mp4",
+                Video.file_name == f"{media_id}.mov",
+                Video.file_name.like(f"{media_id}%")
+            )
+        )
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
     
     if not video:
         raise HTTPException(status_code=404, detail="Media not found")
+    
+    video_uuid = video.id
     
     # Get analysis
     analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
@@ -1572,22 +1802,16 @@ async def get_analysis(
         "media_id": media_id,
         "has_analysis": True,
         "transcript": analysis.transcript,
-        "transcript_analysis": analysis.transcript_analysis,
         "topics": analysis.topics or [],
         "hooks": analysis.hooks or [],
         "tone": analysis.tone,
         "pacing": analysis.pacing,
         "key_moments": analysis.key_moments,
-        "visual_analysis": analysis.visual_analysis,
-        "frame_analyses": analysis.frame_analyses,
-        "platform_content": analysis.platform_content,
-        "deep_analysis": analysis.deep_analysis,
-        "pre_social_score": analysis.pre_social_score,
-        "post_social_score": analysis.post_social_score,
-        "post_social_updated_at": analysis.post_social_updated_at.isoformat() if analysis.post_social_updated_at else None,
+        "pre_social_score": float(analysis.pre_social_score) if analysis.pre_social_score else None,
         "analysis_version": analysis.analysis_version,
         "analyzed_at": analysis.analyzed_at.isoformat() if analysis.analyzed_at else None,
-        "updated_at": analysis.updated_at.isoformat() if analysis.updated_at else None,
+        "visual_analysis": analysis.visual_analysis,
+        "deep_analysis": analysis.deep_analysis,  # Always include deep analysis if available
     }
 
 
@@ -1623,8 +1847,8 @@ async def save_analysis(
         # Update existing - save all fields
         if request.transcript is not None:
             analysis.transcript = request.transcript
-        if request.transcript_analysis is not None:
-            analysis.transcript_analysis = request.transcript_analysis
+        # if request.transcript_analysis is not None:
+        #     analysis.transcript_analysis = request.transcript_analysis  # Column doesn't exist in DB
         if request.topics is not None:
             analysis.topics = request.topics
         if request.hooks is not None:
@@ -1635,16 +1859,17 @@ async def save_analysis(
             analysis.pacing = request.pacing
         if request.key_moments is not None:
             analysis.key_moments = request.key_moments
-        if request.visual_analysis is not None:
-            analysis.visual_analysis = request.visual_analysis
-        if request.frame_analyses is not None:
-            analysis.frame_analyses = request.frame_analyses
-        if request.music_suggestion is not None:
-            analysis.music_suggestion = request.music_suggestion
-        if request.platform_content is not None:
-            analysis.platform_content = request.platform_content
-        if request.deep_analysis is not None:
-            analysis.deep_analysis = request.deep_analysis
+        # Columns that don't exist in DB - skip them
+        # if request.visual_analysis is not None:
+        #     analysis.visual_analysis = request.visual_analysis
+        # if request.frame_analyses is not None:
+        #     analysis.frame_analyses = request.frame_analyses
+        # if request.music_suggestion is not None:
+        #     analysis.music_suggestion = request.music_suggestion
+        # if request.platform_content is not None:
+        #     analysis.platform_content = request.platform_content
+        # if request.deep_analysis is not None:
+        #     analysis.deep_analysis = request.deep_analysis
         if request.pre_social_score is not None:
             analysis.pre_social_score = request.pre_social_score
         analysis.analysis_version = "3.0"
@@ -1653,17 +1878,18 @@ async def save_analysis(
         analysis = VideoAnalysis(
             video_id=video_uuid,
             transcript=request.transcript,
-            transcript_analysis=request.transcript_analysis,
+            # transcript_analysis=request.transcript_analysis,  # Column doesn't exist in DB
             topics=request.topics,
             hooks=request.hooks,
             tone=request.tone,
             pacing=request.pacing,
             key_moments=request.key_moments,
-            visual_analysis=request.visual_analysis,
-            frame_analyses=request.frame_analyses,
-            music_suggestion=request.music_suggestion,
-            platform_content=request.platform_content,
-            deep_analysis=request.deep_analysis,
+            # Columns that don't exist in DB - skip them
+            # visual_analysis=request.visual_analysis,
+            # frame_analyses=request.frame_analyses,
+            # music_suggestion=request.music_suggestion,
+            # platform_content=request.platform_content,
+            # deep_analysis=request.deep_analysis,
             pre_social_score=request.pre_social_score,
             analysis_version="3.0"
         )

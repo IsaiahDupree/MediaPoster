@@ -8,10 +8,13 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 import uuid
+import logging
 
 from database.connection import get_db
 from services.publishing_queue import PublishingQueueService, QueueItem
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

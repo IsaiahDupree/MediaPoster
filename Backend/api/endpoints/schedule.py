@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import create_engine, text
 import json
 
+from services.event_bus import EventBus, Topics
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -147,7 +149,7 @@ async def list_scheduled_posts(
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     platform: Optional[str] = Query(None, description="Filter by platform"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    limit: int = Query(100, le=500),
+    limit: int = Query(100, ge=1, le=500),
 ):
     """
     List scheduled posts with optional filters.
@@ -176,17 +178,23 @@ async def list_scheduled_posts(
         params["status"] = status
     
     # Use actual column names from scheduled_posts table
-    # Join with videos to get source_uri for video playback
+    # Join with videos table to get thumbnail_path and file info
+    # Also join video_analysis to get title/transcript
     query = f"""
         SELECT 
             sp.id, sp.clip_id, sp.content_variant_id, sp.platform, 
             sp.platform_account_id, sp.scheduled_time, sp.status,
             sp.platform_post_id, sp.platform_url, sp.created_at, sp.updated_at, sp.published_at,
-            sp.title, sp.caption, sp.hashtags, sp.account_username, sp.thumbnail_url,
-            COALESCE(sp.video_source_uri, v.source_uri) as video_source_uri,
-            COALESCE(sp.content_id, sp.clip_id::text) as media_ref_id
+            COALESCE(v.file_name, 'Untitled') as title, 
+            va.transcript as caption, 
+            va.topics as hashtags, 
+            NULL as account_username, 
+            v.thumbnail_path as thumbnail_url,
+            v.source_uri as video_source_uri,
+            COALESCE(sp.clip_id::text, sp.content_variant_id::text) as media_ref_id
         FROM scheduled_posts sp
-        LEFT JOIN videos v ON v.id::text = sp.content_id
+        LEFT JOIN videos v ON v.id = sp.clip_id OR v.id = sp.content_variant_id
+        LEFT JOIN video_analysis va ON va.video_id = v.id
         WHERE {' AND '.join(where_clauses)}
         ORDER BY sp.scheduled_time ASC
         LIMIT :limit
@@ -281,6 +289,21 @@ async def create_scheduled_post(post: ScheduledPostCreate):
         conn.commit()
         new_id = result.fetchone()[0]
     
+    # Emit SCHEDULE_CREATED event
+    try:
+        import asyncio
+        event_bus = EventBus.get_instance()
+        asyncio.create_task(event_bus.publish(Topics.SCHEDULE_CREATED, {
+            "post_id": str(new_id),
+            "content_id": post.content_id,
+            "platform": post.platform,
+            "account_id": post.account_id,
+            "scheduled_at": post.scheduled_at,
+        }))
+        logger.info(f"[PubSub] Emitted SCHEDULE_CREATED for {new_id}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit SCHEDULE_CREATED: {e}")
+    
     return {"id": str(new_id), "message": "Post scheduled successfully"}
 
 
@@ -343,6 +366,12 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     if update.status is not None:
         updates.append("status = :status")
         params["status"] = update.status
+        # Reset retry count when rescheduling (status change to 'scheduled')
+        if update.status == 'scheduled':
+            updates.append("retry_count = 0")
+            updates.append("last_error = NULL")
+            updates.append("error_message = NULL")
+            logger.info(f"[UpdatePost] 🔄 Resetting retry_count for reschedule")
     
     if update.account_id is not None:
         updates.append("platform_account_id = :platform_account_id")
@@ -371,6 +400,21 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
             raise HTTPException(status_code=404, detail="Post not found")
     
     logger.info(f"[UpdatePost] ✅ Successfully updated post_id={post_id}")
+    
+    # Emit SCHEDULE_UPDATED event
+    try:
+        import asyncio
+        event_bus = EventBus.get_instance()
+        asyncio.create_task(event_bus.publish(Topics.SCHEDULE_UPDATED, {
+            "post_id": post_id,
+            "updated_fields": list(params.keys()),
+            "scheduled_at": update.scheduled_at,
+            "status": update.status,
+        }))
+        logger.info(f"[PubSub] Emitted SCHEDULE_UPDATED for {post_id}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit SCHEDULE_UPDATED: {e}")
+    
     return {"message": "Post updated successfully", "id": post_id}
 
 
@@ -388,6 +432,17 @@ async def delete_scheduled_post(post_id: str):
         
         if not result.fetchone():
             raise HTTPException(status_code=404, detail="Post not found")
+    
+    # Emit SCHEDULE_CANCELLED event
+    try:
+        import asyncio
+        event_bus = EventBus.get_instance()
+        asyncio.create_task(event_bus.publish(Topics.SCHEDULE_CANCELLED, {
+            "post_id": post_id,
+        }))
+        logger.info(f"[PubSub] Emitted SCHEDULE_CANCELLED for {post_id}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit SCHEDULE_CANCELLED: {e}")
     
     return {"message": "Post deleted successfully"}
 

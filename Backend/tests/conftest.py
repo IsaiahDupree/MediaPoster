@@ -159,17 +159,25 @@ except ImportError:
     Base = None  # Tests will use mocks instead
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def event_loop():
-    """Create event loop for async tests"""
+    """Create event loop for async tests - function scope to avoid event loop conflicts"""
     loop = asyncio.get_event_loop_policy().new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for async tests"""
+    # Clean up any pending tasks
+    try:
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        # Wait for tasks to complete cancellation
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    except Exception:
+        pass
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
     import asyncio
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
@@ -228,8 +236,6 @@ async def db_session():
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
 
 
 @pytest_asyncio.fixture

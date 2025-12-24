@@ -5,13 +5,16 @@ Exposes the unified platform data fetching system via REST API
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import Optional
 from pydantic import BaseModel
+import logging
 
 from services.platform_data_orchestrator import (
     get_orchestrator,
     Platform,
     DataType
 )
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

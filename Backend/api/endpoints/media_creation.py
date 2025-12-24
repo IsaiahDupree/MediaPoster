@@ -12,6 +12,7 @@ from database.connection import get_db
 from database.models import MediaCreationProject, MediaCreationTemplate
 from services.media_creation_service import MediaCreationService
 from services.content_type_handlers import get_content_handler
+from services.event_bus import EventBus, Topics
 from loguru import logger
 
 router = APIRouter(prefix="/api/media-creation", tags=["Media Creation"])
@@ -319,6 +320,7 @@ async def get_preview(
     except Exception as e:
         logger.error(f"Error getting preview: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 

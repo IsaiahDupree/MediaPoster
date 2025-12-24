@@ -7,6 +7,7 @@ from typing import Optional
 import logging
 
 from services.rapidapi_comments_service import get_rapidapi_comments_service
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["RapidAPI Comments"])

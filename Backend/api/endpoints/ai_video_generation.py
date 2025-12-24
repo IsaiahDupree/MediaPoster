@@ -153,12 +153,21 @@ def ensure_tables():
 # =============================================================================
 
 class VideoGenerationTopics:
-    """Event topics for video generation pub/sub."""
-    JOB_QUEUED = "ai_video.job.queued"
-    JOB_STARTED = "ai_video.job.started"
-    JOB_PROGRESS = "ai_video.job.progress"
-    JOB_COMPLETED = "ai_video.job.completed"
-    JOB_FAILED = "ai_video.job.failed"
+    """Event topics for video generation pub/sub.
+    
+    Maps to standard Topics class for consistency:
+    - JOB_QUEUED -> Topics.AI_GENERATION_REQUESTED
+    - JOB_STARTED -> Topics.AI_GENERATION_STARTED
+    - JOB_PROGRESS -> Topics.AI_GENERATION_PROGRESS
+    - JOB_COMPLETED -> Topics.AI_GENERATION_COMPLETED
+    - JOB_FAILED -> Topics.AI_GENERATION_FAILED
+    """
+    # Use standard Topics when available, fallback to custom
+    JOB_QUEUED = Topics.AI_GENERATION_REQUESTED if HAS_EVENT_BUS else "ai_video.job.queued"
+    JOB_STARTED = Topics.AI_GENERATION_STARTED if HAS_EVENT_BUS else "ai_video.job.started"
+    JOB_PROGRESS = Topics.AI_GENERATION_PROGRESS if HAS_EVENT_BUS else "ai_video.job.progress"
+    JOB_COMPLETED = Topics.AI_GENERATION_COMPLETED if HAS_EVENT_BUS else "ai_video.job.completed"
+    JOB_FAILED = Topics.AI_GENERATION_FAILED if HAS_EVENT_BUS else "ai_video.job.failed"
     TITLE_GENERATED = "ai_video.metadata.title_generated"
     DESCRIPTION_GENERATED = "ai_video.metadata.description_generated"
 

@@ -6,6 +6,8 @@ from typing import List, Optional
 from datetime import datetime, date
 from pydantic import BaseModel
 
+from services.event_bus import EventBus, Topics
+
 router = APIRouter(prefix="/api", tags=["publishing", "analytics"])
 
 

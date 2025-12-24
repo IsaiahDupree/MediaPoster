@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+import logging
 
 from database.connection import get_db
 from middleware.workspace_context import get_current_workspace_id
@@ -13,7 +14,9 @@ from services.segment_engine import (
     SegmentInsightResponse,
     compute_segment_insights
 )
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/", response_model=SegmentResponse, status_code=status.HTTP_201_CREATED)
@@ -44,6 +47,18 @@ async def create_segment(
         result = await db.execute(query, params)
         row = result.fetchone()
         await db.commit()
+        
+        # Emit SEGMENT_CREATED event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.SEGMENT_CREATED, {
+                "segment_id": str(segment_id),
+                "name": segment.name,
+                "workspace_id": str(workspace_id),
+            })
+            logger.info(f"[PubSub] Emitted SEGMENT_CREATED for {segment_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit segment event: {e}")
         
         return SegmentResponse(
             id=row.id,

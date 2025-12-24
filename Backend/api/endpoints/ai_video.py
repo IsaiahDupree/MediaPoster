@@ -4,6 +4,7 @@ AI Video Generation API
 Endpoints for generating videos using AI providers like Sora, Runway, Pika, etc.
 """
 
+from loguru import logger
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ import uuid
 import os
 
 from database.connection import get_supabase
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/ai-video", tags=["AI Video Generation"])
 
@@ -275,8 +277,8 @@ async def process_video_generation(generation_id: str, request: VideoGenerationR
                 "status": "failed",
                 "error_message": str(e),
             }).eq("id", generation_id).execute()
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Silent exception: {e}")
 
 
 async def call_provider_api(provider: str, prompt: str, settings: dict, api_key: str) -> dict:

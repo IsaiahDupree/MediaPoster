@@ -124,6 +124,19 @@ class SchedulerWorker(BaseWorker):
                     }
                 )
                 
+                # Emit system health check every 5 ticks (every 5 minutes with default interval)
+                if self._check_count % 5 == 0:
+                    await self.emit(
+                        Topics.SYSTEM_HEALTH_CHECK,
+                        {
+                            "worker_id": self.worker_id,
+                            "uptime_seconds": self.get_uptime_seconds(),
+                            "events_processed": self._events_processed,
+                            "scheduler_running": True,
+                            "check_count": self._check_count,
+                        }
+                    )
+                
             except Exception as e:
                 logger.error(f"[{self.worker_id}] Scheduler check failed: {e}")
             

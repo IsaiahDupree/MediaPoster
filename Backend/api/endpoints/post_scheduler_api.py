@@ -6,9 +6,12 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+import logging
 
 from services.post_scheduler import get_scheduler, start_scheduler, stop_scheduler
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

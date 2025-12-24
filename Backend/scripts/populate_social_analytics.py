@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
+import time
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,22 +20,34 @@ load_dotenv()
 
 from sqlalchemy import create_engine, text
 from services.rapidapi_social_fetcher import RapidAPISocialFetcher, Platform
+from loguru import logger
 
 
 async def populate_all_accounts():
     """Fetch and save analytics for all configured social accounts."""
+    start_time = time.time()
+    
+    logger.info("="*80)
+    logger.info("🚀 Social Media Analytics Population")
+    logger.info("="*80)
+    logger.info(f"📅 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("")
     
     db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        logger.error("❌ DATABASE_URL not found in environment")
+        return
+    
+    logger.info("🔌 Connecting to database...")
     engine = create_engine(db_url)
     fetcher = RapidAPISocialFetcher()
-    
-    print("=" * 60)
-    print("🚀 Social Media Analytics Population")
-    print(f"   Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+    logger.info("✅ Database connected")
+    logger.info("")
     
     # First, sync accounts from env
-    print("\n📥 Step 1: Syncing accounts from environment...")
+    logger.info("="*80)
+    logger.info("📥 STEP 1: Syncing Accounts from Environment")
+    logger.info("="*80)
     env_accounts = []
     
     platforms_config = {
@@ -54,9 +67,10 @@ async def populate_all_accounts():
             if username:
                 env_accounts.append({"platform": platform, "username": username})
     
-    print(f"   Found {len(env_accounts)} accounts in environment")
+    logger.info(f"📋 Found {len(env_accounts)} accounts in environment")
     
     # Sync to database
+    logger.info("💾 Syncing to database...")
     with engine.connect() as conn:
         added = 0
         for acc in env_accounts:
@@ -72,10 +86,13 @@ async def populate_all_accounts():
                 """), acc)
                 added += 1
         conn.commit()
-        print(f"   Added {added} new accounts to database")
+        logger.info(f"✅ Added {added} new accounts to database")
+        logger.info("")
     
     # Get all accounts from database
-    print("\n📊 Step 2: Fetching live analytics...")
+    logger.info("="*80)
+    logger.info("📊 STEP 2: Fetching Live Analytics")
+    logger.info("="*80)
     with engine.connect() as conn:
         accounts = conn.execute(text("""
             SELECT id, platform, username FROM social_media_accounts
@@ -83,13 +100,19 @@ async def populate_all_accounts():
             ORDER BY platform, username
         """)).fetchall()
     
-    print(f"   Processing {len(accounts)} accounts...\n")
+    logger.info(f"📋 Processing {len(accounts)} accounts...")
+    logger.info("")
     
     results = {"success": 0, "failed": 0, "skipped": 0, "rate_limited": 0}
+    total_accounts = len(accounts)
     
-    for acc_id, platform, username in accounts:
+    for idx, (acc_id, platform, username) in enumerate(accounts, 1):
+        progress = f"[{idx}/{total_accounts}]"
+        logger.info(f"  {progress} 🔍 Fetching {platform}/@{username}...")
+        
         try:
             data = None
+            fetch_start = time.time()
             
             # Fetch based on platform
             if platform == "instagram":
@@ -101,9 +124,11 @@ async def populate_all_accounts():
             elif platform == "youtube":
                 data = await fetcher.fetch_youtube_analytics(username)
             else:
-                print(f"   ⏭️  {platform}/@{username} - No fetcher available")
+                logger.info(f"    ⏭️  No fetcher available for {platform}")
                 results["skipped"] += 1
                 continue
+            
+            fetch_time = time.time() - fetch_start
             
             # Check if we got real data
             if data and (data.followers_count > 0 or data.posts_count > 0):
@@ -115,6 +140,7 @@ async def populate_all_accounts():
             else:
                 status = "❌"
                 results["failed"] += 1
+                logger.error(f"    ❌ Failed to fetch data ({fetch_time:.1f}s)")
                 continue
             
             # Update database
@@ -128,7 +154,6 @@ async def populate_all_accounts():
                         total_likes = :likes,
                         engagement_rate = :engagement,
                         is_verified = :verified,
-                        bio = :bio,
                         profile_pic_url = :pic,
                         last_fetched_at = NOW()
                     WHERE id = :id
@@ -141,27 +166,32 @@ async def populate_all_accounts():
                     "likes": data.total_likes,
                     "engagement": data.engagement_rate,
                     "verified": data.is_verified,
-                    "bio": data.bio[:500] if data.bio else None,
                     "pic": data.profile_pic_url,
                 })
                 conn.commit()
             
-            print(f"   {status} {platform}/@{username}: {data.followers_count:,} followers, {data.posts_count} posts")
+            followers_str = f"{data.followers_count:,}" if data.followers_count else "0"
+            posts_str = f"{data.posts_count:,}" if data.posts_count else "0"
+            logger.info(f"    {status} {followers_str} followers, {posts_str} posts ({fetch_time:.1f}s)")
             
-            # Rate limiting delay
-            await asyncio.sleep(0.3)
+            # Rate limiting
+            await asyncio.sleep(1)
             
         except Exception as e:
-            print(f"   ❌ {platform}/@{username}: Error - {str(e)[:50]}")
+            logger.error(f"    ❌ Error: {str(e)[:100]}")
             results["failed"] += 1
     
     # Print summary
-    print("\n" + "=" * 60)
-    print("📊 SUMMARY")
-    print("=" * 60)
-    print(f"   ✅ Successful: {results['success']}")
-    print(f"   ❌ Failed: {results['failed']}")
-    print(f"   ⏭️  Skipped: {results['skipped']}")
+    total_elapsed = time.time() - start_time
+    logger.info("")
+    logger.info("="*80)
+    logger.info("📊 SUMMARY")
+    logger.info("="*80)
+    logger.info(f"✅ Successful: {results['success']}")
+    logger.info(f"❌ Failed: {results['failed']}")
+    logger.info(f"⏭️  Skipped: {results['skipped']}")
+    logger.info(f"⏱️  Total time: {total_elapsed:.1f}s ({total_elapsed/60:.1f} minutes)")
+    logger.info("")
     
     # Get final stats
     with engine.connect() as conn:
@@ -175,14 +205,16 @@ async def populate_all_accounts():
             WHERE is_active = TRUE
         """)).fetchone()
         
-        print(f"\n   📈 Total Accounts: {stats[0]}")
-        print(f"   👥 Total Followers: {stats[1]:,}")
-        print(f"   ❤️  Total Likes: {stats[2]:,}")
-        print(f"   📝 Total Posts: {stats[3]:,}")
+        logger.info("📈 Database Statistics:")
+        logger.info(f"   📊 Total Accounts: {stats[0]}")
+        logger.info(f"   👥 Total Followers: {stats[1]:,}" if stats[1] else "   👥 Total Followers: 0")
+        logger.info(f"   ❤️  Total Likes: {stats[2]:,}" if stats[2] else "   ❤️  Total Likes: 0")
+        logger.info(f"   📝 Total Posts: {stats[3]:,}" if stats[3] else "   📝 Total Posts: 0")
     
-    print("\n" + "=" * 60)
-    print(f"✅ Complete! {datetime.now().strftime('%H:%M:%S')}")
-    print("=" * 60)
+    logger.info("")
+    logger.info("="*80)
+    logger.info(f"✅ Complete! {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("="*80)
 
 
 if __name__ == "__main__":

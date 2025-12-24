@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db
 from services.calendar_service import CalendarService
 from services.exceptions import ServiceError
+from services.event_bus import EventBus, Topics
 
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])

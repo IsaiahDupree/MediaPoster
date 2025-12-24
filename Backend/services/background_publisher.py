@@ -86,6 +86,10 @@ class BackgroundPublisher:
     
     def __init__(self):
         self._publish_service = None
+        # Initialize event bus
+        from services.event_bus import EventBus
+        self.event_bus = EventBus.get_instance()
+        self.event_bus.set_source("background-publisher")
     
     @property
     def publish_service(self):
@@ -295,11 +299,26 @@ class BackgroundPublisher:
         Returns:
             PublishResult with status, URLs, and verification details
         """
+        from services.event_bus import Topics
+        
         result = PublishResult(
             success=False,
             status=PublishStatus.PENDING,
             verification={},
             steps={}
+        )
+        
+        # Emit publish requested event
+        correlation_id = f"publish-{request.media_id}-{request.platform}"
+        await self.event_bus.publish(
+            Topics.PUBLISH_REQUESTED,
+            {
+                "media_id": request.media_id,
+                "platform": request.platform,
+                "account_id": request.blotato_account_id,
+                "username": request.username
+            },
+            correlation_id=correlation_id
         )
         
         try:
@@ -308,6 +327,17 @@ class BackgroundPublisher:
             # ─────────────────────────────────────────────────────────────────
             result.status = PublishStatus.VALIDATING
             logger.info(f"[Publish] Step 1/6: Verifying media {request.media_id}...")
+            
+            # Emit publish started event
+            await self.event_bus.publish(
+                Topics.PUBLISH_STARTED,
+                {
+                    "media_id": request.media_id,
+                    "platform": request.platform,
+                    "status": "validating"
+                },
+                correlation_id=correlation_id
+            )
             
             media_check = await self.verify_media(request.media_id)
             result.verification["media"] = media_check["valid"]
@@ -376,6 +406,17 @@ class BackgroundPublisher:
             result.status = PublishStatus.UPLOADING_STORAGE
             logger.info(f"[Publish] Step 5/6: Executing full publish flow...")
             
+            # Emit uploading event
+            await self.event_bus.publish(
+                Topics.PUBLISH_UPLOADING,
+                {
+                    "media_id": request.media_id,
+                    "platform": request.platform,
+                    "status": "uploading"
+                },
+                correlation_id=correlation_id
+            )
+            
             # Build target config
             target_config = request.target_config or {}
             platform_lower = request.platform.lower()
@@ -413,11 +454,38 @@ class BackgroundPublisher:
             result.post_submission_id = publish_result.get("post_submission_id")
             result.platform_url = publish_result.get("public_url")
             
+            # Update correlation_id to include post_submission_id for better tracking
+            if result.post_submission_id:
+                correlation_id = f"publish-{request.media_id}-{request.platform}-{result.post_submission_id}"
+            
+            # Emit upload completed event
+            await self.event_bus.publish(
+                Topics.PUBLISH_UPLOAD_COMPLETED,
+                {
+                    "media_id": request.media_id,
+                    "platform": request.platform,
+                    "post_submission_id": result.post_submission_id
+                },
+                correlation_id=correlation_id
+            )
+            
             # ─────────────────────────────────────────────────────────────────
             # STEP 6: Final Verification & Record
             # ─────────────────────────────────────────────────────────────────
             result.status = PublishStatus.POLLING_URL if request.poll_for_url else PublishStatus.SUCCESS
             logger.info(f"[Publish] Step 6/6: Final verification...")
+            
+            if request.poll_for_url and not result.platform_url:
+                # Emit polling event
+                await self.event_bus.publish(
+                    Topics.PUBLISH_POLLING,
+                    {
+                        "media_id": request.media_id,
+                        "platform": request.platform,
+                        "post_submission_id": result.post_submission_id
+                    },
+                    correlation_id=correlation_id
+                )
             
             result.verification["published"] = True
             result.verification["url_obtained"] = bool(result.platform_url)
@@ -425,6 +493,20 @@ class BackgroundPublisher:
             # Success!
             result.success = True
             result.status = PublishStatus.SUCCESS
+            
+            # Emit publish completed event
+            await self.event_bus.publish(
+                Topics.PUBLISH_COMPLETED,
+                {
+                    "media_id": request.media_id,
+                    "platform": request.platform,
+                    "post_submission_id": result.post_submission_id,
+                    "platform_url": result.platform_url,
+                    "account_id": request.blotato_account_id,
+                    "username": request.username
+                },
+                correlation_id=correlation_id
+            )
             
             logger.success(
                 f"[Publish] ✅ Successfully published to {request.platform}! "
@@ -437,6 +519,19 @@ class BackgroundPublisher:
             logger.error(f"[Publish] ❌ Publish failed with exception: {e}")
             result.error = str(e)
             result.status = PublishStatus.FAILED
+            
+            # Emit publish failed event
+            await self.event_bus.publish(
+                Topics.PUBLISH_FAILED,
+                {
+                    "media_id": request.media_id,
+                    "platform": request.platform,
+                    "error": str(e),
+                    "account_id": request.blotato_account_id
+                },
+                correlation_id=correlation_id
+            )
+            
             return result
     
     async def publish_batch(

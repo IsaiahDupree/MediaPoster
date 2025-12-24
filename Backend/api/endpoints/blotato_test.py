@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 import os
 from dotenv import load_dotenv
 
+from services.event_bus import EventBus, Topics
+
 # Load env vars
 load_dotenv()
 

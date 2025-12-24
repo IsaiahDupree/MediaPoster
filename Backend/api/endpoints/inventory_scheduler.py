@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 import uuid
+import logging
 
 from database.connection import get_db, async_session_maker
 from services.inventory_aware_scheduler import (
@@ -15,7 +16,9 @@ from services.inventory_aware_scheduler import (
     SchedulerConfig,
     ContentInventory
 )
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
 
 

@@ -4,6 +4,7 @@ Agent Panel API Endpoints
 API for viewing AI agent progress, event timelines, and controlling background tasks.
 """
 
+from loguru import logger
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -53,15 +54,15 @@ async def get_event_timeline(
     if agent_type:
         try:
             agent_filter = AgentType(agent_type)
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Silent exception: {e}")
     
     event_filter = None
     if event_type:
         try:
             event_filter = [EventType(event_type)]
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Silent exception: {e}")
     
     since = datetime.now() - timedelta(minutes=minutes_ago)
     
@@ -331,8 +332,8 @@ async def get_combined_panel_data():
             agent = AgentType(agent_type)
             events = bus.get_agent_history(agent, 20)
             all_events.extend(events)
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Silent exception: {e}")
     
     # Sort by timestamp
     all_events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)

@@ -15,6 +15,7 @@ from database.connection import get_db
 from database.models import OriginalVideo, ProcessingJob
 from modules.ai_analysis import ContentAnalyzer
 from config.platform_limits import get_platform_limits, PLATFORM_LIMITS, DEFAULT_PROMPT_SETTINGS
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 
@@ -84,6 +85,19 @@ async def start_full_analysis(
     db.add(job)
     await db.commit()
     await db.refresh(job)
+    
+    # Emit ANALYSIS_REQUESTED event
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(Topics.ANALYSIS_REQUESTED, {
+            "job_id": str(job.job_id),
+            "video_id": str(video_id),
+            "transcribe": request.transcribe,
+            "analyze_vision": request.analyze_vision,
+        })
+        logger.info(f"[PubSub] Emitted ANALYSIS_REQUESTED for {job.job_id}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit analysis event: {e}")
     
     # Start analysis in background
     background_tasks.add_task(

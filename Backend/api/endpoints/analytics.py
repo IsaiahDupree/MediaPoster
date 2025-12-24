@@ -8,6 +8,7 @@ from typing import List, Dict
 from pydantic import BaseModel
 
 from database.connection import get_db
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 

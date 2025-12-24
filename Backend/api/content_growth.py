@@ -4,6 +4,7 @@ Track and analyze content performance over time
 Backfill and sync metrics from social platforms
 """
 
+from loguru import logger
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, and_
@@ -533,8 +534,8 @@ async def run_backfill_job(
                     metrics = await fetch_platform_metrics(platform, platform_post_id or "")
                     metrics.timestamp = datetime.utcnow() - timedelta(days=day)
                     history.append(metrics)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Silent exception: {e}")
             
             # Get current metrics
             current = await fetch_platform_metrics(platform, platform_post_id or "")

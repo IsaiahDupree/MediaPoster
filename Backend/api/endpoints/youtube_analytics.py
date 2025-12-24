@@ -12,6 +12,7 @@ from services.youtube_analytics_service import (
     YouTubeChannelMetrics,
     YouTubeComment,
 )
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["YouTube Analytics"])

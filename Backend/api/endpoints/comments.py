@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, text
 from pydantic import BaseModel
 import os
 
+from services.event_bus import EventBus, Topics
+
 router = APIRouter(tags=["Comments"])
 
 # Database connection

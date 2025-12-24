@@ -6,12 +6,15 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 import uuid
+import logging
 
 from database.connection import get_db
 from database.models import ProcessingJob
 from pydantic import BaseModel
 from datetime import datetime
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

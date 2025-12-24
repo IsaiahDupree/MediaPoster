@@ -12,10 +12,12 @@ import uuid
 import os
 from pathlib import Path
 
+from sqlalchemy import select
 from database.connection import get_db
 from database.models import OriginalVideo, Clip
 from config import settings
 from services.thumbnail_generator import ThumbnailGenerator
+from services.event_bus import EventBus, Topics
 from loguru import logger
 
 router = APIRouter()

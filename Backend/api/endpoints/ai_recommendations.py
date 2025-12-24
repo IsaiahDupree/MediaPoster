@@ -5,6 +5,7 @@ import uuid
 
 from database.connection import get_db
 from services.ai_recommendation_service import AIRecommendationService
+from services.event_bus import EventBus, Topics
 from pydantic import BaseModel
 
 router = APIRouter()

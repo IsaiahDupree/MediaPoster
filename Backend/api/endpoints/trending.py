@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from database.connection import get_db
 from services.trending_content import TrendingContentService
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 

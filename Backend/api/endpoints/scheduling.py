@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import os
 import shutil
+import logging
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -10,10 +11,12 @@ from dotenv import load_dotenv
 from modules.cloud_staging.google_drive import GoogleDriveUploader
 from connectors.blotato.connector import BlotatoConnector
 from connectors.base import ContentVariant
+from services.event_bus import EventBus, Topics
 
 # Load env vars
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class ScheduleResponse(BaseModel):

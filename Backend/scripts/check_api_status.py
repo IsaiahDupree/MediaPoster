@@ -9,6 +9,8 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
+import time
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -16,30 +18,38 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import httpx
+from loguru import logger
 
 
 async def check_api_status():
     """Check status of all social media APIs."""
+    start_time = time.time()
+    
+    logger.info("="*80)
+    logger.info("🔍 Social Media API Status Check")
+    logger.info("="*80)
+    logger.info(f"📅 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("")
     
     rapidapi_key = os.getenv("RAPIDAPI_KEY", "")
     youtube_key = os.getenv("YOUTUBE_API_KEY", "")
     
-    print("=" * 60)
-    print("🔍 Social Media API Status Check")
-    print("=" * 60)
-    print()
-    
     # Check API keys
-    print("📋 API Keys:")
-    print(f"   RapidAPI Key: {'✅ Set' if rapidapi_key else '❌ Missing'} ({len(rapidapi_key)} chars)")
-    print(f"   YouTube API Key: {'✅ Set' if youtube_key else '❌ Missing'} ({len(youtube_key)} chars)")
-    print()
+    logger.info("="*80)
+    logger.info("📋 API Keys Configuration")
+    logger.info("="*80)
+    logger.info(f"   RapidAPI Key: {'✅ Set' if rapidapi_key else '❌ Missing'} ({len(rapidapi_key)} chars)")
+    logger.info(f"   YouTube API Key: {'✅ Set' if youtube_key else '❌ Missing'} ({len(youtube_key)} chars)")
+    logger.info("")
     
     # Test each platform
+    logger.info("="*80)
+    logger.info("🧪 Testing API Endpoints")
+    logger.info("="*80)
     results = []
     
     # Instagram
-    print("📸 Testing Instagram API...")
+    logger.info("  📸 Testing Instagram API...")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(
@@ -65,7 +75,7 @@ async def check_api_status():
         results.append(("Instagram", "❌ Failed", 0, str(e)[:40]))
     
     # TikTok
-    print("🎵 Testing TikTok API...")
+    logger.info("  🎵 Testing TikTok API...")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(
@@ -91,7 +101,7 @@ async def check_api_status():
         results.append(("TikTok", "❌ Failed", 0, str(e)[:40]))
     
     # Twitter
-    print("𝕏 Testing Twitter API...")
+    logger.info("  𝕏 Testing Twitter API...")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(
@@ -117,7 +127,7 @@ async def check_api_status():
         results.append(("Twitter", "❌ Failed", 0, str(e)[:40]))
     
     # YouTube
-    print("📺 Testing YouTube API...")
+    logger.info("  📺 Testing YouTube API...")
     if youtube_key:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -141,45 +151,51 @@ async def check_api_status():
     else:
         results.append(("YouTube", "⚠️ No API Key", 0, "Set YOUTUBE_API_KEY in .env"))
     
-    print()
-    print("=" * 60)
-    print("📊 Results Summary")
-    print("=" * 60)
-    print()
+    total_elapsed = time.time() - start_time
+    logger.info("")
+    logger.info("="*80)
+    logger.info("📊 Results Summary")
+    logger.info("="*80)
+    logger.info("")
     
     # Print table
-    print(f"{'Platform':<12} {'Status':<20} {'Code':<6} {'Action'}")
-    print("-" * 60)
+    logger.info(f"{'Platform':<12} {'Status':<20} {'Code':<6} {'Action'}")
+    logger.info("-" * 80)
     for platform, status, code, action in results:
-        print(f"{platform:<12} {status:<20} {code:<6} {action}")
+        logger.info(f"{platform:<12} {status:<20} {code:<6} {action}")
     
-    print()
-    print("=" * 60)
-    print("💡 Recommendations")
-    print("=" * 60)
-    print()
+    logger.info("")
+    logger.info("="*80)
+    logger.info("💡 Recommendations")
+    logger.info("="*80)
+    logger.info("")
     
     working = [r for r in results if "Working" in r[1]]
     needs_sub = [r for r in results if "Unauthorized" in r[1] or "Forbidden" in r[1]]
     errors = [r for r in results if "Failed" in r[1] or "Error" in r[1]]
     
-    print(f"✅ Working APIs: {len(working)}/{len(results)}")
+    logger.info(f"✅ Working APIs: {len(working)}/{len(results)}")
     for r in working:
-        print(f"   • {r[0]}")
+        logger.info(f"   • {r[0]}")
     
     if needs_sub:
-        print(f"\n⚠️  Need Subscription: {len(needs_sub)}")
+        logger.info("")
+        logger.info(f"⚠️  Need Subscription: {len(needs_sub)}")
         for r in needs_sub:
-            print(f"   • {r[0]} - {r[3]}")
-        print("\n   💰 Estimated Cost: $25-100/month for all subscriptions")
-        print("   📝 See API_ERROR_CODES.md for details")
+            logger.info(f"   • {r[0]} - {r[3]}")
+        logger.info("")
+        logger.info("   💰 Estimated Cost: $25-100/month for all subscriptions")
+        logger.info("   📝 See API_ERROR_CODES.md for details")
     
     if errors:
-        print(f"\n❌ Errors: {len(errors)}")
+        logger.info("")
+        logger.info(f"❌ Errors: {len(errors)}")
         for r in errors:
-            print(f"   • {r[0]} - {r[3]}")
+            logger.info(f"   • {r[0]} - {r[3]}")
     
-    print()
+    logger.info("")
+    logger.info(f"⏱️  Total check time: {total_elapsed:.1f}s")
+    logger.info("")
 
 
 if __name__ == "__main__":

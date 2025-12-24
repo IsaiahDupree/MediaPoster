@@ -12,6 +12,7 @@ import uuid
 from database.connection import get_db
 from services.analytics_service import AnalyticsService
 from services.insights_engine import InsightsEngine
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 

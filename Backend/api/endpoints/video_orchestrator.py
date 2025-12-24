@@ -17,6 +17,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 

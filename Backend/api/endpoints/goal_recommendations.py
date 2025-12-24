@@ -12,6 +12,7 @@ import uuid
 from database.connection import get_db
 from database.models import PostingGoal
 from services.goal_recommendations import GoalRecommendationsService
+from services.event_bus import EventBus, Topics
 from loguru import logger
 
 router = APIRouter(prefix="/api/goals", tags=["Goal Recommendations"])

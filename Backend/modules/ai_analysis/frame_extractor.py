@@ -9,6 +9,8 @@ from typing import List, Dict, Optional
 from loguru import logger
 import shutil
 
+from services.event_bus import EventBus, Topics
+
 
 class FrameExtractor:
     """Extract frames from videos for visual analysis"""
@@ -43,6 +45,20 @@ class FrameExtractor:
             List of paths to extracted frame images
         """
         logger.info(f"Extracting frames from {video_path.name} at {fps} fps")
+        
+        # Emit frame extraction started event
+        try:
+            event_bus = EventBus.get_instance()
+            import asyncio
+            asyncio.get_event_loop().run_until_complete(
+                event_bus.publish(Topics.FRAME_EXTRACTION_STARTED, {
+                    "video_path": str(video_path),
+                    "fps": fps,
+                    "max_frames": max_frames,
+                })
+            )
+        except Exception:
+            pass  # Non-critical
         
         # Create output directory for this video
         video_frames_dir = self.output_dir / video_path.stem
@@ -79,6 +95,21 @@ class FrameExtractor:
             frames = sorted(video_frames_dir.glob("frame_*.jpg"))
             
             logger.success(f"✓ Extracted {len(frames)} frames")
+            
+            # Emit frame extraction completed event
+            try:
+                event_bus = EventBus.get_instance()
+                import asyncio
+                asyncio.get_event_loop().run_until_complete(
+                    event_bus.publish(Topics.FRAME_EXTRACTION_COMPLETED, {
+                        "video_path": str(video_path),
+                        "frame_count": len(frames),
+                        "output_dir": str(video_frames_dir),
+                    })
+                )
+            except Exception:
+                pass  # Non-critical
+            
             return frames
             
         except subprocess.TimeoutExpired:

@@ -9,6 +9,7 @@ from fastapi import APIRouter
 # Add parent directory to path to avoid config.py vs config/ conflict
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from config.feature_flags import feature_flags
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 

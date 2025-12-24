@@ -13,6 +13,7 @@ from database.connection import get_db
 from database.models import VideoClip, ScheduledPost
 from sqlalchemy import select, update
 from loguru import logger
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 
@@ -139,6 +140,19 @@ async def schedule_post(
         # Refresh to get IDs
         for post in scheduled_posts:
             await db.refresh(post)
+        
+        # Emit SCHEDULE_CREATED event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.SCHEDULE_CREATED, {
+                "post_id": str(scheduled_posts[0].id),
+                "platforms": request.platforms,
+                "scheduled_time": request.scheduled_time.isoformat(),
+                "content_source": content_source,
+            })
+            logger.info(f"[PubSub] Emitted SCHEDULE_CREATED for {scheduled_posts[0].id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit schedule event: {e}")
         
         # Schedule via Blotato in background if media URL available
         if media_url:

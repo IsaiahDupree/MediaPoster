@@ -9,6 +9,7 @@ from pathlib import Path
 from loguru import logger
 
 from modules.video_ingestion import VideoIngestionService
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 
@@ -65,6 +66,20 @@ async def start_ingestion(config: IngestionConfig, background_tasks: BackgroundT
                 await session.commit()
                 
                 logger.success(f"Video saved to database: {video.video_id}")
+                
+                # Emit MEDIA_INGESTED event
+                try:
+                    event_bus = EventBus.get_instance()
+                    await event_bus.publish(Topics.MEDIA_INGESTED, {
+                        "media_id": str(video.video_id),
+                        "file_path": str(path),
+                        "file_name": path.name,
+                        "source": metadata['source'],
+                        "duration": metadata['duration'],
+                    })
+                    logger.info(f"[PubSub] Emitted MEDIA_INGESTED for {video.video_id}")
+                except Exception as e:
+                    logger.warning(f"[PubSub] Failed to emit ingestion event: {e}")
     
     # Create service
     watch_dirs = config.watch_directories or [

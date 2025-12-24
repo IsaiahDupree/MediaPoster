@@ -22,6 +22,7 @@ from services.narrative_scheduler.models import (
     NarrativePillar,
     SchedulingConstraints,
 )
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/narrative", tags=["Narrative Scheduler"])
@@ -327,6 +328,15 @@ async def list_plans(
             })
         
         return {"plans": plans, "total": len(plans)}
+
+
+@router.get("/weekly-schedules")
+async def get_weekly_schedules(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    limit: int = Query(10, le=50)
+):
+    """Get weekly schedules (alias for /plans endpoint for frontend compatibility)"""
+    return await list_plans(status=status, limit=limit)
 
 
 @router.get("/plans/{plan_id}")

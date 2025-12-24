@@ -11,6 +11,7 @@ import logging
 import os
 from datetime import datetime
 from sqlalchemy import create_engine, text
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/api/scheduler", tags=["Scheduler"])
 logger = logging.getLogger(__name__)

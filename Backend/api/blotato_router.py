@@ -31,6 +31,7 @@ from services.blotato_api import (
     WebhookTarget,
     VOICE_IDS,
 )
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/blotato", tags=["Blotato"])
@@ -512,6 +513,7 @@ class FullPublishRequest(BaseModel):
     platform: str = Field(..., description="Target platform")
     username: str = Field(..., description="Account username")
     text: str = Field(..., description="Post caption/text")
+    title: Optional[str] = Field(default=None, description="Video title (for TikTok, YouTube, Pinterest)")
     cleanup_gdrive: bool = Field(default=True, description="Delete from Google Drive after publish")
 
 
@@ -582,10 +584,10 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
                 error=f"File not found: {file_path}"
             )
         
-        # Step 2-5: Use PublishService for full flow
-        from services.publish_service import get_publish_service
+        # Step 2-5: Use BackgroundPublisher for event-driven publish flow
+        from services.background_publisher import get_background_publisher, PublishRequest
         
-        publish_service = get_publish_service()
+        publisher = get_background_publisher()
         
         # Build target config based on platform
         platform_lower = request.platform.lower()
@@ -595,31 +597,50 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
             target_config = {
                 "privacy_level": "PUBLIC_TO_EVERYONE",
                 "is_ai_generated": False,  # User's own content, not AI generated
+                "title": request.title if request.title else None,
             }
         elif platform_lower == "instagram":
             target_config = {"media_type": "reel"}
         elif platform_lower == "youtube":
             target_config = {
-                "title": request.text[:100] if request.text else "Video",
+                "title": request.title or request.text[:100] if request.text else "Video",
                 "privacy_status": "public",
             }
+        elif platform_lower == "pinterest":
+            target_config = {
+                "title": request.title if request.title else None,
+            }
         
-        # Use Google Drive for all platforms (Supabase project not configured)
-        # TODO: Switch to Supabase when project is properly configured
-        use_google_drive = True
-        
-        result = await publish_service.full_publish_flow(
-            file_path=file_path,
-            account_id=request.blotato_account_id,
+        # Create publish request
+        publish_request = PublishRequest(
+            media_id=request.media_id,
+            blotato_account_id=request.blotato_account_id,
             platform=platform_lower,
-            text=request.text,
+            username=request.username or "",  # Will be verified by publisher
+            caption=request.text,
+            title=request.title,
+            hashtags=request.hashtags,
             target_config=target_config,
+            poll_for_url=True,
             cleanup_storage=request.cleanup_gdrive,
-            use_supabase=False,  # Use Google Drive for all platforms
+            use_supabase=False  # Use Google Drive for all platforms
         )
         
+        # Use BackgroundPublisher which emits events and handles the full flow
+        result = await publisher.publish(publish_request)
+        
+        # Convert PublishResult to dict format expected by response
+        publish_result = {
+            "success": result.success,
+            "post_submission_id": result.post_submission_id,
+            "public_url": result.platform_url,
+            "error": result.error,
+            "steps": result.steps,
+            "verification": result.verification
+        }
+        
         # Record the post if successful
-        if result['success'] and result.get('post_submission_id'):
+        if publish_result['success'] and publish_result.get('post_submission_id'):
             try:
                 async with httpx.AsyncClient(timeout=10) as client:
                     await client.post(
@@ -627,7 +648,7 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
                         json={
                             "media_id": request.media_id,
                             "platform": platform_lower,
-                            "blotato_submission_id": result.get('post_submission_id'),
+                            "blotato_submission_id": publish_result.get('post_submission_id'),
                             "blotato_account_id": request.blotato_account_id,
                             "caption": request.text,
                             "status": "published",
@@ -638,10 +659,11 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
                 logger.warning(f"Failed to record post: {record_err}")
         
         return FullPublishResponse(
-            success=result['success'],
-            post_submission_id=result.get('post_submission_id'),
-            error=result.get('error'),
-            steps=result.get('steps', {}),
+            success=publish_result['success'],
+            post_submission_id=publish_result.get('post_submission_id'),
+            public_url=publish_result.get('public_url'),
+            error=publish_result.get('error'),
+            steps=publish_result.get('steps', {}),
         )
         
     except Exception as e:
@@ -716,6 +738,22 @@ async def full_publish_with_tracking(request: FullPublishWithTrackingRequest):
             use_supabase=False,
             poll_for_url=request.poll_for_url
         )
+        
+        # Emit PUBLISH_COMPLETED event for downstream processing (metrics fetch, etc.)
+        if result['success'] and result.get('public_url'):
+            try:
+                event_bus = EventBus.get_instance()
+                import asyncio
+                asyncio.create_task(event_bus.publish(Topics.PUBLISH_COMPLETED, {
+                    "media_id": request.media_id,
+                    "platform": platform_lower,
+                    "platform_url": result.get('public_url'),
+                    "account_id": request.blotato_account_id,
+                    "submission_id": result.get('post_submission_id'),
+                }))
+                logger.info(f"[PubSub] Emitted PUBLISH_COMPLETED for {request.media_id} on {platform_lower}")
+            except Exception as e:
+                logger.warning(f"[PubSub] Failed to emit PUBLISH_COMPLETED: {e}")
         
         return FullPublishResponse(
             success=result['success'],

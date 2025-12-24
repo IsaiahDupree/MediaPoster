@@ -11,6 +11,7 @@ from services.tiktok_analytics_service import (
     get_tiktok_analytics_service,
     TikTokComment,
 )
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["TikTok Analytics"])

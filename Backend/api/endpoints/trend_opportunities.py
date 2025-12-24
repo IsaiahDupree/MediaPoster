@@ -16,6 +16,8 @@ import uuid
 import json
 import os
 
+from services.event_bus import EventBus, Topics
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
 _engine = None

@@ -9,6 +9,8 @@ from fastapi import APIRouter
 from sqlalchemy import create_engine, text
 from typing import Dict, Any, List
 
+from services.event_bus import EventBus, Topics
+
 router = APIRouter()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")

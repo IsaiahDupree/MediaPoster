@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import Optional, List, Dict, Any
 
 from services.workflow_manager import WorkflowManager
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 

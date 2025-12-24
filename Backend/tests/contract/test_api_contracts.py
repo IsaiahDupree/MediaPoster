@@ -3,9 +3,11 @@ API Contract Tests
 Validates API response schemas match expected contracts
 """
 import pytest
-from fastapi.testclient import TestClient
+import httpx
 from typing import Any, Dict, List, Optional
 import json
+
+API_URL = "http://localhost:5555"
 
 
 def validate_schema(data: Any, schema: Dict) -> List[str]:
@@ -70,11 +72,6 @@ def validate_field(value: Any, schema: Dict, field_name: str) -> List[str]:
 class TestAnalyticsContracts:
     """Contract tests for analytics API"""
     
-    @pytest.fixture
-    def client(self):
-        from main import app
-        return TestClient(app)
-    
     # Expected schema for analytics overview
     OVERVIEW_SCHEMA = {
         "type": "object",
@@ -86,14 +83,16 @@ class TestAnalyticsContracts:
         }
     }
     
-    def test_overview_contract(self, client):
+    @pytest.mark.asyncio
+    async def test_overview_contract(self):
         """Test analytics overview response matches contract"""
-        response = client.get("/api/social-analytics/overview")
-        
-        if response.status_code == 200:
-            data = response.json()
-            errors = validate_schema(data, self.OVERVIEW_SCHEMA)
-            assert len(errors) == 0, f"Contract violations: {errors}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{API_URL}/api/social-analytics/overview")
+            
+            if response.status_code == 200:
+                data = response.json()
+                errors = validate_schema(data, self.OVERVIEW_SCHEMA)
+                assert len(errors) == 0, f"Contract violations: {errors}"
     
     # Expected schema for accounts list
     ACCOUNTS_SCHEMA = {
@@ -110,23 +109,20 @@ class TestAnalyticsContracts:
         }
     }
     
-    def test_accounts_contract(self, client):
+    @pytest.mark.asyncio
+    async def test_accounts_contract(self):
         """Test accounts list response matches contract"""
-        response = client.get("/api/social-analytics/accounts")
-        
-        if response.status_code == 200:
-            data = response.json()
-            errors = validate_schema(data, self.ACCOUNTS_SCHEMA)
-            assert len(errors) == 0, f"Contract violations: {errors}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{API_URL}/api/social-analytics/accounts")
+            
+            if response.status_code == 200:
+                data = response.json()
+                errors = validate_schema(data, self.ACCOUNTS_SCHEMA)
+                assert len(errors) == 0, f"Contract violations: {errors}"
 
 
 class TestVideosContracts:
     """Contract tests for videos API"""
-    
-    @pytest.fixture
-    def client(self):
-        from main import app
-        return TestClient(app)
     
     VIDEO_SCHEMA = {
         "type": "object",
@@ -145,31 +141,28 @@ class TestVideosContracts:
         "items": VIDEO_SCHEMA
     }
     
-    def test_videos_list_contract(self, client):
+    @pytest.mark.asyncio
+    async def test_videos_list_contract(self):
         """Test videos list response matches contract"""
-        response = client.get("/api/videos?limit=5")
-        
-        if response.status_code == 200:
-            data = response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{API_URL}/api/videos?limit=5")
             
-            # Handle paginated response
-            if isinstance(data, dict):
-                items = data.get("items", data.get("data", []))
-            else:
-                items = data
-            
-            for item in items[:5]:
-                errors = validate_schema(item, self.VIDEO_SCHEMA)
-                assert len(errors) == 0, f"Contract violations: {errors}"
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Handle paginated response
+                if isinstance(data, dict):
+                    items = data.get("items", data.get("data", []))
+                else:
+                    items = data
+                
+                for item in items[:5]:
+                    errors = validate_schema(item, self.VIDEO_SCHEMA)
+                    assert len(errors) == 0, f"Contract violations: {errors}"
 
 
 class TestPublishingContracts:
     """Contract tests for publishing API"""
-    
-    @pytest.fixture
-    def client(self):
-        from main import app
-        return TestClient(app)
     
     SCHEDULED_POST_SCHEMA = {
         "type": "object",
@@ -183,26 +176,23 @@ class TestPublishingContracts:
         "required": ["id"]
     }
     
-    def test_scheduled_posts_contract(self, client):
+    @pytest.mark.asyncio
+    async def test_scheduled_posts_contract(self):
         """Test scheduled posts response matches contract"""
-        response = client.get("/api/publishing/scheduled")
-        
-        if response.status_code == 200:
-            data = response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{API_URL}/api/publishing/scheduled")
             
-            if isinstance(data, list):
-                for item in data[:5]:
-                    errors = validate_schema(item, self.SCHEDULED_POST_SCHEMA)
-                    assert len(errors) == 0, f"Contract violations: {errors}"
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, list):
+                    for item in data[:5]:
+                        errors = validate_schema(item, self.SCHEDULED_POST_SCHEMA)
+                        assert len(errors) == 0, f"Contract violations: {errors}"
 
 
 class TestGoalsContracts:
     """Contract tests for goals API"""
-    
-    @pytest.fixture
-    def client(self):
-        from main import app
-        return TestClient(app)
     
     GOAL_SCHEMA = {
         "type": "object",
@@ -216,26 +206,23 @@ class TestGoalsContracts:
         "required": ["id"]
     }
     
-    def test_goals_contract(self, client):
+    @pytest.mark.asyncio
+    async def test_goals_contract(self):
         """Test goals response matches contract"""
-        response = client.get("/api/goals")
-        
-        if response.status_code == 200:
-            data = response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{API_URL}/api/goals")
             
-            if isinstance(data, list):
-                for item in data[:5]:
-                    errors = validate_schema(item, self.GOAL_SCHEMA)
-                    assert len(errors) == 0, f"Contract violations: {errors}"
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, list):
+                    for item in data[:5]:
+                        errors = validate_schema(item, self.GOAL_SCHEMA)
+                        assert len(errors) == 0, f"Contract violations: {errors}"
 
 
 class TestErrorContracts:
     """Contract tests for error responses"""
-    
-    @pytest.fixture
-    def client(self):
-        from main import app
-        return TestClient(app)
     
     ERROR_SCHEMA = {
         "type": "object",
@@ -246,29 +233,33 @@ class TestErrorContracts:
         }
     }
     
-    def test_404_error_contract(self, client):
+    @pytest.mark.asyncio
+    async def test_404_error_contract(self):
         """Test 404 error response matches contract"""
-        response = client.get("/api/nonexistent-endpoint-12345")
-        
-        assert response.status_code == 404
-        data = response.json()
-        
-        # Should have some error message
-        has_message = any([
-            data.get("detail"),
-            data.get("message"),
-            data.get("error"),
-        ])
-        assert has_message, "Error response should have a message"
-    
-    def test_422_error_contract(self, client):
-        """Test validation error response matches contract"""
-        response = client.post("/api/goals", json={})
-        
-        if response.status_code == 422:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{API_URL}/api/nonexistent-endpoint-12345")
+            
+            assert response.status_code == 404
             data = response.json()
-            # FastAPI validation errors have 'detail' array
-            assert "detail" in data or "message" in data or "error" in data
+            
+            # Should have some error message
+            has_message = any([
+                data.get("detail"),
+                data.get("message"),
+                data.get("error"),
+            ])
+            assert has_message, "Error response should have a message"
+    
+    @pytest.mark.asyncio
+    async def test_422_error_contract(self):
+        """Test validation error response matches contract"""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(f"{API_URL}/api/goals", json={})
+            
+            if response.status_code == 422:
+                data = response.json()
+                # FastAPI validation errors have 'detail' array
+                assert "detail" in data or "message" in data or "error" in data
 
 
 # Mark all as contract tests

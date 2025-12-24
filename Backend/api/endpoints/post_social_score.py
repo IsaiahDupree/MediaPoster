@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from database.connection import get_db
 from services.post_social_score import PostSocialScoreCalculator
+from services.event_bus import EventBus, Topics
 from loguru import logger
 
 router = APIRouter(prefix="/api/post-social-score", tags=["Post-Social Score"])

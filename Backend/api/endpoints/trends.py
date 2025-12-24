@@ -9,9 +9,12 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import os
+import logging
 
 from database.connection import get_supabase
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/trends", tags=["Trends & Analytics"])
 
 
@@ -116,6 +119,20 @@ async def add_hashtag_trend(hashtag: TrendHashtag):
         "snapshot_at": datetime.utcnow().isoformat()
     }).execute()
     
+    # Emit TREND_RAW_INGESTED event
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(Topics.TREND_RAW_INGESTED, {
+            "type": "hashtag",
+            "platform": hashtag.platform,
+            "hashtag": hashtag.hashtag,
+            "rank": hashtag.rank,
+            "growth_rate": hashtag.growth_rate,
+        })
+        logger.info(f"[PubSub] Emitted TREND_RAW_INGESTED for {hashtag.hashtag}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit trend event: {e}")
+    
     return {"success": True, "data": result.data}
 
 
@@ -181,6 +198,20 @@ async def add_sound_trend(sound: TrendSound):
         "snapshot_at": datetime.utcnow().isoformat()
     }).execute()
     
+    # Emit TREND_RAW_INGESTED event for sound
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(Topics.TREND_RAW_INGESTED, {
+            "type": "sound",
+            "platform": sound.platform,
+            "sound_name": sound.sound_name,
+            "rank": sound.rank,
+            "usage_count": sound.usage_count,
+        })
+        logger.info(f"[PubSub] Emitted TREND_RAW_INGESTED for sound {sound.sound_name}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit sound trend event: {e}")
+    
     return {"success": True, "data": result.data}
 
 
@@ -228,6 +259,20 @@ async def add_topic_trend(topic: TrendTopic):
         "region": topic.region,
         "snapshot_at": datetime.utcnow().isoformat()
     }).execute()
+    
+    # Emit TREND_RAW_INGESTED event for topic
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(Topics.TREND_RAW_INGESTED, {
+            "type": "topic",
+            "platform": topic.platform,
+            "topic": topic.topic,
+            "rank": topic.rank,
+            "mention_count": topic.mention_count,
+        })
+        logger.info(f"[PubSub] Emitted TREND_RAW_INGESTED for topic {topic.topic}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit topic trend event: {e}")
     
     return {"success": True, "data": result.data}
 

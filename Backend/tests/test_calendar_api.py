@@ -14,7 +14,7 @@ from database.connection import get_db
 
 
 # Test fixtures
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_db():
     """Create test database session"""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=NullPool)

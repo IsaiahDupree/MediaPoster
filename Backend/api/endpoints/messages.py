@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel
+import logging
 
 from services.message_engine import (
     assemble_person_context,
@@ -11,7 +12,9 @@ from services.message_engine import (
     MessageGoal,
     GeneratedMessage
 )
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class GenerateRequest(BaseModel):

@@ -4,6 +4,7 @@ Comprehensive image analysis using AI vision models.
 Extracts: people, clothing, emotions, scene, location, time, objects, and more.
 """
 
+from loguru import logger
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
@@ -465,12 +466,29 @@ async def analyze_with_openai(image_data: str, is_url: bool, custom_fields: List
             json_end = content.rfind("}") + 1
             if json_start != -1 and json_end > json_start:
                 json_str = content[json_start:json_end]
+                # Try to fix common JSON issues
+                json_str = json_str.replace('\n', ' ').replace('\r', '')
                 return json.loads(json_str)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON parsing failed: {e}. Attempting fix...")
+            try:
+                # Try to fix trailing commas and other common issues
+                import re
+                json_str = re.sub(r',\s*}', '}', json_str)
+                json_str = re.sub(r',\s*]', ']', json_str)
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                logger.warning(f"JSON fix failed, extracting data from raw response")
         
-        # Return raw content if JSON parsing fails
-        return {"raw_analysis": content}
+        # Extract key information from raw content if JSON parsing fails
+        return {
+            "title": "Analysis Complete",
+            "detailed_description": content[:500] if content else "Analysis complete",
+            "scene_setting": "Unknown",
+            "overall_mood": "neutral",
+            "dominant_colors": ["unknown"],
+            "raw_analysis": content
+        }
 
 
 async def analyze_with_mock(custom_fields: List[str]) -> Dict[str, Any]:

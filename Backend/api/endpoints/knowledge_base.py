@@ -13,6 +13,9 @@ from sqlalchemy import create_engine, text
 import logging
 import uuid
 import os
+import asyncio
+
+from services.event_bus import EventBus, Topics
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
@@ -315,6 +318,19 @@ async def create_rule(rule: RuleCreate):
         conn.commit()
         
         logger.info(f"Created rule {rule_id}: {rule.name or rule.rule_type}")
+        
+        # Emit KNOWLEDGE_BASE_RULE_CREATED event
+        try:
+            event_bus = EventBus.get_instance()
+            asyncio.create_task(event_bus.publish(Topics.KNOWLEDGE_BASE_RULE_APPLIED, {
+                "rule_id": rule_id,
+                "rule_type": rule.rule_type,
+                "name": rule.name,
+                "source_experiment_id": rule.source_experiment_id,
+            }))
+            logger.info(f"[PubSub] Emitted KNOWLEDGE_BASE_RULE_CREATED for {rule_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit KB rule event: {e}")
         
         return {
             "id": rule_id,

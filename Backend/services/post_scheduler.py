@@ -529,6 +529,22 @@ class PostScheduler:
                     "error": error
                 })
                 logger.warning(f"⚠️ Post {post['id']} failed, retry {current_retries + 1}/{self.max_retries} at {next_retry}")
+                
+                # Emit PUBLISH_RETRYING event
+                try:
+                    import asyncio
+                    asyncio.create_task(self.event_bus.publish(Topics.PUBLISH_RETRYING, {
+                        "post_id": str(post["id"]),
+                        "media_id": post.get("content_id"),
+                        "platform": post.get("platform"),
+                        "retry_count": current_retries + 1,
+                        "max_retries": self.max_retries,
+                        "next_retry_at": next_retry.isoformat(),
+                        "error": error,
+                    }))
+                    logger.info(f"[PubSub] Emitted PUBLISH_RETRYING for {post['id']}")
+                except Exception as e:
+                    logger.warning(f"[PubSub] Failed to emit PUBLISH_RETRYING: {e}")
             else:
                 # Max retries reached, mark as failed
                 conn.execute(text("""
@@ -565,14 +581,14 @@ class PostScheduler:
             upcoming = conn.execute(text("""
                 SELECT COUNT(*) FROM scheduled_posts
                 WHERE status = 'scheduled'
-                  AND scheduled_at > NOW()
+                  AND scheduled_time > NOW()
             """)).scalar() or 0
             
             # Get posts due now
             due_now = conn.execute(text("""
                 SELECT COUNT(*) FROM scheduled_posts
                 WHERE status = 'scheduled'
-                  AND scheduled_at <= NOW()
+                  AND scheduled_time <= NOW()
             """)).scalar() or 0
             
             # Get recent failures
@@ -598,13 +614,13 @@ class PostScheduler:
         with self.engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT 
-                    id, title, platform, account_username, 
-                    scheduled_at, status, retry_count, last_error
+                    id, 'Scheduled Post' as title, platform, platform_account_id as account_username, 
+                    scheduled_time, status, retry_count, last_error
                 FROM scheduled_posts
-                WHERE status IN ('scheduled', 'failed')
+                WHERE status IN ('scheduled', 'pending', 'failed')
                 ORDER BY 
                     CASE WHEN status = 'failed' THEN 0 ELSE 1 END,
-                    scheduled_at ASC
+                    scheduled_time ASC
                 LIMIT :limit
             """), {"limit": limit})
             

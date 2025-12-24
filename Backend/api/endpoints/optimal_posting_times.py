@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from database.connection import get_db
 from services.optimal_posting_times import OptimalPostingTimesService
+from services.event_bus import EventBus, Topics
 from loguru import logger
 
 router = APIRouter(prefix="/api/optimal-posting-times", tags=["Optimal Posting Times"])
@@ -93,6 +94,7 @@ async def get_recommended_time(
     except Exception as e:
         logger.error(f"Error getting recommended time: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 

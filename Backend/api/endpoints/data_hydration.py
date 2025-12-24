@@ -10,6 +10,7 @@ from services.data_hydration_service import (
     get_hydration_service,
     DataDomain
 )
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 

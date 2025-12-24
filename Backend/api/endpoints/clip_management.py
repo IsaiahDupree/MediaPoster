@@ -8,12 +8,15 @@ from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
+import logging
 
 from database.connection import get_db
 from services.clip_selector import ClipSelector, ClipSuggestion
 from services.clip_editor import ClipEditor
 from services.clip_publisher import ClipPublisher
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

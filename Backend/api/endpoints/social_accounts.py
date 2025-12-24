@@ -16,6 +16,7 @@ from services.rapidapi_social_fetcher import (
     Platform,
     get_social_fetcher
 )
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Social Accounts"])
@@ -298,6 +299,19 @@ async def add_account(request: AddAccountRequest):
         }).fetchone()
         
         conn.commit()
+        
+        # Emit ACCOUNT_CONNECTED event
+        try:
+            event_bus = EventBus.get_instance()
+            import asyncio
+            asyncio.create_task(event_bus.publish(Topics.ACCOUNT_CONNECTED, {
+                "account_id": result[0],
+                "platform": request.platform.lower(),
+                "username": request.username,
+            }))
+            logger.info(f"[PubSub] Emitted ACCOUNT_CONNECTED for {request.username}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit account event: {e}")
         
         return {"message": "Account added successfully", "account_id": result[0]}
         

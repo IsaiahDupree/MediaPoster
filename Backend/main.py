@@ -13,11 +13,13 @@ import sys
 
 from config import settings
 from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces, trends
+from api.endpoints import event_history
 from database.connection import init_db, close_db
 
 # Event Bus imports
 from services.event_bus import EventBus, Topics
 from services.workflow_manager import WorkflowManager
+from services.analytics_refresh_handler import get_analytics_refresh_handler
 
 # Configure logging
 logger.remove()
@@ -99,6 +101,13 @@ async def lifespan(app: FastAPI):
         workflow_manager = WorkflowManager.get_instance(event_bus)
         await event_bus.publish(Topics.SYSTEM_STARTUP, {"environment": settings.app_env})
         logger.success("✓ Event Bus initialized")
+        
+        # Initialize analytics refresh handler (subscribes to publish events)
+        try:
+            get_analytics_refresh_handler()
+            logger.success("✓ Analytics refresh handler initialized")
+        except Exception as e:
+            logger.warning(f"⚠️  Analytics refresh handler initialization failed: {e}")
     except Exception as e:
         logger.warning(f"⚠️  Event Bus initialization failed: {e}")
     
@@ -112,7 +121,90 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Post Scheduler failed to start: {e}")
     
+    # Start the Metrics Fetch Worker (auto-fetches metrics after publish)
+    metrics_worker = None
+    try:
+        from services.workers.metrics_fetch_worker import MetricsFetchWorker
+        from services.workers.thumbnail_generation_worker import ThumbnailGenerationWorker
+        from services.workers.event_history_worker import EventHistoryWorker
+        
+        metrics_worker = MetricsFetchWorker(event_bus)
+        await metrics_worker.start()
+        
+        thumbnail_worker = ThumbnailGenerationWorker(event_bus)
+        await thumbnail_worker.start()
+        
+        # Start event history worker (persists all events to database)
+        event_history_worker = EventHistoryWorker(event_bus)
+        await event_history_worker.start()
+        logger.success("✓ Event History Worker started")
+        logger.success("✓ Metrics Fetch Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Metrics Fetch Worker failed to start: {e}")
+    
+    # Start the Cleanup Worker (cleans up orphaned resources on media deletion)
+    cleanup_worker = None
+    try:
+        from services.workers.cleanup_worker import CleanupWorker
+        cleanup_worker = CleanupWorker(event_bus)
+        await cleanup_worker.start()
+        logger.success("✓ Cleanup Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Cleanup Worker failed to start: {e}")
+    
+    # Start the Notification Worker (generates notifications for key events)
+    notification_worker = None
+    try:
+        from services.workers.notification_worker import NotificationWorker
+        notification_worker = NotificationWorker(event_bus)
+        await notification_worker.start()
+        logger.success("✓ Notification Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Notification Worker failed to start: {e}")
+    
+    # Start the Narrative Builder Worker (auto-updates signals on publish/analysis)
+    narrative_worker = None
+    try:
+        from services.workers.narrative_builder_worker import NarrativeBuilderWorker
+        narrative_worker = NarrativeBuilderWorker(event_bus)
+        await narrative_worker.start()
+        logger.success("✓ Narrative Builder Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Narrative Builder Worker failed to start: {e}")
+    
     yield
+    
+    # Stop the Notification Worker on shutdown
+    if notification_worker:
+        try:
+            await notification_worker.stop()
+            logger.success("✓ Notification Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Notification Worker: {e}")
+    
+    # Stop the Narrative Builder Worker on shutdown
+    if narrative_worker:
+        try:
+            await narrative_worker.stop()
+            logger.success("✓ Narrative Builder Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Narrative Builder Worker: {e}")
+    
+    # Stop the Cleanup Worker on shutdown
+    if cleanup_worker:
+        try:
+            await cleanup_worker.stop()
+            logger.success("✓ Cleanup Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Cleanup Worker: {e}")
+    
+    # Stop the Metrics Fetch Worker on shutdown
+    if metrics_worker:
+        try:
+            await metrics_worker.stop()
+            logger.success("✓ Metrics Fetch Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Metrics Fetch Worker: {e}")
     
     # Stop the scheduler on shutdown
     if post_scheduler:
@@ -458,6 +550,9 @@ app.include_router(events.router, prefix="/api", tags=["Events"])
 app.include_router(workflows.router, prefix="/api", tags=["Workflows"])
 app.include_router(websocket.router, prefix="/api", tags=["WebSocket"])
 
+# Event History (Querying & Replay)
+app.include_router(event_history.router, tags=["Event History"])
+
 # Dashboard Widgets
 from api.endpoints import dashboard
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
@@ -485,6 +580,10 @@ app.include_router(coaching.router, tags=["Coaching"])
 # Narrative Builder (AI Content Strategy)
 from api.endpoints import narrative_builder
 app.include_router(narrative_builder.router, tags=["Narrative Builder"])
+
+# Prompt Generation Settings (Voice, Tone, Style, Limits)
+from api.endpoints import prompt_settings
+app.include_router(prompt_settings.router, prefix="/api", tags=["Prompt Settings"])
 
 # Experiments (Growth Lab)
 from api.endpoints import experiments

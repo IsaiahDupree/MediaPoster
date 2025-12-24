@@ -8,11 +8,14 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from database.connection import get_db
 from database.models import ContentVariant, ContentMetric, ContentRollup
 from services.content_metrics import ContentMetricsService
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -81,6 +84,17 @@ async def poll_content_metrics(
     """Poll metrics for all variants of a content item"""
     service = ContentMetricsService(db)
     metrics = await service.poll_metrics_for_content(content_id)
+    
+    # Emit METRICS_FETCH_COMPLETED event
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(Topics.METRICS_FETCH_COMPLETED, {
+            "content_id": str(content_id),
+            "metrics_collected": len(metrics),
+        })
+        logger.info(f"[PubSub] Emitted METRICS_FETCH_COMPLETED for {content_id}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit metrics event: {e}")
     
     return {
         "status": "success",

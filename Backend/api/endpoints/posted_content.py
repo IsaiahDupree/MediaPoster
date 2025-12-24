@@ -14,6 +14,7 @@ import uuid
 
 from database.connection import get_db
 from database.models import PostedContent as PostedContentModel
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,7 @@ async def record_post(request: PostRecordRequest, db: AsyncSession = Depends(get
             media_id=uuid.UUID(request.media_id) if request.media_id else None,
             caption=request.caption,
             status=request.status,
+            posted_at=datetime.now(),
         )
         
         db.add(new_post)
@@ -144,6 +146,20 @@ async def record_post(request: PostRecordRequest, db: AsyncSession = Depends(get
         await db.refresh(new_post)
         
         logger.info(f"✓ Recorded post to DB: {request.platform} - {request.platform_url}")
+        
+        # Emit CONTENT_POSTED event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.CONTENT_POSTED, {
+                "post_id": str(new_post.id),
+                "media_id": request.media_id,
+                "platform": request.platform,
+                "platform_url": request.platform_url,
+                "account_id": request.blotato_account_id,
+            })
+            logger.info(f"[PubSub] Emitted CONTENT_POSTED for {new_post.id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit CONTENT_POSTED: {e}")
         
         return {
             "success": True,

@@ -2,6 +2,7 @@
 Storage Management Endpoints
 Manage local storage directories and files
 """
+from loguru import logger
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ from datetime import datetime
 
 from database.connection import get_db
 from services.local_storage import local_storage
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/storage", tags=["Storage"])
 
@@ -274,7 +276,7 @@ def _cleanup_storage_sync(temp_only: bool, older_than_days: Optional[int]) -> in
                                 file.unlink()
                                 cleaned += 1
                             except Exception as e:
-                                pass
+                                logger.debug(f"Silent exception: {e}")
     
     return cleaned
 
@@ -326,6 +328,7 @@ async def delete_storage_clip(
         raise HTTPException(status_code=404, detail="Clip not found in local storage")
     
     return {"message": "Clip deleted from local storage", "clip_id": clip_id}
+
 
 
 

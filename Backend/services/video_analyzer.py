@@ -230,6 +230,27 @@ class VideoAnalyzer:
                 vs = visual_context.get("visual_summary", "")
                 hooks = [vs[:100] + "..." if len(vs) > 100 else vs] if vs else []
             
+            # Extract best hook from hooks list
+            best_hook = hooks[0] if hooks else None
+            
+            # Determine pillar tags from topics
+            pillar_tags = topics[:3] if topics else None
+            
+            # Determine format tags based on video metadata
+            format_tags = []
+            if metadata:
+                duration = metadata.get("duration", 0)
+                if duration < 60:
+                    format_tags.append("short-form")
+                elif duration < 180:
+                    format_tags.append("medium-form")
+                else:
+                    format_tags.append("long-form")
+            format_tags.append("video")
+            
+            # Add frame count to visual context
+            visual_context["frame_count"] = len(frames) if frames else 5
+            
             analysis_values = {
                 "transcript": transcript if transcript else "",
                 "topics": topics,
@@ -238,9 +259,12 @@ class VideoAnalyzer:
                 "pacing": analysis.get("pacing", "medium"),
                 "key_moments": analysis.get("key_moments", {}),
                 "visual_analysis": visual_context,
-                "music_suggestion": analysis.get("music_suggestion", {}),
+                "detected_hook": best_hook,
+                "pillar_tags": pillar_tags,
+                "format_tags": format_tags,
+                "music_suggestion": analysis.get("music_suggestion"),
                 "pre_social_score": float(raw_score),
-                "analysis_version": "2.2",  # Version with guaranteed topics/hooks
+                "analysis_version": "3.0",  # Version with all deep analysis fields
                 "analyzed_at": datetime.utcnow()
             }
             

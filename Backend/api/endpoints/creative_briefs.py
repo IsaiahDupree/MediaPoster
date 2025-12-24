@@ -8,6 +8,8 @@ from typing import Optional, List, Dict, Any
 from enum import Enum
 from loguru import logger
 
+from services.event_bus import EventBus, Topics
+
 from models.creative_brief_models import (
     AngleInsightSnapshot,
     ProductPerformanceSnapshot,
@@ -230,8 +232,8 @@ def convert_to_snapshot(product: ProductDataRequest, video: VideoDataRequest) ->
         role = SceneRole.OTHER
         try:
             role = SceneRole(s.role.lower())
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Silent exception: {e}")
         
         scene = SceneAnalysis(
             start_sec=s.start_sec,
@@ -342,6 +344,19 @@ async def generate_creative_brief(request: GenerateBriefRequest):
                 else:
                     brief_dict[field.name] = value
             response.brief_json = brief_dict
+        
+        # Emit CREATIVE_BRIEF_GENERATED event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.BRIEF_GENERATED, {
+                "brief_id": response.brief_id,
+                "format": brief.format.value,
+                "title": brief.title,
+                "duration_target_sec": brief.duration_target_sec,
+            })
+            logger.info(f"[PubSub] Emitted BRIEF_GENERATED for {response.brief_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit brief event: {e}")
         
         return response
         

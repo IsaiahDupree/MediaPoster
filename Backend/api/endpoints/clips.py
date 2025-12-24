@@ -13,6 +13,7 @@ from loguru import logger
 from database.connection import get_db
 from database.models import OriginalVideo, Clip, ProcessingJob
 from modules.clip_generation import ClipAssembler
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 
@@ -102,6 +103,19 @@ async def generate_clips(
     db.add(job)
     await db.commit()
     await db.refresh(job)
+    
+    # Emit CLIP_EXTRACTION_REQUESTED event
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(Topics.CLIP_EXTRACTION_REQUESTED, {
+            "job_id": str(job.job_id),
+            "video_id": str(video_id),
+            "template": request.template,
+            "platforms": request.platforms,
+        })
+        logger.info(f"[PubSub] Emitted CLIP_EXTRACTION_REQUESTED for {job.job_id}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit clip event: {e}")
     
     background_tasks.add_task(
         run_clip_generation,

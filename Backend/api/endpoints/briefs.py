@@ -8,11 +8,14 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from database.connection import get_db
 from database.models import Segment
 from services.content_brief import ContentBriefGenerator
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

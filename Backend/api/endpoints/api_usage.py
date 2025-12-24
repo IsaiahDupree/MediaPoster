@@ -9,6 +9,7 @@ from typing import Dict, Any
 from pydantic import BaseModel
 
 from database.connection import get_db
+from services.event_bus import EventBus, Topics
 # Note: APIRateLimiter uses sync Session, so we use async SQL queries directly
 
 router = APIRouter()

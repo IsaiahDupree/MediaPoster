@@ -26,10 +26,11 @@ import asyncio
 
 # EventBus import for pub/sub
 try:
-    from services.event_bus import EventBus
+    from services.event_bus import EventBus, Topics
     HAS_EVENT_BUS = True
 except ImportError:
     HAS_EVENT_BUS = False
+    Topics = None
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
@@ -50,20 +51,23 @@ router = APIRouter(prefix="/api/engagement", tags=["Comment Engagement"])
 # =============================================================================
 
 class CommentTopics:
-    """Event topics for comment pub/sub."""
-    COMMENT_RECEIVED = "comment.received"
-    COMMENT_ANALYZED = "comment.analyzed"
-    COMMENT_REPLIED = "comment.replied"
-    COMMENT_FLAGGED = "comment.flagged"
+    """Event topics for comment pub/sub.
+    
+    Now uses standard Topics class when available for consistency.
+    """
+    COMMENT_RECEIVED = Topics.COMMENT_RECEIVED if Topics else "comment.received"
+    COMMENT_ANALYZED = Topics.COMMENT_ANALYZED if Topics else "comment.analyzed"
+    COMMENT_REPLIED = Topics.COMMENT_REPLIED if Topics else "comment.replied"
+    COMMENT_FLAGGED = Topics.COMMENT_FLAGGED if Topics else "comment.flagged"
     COMMENT_HIDDEN = "comment.hidden"
     COMMENT_LIKED = "comment.liked"
     
 class FanTopics:
     """Event topics for fan/audience tracking."""
-    FAN_IDENTIFIED = "fan.identified"
+    FAN_IDENTIFIED = Topics.FAN_IDENTIFIED if Topics else "fan.identified"
     FAN_ENGAGEMENT_UPDATED = "fan.engagement_updated"
-    FAN_TIER_CHANGED = "fan.tier_changed"
-    TOP_FAN_ALERT = "fan.top_fan_alert"
+    FAN_TIER_CHANGED = Topics.FAN_TIER_CHANGED if Topics else "fan.tier_changed"
+    TOP_FAN_ALERT = Topics.TOP_FAN_ALERT if Topics else "fan.top_fan_alert"
 
 class AutomationTopics:
     """Event topics for automation."""

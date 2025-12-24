@@ -9,11 +9,14 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import os
+import logging
 
 from database.connection import get_db
 from database.models import OutboundMessage, Person
 from services.email_service import EmailServiceProvider
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -79,6 +82,19 @@ async def send_email(
             variant=request.variant
         )
         
+        # Emit EMAIL_SENT event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.EMAIL_SENT, {
+                "message_id": str(message.id),
+                "person_id": str(request.person_id),
+                "subject": request.subject,
+                "goal_type": request.goal_type,
+            })
+            logger.info(f"[PubSub] Emitted EMAIL_SENT for {message.id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit email event: {e}")
+        
         return {
             "status": "success",
             "message_id": str(message.id),
@@ -88,6 +104,16 @@ async def send_email(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # Emit EMAIL_FAILED event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.EMAIL_FAILED, {
+                "person_id": str(request.person_id),
+                "subject": request.subject,
+                "error": str(e),
+            })
+        except:
+            pass
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
 

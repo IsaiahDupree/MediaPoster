@@ -13,6 +13,7 @@ from database.connection import get_db
 from services.content_analysis_orchestrator import ContentAnalysisOrchestrator
 from services.segment_editor import SegmentEditor
 from services.performance_correlator import PerformanceCorrelator
+from services.event_bus import EventBus, Topics
 from database.models import VideoSegment, AnalyzedVideo
 
 router = APIRouter()

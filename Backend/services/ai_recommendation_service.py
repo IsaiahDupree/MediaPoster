@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from services.insights_engine import InsightsEngine
 from services.performance_correlator import PerformanceCorrelator
-from database.models import ContentInsight, User
+from database.models import ContentInsight
 
 logger = logging.getLogger(__name__)
 

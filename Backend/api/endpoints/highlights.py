@@ -21,6 +21,7 @@ from modules.highlight_detection import (
     HighlightRanker,
     GPTRecommender
 )
+from services.event_bus import EventBus, Topics
 
 router = APIRouter()
 
@@ -87,6 +88,18 @@ async def detect_highlights(
     db.add(job)
     await db.commit()
     await db.refresh(job)
+    
+    # Emit HIGHLIGHT_DETECTION_REQUESTED event
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(Topics.HIGHLIGHT_DETECTION_REQUESTED, {
+            "job_id": str(job.job_id),
+            "video_id": str(video_id),
+            "max_highlights": request.max_highlights,
+        })
+        logger.info(f"[PubSub] Emitted HIGHLIGHT_DETECTION_REQUESTED for {job.job_id}")
+    except Exception as e:
+        logger.warning(f"[PubSub] Failed to emit highlight event: {e}")
     
     # Start highlight detection in background
     background_tasks.add_task(

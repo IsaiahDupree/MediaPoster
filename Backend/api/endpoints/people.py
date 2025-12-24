@@ -8,13 +8,16 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from database.connection import get_db
 from database.models import Person, Identity, PersonEvent, PersonInsight
 from services.people_ingestion import PeopleIngestionService
 from services.person_lens import PersonLensComputer
 from middleware.workspace_context import get_current_workspace_id
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

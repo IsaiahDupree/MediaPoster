@@ -14,6 +14,7 @@ import logging
 
 from database.connection import get_db
 from services.video_pipeline import VideoAnalysisPipeline
+from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/viral-analysis", tags=["viral-analysis"])

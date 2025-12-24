@@ -8,6 +8,7 @@ from typing import Optional
 from loguru import logger
 
 from services.media_provider import get_media_provider, MediaType
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/api/media-provider", tags=["Media Provider"])
 
@@ -65,6 +66,16 @@ async def stream_video(media_id: str, request: Request):
     """
     Stream video with range request support for seeking.
     Supports partial content (HTTP 206) for video players.
+    """
+    provider = get_media_provider()
+    range_header = request.headers.get("Range")
+    return await provider.get_video_stream(media_id, range_header)
+
+
+@router.get("/video/{media_id}")
+async def get_video(media_id: str, request: Request):
+    """
+    Get video file (alias for /stream/{media_id} for compatibility).
     """
     provider = get_media_provider()
     range_header = request.headers.get("Range")

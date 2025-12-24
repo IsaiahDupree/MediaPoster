@@ -2,6 +2,7 @@
 Experiments API Endpoints
 Handles experiment management, variant tracking, and results analysis
 """
+from loguru import logger
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -9,6 +10,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import create_engine, text
 import os
 import json
+
+from services.event_bus import EventBus, Topics
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
@@ -486,6 +489,23 @@ async def create_experiment(data: CreateExperiment):
         
         conn.commit()
         
+        # Emit EXPERIMENT_CREATED event
+        try:
+            import asyncio
+            event_bus = EventBus.get_instance()
+            asyncio.create_task(event_bus.publish(Topics.EXPERIMENT_PLAN_RUN, {
+                "experiment_id": str(experiment_id),
+                "name": data.name,
+                "type": data.type,
+                "hypothesis": data.hypothesis,
+                "primary_metric": data.primary_metric,
+                "platforms": data.platforms,
+                "variant_count": len(data.variants),
+            }))
+            logger.info(f"[PubSub] Emitted EXPERIMENT_CREATED for {experiment_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit EXPERIMENT_CREATED: {e}")
+        
         return {'id': str(experiment_id), 'status': 'draft'}
 
 
@@ -501,6 +521,18 @@ async def start_experiment(experiment_id: str):
             WHERE id = :id AND status = 'draft'
         """), {'id': experiment_id})
         conn.commit()
+        
+        # Emit EXPERIMENT_RUN_STARTED event
+        try:
+            import asyncio
+            event_bus = EventBus.get_instance()
+            asyncio.create_task(event_bus.publish(Topics.EXPERIMENT_RUN_STARTED, {
+                "experiment_id": experiment_id,
+                "started_at": datetime.now().isoformat(),
+            }))
+            logger.info(f"[PubSub] Emitted EXPERIMENT_RUN_STARTED for {experiment_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit EXPERIMENT_RUN_STARTED: {e}")
         
         return {'status': 'running', 'started_at': datetime.now().isoformat()}
 
@@ -575,6 +607,20 @@ async def complete_experiment(
             """), {'winner': winner_variant_id, 'exp_id': experiment_id})
         
         conn.commit()
+        
+        # Emit EXPERIMENT_RUN_COMPLETED event
+        try:
+            import asyncio
+            event_bus = EventBus.get_instance()
+            asyncio.create_task(event_bus.publish(Topics.EXPERIMENT_RUN_COMPLETED, {
+                "experiment_id": experiment_id,
+                "winner_variant_id": winner_variant_id,
+                "uplift": uplift,
+                "completed_at": datetime.now().isoformat(),
+            }))
+            logger.info(f"[PubSub] Emitted EXPERIMENT_RUN_COMPLETED for {experiment_id}")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit EXPERIMENT_RUN_COMPLETED: {e}")
         
         return {'status': 'completed', 'uplift': uplift, 'winner': winner_variant_id}
 
@@ -1237,8 +1283,8 @@ async def batch_generate_rules():
                 result = await generate_rule_from_experiment(str(exp[0]))
                 if 'rule_id' in result:
                     generated.append(result)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Silent exception: {e}")
         
         return {'rules_generated': len(generated), 'rules': generated}
 
@@ -1424,8 +1470,8 @@ async def generate_ideas():
                     'priority': idea['priority_score'],
                     'source': idea['source'],
                 })
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Silent exception: {e}")
         
         conn.commit()
     
@@ -2264,8 +2310,8 @@ async def sync_learnings_to_narrative():
                         "confidence": pattern.confidence
                     })
                     synced_patterns.append(pattern.name)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Silent exception: {e}")
             conn.commit()
         
         return {

@@ -3,10 +3,13 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import UUID, uuid4
+import logging
 
 from database.connection import get_db
 from connectors.base import ContentVariant
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # --- Pydantic Models ---

@@ -171,19 +171,28 @@ class MediaProviderService:
         """
         Get thumbnail for a media file.
         Sizes: small (160px), medium (320px), large (640px)
+        Supports on-the-fly generation if thumbnail doesn't exist.
         """
         media_info = await self.get_media_info(media_id)
         
         if not media_info:
             raise HTTPException(status_code=404, detail="Media not found")
         
-        # Check if thumbnail exists
-        if media_info.thumbnail_path and self.validate_file_exists(media_info.thumbnail_path):
-            return FileResponse(
-                media_info.thumbnail_path,
-                media_type="image/jpeg",
-                headers={"Cache-Control": "public, max-age=86400"}
-            )
+        # Check if thumbnail exists (try both container and host paths)
+        if media_info.thumbnail_path:
+            thumb_path_str = self._map_to_container_path(media_info.thumbnail_path)
+            actual_thumb_path = None
+            if thumb_path_str and Path(thumb_path_str).exists():
+                actual_thumb_path = thumb_path_str
+            elif Path(media_info.thumbnail_path).exists():
+                actual_thumb_path = media_info.thumbnail_path
+            
+            if actual_thumb_path:
+                return FileResponse(
+                    actual_thumb_path,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"}
+                )
         
         # Try to find thumbnail by ID
         thumb_path = self.thumbnail_dir / f"{media_id}.jpg"
@@ -194,8 +203,54 @@ class MediaProviderService:
                 headers={"Cache-Control": "public, max-age=86400"}
             )
         
+        # Try to generate on-the-fly from source file (like media-db does)
+        if media_info.file_path and self.validate_file_exists(media_info.file_path):
+            try:
+                from services.thumbnail_service import generate_thumbnail
+                # Map host paths to container paths if needed
+                file_path = self._map_to_container_path(media_info.file_path)
+                if file_path and Path(file_path).exists():
+                    generated_thumb = generate_thumbnail(file_path, size)
+                    if generated_thumb and Path(generated_thumb).exists():
+                        # Update database with thumbnail path
+                        await self._update_thumbnail_path(media_id, generated_thumb)
+                        return FileResponse(
+                            generated_thumb,
+                            media_type="image/jpeg",
+                            headers={"Cache-Control": "public, max-age=86400"}
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to generate thumbnail on-the-fly: {e}")
+        
         # No thumbnail - return placeholder or 404
         raise HTTPException(status_code=404, detail="Thumbnail not found")
+    
+    def _map_to_container_path(self, host_path: str) -> str:
+        """Map host filesystem paths to Docker container paths."""
+        if not host_path:
+            return host_path
+        import re
+        # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/import
+        pattern = r'^/Users/[^/]+/Documents/IphoneImport/(.*)$'
+        match = re.match(pattern, host_path)
+        if match:
+            return f"/media/import/{match.group(1)}"
+        if host_path.startswith('~/Documents/IphoneImport/'):
+            return host_path.replace('~/Documents/IphoneImport/', '/media/import/')
+        return host_path
+    
+    async def _update_thumbnail_path(self, media_id: str, thumbnail_path: str):
+        """Update thumbnail path in database."""
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    UPDATE videos 
+                    SET thumbnail_path = :thumb_path 
+                    WHERE id = :id
+                """), {"thumb_path": thumbnail_path, "id": media_id})
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to update thumbnail path in database: {e}")
     
     async def get_video_stream(
         self, 
@@ -210,10 +265,20 @@ class MediaProviderService:
         if not media_info:
             raise HTTPException(status_code=404, detail="Media not found")
         
-        if not self.validate_file_exists(media_info.file_path):
+        # Map host paths to container paths if needed
+        file_path_str = self._map_to_container_path(media_info.file_path) if media_info.file_path else None
+        
+        # Try container path first, then original path
+        actual_path = None
+        if file_path_str and Path(file_path_str).exists():
+            actual_path = file_path_str
+        elif media_info.file_path and Path(media_info.file_path).exists():
+            actual_path = media_info.file_path
+        
+        if not actual_path:
             raise HTTPException(status_code=404, detail="File not found on disk")
         
-        file_path = Path(media_info.file_path)
+        file_path = Path(actual_path)
         file_size = file_path.stat().st_size
         
         # Handle range requests for video seeking

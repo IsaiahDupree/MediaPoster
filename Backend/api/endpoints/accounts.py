@@ -11,10 +11,13 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import uuid
+import logging
 
 from database.connection import get_db, async_session_maker
 from database.models import ConnectorConfig
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/accounts", tags=["Accounts"])
 
 
@@ -238,6 +241,20 @@ async def connect_account(
                 
                 # Trigger initial sync in background
                 background_tasks.add_task(sync_account_data, str(connector.id), request.platform)
+                
+                # Emit ACCOUNT_CONNECTED event
+                try:
+                    import asyncio
+                    event_bus = EventBus.get_instance()
+                    asyncio.create_task(event_bus.publish(Topics.BLOTATO_ACCOUNT_SYNCED, {
+                        "account_id": str(connector.id),
+                        "platform": request.platform,
+                        "username": config_data.get('username'),
+                        "connection_method": request.connection_method,
+                    }))
+                    logger.info(f"[PubSub] Emitted ACCOUNT_CONNECTED for {connector.id}")
+                except Exception as e:
+                    logger.warning(f"[PubSub] Failed to emit ACCOUNT_CONNECTED: {e}")
                 
                 return {
                     "success": True,

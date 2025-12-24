@@ -114,6 +114,41 @@ class Topics:
     NOTIFICATION_SENT = "notification.sent"               # Notification delivered
     
     # =========================================================================
+    # COMMENTS & ENGAGEMENT
+    # =========================================================================
+    COMMENT_RECEIVED = "comment.received"                 # New comment detected
+    COMMENT_ANALYZED = "comment.analyzed"                 # Sentiment/intent analyzed
+    COMMENT_REPLIED = "comment.replied"                   # Auto-reply sent
+    COMMENT_FLAGGED = "comment.flagged"                   # Comment flagged for review
+    FAN_IDENTIFIED = "fan.identified"                     # Top fan identified
+    FAN_TIER_CHANGED = "fan.tier_changed"                 # Fan tier upgraded/downgraded
+    TOP_FAN_ALERT = "fan.top_fan_alert"                   # Top fan activity alert
+    
+    # =========================================================================
+    # WORKFLOWS
+    # =========================================================================
+    WORKFLOW_CREATED = "workflow.created"                 # New workflow created
+    WORKFLOW_STARTED = "workflow.started"                 # Workflow execution started
+    WORKFLOW_STEP_COMPLETED = "workflow.step.completed"   # Workflow step finished
+    WORKFLOW_COMPLETED = "workflow.completed"             # Workflow finished
+    WORKFLOW_FAILED = "workflow.failed"                   # Workflow error
+    
+    # =========================================================================
+    # SOCIAL ACCOUNTS
+    # =========================================================================
+    ACCOUNT_CONNECTED = "account.connected"               # New account connected
+    ACCOUNT_SYNCED = "account.synced"                     # Account data refreshed
+    ACCOUNT_DISCONNECTED = "account.disconnected"         # Account removed
+    ACCOUNT_METRICS_UPDATED = "account.metrics_updated"   # Account metrics refreshed
+    
+    # =========================================================================
+    # EMAIL NOTIFICATIONS
+    # =========================================================================
+    EMAIL_QUEUED = "email.queued"                         # Email queued for sending
+    EMAIL_SENT = "email.sent"                             # Email sent successfully
+    EMAIL_FAILED = "email.failed"                         # Email send failed
+    
+    # =========================================================================
     # HYDRATION (State Management)
     # =========================================================================
     HYDRATION_SNAPSHOT_READY = "mp.hydration.evt.snapshot_ready"  # Fresh state available
@@ -125,6 +160,14 @@ class Topics:
     NARRATIVE_PLAN_REQUESTED = "mp.narrative.cmd.plan"            # Request new plan
     NARRATIVE_PLAN_GENERATED = "mp.narrative.evt.plan_generated"  # Plan ready
     NARRATIVE_GOAL_UPDATED = "mp.narrative.evt.goal_updated"      # Goal progress changed
+    NARRATIVE_SIGNALS_UPDATED = "narrative.signals.updated"      # Signals refreshed
+    
+    # =========================================================================
+    # GOALS
+    # =========================================================================
+    GOAL_CREATED = "goal.created"                                 # New goal created
+    GOAL_UPDATED = "goal.updated"                                 # Goal progress updated
+    GOAL_COMPLETED = "goal.completed"                             # Goal achieved
     
     # =========================================================================
     # EXPERIMENTS (Research Brain)
@@ -145,14 +188,19 @@ class Topics:
     PLAYBOOK_ACTIVATED = "mp.rules.evt.playbook_activated"        # Playbook in use
     
     # =========================================================================
-    # SCHEDULER (Execution)
+    # SCHEDULER (Execution) - DEPRECATED: Use schedule.* topics instead
+    # These are kept for backwards compatibility but new code should use:
+    #   - SCHEDULE_CREATED instead of SCHEDULER_CREATE_ITEMS
+    #   - SCHEDULE_UPDATED instead of SCHEDULER_UPDATE_ITEM
+    #   - SCHEDULE_CANCELLED instead of SCHEDULER_CANCEL_ITEM
+    #   - SCHEDULE_DUE instead of SCHEDULER_ITEM_DUE
     # =========================================================================
-    SCHEDULER_CREATE_ITEMS = "mp.scheduler.cmd.create_items"      # Create schedule items
-    SCHEDULER_UPDATE_ITEM = "mp.scheduler.cmd.update_item"        # Update item
-    SCHEDULER_CANCEL_ITEM = "mp.scheduler.cmd.cancel_item"        # Cancel item
-    SCHEDULER_ITEM_SCHEDULED = "mp.scheduler.evt.item_scheduled"  # Item scheduled
-    SCHEDULER_ITEM_DUE = "mp.scheduler.evt.item_due"              # Time reached
-    SCHEDULER_ITEM_CANCELED = "mp.scheduler.evt.item_canceled"    # Item canceled
+    SCHEDULER_CREATE_ITEMS = "mp.scheduler.cmd.create_items"      # DEPRECATED: Use SCHEDULE_CREATED
+    SCHEDULER_UPDATE_ITEM = "mp.scheduler.cmd.update_item"        # DEPRECATED: Use SCHEDULE_UPDATED
+    SCHEDULER_CANCEL_ITEM = "mp.scheduler.cmd.cancel_item"        # DEPRECATED: Use SCHEDULE_CANCELLED
+    SCHEDULER_ITEM_SCHEDULED = "mp.scheduler.evt.item_scheduled"  # DEPRECATED: Use SCHEDULE_CREATED
+    SCHEDULER_ITEM_DUE = "mp.scheduler.evt.item_due"              # DEPRECATED: Use SCHEDULE_DUE
+    SCHEDULER_ITEM_CANCELED = "mp.scheduler.evt.item_canceled"    # DEPRECATED: Use SCHEDULE_CANCELLED
     
     # =========================================================================
     # TRENDS (Opportunity Signals)

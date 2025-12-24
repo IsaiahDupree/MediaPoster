@@ -2,6 +2,11 @@
 
 > Automate the journey from raw iPhone footage to viral social media content with AI-powered analysis, intelligent highlight detection, and multi-platform distribution.
 
+## 🎯 **NEW TO THIS PROJECT?** 
+👉 **Start here:** [`START_HERE.md`](./START_HERE.md) - Quick 3-step setup guide  
+👉 **Understanding structure:** [`ONBOARDING_GUIDE.md`](./ONBOARDING_GUIDE.md) - Complete navigation guide  
+👉 **Project structure:** [`PROJECT_STRUCTURE.md`](./PROJECT_STRUCTURE.md) - Directory map
+
 ## 🎯 Overview
 
 MediaPoster is a comprehensive automation system that transforms long-form videos from your iPhone into optimized, viral-style short clips and automatically distributes them across multiple social media platforms. Built with modularity and scalability in mind, each component can operate independently or as part of an integrated pipeline.

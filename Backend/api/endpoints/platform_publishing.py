@@ -11,6 +11,7 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 import uuid
+import logging
 
 from database.connection import get_db
 from database.models import PlatformPost, PlatformCheckback, PostComment
@@ -18,7 +19,9 @@ from services.multi_platform_publisher import MultiPlatformPublisher
 from services.platform_adapters.base import (
     PlatformType, PublishRequest, MockPlatformAdapter
 )
+from services.event_bus import EventBus, Topics
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

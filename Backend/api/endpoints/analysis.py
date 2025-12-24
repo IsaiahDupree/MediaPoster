@@ -14,6 +14,7 @@ from loguru import logger
 from database.connection import get_db
 from database.models import OriginalVideo, ProcessingJob
 from modules.ai_analysis import ContentAnalyzer
+from config.platform_limits import get_platform_limits, PLATFORM_LIMITS, DEFAULT_PROMPT_SETTINGS
 
 router = APIRouter()
 
@@ -399,6 +400,15 @@ Generate ONLY the title, no quotes, no explanation. Make it punchy and engaging 
     }
 
 
+def truncate_to_limit(text: str, max_chars: int, add_ellipsis: bool = True) -> str:
+    """Truncate text to fit within character limit"""
+    if len(text) <= max_chars:
+        return text
+    if add_ellipsis and max_chars > 3:
+        return text[:max_chars - 3].rsplit(' ', 1)[0] + "..."
+    return text[:max_chars]
+
+
 async def _generate_platform_captions(
     title: str,
     transcript: str,
@@ -411,9 +421,16 @@ async def _generate_platform_captions(
     include_hashtags: bool,
     include_hook: bool
 ) -> Dict[str, str]:
-    """Generate captions for all platforms using AI based on content analysis"""
+    """Generate captions for all platforms using AI based on content analysis.
+    
+    Enforces platform-specific character limits with 20% buffer for safety.
+    """
     
     logger.info(f"[_generate_platform_captions] 🎯 Generating for tone={tone}, style={style}")
+    
+    # Get platform limits for all platforms we'll generate for
+    platforms_to_generate = ["tiktok", "instagram", "youtube", "twitter", "threads", "pinterest", "linkedin", "bluesky", "facebook"]
+    platform_limits = {p: get_platform_limits(p) for p in platforms_to_generate}
     
     # Build context from available data
     topics_str = ', '.join(topics[:5]) if topics else ""
@@ -482,80 +499,146 @@ Write ONLY the description (2-3 sentences), no hashtags, no title. Be creative a
         base_hashtags = [f"#{t.replace(' ', '').lower()}" for t in topics[:5]]
     
     # Platform-specific generation
+    # NOTE: Descriptions should NOT include the title - title is separate
     captions = {}
     
-    # TikTok caption - use description_text to avoid duplication
+    # TikTok caption - description only, no title
     if is_humorous:
-        tiktok_caption = f"😂 {title}\n\n"
+        tiktok_caption = ""
         if description_text:
-            tiktok_caption += f"You won't believe this... {description_text}...\n\n"
+            tiktok_caption = f"😂 You won't believe this... {description_text}\n\n"
         tiktok_caption += f"#fyp #viral #comedy {' '.join(base_hashtags[:3])}"
     elif is_professional:
-        tiktok_caption = f"📊 {title}\n\n"
+        tiktok_caption = ""
         if description_text:
-            tiktok_caption += f"{description_text}...\n\n"
+            tiktok_caption = f"📊 {description_text}\n\n"
         tiktok_caption += f"#business #professional {' '.join(base_hashtags[:3])}"
     elif is_casual:
-        tiktok_caption = f"Hey! 👋 {title}\n\n"
+        tiktok_caption = ""
         if description_text:
-            tiktok_caption += f"{description_text}...\n\n"
+            tiktok_caption = f"👋 {description_text}\n\n"
         tiktok_caption += f"#fyp #foryou {' '.join(base_hashtags[:3])}"
     else:
         # Engaging/default
-        tiktok_caption = f"🔥 {title}\n\n"
+        tiktok_caption = ""
         if description_text:
-            tiktok_caption += f"{description_text}...\n\n"
+            tiktok_caption = f"🔥 {description_text}\n\n"
         tiktok_caption += f"#fyp #viral {' '.join(base_hashtags[:3])}"
     
-    captions['tiktok'] = tiktok_caption
+    captions['tiktok'] = tiktok_caption.strip()
     
-    # Instagram caption - use description_text to avoid duplication
+    # Instagram caption - description only, no title
     if is_humorous:
-        instagram_caption = f"LOL 😂 {title}\n\n"
+        instagram_caption = ""
         if description_text:
-            instagram_caption += f"{description_text}...\n\n"
+            instagram_caption = f"😂 {description_text}\n\n"
         instagram_caption += f"Tag someone who needs to see this! 👇\n\n#reels #funny {' '.join(base_hashtags[:5])}"
     elif is_professional:
-        instagram_caption = f"{title}\n\n"
+        instagram_caption = ""
         if description_text:
-            instagram_caption += f"{description_text}...\n\n"
+            instagram_caption = f"{description_text}\n\n"
         instagram_caption += f"What are your thoughts? Share below.\n\n#professional {' '.join(base_hashtags[:5])}"
     elif is_casual:
-        instagram_caption = f"Just vibing ✨ {title}\n\n"
+        instagram_caption = ""
         if description_text:
-            instagram_caption += f"{description_text}...\n\n"
+            instagram_caption = f"✨ {description_text}\n\n"
         instagram_caption += f"#reels #mood {' '.join(base_hashtags[:5])}"
     else:
-        instagram_caption = f"✨ {title}\n\n"
+        instagram_caption = ""
         if description_text:
-            instagram_caption += f"{description_text}...\n\n"
+            instagram_caption = f"✨ {description_text}\n\n"
         instagram_caption += f"#reels #explore {' '.join(base_hashtags[:5])}"
     
-    captions['instagram'] = instagram_caption
+    captions['instagram'] = instagram_caption.strip()
     
-    # YouTube caption - use description_text to avoid duplication
+    # YouTube caption - description only, no title
     if is_humorous:
-        youtube_caption = f"{title} 😂\n\n"
+        youtube_caption = ""
         if description_text:
-            youtube_caption += f"{description_text}\n\n"
+            youtube_caption = f"{description_text} 😂\n\n"
         youtube_caption += f"Don't forget to like and subscribe for more!\n\nTopics: {topics_str}"
     elif is_professional:
-        youtube_caption = f"{title}\n\n"
+        youtube_caption = ""
         if description_text:
-            youtube_caption += f"{description_text}\n\n"
+            youtube_caption = f"{description_text}\n\n"
         youtube_caption += f"For more professional content, subscribe to our channel.\n\nTopics: {topics_str}"
     elif is_casual:
-        youtube_caption = f"{title}\n\n"
+        youtube_caption = ""
         if description_text:
-            youtube_caption += f"{description_text}\n\n"
+            youtube_caption = f"{description_text}\n\n"
         youtube_caption += f"Thanks for watching! 💜\n\nTopics: {topics_str}"
     else:
-        youtube_caption = f"{title}\n\n"
+        youtube_caption = ""
         if description_text:
-            youtube_caption += f"{description_text}\n\n"
+            youtube_caption = f"{description_text}\n\n"
         youtube_caption += f"Topics: {topics_str}"
     
-    captions['youtube'] = youtube_caption
+    captions['youtube'] = youtube_caption.strip()
+    
+    # Generate for additional platforms with proper limits
+    # NOTE: All descriptions should NOT include the title - title is separate
+    
+    # Twitter/X - description only (short platform)
+    twitter_limit = platform_limits['twitter']
+    twitter_caption = ""
+    if description_text:
+        twitter_caption = truncate_to_limit(description_text, twitter_limit.description_target - 40)
+    if include_hashtags and base_hashtags:
+        twitter_caption += f" {' '.join(base_hashtags[:2])}"
+    captions['twitter'] = truncate_to_limit(twitter_caption.strip(), twitter_limit.description_target)
+    
+    # Threads - description only
+    threads_limit = platform_limits['threads']
+    threads_caption = ""
+    if description_text:
+        threads_caption = f"✨ {truncate_to_limit(description_text, threads_limit.description_target - 50)}\n\n"
+    if include_hashtags and base_hashtags:
+        threads_caption += ' '.join(base_hashtags[:3])
+    captions['threads'] = truncate_to_limit(threads_caption.strip(), threads_limit.description_target)
+    
+    # Pinterest - description only
+    pinterest_limit = platform_limits['pinterest']
+    pinterest_title = truncate_to_limit(title, pinterest_limit.title_target)
+    pinterest_desc = description_text if description_text else f"Discover insights about {topics[0] if topics else 'this topic'}"
+    captions['pinterest'] = truncate_to_limit(pinterest_desc, pinterest_limit.description_target)
+    captions['pinterest_title'] = pinterest_title
+    
+    # LinkedIn - description only
+    linkedin_limit = platform_limits['linkedin']
+    linkedin_caption = ""
+    if description_text:
+        linkedin_caption = f"{description_text}\n\n"
+    linkedin_caption += "What are your thoughts? Share in the comments below."
+    if include_hashtags and base_hashtags:
+        linkedin_caption += f"\n\n{' '.join(base_hashtags[:5])}"
+    captions['linkedin'] = truncate_to_limit(linkedin_caption.strip(), linkedin_limit.description_target)
+    
+    # Bluesky - description only
+    bluesky_limit = platform_limits['bluesky']
+    bluesky_caption = ""
+    if description_text:
+        bluesky_caption = truncate_to_limit(description_text, bluesky_limit.description_target - 30)
+    captions['bluesky'] = truncate_to_limit(bluesky_caption.strip(), bluesky_limit.description_target)
+    
+    # Facebook - description only
+    facebook_limit = platform_limits['facebook']
+    facebook_caption = ""
+    if description_text:
+        facebook_caption = f"{description_text}\n\n"
+    if include_hashtags and base_hashtags:
+        facebook_caption += ' '.join(base_hashtags[:3])
+    captions['facebook'] = truncate_to_limit(facebook_caption.strip(), facebook_limit.description_target)
+    
+    # Enforce limits on previously generated captions
+    captions['tiktok'] = truncate_to_limit(captions['tiktok'], platform_limits['tiktok'].description_target)
+    captions['instagram'] = truncate_to_limit(captions['instagram'], platform_limits['instagram'].description_target)
+    captions['youtube'] = truncate_to_limit(captions['youtube'], platform_limits['youtube'].description_target)
+    
+    # Log character counts for debugging
+    for p, caption in captions.items():
+        if p in platform_limits:
+            limit = platform_limits[p].description_target
+            logger.info(f"[_generate_platform_captions] 📏 {p}: {len(caption)}/{limit} chars")
     
     return captions
 

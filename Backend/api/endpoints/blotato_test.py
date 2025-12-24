@@ -98,3 +98,56 @@ async def trigger_scraper(provider: str):
         message=f"Scraper job started for {provider}",
         data={"job_id": f"scrape_{provider}_456", "status": "pending"}
     )
+
+
+@router.get("/accounts")
+async def get_blotato_accounts():
+    """
+    Get all connected Blotato accounts with their IDs.
+    These IDs are used when publishing content to match MediaPoster accounts to Blotato accounts.
+    """
+    # Blotato Account ID mappings from the user's Blotato dashboard
+    # Source: https://app.blotato.com/settings/accounts
+    accounts = [
+        # TikTok accounts
+        {"id": 710, "platform": "tiktok", "username": "isaiah_dupree", "fullname": "Isaiah Dupree"},
+        {"id": 243, "platform": "tiktok", "username": "the_isaiah_dupree", "fullname": "The Isaiah Dupree"},
+        {"id": 4508, "platform": "tiktok", "username": "dupree_isaiah", "fullname": "Dupree Isaiah"},
+        {"id": 571, "platform": "tiktok", "username": "soursides_is_sour", "fullname": "Soursides"},
+        
+        # Instagram accounts
+        {"id": 807, "platform": "instagram", "username": "the_isaiah_dupree", "fullname": "The Isaiah Dupree"},
+        {"id": 670, "platform": "instagram", "username": "the_isaiah_dupree_", "fullname": "The Isaiah Dupree"},
+        {"id": 1369, "platform": "instagram", "username": "dupree_isaiah_", "fullname": "Dupree Isaiah"},
+        {"id": 4508, "platform": "instagram", "username": "dupree_isaiah", "fullname": "Dupree Isaiah"},
+        
+        # YouTube accounts
+        {"id": 228, "platform": "youtube", "username": "UCnDBsELI2OlaEl5yxA77HNA", "fullname": "Isaiah Dupree"},
+        {"id": 3370, "platform": "youtube", "username": "lofi_creator", "fullname": "lofi creator"},
+        
+        # Twitter/X accounts
+        {"id": 4151, "platform": "twitter", "username": "soursides_is_sour", "fullname": "Soursides"},
+        {"id": 4151, "platform": "twitter", "username": "IsaiahDupree7", "fullname": "Isaiah Dupree"},
+        
+        # Threads accounts
+        {"id": 1369, "platform": "threads", "username": "dupree_isaiah_", "fullname": "Dupree Isaiah"},
+        {"id": 4150, "platform": "threads", "username": "isaiahdupree75", "fullname": "Isaiah Dupree"},
+        {"id": 173, "platform": "threads", "username": "the_isaiah_dupree_", "fullname": "The Isaiah Dupree"},
+        {"id": 201, "platform": "threads", "username": "the_isaiah_dupree", "fullname": "The Isaiah Dupree"},
+        
+        # Pinterest accounts
+        {"id": 173, "platform": "pinterest", "username": "isaiahdupree33", "fullname": "Isaiah Dupree"},
+        {"id": 243, "platform": "pinterest", "username": "isaiahdupree75", "fullname": "Isaiah Dupree"},
+        
+        # LinkedIn accounts
+        {"id": 571, "platform": "linkedin", "username": "IsaiahDupree7", "fullname": "Isaiah Dupree"},
+        
+        # Facebook accounts
+        {"id": 786, "platform": "facebook", "username": "Isaiah Dupree", "fullname": "Isaiah Dupree"},
+        
+        # Bluesky accounts
+        {"id": 201, "platform": "bluesky", "username": "isaiahdupree.bsky.social", "fullname": "Isaiah Dupree"},
+        {"id": 201, "platform": "bluesky", "username": "the_isaiah_dupree_", "fullname": "The Isaiah Dupree"},
+    ]
+    
+    return accounts

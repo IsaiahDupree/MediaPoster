@@ -647,6 +647,10 @@ app.include_router(analytics_compare.router, tags=["Analytics Compare"])
 
 # Posted Media (Published content from connected accounts)
 from api import posted_media
+
+# Instagram TrendTok (Instagram analytics and trend discovery)
+from api.endpoints import instagram_api
+app.include_router(instagram_api.router, prefix="/api/instagram", tags=["Instagram TrendTok"])
 app.include_router(posted_media.router, tags=["Posted Media"])
 
 # Database Backup endpoints

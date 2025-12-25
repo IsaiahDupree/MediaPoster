@@ -651,6 +651,10 @@ from api import posted_media
 # Instagram TrendTok (Instagram analytics and trend discovery)
 from api.endpoints import instagram_api
 app.include_router(instagram_api.router, prefix="/api/instagram", tags=["Instagram TrendTok"])
+
+# Trends API (Trending audio, hashtags, formats)
+from api.endpoints import trends_api
+app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discovery"])
 app.include_router(posted_media.router, tags=["Posted Media"])
 
 # Database Backup endpoints

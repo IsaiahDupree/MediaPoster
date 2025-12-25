@@ -224,7 +224,15 @@ class InstagramTarget:
 
 @dataclass
 class TikTokTarget:
-    """TikTok-specific target configuration"""
+    """TikTok-specific target configuration
+    
+    IMPORTANT: is_ai_generated defaults to False because most content
+    from MediaPoster is user-recorded iPhone videos, NOT AI-generated.
+    Only set to True if the content was actually created by AI (e.g., 
+    Blotato video creation, AI image generators, etc.)
+    
+    TikTok requires accurate disclosure of AI-generated content.
+    """
     target_type: str = "tiktok"
     privacy_level: TikTokPrivacy = TikTokPrivacy.PUBLIC
     disabled_comments: bool = False
@@ -232,7 +240,7 @@ class TikTokTarget:
     disabled_stitch: bool = False
     is_branded_content: bool = False
     is_your_brand: bool = False
-    is_ai_generated: bool = True
+    is_ai_generated: bool = False  # Default FALSE - most content is real iPhone videos
     title: Optional[str] = None
     auto_add_music: bool = False
     is_draft: bool = False

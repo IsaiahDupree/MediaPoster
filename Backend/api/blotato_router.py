@@ -75,7 +75,7 @@ class PublishPostRequest(BaseModel):
     tiktok_disabled_duet: bool = Field(default=False)
     tiktok_disabled_stitch: bool = Field(default=False)
     tiktok_is_branded: bool = Field(default=False)
-    tiktok_is_ai_generated: bool = Field(default=True)
+    tiktok_is_ai_generated: bool = Field(default=False, description="Only True for AI-generated content, not iPhone videos")
     
     # Pinterest
     pinterest_board_id: Optional[str] = Field(default=None, description="Pinterest board ID")
@@ -425,7 +425,7 @@ async def bulk_publish(request: BulkPublishRequest):
             elif platform == Platform.TIKTOK:
                 target = TikTokTarget(
                     privacy_level=TikTokPrivacy.PUBLIC,
-                    is_ai_generated=True,
+                    is_ai_generated=False,  # Real user content, not AI
                 )
             elif platform == Platform.THREADS:
                 target = ThreadsTarget()

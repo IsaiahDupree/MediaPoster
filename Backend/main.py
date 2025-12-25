@@ -605,6 +605,10 @@ app.include_router(publishing.router, prefix="/api/publishing", tags=["Publishin
 from api.endpoints import storage
 app.include_router(storage.router, prefix="/api", tags=["Storage Management"])
 
+# AI-Assisted Curation (Sentiment, Duplicates, Auto-curate, Bulk ops)
+from api import ai_curation
+app.include_router(ai_curation.router, tags=["AI Curation"])
+
 # Media Processing (Mobile/Web uploads with smart resume)
 from api import media_processing
 app.include_router(media_processing.router, tags=["Media Processing"])
@@ -640,6 +644,22 @@ app.include_router(analytics_compare.router, tags=["Analytics Compare"])
 # Posted Media (Published content from connected accounts)
 from api import posted_media
 app.include_router(posted_media.router, tags=["Posted Media"])
+
+# Database Backup endpoints
+from api.endpoints import backup
+app.include_router(backup.router, tags=["Database Backup"])
+
+# Analysis Health endpoints
+from api.endpoints import analysis_health
+app.include_router(analysis_health.router, tags=["Analysis Health"])
+
+# Analysis Validation endpoints
+from api.endpoints import analysis_validation
+app.include_router(analysis_validation.router, tags=["Analysis Validation"])
+
+# Comprehensive App Validation endpoints
+from api.endpoints import app_validation
+app.include_router(app_validation.router, tags=["App Validation"])
 
 # Content Growth (Metrics tracking over time)
 from api import content_growth

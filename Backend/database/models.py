@@ -1265,6 +1265,7 @@ class Video(Base):
     source_type = Column(Text, nullable=False)  # 'local', 'gdrive', 'supabase', 's3', 'other'
     source_uri = Column(Text, nullable=False)
     file_name = Column(Text)
+    title = Column(String(150))  # AI-generated title (~20% of platform char limit)
     file_size = Column(BigInteger)  # File size in bytes (supports up to ~9.2 exabytes)
     duration_sec = Column(Integer)
     resolution = Column(Text)
@@ -1274,6 +1275,11 @@ class Video(Base):
     thumbnail_path = Column(Text)
     thumbnail_generated_at = Column(TIMESTAMP(timezone=True))
     best_frame_score = Column(Numeric(5, 3))
+    
+    # Curation fields
+    curation_status = Column(Text, default='pending')  # 'pending', 'approved', 'rejected'
+    auto_curated = Column(Boolean, default=False)
+    auto_curation_reason = Column(Text)
     
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -1306,6 +1312,11 @@ class VideoAnalysis(Base):
     music_suggestion = Column(JSONB)  # AI-suggested music recommendations
     pillar_tags = Column(ARRAY(Text))  # Content pillar categorization
     format_tags = Column(ARRAY(Text))  # Format tags
+    
+    # Sentiment analysis fields
+    sentiment_score = Column(Numeric(4, 3))  # -1.0 to 1.0
+    sentiment_label = Column(Text)  # 'very_negative', 'negative', 'neutral', 'positive', 'very_positive'
+    transcript_hash = Column(Text)  # For duplicate detection
     
     # Relationships
     video = relationship("Video", back_populates="analysis")

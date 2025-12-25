@@ -655,6 +655,10 @@ app.include_router(instagram_api.router, prefix="/api/instagram", tags=["Instagr
 # Trends API (Trending audio, hashtags, formats)
 from api.endpoints import trends_api
 app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discovery"])
+
+# Content Analyzer API (AI-powered video analysis)
+from api.endpoints import content_analyzer_api
+app.include_router(content_analyzer_api.router, prefix="/api/content-analyzer", tags=["Content Analyzer"])
 app.include_router(posted_media.router, tags=["Posted Media"])
 
 # Database Backup endpoints

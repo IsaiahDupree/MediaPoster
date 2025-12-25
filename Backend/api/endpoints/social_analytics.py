@@ -109,9 +109,9 @@ async def get_dashboard_overview():
                 COALESCE(SUM(followers_count), 0) as total_followers,
                 COALESCE(SUM(posts_count), 0) as total_posts,
                 COALESCE(SUM(total_views), 0) as total_views,
-                COALESCE(SUM(total_likes), 0) as total_likes,
-                COALESCE(SUM(total_comments), 0) as total_comments,
-                COALESCE(AVG(engagement_rate), 0) as avg_engagement_rate
+                0 as total_likes,
+                0 as total_comments,
+                0 as avg_engagement_rate
             FROM social_media_accounts
             WHERE is_active = TRUE
         """)).fetchone()
@@ -124,8 +124,8 @@ async def get_dashboard_overview():
                 COALESCE(SUM(followers_count), 0) as total_followers,
                 COALESCE(SUM(posts_count), 0) as total_posts,
                 COALESCE(SUM(total_views), 0) as total_views,
-                COALESCE(SUM(total_likes), 0) as total_likes,
-                COALESCE(AVG(engagement_rate), 0) as avg_engagement_rate
+                0 as total_likes,
+                0 as avg_engagement_rate
             FROM social_media_accounts
             WHERE is_active = TRUE
             GROUP BY platform
@@ -179,17 +179,17 @@ async def get_all_accounts(
             SELECT 
                 platform,
                 username,
-                account_status,
+                'active' as account_status,
                 COALESCE(followers_count, 0) as followers_count,
                 COALESCE(total_views, 0) as total_views,
-                COALESCE(total_likes, 0) as total_likes,
-                COALESCE(total_comments, 0) as total_comments,
-                COALESCE(engagement_rate, 0) as engagement_rate,
-                COALESCE(follower_growth, 0) as follower_growth,
+                0 as total_likes,
+                0 as total_comments,
+                0 as engagement_rate,
+                0 as follower_growth,
                 COALESCE(posts_count, 0) as posts_count,
                 last_fetched_at
-            FROM social_analytics_latest
-            WHERE 1=1
+            FROM social_media_accounts
+            WHERE is_active = TRUE
         """
         
         params = {}

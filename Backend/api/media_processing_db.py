@@ -250,9 +250,10 @@ async def list_media(
     for video in videos:
         # Try to get analysis with raw SQL to handle schema differences
         analysis = None
+        curation_status = None
         try:
             analysis_result = await db.execute(
-                text("SELECT video_id, transcript, topics, pre_social_score FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
+                text("SELECT video_id, transcript, topics, pre_social_score, curation_status FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
                 {"vid": str(video.id)}
             )
             row = analysis_result.fetchone()
@@ -272,6 +273,8 @@ async def list_media(
                     "topics": topics,
                     "pre_social_score": float(row[3]) if row[3] is not None else None
                 }
+                # Extract curation_status (column index 4)
+                curation_status = row[4] if len(row) > 4 else None
         except Exception as e:
             logger.warning(f"Failed to fetch analysis for video {video.id}: {e}", exc_info=True)
         
@@ -310,7 +313,7 @@ async def list_media(
                 pre_social_score=analysis["pre_social_score"] if analysis else None,
                 transcript=analysis["transcript"] if analysis else None,
                 topics=analysis["topics"] if analysis else None,
-                curation_status=None,  # Column doesn't exist in current schema
+                curation_status=curation_status,  # Will be None if not curated, or 'pending'/'approved'/'rejected' if set
                 created_at=video.created_at.isoformat() if video.created_at else "",
                 updated_at=video.updated_at.isoformat() if video.updated_at else None
             ))

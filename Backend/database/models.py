@@ -1318,6 +1318,10 @@ class VideoAnalysis(Base):
     sentiment_label = Column(Text)  # 'very_negative', 'negative', 'neutral', 'positive', 'very_positive'
     transcript_hash = Column(Text)  # For duplicate detection
     
+    # Curation fields
+    curation_status = Column(Text)  # 'pending', 'approved', 'rejected'
+    curated_at = Column(TIMESTAMP(timezone=True))
+    
     # Relationships
     video = relationship("Video", back_populates="analysis")
 

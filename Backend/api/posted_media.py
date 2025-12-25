@@ -261,6 +261,70 @@ async def list_posted_media(
         )
 
 
+@router.get("/all")
+async def get_all_posted_media_ids(
+    days: int = Query(90, description="Number of days to look back"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all media IDs that have been posted.
+    Returns a simple list of media IDs for quick lookup.
+    Used by frontend to mark which media items have been posted.
+    """
+    try:
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        posted_media_ids = set()
+        
+        # Get media IDs from PostedContent table
+        pc_query = select(PostedContent.media_id).filter(
+            PostedContent.status == "published",
+            PostedContent.posted_at >= cutoff_date,
+            PostedContent.media_id.isnot(None)
+        )
+        pc_result = await db.execute(pc_query)
+        pc_ids = pc_result.scalars().all()
+        for media_id in pc_ids:
+            if media_id:
+                posted_media_ids.add(str(media_id))
+        
+        # Get media IDs from ScheduledPost table (via clip_id or content_variant_id)
+        sp_query = select(ScheduledPost).filter(
+            ScheduledPost.status == "published",
+            ScheduledPost.scheduled_time >= cutoff_date
+        )
+        sp_result = await db.execute(sp_query)
+        scheduled_posts = sp_result.scalars().all()
+        
+        for post in scheduled_posts:
+            # Get video_id from clip or content_variant
+            try:
+                if post.clip_id:
+                    # Get video_id from video_clips table
+                    clip_query = select(VideoClip.video_id).filter(VideoClip.id == post.clip_id)
+                    clip_result = await db.execute(clip_query)
+                    video_id = clip_result.scalar_one_or_none()
+                    if video_id:
+                        posted_media_ids.add(str(video_id))
+                elif post.content_variant_id:
+                    # Content variants also reference videos
+                    # For now, use content_variant_id as the media_id
+                    posted_media_ids.add(str(post.content_variant_id))
+            except Exception as e:
+                # Log but don't fail - some posts might have invalid references
+                logger.warning(f"Error getting video_id for scheduled post {post.id}: {e}")
+                continue
+        
+        return {
+            "posted_media_ids": list(posted_media_ids),
+            "count": len(posted_media_ids),
+            "days": days
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching all posted media IDs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch posted media IDs: {str(e)}")
+
+
 @router.get("/platforms")
 async def get_platform_breakdown(
     days: int = Query(30, description="Number of days to look back"),

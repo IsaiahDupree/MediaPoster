@@ -10,7 +10,7 @@ from datetime import datetime
 import uuid
 
 from database.connection import get_db
-from database.models import VideoClip, ScheduledPost
+from database.models import VideoClip, ScheduledPost, VideoAnalysis, Video
 from sqlalchemy import select, update
 from loguru import logger
 from services.event_bus import EventBus, Topics
@@ -123,7 +123,80 @@ async def schedule_post(
     else:
         raise HTTPException(status_code=400, detail="Either clip_id or media_project_id must be provided")
     
+    # Validate scheduled time is in the future
+    from datetime import timezone
+    now = datetime.now(timezone.utc)
+    if request.scheduled_time.tzinfo is None:
+        request.scheduled_time = request.scheduled_time.replace(tzinfo=timezone.utc)
+    
+    if request.scheduled_time < now:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot schedule post in the past. Please use a future time."
+        )
+    
+    # Validate platforms list
+    if not request.platforms or len(request.platforms) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one platform must be specified"
+        )
+    
     try:
+        # Fetch proper title and caption if not provided
+        proper_title = request.title
+        proper_caption = request.caption
+        
+        # If title/caption not provided, try to fetch from analysis
+        if not proper_title or not proper_caption:
+            try:
+                if clip_id:
+                    result = await db.execute(
+                        select(VideoClip).filter(VideoClip.id == clip_id)
+                    )
+                    clip = result.scalar_one_or_none()
+                    if clip and clip.video_id:
+                        # Get video title
+                        video_result = await db.execute(
+                            select(Video).filter(Video.id == clip.video_id)
+                        )
+                        video = video_result.scalar_one_or_none()
+                        if video and video.title and not proper_title:
+                            proper_title = video.title
+                        
+                        # Get caption from analysis (platform_content preferred)
+                        analysis_result = await db.execute(
+                            select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
+                        )
+                        analysis = analysis_result.scalar_one_or_none()
+                        if analysis and not proper_caption:
+                            # Try platform_content first, then hooks, then topics
+                            if analysis.platform_content:
+                                import json
+                                try:
+                                    pc_list = analysis.platform_content if isinstance(analysis.platform_content, list) else json.loads(analysis.platform_content) if isinstance(analysis.platform_content, str) else []
+                                    for pc in pc_list:
+                                        if pc.get('platform') == request.platforms[0] if request.platforms else 'tiktok':
+                                            proper_caption = pc.get('description') or pc.get('caption')
+                                            break
+                                except:
+                                    pass
+                            
+                            # Fallback to hooks or topics, NOT transcript
+                            if not proper_caption:
+                                if analysis.hooks and len(analysis.hooks) > 0:
+                                    proper_caption = analysis.hooks[0]
+                                elif analysis.topics and len(analysis.topics) > 0:
+                                    proper_caption = f"Discover: {', '.join(analysis.topics[:2])}"
+            except Exception as e:
+                logger.warning(f"Could not fetch title/caption from analysis: {e}")
+        
+        # Fallback to generic values if still missing
+        if not proper_title or proper_title.startswith(('IMG_', 'VID_', 'MOV_')) or len(proper_title) < 5:
+            proper_title = "Check this out"
+        if not proper_caption:
+            proper_caption = "Check out this content!"
+        
         # Create scheduled post records for each platform
         scheduled_posts = []
         for platform in request.platforms:
@@ -132,7 +205,10 @@ async def schedule_post(
                 media_project_id=request.media_project_id,
                 platform=platform,
                 scheduled_time=request.scheduled_time,
-                status='scheduled'
+                status='scheduled',
+                title=proper_title,  # Store proper title, not filename
+                caption=proper_caption,  # Store proper caption, not transcript
+                hashtags=request.hashtags or []  # Store hashtags
             )
             db.add(scheduled_post)
             scheduled_posts.append(scheduled_post)
@@ -157,21 +233,24 @@ async def schedule_post(
             logger.warning(f"[PubSub] Failed to emit schedule event: {e}")
         
         # Schedule via Blotato in background if media URL available
+        # IMPORTANT: Create a background task for EACH platform, not just the first one
         if media_url:
             from pathlib import Path
             content_id = str(request.media_project_id) if request.media_project_id else str(clip_id)
-            background_tasks.add_task(
-                _publish_via_blotato,
-                str(scheduled_posts[0].id),
-                content_id,
-                str(media_url),
-                request.platforms,
-                request.scheduled_time,
-                request.caption,
-                request.hashtags,
-                request.title,  # Pass title explicitly
-                content_source
-            )
+            # Create background task for each scheduled post (one per platform)
+            for scheduled_post in scheduled_posts:
+                background_tasks.add_task(
+                    _publish_via_blotato,
+                    str(scheduled_post.id),
+                    content_id,
+                    str(media_url),
+                    [scheduled_post.platform],  # Single platform per post
+                    request.scheduled_time,
+                    proper_caption,  # Use the proper caption we fetched
+                    request.hashtags,
+                    proper_title,  # Use the proper title we fetched
+                    content_source
+                )
         
         return PostResponse(
             post_id=str(scheduled_posts[0].id),
@@ -198,46 +277,106 @@ async def _publish_via_blotato(
     title: Optional[str] = None,
     content_source: str = "clip"
 ):
-    """Background task to publish via Blotato"""
+    """Background task to schedule/publish via Blotato
+    
+    IMPORTANT: This function should only be called for FUTURE scheduled posts.
+    For posts that are due now, let the scheduler worker handle them to avoid
+    double publishing.
+    """
     from pathlib import Path
     from modules.publishing.publisher import ContentPublisher
     from database.connection import async_session_maker
     from database.models import ScheduledPost, VideoClip, VideoAnalysis
     from sqlalchemy import update, select
     from loguru import logger
+    from datetime import timezone
     
     try:
+        # SAFEGUARD 1: Check if post is already being processed or published
+        async with async_session_maker() as db:
+            result = await db.execute(
+                select(ScheduledPost).filter(ScheduledPost.id == uuid.UUID(post_id))
+            )
+            post = result.scalar_one_or_none()
+            
+            if not post:
+                logger.error(f"Post {post_id} not found")
+                return
+            
+            # If already published or publishing, skip
+            if post.status in ('published', 'publishing'):
+                logger.warning(f"Post {post_id} already {post.status}, skipping")
+                return
+            
+            # SAFEGUARD 2: Atomically update status to 'publishing' to prevent concurrent processing
+            # Only update if status is still 'scheduled'
+            update_result = await db.execute(
+                update(ScheduledPost)
+                .where(
+                    ScheduledPost.id == uuid.UUID(post_id),
+                    ScheduledPost.status == 'scheduled'  # Only update if still scheduled
+                )
+                .values(status='publishing')
+            )
+            await db.commit()
+            
+            # If no rows were updated, another process is already handling this post
+            if update_result.rowcount == 0:
+                logger.warning(f"Post {post_id} status changed by another process, skipping")
+                return
+        
+        # SAFEGUARD 3: Only handle future posts here, let scheduler handle due posts
+        now = datetime.now(timezone.utc)
+        if scheduled_time.tzinfo is None:
+            scheduled_time = scheduled_time.replace(tzinfo=timezone.utc)
+        
+        # If post is due now or in the past, let the scheduler handle it
+        if scheduled_time <= now:
+            logger.info(f"Post {post_id} is due now, letting scheduler handle it")
+            # Reset status back to scheduled so scheduler can pick it up
+            async with async_session_maker() as db:
+                await db.execute(
+                    update(ScheduledPost)
+                    .where(ScheduledPost.id == uuid.UUID(post_id))
+                    .values(status='scheduled')
+                )
+                await db.commit()
+            return
+        
         publisher = ContentPublisher(use_blotato=True, use_cloud_staging=True)
         
-        # Calculate delay in minutes
-        delay_minutes = None
-        if scheduled_time > datetime.now(scheduled_time.tzinfo):
-            delta = scheduled_time - datetime.now(scheduled_time.tzinfo)
-            delay_minutes = int(delta.total_seconds() / 60)
+        # Calculate delay in minutes for future posts
+        delta = scheduled_time - now
+        delay_minutes = int(delta.total_seconds() / 60)
         
         # Fetch proper title from database if not provided
         proper_title = title
         if not proper_title or proper_title.startswith(('IMG_', 'VID_', 'MOV_')) or len(proper_title) < 5:
             try:
                 async with async_session_maker() as db:
-                    # Try to get title from clip's video analysis
+                    from database.models import Video
+                    # Try to get title from clip's video
                     if content_source == "clip":
                         result = await db.execute(
                             select(VideoClip).filter(VideoClip.id == uuid.UUID(content_id))
                         )
                         clip = result.scalar_one_or_none()
                         if clip and clip.video_id:
-                            analysis_result = await db.execute(
-                                select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
+                            # Get video title first
+                            video_result = await db.execute(
+                                select(Video).filter(Video.id == clip.video_id)
                             )
-                            analysis = analysis_result.scalar_one_or_none()
-                            if analysis:
-                                # Use AI-generated title from analysis if available
-                                proper_title = (
-                                    getattr(analysis, 'title', None) or
-                                    (analysis.topics[0] if analysis.topics and len(analysis.topics) > 0 else None) or
-                                    None
+                            video = video_result.scalar_one_or_none()
+                            if video and video.title:
+                                proper_title = video.title
+                            else:
+                                # Fallback to analysis topics if no video title
+                                analysis_result = await db.execute(
+                                    select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
                                 )
+                                analysis = analysis_result.scalar_one_or_none()
+                                if analysis and analysis.topics and len(analysis.topics) > 0:
+                                    proper_title = analysis.topics[0]
             except Exception as e:
                 logger.warning(f"Could not fetch title from database: {e}")
         
@@ -258,20 +397,34 @@ async def _publish_via_blotato(
         )
         
         # Update scheduled post status
+        # Note: For scheduled posts, status should be 'scheduled' (Blotato will publish later)
+        # Only mark as 'published' if it was published immediately (shouldn't happen for future posts)
         async with async_session_maker() as db:
-            await db.execute(
-                update(ScheduledPost)
-                .where(ScheduledPost.id == uuid.UUID(post_id))
-                .values(
-                    status='published' if result.get('success') else 'failed',
-                    platform_post_id=str(result.get('posts', {}).get('post_id', '')),
-                    platform_url=result.get('posts', {}).get('url', ''),
-                    published_at=datetime.now() if result.get('success') else None
+            if result.get('success'):
+                # If Blotato scheduled it successfully, keep status as 'scheduled'
+                # The scheduler will update to 'published' when Blotato actually publishes it
+                await db.execute(
+                    update(ScheduledPost)
+                    .where(ScheduledPost.id == uuid.UUID(post_id))
+                    .values(
+                        status='scheduled',  # Keep as scheduled, Blotato will publish later
+                        platform_post_id=str(result.get('posts', {}).get('post_id', '')),
+                        platform_url=result.get('posts', {}).get('url', '')
+                        # Don't set published_at yet - that happens when actually published
+                    )
                 )
-            )
+                logger.success(f"Post {post_id} scheduled with Blotato successfully")
+            else:
+                # Mark as failed if scheduling failed
+                await db.execute(
+                    update(ScheduledPost)
+                    .where(ScheduledPost.id == uuid.UUID(post_id))
+                    .values(
+                        status='failed',
+                        error_message=str(result.get('error', 'Unknown error'))
+                    )
+                )
             await db.commit()
-        
-        logger.success(f"Post {post_id} published successfully")
         
     except Exception as e:
         logger.error(f"Error publishing post {post_id}: {e}")

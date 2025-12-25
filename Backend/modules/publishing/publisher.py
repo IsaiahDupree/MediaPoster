@@ -103,7 +103,11 @@ class ContentPublisher:
                 # Prepare caption and hashtags
                 caption = metadata.get('caption', metadata.get('hook_text', ''))
                 hashtags = metadata.get('hashtags', [])
-                title = metadata.get('title', clip_path.stem)
+                # Use provided title, avoid filename fallback
+                title = metadata.get('title')
+                if not title or title.startswith(('IMG_', 'VID_', 'MOV_')) or title == clip_path.stem:
+                    # If title is missing or just a filename, use generic title
+                    title = "Check this out"  # Generic fallback, not filename
                 
                 # Post to platforms
                 post_result = self.blotato.post_clip(

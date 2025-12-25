@@ -190,14 +190,19 @@ async def list_scheduled_posts(
                 sp.title,
                 (SELECT pc->>'title' FROM jsonb_array_elements(COALESCE(va.platform_content, '[]'::jsonb)) pc WHERE pc->>'platform' = sp.platform LIMIT 1),
                 v.title,
-                v.file_name,
-                'Untitled'
+                -- Don't fall back to filename - use generic title instead
+                'Check this out'
             ) as title, 
             COALESCE(
                 sp.caption,
                 (SELECT pc->>'description' FROM jsonb_array_elements(COALESCE(va.platform_content, '[]'::jsonb)) pc WHERE pc->>'platform' = sp.platform LIMIT 1),
-                va.transcript,
-                ''
+                -- Don't fall back to transcript - use hooks or topics instead
+                CASE 
+                    WHEN va.hooks IS NOT NULL AND array_length(va.hooks, 1) > 0 THEN va.hooks[1]
+                    WHEN va.topics IS NOT NULL AND array_length(va.topics, 1) > 0 THEN 'Discover: ' || array_to_string(va.topics[1:2], ', ')
+                    ELSE 'Check out this content!'
+                END,
+                'Check out this content!'
             ) as caption, 
             COALESCE(
                 sp.hashtags,
@@ -210,10 +215,12 @@ async def list_scheduled_posts(
             sp.account_username,
             v.thumbnail_path as thumbnail_url,
             v.source_uri as video_source_uri,
+            v.id as video_id,  -- Add video_id for media-provider thumbnail lookup
             COALESCE(sp.clip_id::text, sp.content_variant_id::text, sp.content_id) as media_ref_id,
             COALESCE(sp.source, 'manual') as source
         FROM scheduled_posts sp
-        LEFT JOIN videos v ON v.id = sp.clip_id OR v.id = sp.content_variant_id
+        LEFT JOIN video_clips vc ON vc.id = sp.clip_id  -- Join video_clips to get video_id
+        LEFT JOIN videos v ON v.id = COALESCE(vc.video_id, sp.content_variant_id)  -- Join videos using video_id from clip or content_variant_id
         LEFT JOIN video_analysis va ON va.video_id = v.id
         WHERE {' AND '.join(where_clauses)}
         ORDER BY sp.scheduled_time ASC
@@ -225,8 +232,9 @@ async def list_scheduled_posts(
     
     posts = []
     for row in rows:
-        content_id = str(row[18]) if row[18] else (str(row[1]) if row[1] else None)  # media_ref_id
-        thumbnail = row[16]  # thumbnail_url from scheduled_posts
+        content_id = str(row[19]) if len(row) > 19 and row[19] else (str(row[1]) if row[1] else None)  # media_ref_id (updated index)
+        video_id = str(row[18]) if len(row) > 18 and row[18] else None  # video_id for media-provider
+        thumbnail = row[16]  # thumbnail_url from videos table
         video_source = row[17]  # video_source_uri
         
         # Build thumbnail URL from stored path
@@ -261,7 +269,8 @@ async def list_scheduled_posts(
         posts.append({
             "id": str(row[0]),
             "content_id": content_id,
-            "media_id": content_id,
+            "media_id": video_id or content_id,  # Use video_id for media-provider, fallback to content_id
+            "video_id": video_id,  # Explicitly include video_id for thumbnail lookup
             "title": row[12] or "Untitled",  # Now uses scheduled_posts.title (actual posted title)
             "caption": row[13] or "",  # Now uses scheduled_posts.caption (actual posted caption)
             "hashtags": hashtags_list,
@@ -280,7 +289,7 @@ async def list_scheduled_posts(
             "updated_at": str(row[10]) if row[10] else None,
             "platform_url": row[8],
             "published_at": str(row[11]) if row[11] else None,
-            "source": row[19] if len(row) > 19 else "manual",
+            "source": row[20] if len(row) > 20 else "manual",  # Updated index
         })
     
     return {"posts": posts, "total": len(posts)}
@@ -406,12 +415,72 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     updates = []
     params = {"id": post_id}
     
-    # Note: title, caption, hashtags columns don't exist in ORM model
-    # These updates are kept for backwards compatibility but may not work
+    # Check current status before allowing updates
+    with engine.connect() as conn:
+        current_status_result = conn.execute(text("""
+            SELECT status, scheduled_time FROM scheduled_posts WHERE id = :id
+        """), {"id": post_id})
+        current_row = current_status_result.fetchone()
+        if not current_row:
+            raise HTTPException(status_code=404, detail="Post not found")
+        current_status = current_row[0]
+        current_scheduled_time = current_row[1]
+    
+    # Validate status transitions
+    if update.status is not None and update.status != current_status:
+        # Don't allow updating status of posts that are publishing or published
+        if current_status in ('publishing', 'published'):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot update status of post that is {current_status}"
+            )
+        # Don't allow setting status to scheduled if post is already published
+        if update.status == 'scheduled' and current_status == 'published':
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot reschedule a post that is already published"
+            )
+    
+    # Support updating title, caption, and hashtags (columns now exist in model)
+    if update.title is not None:
+        updates.append("title = :title")
+        params["title"] = update.title
+    
+    if update.caption is not None:
+        updates.append("caption = :caption")
+        params["caption"] = update.caption
+    
+    if update.hashtags is not None:
+        updates.append("hashtags = :hashtags")
+        params["hashtags"] = json.dumps(update.hashtags) if isinstance(update.hashtags, list) else update.hashtags
     
     if update.scheduled_at is not None:
-        updates.append("scheduled_time = :scheduled_time")
-        params["scheduled_time"] = update.scheduled_at
+        # Validate new scheduled time
+        from datetime import datetime, timezone
+        try:
+            new_time = datetime.fromisoformat(update.scheduled_at.replace('Z', '+00:00')) if isinstance(update.scheduled_at, str) else update.scheduled_at
+            if new_time.tzinfo is None:
+                new_time = new_time.replace(tzinfo=timezone.utc)
+            
+            # Don't allow rescheduling to the past (unless it's a failed post being retried)
+            now = datetime.now(timezone.utc)
+            if new_time < now and current_status != 'failed':
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot schedule post in the past. Use a future time."
+                )
+            
+            # Don't allow rescheduling if post is currently publishing
+            if current_status == 'publishing':
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot reschedule a post that is currently being published"
+                )
+            
+            updates.append("scheduled_time = :scheduled_time")
+            params["scheduled_time"] = update.scheduled_at
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid scheduled_at format: {e}")
     
     if update.status is not None:
         updates.append("status = :status")
@@ -503,17 +572,70 @@ async def reschedule_post(post_id: str, new_time: str = Query(..., description="
     ensure_table_exists()
     engine = get_engine()
     
+    from datetime import datetime, timezone
+    
+    # Validate new time format and check if it's in the future
+    try:
+        parsed_time = datetime.fromisoformat(new_time.replace('Z', '+00:00'))
+        if parsed_time.tzinfo is None:
+            parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+        
+        now = datetime.now(timezone.utc)
+        if parsed_time < now:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot reschedule post to a time in the past"
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid time format: {e}")
+    
     with engine.connect() as conn:
+        # Check current status first
+        status_check = conn.execute(text("""
+            SELECT status FROM scheduled_posts WHERE id = :id
+        """), {"id": post_id})
+        status_row = status_check.fetchone()
+        
+        if not status_row:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        current_status = status_row[0]
+        
+        # Don't allow rescheduling if post is publishing or published
+        if current_status == 'publishing':
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot reschedule a post that is currently being published"
+            )
+        if current_status == 'published':
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot reschedule a post that is already published"
+            )
+        
+        # Only allow rescheduling if status is 'scheduled' or 'failed'
+        if current_status not in ('scheduled', 'failed'):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reschedule post with status: {current_status}"
+            )
+        
+        # Update the scheduled time and reset status/errors if it was failed
         result = conn.execute(text("""
             UPDATE scheduled_posts 
-            SET scheduled_time = :new_time, updated_at = NOW()
-            WHERE id = :id AND status = 'scheduled'
+            SET scheduled_time = :new_time, 
+                updated_at = NOW(),
+                status = CASE WHEN status = 'failed' THEN 'scheduled' ELSE status END,
+                retry_count = CASE WHEN status = 'failed' THEN 0 ELSE retry_count END,
+                last_error = CASE WHEN status = 'failed' THEN NULL ELSE last_error END,
+                error_message = CASE WHEN status = 'failed' THEN NULL ELSE error_message END
+            WHERE id = :id AND status IN ('scheduled', 'failed')
             RETURNING id
         """), {"id": post_id, "new_time": new_time})
         conn.commit()
         
         if not result.fetchone():
-            raise HTTPException(status_code=404, detail="Post not found or already posted")
+            raise HTTPException(status_code=404, detail="Post not found or cannot be rescheduled")
     
     return {"message": "Post rescheduled successfully"}
 

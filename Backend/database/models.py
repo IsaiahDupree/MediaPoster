@@ -976,6 +976,11 @@ class ScheduledPost(Base):
     platform = Column(String(50), nullable=False)
     platform_account_id = Column(UUID(as_uuid=True))  # References connector_configs
     
+    # Post content (stored to avoid falling back to filename/transcript)
+    title = Column(Text)  # Proper title, not filename
+    caption = Column(Text)  # Proper caption, not transcript
+    hashtags = Column(ARRAY(Text))  # Hashtags array
+    
     # Scheduling
     scheduled_time = Column(TIMESTAMP(timezone=True), nullable=False)
     

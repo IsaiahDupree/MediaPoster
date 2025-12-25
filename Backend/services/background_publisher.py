@@ -265,12 +265,22 @@ class BackgroundPublisher:
                     if caption:
                         break
             else:
-                # Fall back to suggested caption or transcript
-                caption = (
-                    analysis.get("suggested_caption") or
-                    analysis.get("transcript", "")[:200] or
-                    "Check out this content!"
-                )
+                # Fall back to suggested caption, but NOT raw transcript
+                # Generate caption from hooks/topics if available
+                hooks = analysis.get("hooks", [])
+                topics = analysis.get("topics", [])
+                
+                if hooks and len(hooks) > 0:
+                    # Use first hook as caption base
+                    caption = hooks[0]
+                    if topics:
+                        caption += f" - {', '.join(topics[:2])}"
+                elif topics and len(topics) > 0:
+                    # Create caption from topics
+                    caption = f"Discover: {', '.join(topics[:2])}"
+                else:
+                    # Generic fallback, NOT transcript
+                    caption = analysis.get("suggested_caption") or "Check out this content!"
         
         # Add hashtags
         hashtags = custom_hashtags or []

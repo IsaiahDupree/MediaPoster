@@ -345,3 +345,197 @@ async def get_combined_panel_data():
         "unified_timeline": all_events[:50],
         "timestamp": datetime.now().isoformat()
     }
+
+
+# =============================================================================
+# AGENT STATES
+# =============================================================================
+
+@router.get("/states")
+async def get_agent_states():
+    """Get current states of all agents."""
+    from services.agent_framework import get_event_bus
+    
+    bus = get_event_bus()
+    
+    return {
+        "success": True,
+        "states": bus.get_all_states(),
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+# =============================================================================
+# BUDGET TRACKING
+# =============================================================================
+
+@router.get("/budgets")
+async def get_agent_budgets():
+    """Get budget/cost tracking for all agents."""
+    import os
+    from sqlalchemy import create_engine, text
+    
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+    engine = create_engine(DATABASE_URL)
+    
+    try:
+        with engine.connect() as conn:
+            # Try to get from agent_budgets table if it exists
+            result = conn.execute(text("""
+                SELECT agent_type, api_calls_today, api_calls_limit, 
+                       tokens_used, tokens_limit, cost_today, cost_limit
+                FROM agent_budgets
+                WHERE date = CURRENT_DATE
+            """))
+            budgets = [dict(row._mapping) for row in result]
+            
+            return {
+                "success": True,
+                "budgets": budgets
+            }
+    except Exception as e:
+        # Table doesn't exist yet, return default budgets
+        logger.debug(f"Budget table not found: {e}")
+        return {
+            "success": True,
+            "budgets": [
+                {
+                    "agent_type": "narrative",
+                    "api_calls_today": 0,
+                    "api_calls_limit": 100,
+                    "tokens_used": 0,
+                    "tokens_limit": 500000,
+                    "cost_today": 0.0,
+                    "cost_limit": 5.0
+                },
+                {
+                    "agent_type": "experiments",
+                    "api_calls_today": 0,
+                    "api_calls_limit": 50,
+                    "tokens_used": 0,
+                    "tokens_limit": 250000,
+                    "cost_today": 0.0,
+                    "cost_limit": 2.5
+                },
+                {
+                    "agent_type": "content_mix",
+                    "api_calls_today": 0,
+                    "api_calls_limit": 100,
+                    "tokens_used": 0,
+                    "tokens_limit": 500000,
+                    "cost_today": 0.0,
+                    "cost_limit": 5.0
+                }
+            ]
+        }
+
+
+@router.post("/budgets/{agent_type}/track")
+async def track_api_usage(agent_type: str, tokens: int = 0, cost: float = 0.0):
+    """Track API usage for an agent."""
+    import os
+    from sqlalchemy import create_engine, text
+    
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+    engine = create_engine(DATABASE_URL)
+    
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO agent_budgets (agent_type, date, api_calls_today, tokens_used, cost_today)
+                VALUES (:agent_type, CURRENT_DATE, 1, :tokens, :cost)
+                ON CONFLICT (agent_type, date) DO UPDATE SET
+                    api_calls_today = agent_budgets.api_calls_today + 1,
+                    tokens_used = agent_budgets.tokens_used + :tokens,
+                    cost_today = agent_budgets.cost_today + :cost
+            """), {"agent_type": agent_type, "tokens": tokens, "cost": cost})
+            conn.commit()
+            
+        return {"success": True, "message": "Usage tracked"}
+    except Exception as e:
+        logger.warning(f"Failed to track budget: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# =============================================================================
+# AGENT MEMORY (LEARNINGS)
+# =============================================================================
+
+@router.get("/memories")
+async def get_agent_memories(
+    agent_type: Optional[str] = None,
+    limit: int = Query(default=10, le=50)
+):
+    """Get stored agent learnings/memories."""
+    import os
+    from sqlalchemy import create_engine, text
+    
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+    engine = create_engine(DATABASE_URL)
+    
+    try:
+        with engine.connect() as conn:
+            if agent_type:
+                result = conn.execute(text("""
+                    SELECT id, agent_type, learning, context, relevance_score, created_at
+                    FROM agent_memories
+                    WHERE agent_type = :agent_type
+                    ORDER BY relevance_score DESC, created_at DESC
+                    LIMIT :limit
+                """), {"agent_type": agent_type, "limit": limit})
+            else:
+                result = conn.execute(text("""
+                    SELECT id, agent_type, learning, context, relevance_score, created_at
+                    FROM agent_memories
+                    ORDER BY relevance_score DESC, created_at DESC
+                    LIMIT :limit
+                """), {"limit": limit})
+            
+            memories = [dict(row._mapping) for row in result]
+            
+            return {
+                "success": True,
+                "memories": memories
+            }
+    except Exception as e:
+        logger.debug(f"Memory table not found: {e}")
+        return {
+            "success": True,
+            "memories": []
+        }
+
+
+@router.post("/memories")
+async def store_agent_memory(
+    agent_type: str,
+    learning: str,
+    context: str = "",
+    relevance_score: float = 0.5
+):
+    """Store a new agent learning/memory."""
+    import os
+    import uuid
+    from sqlalchemy import create_engine, text
+    
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+    engine = create_engine(DATABASE_URL)
+    
+    try:
+        memory_id = str(uuid.uuid4())
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO agent_memories (id, agent_type, learning, context, relevance_score)
+                VALUES (:id, :agent_type, :learning, :context, :relevance_score)
+            """), {
+                "id": memory_id,
+                "agent_type": agent_type,
+                "learning": learning,
+                "context": context,
+                "relevance_score": relevance_score
+            })
+            conn.commit()
+            
+        return {"success": True, "memory_id": memory_id}
+    except Exception as e:
+        logger.warning(f"Failed to store memory: {e}")
+        return {"success": False, "error": str(e)}

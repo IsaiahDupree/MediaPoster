@@ -249,17 +249,40 @@ async def list_media(
     response = []
     for video in videos:
         # Try to get analysis with raw SQL to handle schema differences
+        # Use a more robust approach that won't break if curation_status column doesn't exist
         analysis = None
         curation_status = None
         try:
-            analysis_result = await db.execute(
-                text("SELECT video_id, transcript, topics, pre_social_score, curation_status FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
-                {"vid": str(video.id)}
-            )
-            row = analysis_result.fetchone()
+            # First try with curation_status
+            try:
+                analysis_result = await db.execute(
+                    text("SELECT video_id, transcript, topics, pre_social_score, curation_status FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
+                    {"vid": str(video.id)}
+                )
+                row = analysis_result.fetchone()
+                if row and len(row) >= 5:
+                    # Has curation_status column
+                    curation_status = row[4] if row[4] is not None else None
+                elif row:
+                    # Row exists but might not have curation_status column
+                    curation_status = None
+            except Exception as curation_error:
+                # If curation_status column doesn't exist, try without it
+                logger.warning(f"Curation status column might not exist for video {video.id}, trying without it: {curation_error}", exc_info=True)
+                try:
+                    analysis_result = await db.execute(
+                        text("SELECT video_id, transcript, topics, pre_social_score FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
+                        {"vid": str(video.id)}
+                    )
+                    row = analysis_result.fetchone()
+                    curation_status = None  # Column doesn't exist
+                except Exception as e2:
+                    logger.error(f"Failed to fetch analysis (fallback) for video {video.id}: {e2}", exc_info=True)
+                    row = None
+            
             if row:
                 # Ensure topics is a list (PostgreSQL array might be returned as list or None)
-                topics = row[2] if row[2] else None
+                topics = row[2] if len(row) > 2 and row[2] else None
                 if topics and not isinstance(topics, list):
                     # If it's a string, try to parse it
                     try:
@@ -269,14 +292,16 @@ async def list_media(
                         topics = None
                 
                 analysis = {
-                    "transcript": row[1] if row[1] else None,
+                    "transcript": row[1] if len(row) > 1 and row[1] else None,
                     "topics": topics,
-                    "pre_social_score": float(row[3]) if row[3] is not None else None
+                    "pre_social_score": float(row[3]) if len(row) > 3 and row[3] is not None else None
                 }
-                # Extract curation_status (column index 4)
-                curation_status = row[4] if len(row) > 4 else None
         except Exception as e:
-            logger.warning(f"Failed to fetch analysis for video {video.id}: {e}", exc_info=True)
+            # Log error but continue - we can still return the video without analysis
+            # This is a non-fatal error, but we should know about it
+            logger.error(f"Failed to fetch analysis for video {video.id}: {e}", exc_info=True)
+            analysis = None
+            curation_status = None
         
         # Only mark as "analyzed" if analysis is COMPLETE (has transcript AND topics AND score)
         # This prevents false positives from incomplete analysis
@@ -301,25 +326,42 @@ async def list_media(
             )
         
         try:
+            # Ensure thumbnail_path is always included, even if None
+            # Frontend can use media_id with media-provider as fallback
+            thumbnail_path = video.thumbnail_path if hasattr(video, 'thumbnail_path') and video.thumbnail_path else None
+            
+            # Safely access analysis fields
+            pre_social_score = None
+            transcript = None
+            topics = None
+            if analysis:
+                pre_social_score = analysis.get("pre_social_score") if analysis.get("pre_social_score") is not None else None
+                transcript = analysis.get("transcript") if analysis.get("transcript") else None
+                topics = analysis.get("topics") if analysis.get("topics") else None
+            
             response.append(MediaStatusResponse(
-                media_id=str(video.id),
+                media_id=str(video.id),  # This is the video_id, which media-provider needs
                 filename=video.file_name or "",
                 status=status,
-                file_path=video.source_uri,
-                file_size=video.file_size,
-                duration_sec=video.duration_sec,
-                resolution=video.resolution,
-                thumbnail_path=video.thumbnail_path,
-                pre_social_score=analysis["pre_social_score"] if analysis else None,
-                transcript=analysis["transcript"] if analysis else None,
-                topics=analysis["topics"] if analysis else None,
+                file_path=video.source_uri if hasattr(video, 'source_uri') else None,
+                file_size=video.file_size if hasattr(video, 'file_size') else None,
+                duration_sec=video.duration_sec if hasattr(video, 'duration_sec') else None,
+                resolution=video.resolution if hasattr(video, 'resolution') else None,
+                thumbnail_path=thumbnail_path,  # Explicitly set, can be None - frontend will use media-provider
+                pre_social_score=pre_social_score,
+                transcript=transcript,
+                topics=topics,
                 curation_status=curation_status,  # Will be None if not curated, or 'pending'/'approved'/'rejected' if set
                 created_at=video.created_at.isoformat() if video.created_at else "",
                 updated_at=video.updated_at.isoformat() if video.updated_at else None
             ))
         except Exception as e:
-            logger.error(f"Failed to create response for video {video.id}: {e}", exc_info=True)
-            # Skip this video if we can't serialize it
+            # This is a critical error - we're failing to serialize a video response
+            logger.error(f"CRITICAL: Failed to create response for video {video.id}: {e}", exc_info=True)
+            # Log the full video object for debugging
+            logger.error(f"Video object details: id={video.id}, filename={getattr(video, 'file_name', 'N/A')}, thumbnail_path={getattr(video, 'thumbnail_path', 'N/A')}, source_uri={getattr(video, 'source_uri', 'N/A')}")
+            # Skip this video if we can't serialize it, but log it as an error
+            # This should be investigated - it means we have data integrity issues
             continue
     
     return response

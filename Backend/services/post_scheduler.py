@@ -215,19 +215,30 @@ class PostScheduler:
         }
     
     def _get_due_posts(self, now: datetime) -> List[Dict]:
-        """Get all posts that are scheduled and due for publishing"""
+        """Get all posts that are scheduled and due for publishing
+        
+        Uses atomic status update to prevent race conditions where multiple
+        workers try to process the same post.
+        """
         with self.engine.connect() as conn:
-            # Fetch scheduled posts due for publishing
-            # Uses actual column names from scheduled_posts table
+            # Atomically update status to 'publishing' and return those posts
+            # This prevents multiple workers from processing the same post
             result = conn.execute(text("""
-                SELECT 
+                UPDATE scheduled_posts
+                SET status = 'publishing',
+                    updated_at = NOW()
+                WHERE id IN (
+                    SELECT id
+                    FROM scheduled_posts
+                    WHERE status = 'scheduled'
+                      AND scheduled_time <= :now
+                    ORDER BY scheduled_time ASC
+                    LIMIT 50
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING 
                     id, clip_id, content_variant_id, platform, 
                     platform_account_id, scheduled_time, status
-                FROM scheduled_posts
-                WHERE status = 'scheduled'
-                  AND scheduled_time <= :now
-                ORDER BY scheduled_time ASC
-                LIMIT 50
             """), {"now": now})
             
             posts = []

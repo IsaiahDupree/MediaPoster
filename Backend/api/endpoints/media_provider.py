@@ -57,8 +57,16 @@ async def get_thumbnail(
     Get thumbnail for a media file.
     Sizes: small (160px), medium (320px), large (640px)
     """
-    provider = get_media_provider()
-    return await provider.get_thumbnail_response(media_id, size)
+    try:
+        provider = get_media_provider()
+        return await provider.get_thumbnail_response(media_id, size)
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404) as-is
+        raise
+    except Exception as e:
+        # Log unexpected errors and return 500 instead of failing silently
+        logger.error(f"Unexpected error getting thumbnail for {media_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal error getting thumbnail: {str(e)}")
 
 
 @router.get("/stream/{media_id}")

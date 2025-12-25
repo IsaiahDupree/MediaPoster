@@ -112,10 +112,24 @@ async def schedule_video(client: httpx.AsyncClient, video: dict, scheduled_time:
         if hashtags:
             caption = f"{caption}\n\n{' '.join(hashtags)}"
     
+    # Generate proper title from analysis, not filename
+    title = None
+    if analysis:
+        # Try to get title from analysis
+        title = (
+            analysis.get("title") or
+            (analysis.get("topics", [])[0] if analysis.get("topics") else None) or
+            (analysis.get("hooks", [])[0] if analysis.get("hooks") else None)
+        )
+    
+    # Fallback to generic title if still no good title
+    if not title or title.startswith(('IMG_', 'VID_', 'MOV_')) or len(title) < 5:
+        title = "Check this out"
+    
     # Build schedule request
     payload = {
         "content_id": media_id,
-        "title": filename.replace(".MOV", "").replace(".mp4", ""),
+        "title": title,  # Use proper title, not filename
         "caption": caption,
         "hashtags": [],
         "platform": INSTAGRAM_ACCOUNT["platform"],

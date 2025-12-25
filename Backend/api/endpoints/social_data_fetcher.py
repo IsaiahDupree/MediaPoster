@@ -1,0 +1,281 @@
+"""
+Social Data Fetcher API
+Triggers RapidAPISocialFetcher to populate frontend pages with real data
+"""
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from typing import List, Optional
+from datetime import datetime, timedelta
+from sqlalchemy import create_engine, text
+from pydantic import BaseModel
+import os
+import asyncio
+from loguru import logger
+
+from services.rapidapi_social_fetcher import RapidAPISocialFetcher, Platform, SocialAccount
+from services.social_analytics_service import SocialAnalyticsService
+
+router = APIRouter(prefix="/api/social-data", tags=["Social Data Fetcher"])
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+engine = create_engine(DATABASE_URL)
+
+
+class FetchRequest(BaseModel):
+    platforms: Optional[List[str]] = None  # If None, fetch all
+    force_refresh: bool = False
+
+
+class FetchStatus(BaseModel):
+    status: str
+    message: str
+    accounts_queued: int
+    estimated_time_seconds: int
+
+
+@router.post("/fetch-all", response_model=FetchStatus)
+async def trigger_social_data_fetch(
+    request: FetchRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Trigger RapidAPISocialFetcher to fetch data for all accounts
+    This populates:
+    - /accounts page (account metrics)
+    - /social-metrics page (engagement data)
+    - /analytics/content page (post performance)
+    - /trends page (trending topics)
+    """
+    try:
+        # Get accounts from Blotato
+        conn = engine.connect()
+        
+        query = """
+            SELECT platform, username, id as blotato_id, fullname
+            FROM blotato_accounts
+            WHERE is_active = TRUE
+        """
+        
+        params = {}
+        if request.platforms:
+            placeholders = ','.join([f':platform_{i}' for i in range(len(request.platforms))])
+            query += f" AND platform IN ({placeholders})"
+            for i, platform in enumerate(request.platforms):
+                params[f'platform_{i}'] = platform
+        
+        results = conn.execute(text(query), params).fetchall()
+        conn.close()
+        
+        accounts_to_fetch = []
+        for row in results:
+            platform_str, username, blotato_id, fullname = row
+            accounts_to_fetch.append({
+                'platform': platform_str,
+                'username': username,
+                'blotato_id': blotato_id,
+                'fullname': fullname
+            })
+        
+        if not accounts_to_fetch:
+            return FetchStatus(
+                status="no_accounts",
+                message="No accounts found to fetch",
+                accounts_queued=0,
+                estimated_time_seconds=0
+            )
+        
+        # Queue background task
+        background_tasks.add_task(
+            fetch_social_data_background,
+            accounts_to_fetch,
+            request.force_refresh
+        )
+        
+        # Estimate time (3 seconds per account for API calls)
+        estimated_time = len(accounts_to_fetch) * 3
+        
+        return FetchStatus(
+            status="queued",
+            message=f"Fetching data for {len(accounts_to_fetch)} accounts",
+            accounts_queued=len(accounts_to_fetch),
+            estimated_time_seconds=estimated_time
+        )
+        
+    except Exception as e:
+        logger.error(f"Error triggering social data fetch: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def fetch_social_data_background(accounts: List[dict], force_refresh: bool):
+    """
+    Background task to fetch social data from RapidAPI
+    """
+    fetcher = RapidAPISocialFetcher()
+    analytics_service = SocialAnalyticsService()
+    
+    logger.info(f"Starting social data fetch for {len(accounts)} accounts")
+    
+    for account_data in accounts:
+        try:
+            platform_str = account_data['platform']
+            username = account_data['username']
+            
+            # Skip if recently fetched (unless force_refresh)
+            if not force_refresh:
+                conn = engine.connect()
+                check_query = text("""
+                    SELECT last_fetched_at
+                    FROM social_media_accounts
+                    WHERE platform = :platform AND username = :username
+                """)
+                result = conn.execute(check_query, {
+                    'platform': platform_str,
+                    'username': username
+                }).fetchone()
+                conn.close()
+                
+                if result and result[0]:
+                    last_fetched = result[0]
+                    if isinstance(last_fetched, str):
+                        last_fetched = datetime.fromisoformat(last_fetched.replace('Z', '+00:00'))
+                    
+                    # Skip if fetched within last hour
+                    if datetime.now() - last_fetched < timedelta(hours=1):
+                        logger.info(f"Skipping {platform_str}/@{username} - recently fetched")
+                        continue
+            
+            # Map platform string to enum
+            try:
+                platform = Platform(platform_str.lower())
+            except ValueError:
+                logger.warning(f"Unknown platform: {platform_str}")
+                continue
+            
+            # Create SocialAccount object
+            social_account = SocialAccount(
+                platform=platform,
+                username=username,
+                display_name=account_data.get('fullname')
+            )
+            
+            # Fetch analytics from RapidAPI
+            logger.info(f"Fetching {platform_str}/@{username} from RapidAPI...")
+            analytics = await fetcher.fetch_account_analytics(social_account)
+            
+            if analytics:
+                # Save to database
+                account_id = await analytics_service.get_or_create_account(
+                    platform=platform_str,
+                    username=username,
+                    profile_data={
+                        'full_name': analytics.bio or account_data.get('fullname'),
+                        'bio': analytics.bio,
+                        'profile_pic_url': analytics.profile_pic_url,
+                        'is_verified': analytics.is_verified,
+                        'is_business': False
+                    }
+                )
+                
+                # Save analytics snapshot
+                await analytics_service.save_account_snapshot(
+                    account_id=account_id,
+                    snapshot_data={
+                        'followers_count': analytics.followers_count,
+                        'following_count': analytics.following_count,
+                        'posts_count': analytics.posts_count,
+                        'total_views': analytics.total_views,
+                        'total_likes': analytics.total_likes,
+                        'total_comments': analytics.total_comments,
+                        'total_shares': analytics.total_shares,
+                        'engagement_rate': analytics.engagement_rate
+                    }
+                )
+                
+                # Save recent posts
+                for post in analytics.recent_posts[:10]:  # Limit to 10 most recent
+                    await analytics_service.save_post_metrics(
+                        account_id=account_id,
+                        post_data=post
+                    )
+                
+                logger.success(f"✅ Fetched {platform_str}/@{username}: {analytics.followers_count} followers, {analytics.posts_count} posts")
+            else:
+                logger.warning(f"No analytics returned for {platform_str}/@{username}")
+            
+            # Rate limiting - wait 1 second between requests
+            await asyncio.sleep(1)
+            
+        except Exception as e:
+            logger.error(f"Error fetching {account_data['platform']}/@{account_data['username']}: {e}")
+            continue
+    
+    logger.info(f"Social data fetch complete for {len(accounts)} accounts")
+
+
+@router.get("/fetch-status")
+async def get_fetch_status():
+    """
+    Get status of social data fetching
+    Returns last fetch times and account counts
+    """
+    conn = engine.connect()
+    
+    try:
+        # Get overall stats
+        stats_query = text("""
+            SELECT 
+                COUNT(*) as total_accounts,
+                COUNT(*) FILTER (WHERE last_fetched_at > NOW() - INTERVAL '1 hour') as recently_fetched,
+                COUNT(*) FILTER (WHERE last_fetched_at > NOW() - INTERVAL '24 hours') as fetched_today,
+                MAX(last_fetched_at) as last_fetch_time
+            FROM social_media_accounts
+            WHERE is_active = TRUE
+        """)
+        
+        stats = conn.execute(stats_query).fetchone()
+        
+        # Get platform breakdown
+        platform_query = text("""
+            SELECT 
+                platform,
+                COUNT(*) as account_count,
+                MAX(last_fetched_at) as last_fetch
+            FROM social_media_accounts
+            WHERE is_active = TRUE
+            GROUP BY platform
+            ORDER BY account_count DESC
+        """)
+        
+        platforms = conn.execute(platform_query).fetchall()
+        
+        return {
+            'total_accounts': stats[0] if stats else 0,
+            'recently_fetched': stats[1] if stats else 0,
+            'fetched_today': stats[2] if stats else 0,
+            'last_fetch_time': str(stats[3]) if stats and stats[3] else None,
+            'platforms': [
+                {
+                    'platform': row[0],
+                    'account_count': row[1],
+                    'last_fetch': str(row[2]) if row[2] else None
+                }
+                for row in platforms
+            ]
+        }
+        
+    finally:
+        conn.close()
+
+
+@router.post("/fetch-platform/{platform}")
+async def fetch_platform_data(
+    platform: str,
+    background_tasks: BackgroundTasks,
+    force_refresh: bool = False
+):
+    """
+    Fetch data for a specific platform only
+    """
+    return await trigger_social_data_fetch(
+        FetchRequest(platforms=[platform], force_refresh=force_refresh),
+        background_tasks
+    )

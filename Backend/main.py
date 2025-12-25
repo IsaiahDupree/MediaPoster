@@ -609,6 +609,10 @@ app.include_router(storage.router, prefix="/api", tags=["Storage Management"])
 from api import ai_curation
 app.include_router(ai_curation.router, tags=["AI Curation"])
 
+# Social Data Fetcher (RapidAPI integration for frontend pages)
+from api.endpoints import social_data_fetcher
+app.include_router(social_data_fetcher.router, tags=["Social Data Fetcher"])
+
 # Media Processing (Mobile/Web uploads with smart resume)
 from api import media_processing
 app.include_router(media_processing.router, tags=["Media Processing"])

@@ -13,7 +13,7 @@ import sys
 
 from config import settings
 from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces, trends
-from api.endpoints import event_history
+from api.endpoints import event_history, video_routing_api
 from database.connection import init_db, close_db
 
 # Event Bus imports
@@ -552,6 +552,9 @@ app.include_router(websocket.router, prefix="/api", tags=["WebSocket"])
 
 # Event History (Querying & Replay)
 app.include_router(event_history.router, tags=["Event History"])
+
+# Video Orientation & Routing (YouTube Integration)
+app.include_router(video_routing_api.router, prefix="/api/videos", tags=["Video Routing"])
 
 # Dashboard Widgets
 from api.endpoints import dashboard

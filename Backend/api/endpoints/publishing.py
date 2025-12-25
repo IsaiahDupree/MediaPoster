@@ -62,11 +62,13 @@ async def get_pending_queue():
 
 
 class ScheduleRequest(BaseModel):
-    clip_id: uuid.UUID
+    clip_id: Optional[uuid.UUID] = None
+    media_project_id: Optional[uuid.UUID] = None
     platforms: List[str]
     scheduled_time: datetime
     caption: Optional[str] = None
     hashtags: Optional[List[str]] = None
+    title: Optional[str] = None  # Proper title, not filename
 
 class PostResponse(BaseModel):
     post_id: str
@@ -167,6 +169,7 @@ async def schedule_post(
                 request.scheduled_time,
                 request.caption,
                 request.hashtags,
+                request.title,  # Pass title explicitly
                 content_source
             )
         
@@ -192,14 +195,15 @@ async def _publish_via_blotato(
     scheduled_time: datetime,
     caption: Optional[str],
     hashtags: Optional[List[str]],
+    title: Optional[str] = None,
     content_source: str = "clip"
 ):
     """Background task to publish via Blotato"""
     from pathlib import Path
     from modules.publishing.publisher import ContentPublisher
     from database.connection import async_session_maker
-    from database.models import ScheduledPost
-    from sqlalchemy import update
+    from database.models import ScheduledPost, VideoClip, VideoAnalysis
+    from sqlalchemy import update, select
     from loguru import logger
     
     try:
@@ -211,6 +215,36 @@ async def _publish_via_blotato(
             delta = scheduled_time - datetime.now(scheduled_time.tzinfo)
             delay_minutes = int(delta.total_seconds() / 60)
         
+        # Fetch proper title from database if not provided
+        proper_title = title
+        if not proper_title or proper_title.startswith(('IMG_', 'VID_', 'MOV_')) or len(proper_title) < 5:
+            try:
+                async with async_session_maker() as db:
+                    # Try to get title from clip's video analysis
+                    if content_source == "clip":
+                        result = await db.execute(
+                            select(VideoClip).filter(VideoClip.id == uuid.UUID(content_id))
+                        )
+                        clip = result.scalar_one_or_none()
+                        if clip and clip.video_id:
+                            analysis_result = await db.execute(
+                                select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
+                            )
+                            analysis = analysis_result.scalar_one_or_none()
+                            if analysis:
+                                # Use AI-generated title from analysis if available
+                                proper_title = (
+                                    getattr(analysis, 'title', None) or
+                                    (analysis.topics[0] if analysis.topics and len(analysis.topics) > 0 else None) or
+                                    None
+                                )
+            except Exception as e:
+                logger.warning(f"Could not fetch title from database: {e}")
+        
+        # Fallback to generic title if still no good title
+        if not proper_title or proper_title.startswith(('IMG_', 'VID_', 'MOV_')) or len(proper_title) < 5:
+            proper_title = "Check this out"  # Generic fallback, not filename
+        
         # Publish (works for both clips and media projects)
         result = publisher.publish_clip(
             clip_path=Path(media_path),
@@ -218,7 +252,7 @@ async def _publish_via_blotato(
             metadata={
                 'caption': caption or '',
                 'hashtags': hashtags or [],
-                'title': f'{content_source.title()} {content_id}'
+                'title': proper_title  # Use proper title, not filename or content_id
             },
             schedule_delay_minutes=delay_minutes
         )

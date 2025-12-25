@@ -217,16 +217,6 @@ async def get_trending_niches(
                         "growth": float(row.growth) if row.growth else 0.0
                     })
         
-        # If still no data, return some default niches
-        if not niches:
-            niches = [
-                {"name": "Fitness & Health", "category": "Lifestyle", "post_count": 0, "growth": 12.5},
-                {"name": "Food & Recipes", "category": "Lifestyle", "post_count": 0, "growth": 8.3},
-                {"name": "Travel & Adventure", "category": "Lifestyle", "post_count": 0, "growth": 15.2},
-                {"name": "Fashion & Style", "category": "Lifestyle", "post_count": 0, "growth": 6.7},
-                {"name": "Tech & Gadgets", "category": "Technology", "post_count": 0, "growth": 22.1},
-            ][:limit]
-        
         return {
             "count": len(niches),
             "region": region,

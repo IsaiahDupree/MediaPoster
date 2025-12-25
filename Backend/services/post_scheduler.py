@@ -67,6 +67,10 @@ class PostScheduler:
         # Event Bus integration
         self.event_bus = EventBus.get_instance()
         self.event_bus.set_source("post-scheduler")
+        
+        # Deduplication guard
+        from services.deduplication_guard import get_deduplication_guard
+        self.dedup_guard = get_deduplication_guard()
     
     @property
     def background_publisher(self):
@@ -277,6 +281,11 @@ class PostScheduler:
         5. URL polling
         
         Emits events throughout the process for workflow tracking.
+        
+        DEDUPLICATION SAFEGUARDS:
+        - Checks if already posted before publishing
+        - Uses idempotency keys to prevent duplicate API calls
+        - Locks post during publishing to prevent concurrent attempts
         """
         # Create correlation ID for this publish workflow
         correlation_id = str(uuid4())
@@ -284,6 +293,60 @@ class PostScheduler:
         media_id = str(post.get("content_id")) if post.get("content_id") else None
         platform = post.get("platform")
         account_id = str(post.get("account_id")) if post.get("account_id") else None
+        
+        # SAFEGUARD 1: Check if already posted
+        if media_id and self.dedup_guard.is_already_posted(media_id, platform, account_id):
+            logger.warning(f"⚠️ DUPLICATE PREVENTED: {media_id} already posted to {platform}")
+            return {
+                "success": False,
+                "error": "Content already posted to this platform",
+                "duplicate_prevented": True
+            }
+        
+        # SAFEGUARD 2: Try to acquire publish lock
+        if not self.dedup_guard.prevent_concurrent_publish(post_id):
+            logger.warning(f"⚠️ CONCURRENT PUBLISH PREVENTED: {post_id} already being processed")
+            return {
+                "success": False,
+                "error": "Post already being published by another process",
+                "concurrent_prevented": True
+            }
+        
+        # SAFEGUARD 3: Check idempotency
+        idempotency_key = self.dedup_guard.generate_idempotency_key(
+            media_id,
+            platform,
+            account_id,
+            post.get("scheduled_at")
+        )
+        
+        existing = self.dedup_guard.check_idempotency(idempotency_key)
+        if existing:
+            if existing["status"] == "completed":
+                logger.warning(f"⚠️ IDEMPOTENT: {idempotency_key} already completed")
+                return {
+                    "success": True,
+                    "platform_post_id": existing["platform_post_id"],
+                    "platform_url": existing["platform_url"],
+                    "idempotent": True
+                }
+            elif existing["status"] == "in_progress":
+                logger.warning(f"⚠️ IN PROGRESS: {idempotency_key} currently publishing")
+                return {
+                    "success": False,
+                    "error": "Publish already in progress",
+                    "in_progress": True
+                }
+        
+        # Record publish attempt
+        self.dedup_guard.record_publish_attempt(
+            idempotency_key,
+            post_id,
+            media_id,
+            platform,
+            account_id,
+            {"correlation_id": correlation_id}
+        )
         
         # Emit schedule.due event
         await self.event_bus.publish(
@@ -316,7 +379,7 @@ class PostScheduler:
             logger.warning("Blotato API key not configured, simulating publish")
             result = await self._simulate_publish(post)
             
-            # Emit completion event for simulated publish
+            # Emit publish.completed event
             await self.event_bus.publish(
                 Topics.PUBLISH_COMPLETED,
                 {
@@ -328,6 +391,14 @@ class PostScheduler:
                 },
                 correlation_id=correlation_id
             )
+            
+            # Record success in idempotency tracker
+            self.dedup_guard.record_publish_success(
+                idempotency_key,
+                result.get("platform_post_id"),
+                result.get("platform_url")
+            )
+            
             return result
         
         try:
@@ -374,6 +445,13 @@ class PostScheduler:
                     correlation_id=correlation_id
                 )
                 
+                # Record success in idempotency tracker
+                self.dedup_guard.record_publish_success(
+                    idempotency_key,
+                    result.post_submission_id,
+                    result.platform_url
+                )
+                
                 return {
                     "success": True,
                     "platform_post_id": result.post_submission_id,
@@ -397,6 +475,12 @@ class PostScheduler:
                     correlation_id=correlation_id
                 )
                 
+                # Record failure in idempotency tracker
+                self.dedup_guard.record_publish_failure(
+                    idempotency_key,
+                    result.error or "Publish failed"
+                )
+                
                 return {
                     "success": False,
                     "error": result.error or "Publish failed",
@@ -407,6 +491,9 @@ class PostScheduler:
                 
         except Exception as e:
             logger.error(f"Scheduler publish error: {e}")
+            
+            # Record failure in idempotency tracker
+            self.dedup_guard.record_publish_failure(idempotency_key, str(e))
             
             # Emit publish.failed event
             await self.event_bus.publish(

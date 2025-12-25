@@ -39,51 +39,91 @@ async def get_event_timeline(
     agent_type: Optional[str] = None,
     event_type: Optional[str] = None,
     limit: int = Query(default=50, le=200),
-    minutes_ago: int = Query(default=60, le=1440)
+    minutes_ago: int = Query(default=1440, le=10080)  # Default 24h, max 7 days
 ):
     """
     Get unified event timeline for all agents or filtered by type.
     Shows thoughts, actions, and progress in chronological order.
+    Fetches from database for persistence across restarts.
     """
-    from services.agent_framework import get_event_bus, AgentType, EventType
+    import os
+    from sqlalchemy import create_engine, text
+    import json
     
-    bus = get_event_bus()
-    
-    # Parse filters
-    agent_filter = None
-    if agent_type:
-        try:
-            agent_filter = AgentType(agent_type)
-        except ValueError as e:
-            logger.debug(f"Silent exception: {e}")
-    
-    event_filter = None
-    if event_type:
-        try:
-            event_filter = [EventType(event_type)]
-        except ValueError as e:
-            logger.debug(f"Silent exception: {e}")
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+    engine = create_engine(DATABASE_URL)
     
     since = datetime.now() - timedelta(minutes=minutes_ago)
     
-    timeline = await bus.get_timeline(
-        agent_type=agent_filter,
-        event_types=event_filter,
-        limit=limit,
-        since=since
-    )
-    
-    return {
-        "success": True,
-        "events": timeline,
-        "count": len(timeline),
-        "filters": {
-            "agent_type": agent_type,
-            "event_type": event_type,
-            "limit": limit,
-            "since": since.isoformat()
-        }
+    # Map frontend agent types to database values
+    agent_type_map = {
+        "narrative": "narrative_planner",
+        "experiments": "experiment_runner", 
+        "content_mix": "content_mix_planner"
     }
+    db_agent_type = agent_type_map.get(agent_type, agent_type) if agent_type else None
+    
+    try:
+        with engine.connect() as conn:
+            # Build query with optional filters
+            query = """
+                SELECT id, agent_type, event_type, title, description, 
+                       event_data, created_at
+                FROM agent_events
+                WHERE created_at >= :since
+            """
+            params = {"since": since, "limit": limit}
+            
+            if db_agent_type:
+                query += " AND agent_type = :agent_type"
+                params["agent_type"] = db_agent_type
+            
+            if event_type:
+                query += " AND event_type = :event_type"
+                params["event_type"] = event_type
+            
+            query += " ORDER BY created_at DESC LIMIT :limit"
+            
+            result = conn.execute(text(query), params)
+            
+            events = []
+            for row in result:
+                event_data = row[5]
+                if isinstance(event_data, str):
+                    try:
+                        event_data = json.loads(event_data)
+                    except:
+                        event_data = {}
+                
+                events.append({
+                    "id": str(row[0]),
+                    "agent_type": row[1],
+                    "event_type": row[2],
+                    "title": row[3],
+                    "description": row[4],
+                    "data": event_data,
+                    "timestamp": row[6].isoformat() if row[6] else None
+                })
+            
+            return {
+                "success": True,
+                "events": events,
+                "count": len(events),
+                "filters": {
+                    "agent_type": agent_type,
+                    "event_type": event_type,
+                    "limit": limit,
+                    "since": since.isoformat()
+                }
+            }
+    except Exception as e:
+        logger.error(f"[Timeline] Database error: {e}")
+        return {
+            "success": True,
+            "events": [],
+            "count": 0,
+            "error": str(e)
+        }
 
 
 @router.get("/narrative-planner/timeline")

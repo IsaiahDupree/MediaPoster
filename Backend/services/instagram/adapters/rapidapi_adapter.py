@@ -141,36 +141,40 @@ class RapidApiInstagramAdapter(InstagramAdapter):
         limit: int = 50
     ) -> MediaPage:
         """
-        Fetch reels specifically from a profile.
+        Fetch reels from a profile by getting posts and filtering for videos.
         
-        Endpoint: GET /v1/reels
+        NOTE: instagram-looter2 API does NOT have a /v1/reels endpoint.
+        We use /v1/posts and filter for video content instead.
+        
+        Endpoint: GET /v1/posts
         Params: username_or_id_or_url, cursor (optional)
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            try:
-                params = {
-                    "username_or_id_or_url": identifier,
-                    "limit": limit
-                }
-                if cursor:
-                    params["cursor"] = cursor
-                
-                response = await client.get(
-                    f"{self.base_url}/v1/reels",
-                    params=params,
-                    headers=self._get_headers()
-                )
-                response.raise_for_status()
-                data = response.json()
-                
-                return self._parse_media_page(data)
-                
-            except httpx.HTTPStatusError as e:
-                logger.error(f"RapidAPI HTTP error fetching reels {identifier}: {e}")
-                raise
-            except Exception as e:
-                logger.error(f"Error fetching reels {identifier}: {e}")
-                raise
+        logger.info(f"[RapidAPI] Fetching reels via /v1/posts for {identifier}")
+        
+        # Use get_media (which uses /v1/posts) and filter for video content
+        try:
+            media_page = await self.get_media(identifier, cursor, limit)
+            
+            # Filter for video/reel content only
+            reels = [
+                item for item in media_page.items 
+                if item.media_type in (MediaType.VIDEO, MediaType.REEL)
+            ]
+            
+            logger.info(f"[RapidAPI] Found {len(reels)} videos/reels out of {len(media_page.items)} posts for {identifier}")
+            
+            return MediaPage(
+                items=reels,
+                next_cursor=media_page.next_cursor,
+                has_more=media_page.has_more
+            )
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"RapidAPI HTTP error fetching posts for reels {identifier}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching reels {identifier}: {e}")
+            raise
     
     async def get_hashtag(self, tag: str) -> HashtagData:
         """

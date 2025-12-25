@@ -204,7 +204,11 @@ class AgentEventBus:
     
     async def _persist_event(self, event: AgentEvent):
         """Persist event to database."""
+        import json
         try:
+            # Properly serialize event data to JSON
+            event_data_json = json.dumps(event.data) if event.data else "{}"
+            
             with self.engine.connect() as conn:
                 conn.execute(text("""
                     INSERT INTO agent_events (
@@ -220,7 +224,7 @@ class AgentEventBus:
                     "event_type": event.event_type.value,
                     "title": event.title,
                     "description": event.description,
-                    "event_data": str(event.data),
+                    "event_data": event_data_json,
                     "created_at": event.timestamp
                 })
                 conn.commit()

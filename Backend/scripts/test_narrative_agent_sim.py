@@ -3,7 +3,7 @@
 Narrative Agent Test with Simulated Publishing
 ================================================
 Runs the full narrative agent workflow with simulated (dry-run) publishing.
-Shows live thoughts, decisions, and actions in the terminal.
+Events are emitted to the agent framework so they show up in the UI.
 """
 
 import asyncio
@@ -17,6 +17,9 @@ from uuid import uuid4
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import create_engine, text
+
+# Import agent framework
+from services.agent_framework import get_run_manager, get_event_bus, AgentType, EventType
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
 
@@ -51,9 +54,13 @@ class NarrativeAgentTester:
         self.publisher = SimulatedPublisher() if sim_publish else None
         self.run_id = str(uuid4())
         self.events = []
+        
+        # Get agent framework components
+        self.run_manager = get_run_manager()
+        self.event_bus = get_event_bus()
     
-    def log_event(self, event_type: str, title: str, data: dict = None):
-        """Log an event with visual formatting."""
+    async def log_event(self, event_type: str, title: str, data: dict = None):
+        """Log an event with visual formatting AND emit to agent framework."""
         icons = {
             "thought": "💭",
             "decision": "⚖️",
@@ -73,10 +80,50 @@ class NarrativeAgentTester:
         }
         self.events.append(event)
         
+        # Print to terminal
         print(f"\n{icon} [{event_type.upper()}] {title}")
         if data:
             for key, value in data.items():
                 print(f"   └─ {key}: {value}")
+        
+        # Emit to agent framework event bus
+        from services.agent_framework.event_bus import AgentEvent
+        from decimal import Decimal
+        
+        # Convert any Decimal values to float for JSON serialization
+        def convert_decimals(obj):
+            if isinstance(obj, dict):
+                return {k: convert_decimals(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_decimals(v) for v in obj]
+            elif isinstance(obj, Decimal):
+                return float(obj)
+            return obj
+        
+        safe_data = convert_decimals(data) if data else {}
+        
+        # Map our event types to framework event types
+        type_map = {
+            "thought": EventType.THOUGHT,
+            "decision": EventType.DECISION,
+            "action": EventType.ACTION_STARTED,
+            "result": EventType.ACTION_COMPLETED,
+            "error": EventType.AGENT_ERROR,
+            "milestone": EventType.MILESTONE,
+            "data": EventType.DATA_FETCHED
+        }
+        
+        try:
+            framework_event = AgentEvent(
+                agent_type=AgentType.NARRATIVE_PLANNER,
+                event_type=type_map.get(event_type, EventType.THOUGHT),
+                title=title,
+                description=json.dumps(safe_data) if safe_data else "",
+                data=safe_data
+            )
+            await self.event_bus.publish(framework_event)
+        except Exception as e:
+            print(f"   [EventBus warning: {e}]")
     
     async def run_full_test(self):
         """Run the complete narrative agent test."""
@@ -90,23 +137,23 @@ class NarrativeAgentTester:
         
         try:
             # Step 1: Load Goal
-            self.log_event("milestone", "Step 1: Loading Narrative Goal")
+            await self.log_event("milestone", "Step 1: Loading Narrative Goal")
             goal = await self._load_goal()
             
             # Step 2: Load Pillars
-            self.log_event("milestone", "Step 2: Loading Content Pillars")
+            await self.log_event("milestone", "Step 2: Loading Content Pillars")
             pillars = await self._load_pillars(goal.get("id") if goal else None)
             
             # Step 3: Load Available Videos
-            self.log_event("milestone", "Step 3: Loading Available Videos")
+            await self.log_event("milestone", "Step 3: Loading Available Videos")
             videos = await self._load_videos()
             
             # Step 4: AI Reasoning
-            self.log_event("milestone", "Step 4: AI Reasoning & Planning")
+            await self.log_event("milestone", "Step 4: AI Reasoning & Planning")
             plan = await self._generate_plan(goal, pillars, videos)
             
             # Step 5: Schedule Posts (Simulated)
-            self.log_event("milestone", "Step 5: Scheduling Posts (Simulated)")
+            await self.log_event("milestone", "Step 5: Scheduling Posts (Simulated)")
             scheduled = await self._schedule_posts(plan)
             
             # Step 6: Summary
@@ -120,7 +167,7 @@ class NarrativeAgentTester:
             }
             
         except Exception as e:
-            self.log_event("error", f"Test failed: {str(e)}")
+            await self.log_event("error", f"Test failed: {str(e)}")
             return {"success": False, "error": str(e)}
     
     async def _load_goal(self):
@@ -144,13 +191,13 @@ class NarrativeAgentTester:
                     "time_horizon": row[4],
                     "status": row[5]
                 }
-                self.log_event("data", "Loaded active goal", {
+                await self.log_event("data", "Loaded active goal", {
                     "goal": goal["goal_statement"][:60] + "...",
                     "cta_type": goal["cta_type"]
                 })
                 return goal
             else:
-                self.log_event("thought", "No active goal found, using default", {
+                await self.log_event("thought", "No active goal found, using default", {
                     "default_goal": "Grow audience engagement"
                 })
                 return {
@@ -168,7 +215,7 @@ class NarrativeAgentTester:
             {"name": "Entertainment", "percentage": 35},
             {"name": "Behind-the-scenes", "percentage": 25}
         ]
-        self.log_event("thought", "Using content pillars", {
+        await self.log_event("thought", "Using content pillars", {
             "pillars": ", ".join([p["name"] for p in pillars])
         })
         return pillars
@@ -219,7 +266,7 @@ class NarrativeAgentTester:
                     for row in result
                 ]
             
-            self.log_event("data", f"Found {len(videos)} eligible videos", {
+            await self.log_event("data", f"Found {len(videos)} eligible videos", {
                 "avg_score": round(sum(v.get("score", 70) for v in videos) / max(len(videos), 1), 1),
                 "top_score": videos[0].get("score", 70) if videos else 0
             })
@@ -228,14 +275,14 @@ class NarrativeAgentTester:
     
     async def _generate_plan(self, goal: dict, pillars: list, videos: list):
         """Generate a 7-day plan using AI reasoning."""
-        self.log_event("thought", "Analyzing goal and available content...")
+        await self.log_event("thought", "Analyzing goal and available content...")
         
         # Simulate AI reasoning
-        self.log_event("thought", f"Goal focus: {goal.get('cta_type', 'engagement')}")
-        self.log_event("thought", f"Content pool: {len(videos)} videos across {len(pillars)} pillars")
+        await self.log_event("thought", f"Goal focus: {goal.get('cta_type', 'engagement')}")
+        await self.log_event("thought", f"Content pool: {len(videos)} videos across {len(pillars)} pillars")
         
         # Selection reasoning
-        self.log_event("decision", "Selecting top videos based on score and diversity", {
+        await self.log_event("decision", "Selecting top videos based on score and diversity", {
             "criteria": "score >= 70, pillar balance, freshness"
         })
         
@@ -256,16 +303,16 @@ class NarrativeAgentTester:
                 "scheduled_time": post_time,
                 "platforms": ["tiktok", "instagram"],
                 "caption": f"Check out this content! #{goal.get('cta_type', 'fyp')}",
-                "score": video["score"]
+                "score": video.get("score", 70)
             })
             
-            self.log_event("action", f"Scheduled: {video['title'][:40]}...", {
+            await self.log_event("action", f"Scheduled: {video['title'][:40]}...", {
                 "date": post_date.isoformat(),
                 "time": post_time,
-                "score": video["score"]
+                "score": video.get("score", 70)
             })
         
-        self.log_event("result", f"Created {len(plan)} post schedule", {
+        await self.log_event("result", f"Created {len(plan)} post schedule", {
             "days": 7,
             "posts_per_day": 2
         })
@@ -285,13 +332,13 @@ class NarrativeAgentTester:
                     scheduled_time=f"{post['scheduled_date']} {post['scheduled_time']}"
                 )
                 scheduled.append(result)
-                self.log_event("result", f"SIM PUBLISH: {post['video_title'][:30]}...", {
+                await self.log_event("result", f"SIM PUBLISH: {post['video_title'][:30]}...", {
                     "platforms": ", ".join(post["platforms"]),
                     "status": "SIM_SUCCESS"
                 })
             else:
                 # Would call real Blotato API here
-                self.log_event("action", f"REAL PUBLISH: {post['video_title'][:30]}...")
+                await self.log_event("action", f"REAL PUBLISH: {post['video_title'][:30]}...")
                 scheduled.append(post)
         
         return scheduled

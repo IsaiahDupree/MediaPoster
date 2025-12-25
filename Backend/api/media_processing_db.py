@@ -43,6 +43,7 @@ def update_video_step(job_id: str, video_id: str, step: str, filename: str = Non
         _analysis_jobs[job_id]["videos"][video_id]["updated_at"] = datetime.now().isoformat()
         if filename:
             _analysis_jobs[job_id]["videos"][video_id]["filename"] = filename
+            _analysis_jobs[job_id]["current_filename"] = filename
         _analysis_jobs[job_id]["current_video"] = video_id
         _analysis_jobs[job_id]["current_step"] = step
 

@@ -114,16 +114,8 @@ class VideoAnalyzer:
                     # Select best frame for thumbnail
                     best_frame_path, best_frame_stats = self.thumbnail_generator.select_best_from_frames(frames)
                     best_frame_score = best_frame_stats.get('overall_score', 0.0)
-                    
-                    # Update Video record with thumbnail info (skip if DB connection fails)
-                    try:
-                        await db_session.execute(
-                            update(Video)
-                            .where(Video.id == video_id)
-                            .values(best_frame_score=best_frame_score)
-                        )
-                    except Exception as db_err:
-                        logger.warning(f"Could not save best_frame_score (non-critical): {db_err}")
+                    logger.info(f"[Analysis] Best frame score: {best_frame_score:.2f}")
+                    # Note: best_frame_score will be saved in Step 4 with other analysis data
                 else:
                     logger.warning(f"[Analysis] No frames extracted from video {video_id}")
                     visual_error = "No frames could be extracted"
@@ -324,6 +316,15 @@ class VideoAnalyzer:
                     **analysis_values
                 )
                 db_session.add(new_analysis)
+            
+            # Save best_frame_score to Video table
+            if best_frame_score > 0:
+                await db_session.execute(
+                    update(Video)
+                    .where(Video.id == video_id)
+                    .values(best_frame_score=best_frame_score)
+                )
+                logger.info(f"[Analysis] Saved best_frame_score: {best_frame_score:.2f}")
             
             await db_session.commit()
             

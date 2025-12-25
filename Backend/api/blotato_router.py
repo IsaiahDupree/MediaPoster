@@ -514,6 +514,7 @@ class FullPublishRequest(BaseModel):
     username: str = Field(..., description="Account username")
     text: str = Field(..., description="Post caption/text")
     title: Optional[str] = Field(default=None, description="Video title (for TikTok, YouTube, Pinterest)")
+    hashtags: Optional[List[str]] = Field(default=None, description="Hashtags for the post")
     cleanup_gdrive: bool = Field(default=True, description="Delete from Google Drive after publish")
 
 
@@ -594,21 +595,25 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
         target_config = {}
         
         if platform_lower == "tiktok":
+            # TikTok requires a non-empty title - use caption as fallback
+            tiktok_title = request.title or (request.text[:80] if request.text else "Check this out!")
             target_config = {
                 "privacy_level": "PUBLIC_TO_EVERYONE",
                 "is_ai_generated": False,  # User's own content, not AI generated
-                "title": request.title if request.title else None,
+                "title": tiktok_title,
             }
         elif platform_lower == "instagram":
             target_config = {"media_type": "reel"}
         elif platform_lower == "youtube":
             target_config = {
-                "title": request.title or request.text[:100] if request.text else "Video",
+                "title": request.title or (request.text[:100] if request.text else "Video"),
                 "privacy_status": "public",
             }
         elif platform_lower == "pinterest":
+            # Pinterest also requires a title
+            pinterest_title = request.title or (request.text[:80] if request.text else "Check this out!")
             target_config = {
-                "title": request.title if request.title else None,
+                "title": pinterest_title,
             }
         
         # Create publish request
@@ -643,6 +648,7 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
         if publish_result['success'] and publish_result.get('post_submission_id'):
             try:
                 async with httpx.AsyncClient(timeout=10) as client:
+                    # Record to posted-content store
                     await client.post(
                         "http://localhost:5555/api/posted-content/record",
                         json={
@@ -655,6 +661,23 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
                         }
                     )
                     logger.info(f"✓ Recorded post to posted-content store")
+                    
+                    # Also record to scheduled_posts table so it shows in schedule calendar
+                    await client.post(
+                        "http://localhost:5555/api/schedule/record-posted",
+                        json={
+                            "media_id": request.media_id,
+                            "platform": platform_lower,
+                            "account_id": request.blotato_account_id,
+                            "account_username": request.username,
+                            "title": request.title or request.text[:50] if request.text else "Posted Content",
+                            "caption": request.text,
+                            "platform_post_id": publish_result.get('post_submission_id'),
+                            "platform_url": publish_result.get('public_url'),
+                            "status": "posted",
+                        }
+                    )
+                    logger.info(f"✓ Recorded post to schedule calendar")
             except Exception as record_err:
                 logger.warning(f"Failed to record post: {record_err}")
         

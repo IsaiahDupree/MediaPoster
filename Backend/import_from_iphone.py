@@ -13,7 +13,7 @@ class iPhoneImporter:
     """Import videos from iPhone via USB"""
     
     def __init__(self, destination_dir: Path = None):
-        self.destination_dir = destination_dir or Path.home() / "Downloads" / "iPhone_Videos"
+        self.destination_dir = destination_dir or Path.home() / "Documents" / "IphoneImport"
         self.destination_dir.mkdir(parents=True, exist_ok=True)
     
     def is_iphone_connected(self) -> bool:

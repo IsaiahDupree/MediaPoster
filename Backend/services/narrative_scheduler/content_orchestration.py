@@ -13,6 +13,7 @@ Flow:
 """
 
 import os
+import json
 import logging
 from typing import List, Dict, Optional, Any
 from datetime import datetime, date
@@ -120,9 +121,16 @@ class NarrativeContentOrchestrator:
         pillar: NarrativePillar,
         index: int = 0
     ) -> ContentBriefFromNarrative:
-        """Generate a single content brief for a pillar."""
+        """Generate a single content brief for a pillar using AI."""
         
-        # Build hook and topic based on pillar type
+        # Try AI-powered generation first
+        if self.openai_api_key:
+            try:
+                return await self._generate_brief_with_ai(goal, pillar, index)
+            except Exception as e:
+                logger.warning(f"[ContentOrchestrator] AI brief generation failed: {e}")
+        
+        # Fallback to templates
         hook, topic, key_points = self._get_pillar_content_template(
             pillar_name=pillar.name,
             pillar_type=pillar.pillar_type,
@@ -131,7 +139,6 @@ class NarrativeContentOrchestrator:
             index=index
         )
         
-        # Build CTA based on goal
         cta = self._get_cta_for_goal(goal.primary_cta)
         
         brief = ContentBriefFromNarrative(
@@ -147,6 +154,67 @@ class NarrativeContentOrchestrator:
             visual_style="dynamic"
         )
         
+        return brief
+    
+    async def _generate_brief_with_ai(
+        self,
+        goal: NarrativeGoal,
+        pillar: NarrativePillar,
+        index: int = 0
+    ) -> ContentBriefFromNarrative:
+        """Use real OpenAI to generate personalized content briefs."""
+        from openai import OpenAI
+        client = OpenAI(api_key=self.openai_api_key)
+        
+        prompt = f"""You are a viral content strategist creating a content brief for short-form video.
+
+NARRATIVE GOAL: {goal.goal_statement}
+TARGET AUDIENCE: {goal.target_audience}
+PRIMARY CTA: {goal.primary_cta}
+CONTENT PILLAR: {pillar.name} ({pillar.pillar_type})
+PILLAR DESCRIPTION: {pillar.description}
+
+Create a unique, engaging content brief for a 30-second video. Be specific and creative.
+
+Respond in JSON:
+{{
+    "hook": "An attention-grabbing opening line (first 3 seconds)",
+    "topic": "Specific topic/angle for this video",
+    "key_points": ["point 1", "point 2", "point 3"],
+    "call_to_action": "Specific CTA aligned with the goal",
+    "tone": "emotional tone (e.g., energetic, inspirational, educational)",
+    "visual_style": "visual approach suggestion",
+    "target_duration": 30
+}}
+
+Make the hook scroll-stopping and the content valuable for the target audience."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a viral content expert. Create briefs that drive engagement."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,  # Higher creativity for content
+            response_format={"type": "json_object"}
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        
+        brief = ContentBriefFromNarrative(
+            narrative_goal_id=goal.id,
+            pillar=pillar.name,
+            topic=result.get("topic", "Content topic"),
+            hook=result.get("hook", "Check this out..."),
+            key_points=result.get("key_points", ["Deliver value"]),
+            call_to_action=result.get("call_to_action", self._get_cta_for_goal(goal.primary_cta)),
+            target_duration_seconds=result.get("target_duration", 30),
+            target_platforms=["tiktok", "instagram"],
+            tone=result.get("tone", "engaging"),
+            visual_style=result.get("visual_style", "dynamic")
+        )
+        
+        logger.info(f"[AI Brief] Generated brief for {pillar.name}: {brief.hook[:50]}...")
         return brief
     
     def _get_pillar_content_template(

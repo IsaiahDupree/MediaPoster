@@ -75,20 +75,20 @@ async def get_connected_accounts(
                         SELECT 
                             id::text,
                             platform,
-                            username as handle,
+                            handle,
                             display_name,
-                            profile_pic_url as avatar_url,
+                            avatar_url,
                             CASE 
-                                WHEN is_active THEN 'connected'
-                                WHEN connection_status = 'error' THEN 'error'
+                                WHEN status = 'connected' THEN 'connected'
+                                WHEN status = 'error' THEN 'error'
                                 ELSE 'disconnected'
                             END as status,
-                            connected_via as connection_method,
+                            'blotato' as connection_method,
                             last_synced_at::text,
                             NULL as follower_count,
                             NULL as posts_count,
                             NULL as error_message
-                        FROM social_media_accounts
+                        FROM social_accounts
                         WHERE 1=1
                     """ + (f" AND platform = '{platform}'" if platform else "")))
                     
@@ -573,8 +573,8 @@ async def _sync_youtube_account(session, account, username: str, channel_id: str
                 SELECT 
                     id, CURRENT_DATE,
                     :subscriber_count, :video_count, :view_count
-                FROM social_media_accounts
-                WHERE platform = 'youtube' AND username = :username
+                FROM social_accounts
+                WHERE platform = 'youtube' AND handle = :username
                 ON CONFLICT (social_account_id, snapshot_date)
                 DO UPDATE SET
                     followers_count = EXCLUDED.followers_count,
@@ -648,28 +648,24 @@ async def _sync_rapidapi_account(session, account, platform: str, username: str)
             logger.warning(f"Could not scrape {platform} profile for {username}")
             return
         
-        # Upsert into social_media_accounts
+        # Upsert into social_accounts
         await session.execute(
             text("""
-                INSERT INTO social_media_accounts (
-                    platform, username, display_name, bio, profile_pic_url,
-                    followers_count, posts_count, is_verified,
-                    last_fetched_at, is_active
+                INSERT INTO social_accounts (
+                    platform, handle, display_name, avatar_url,
+                    external_id, status, last_synced_at
                 )
                 VALUES (
-                    :platform, :username, :display_name, :bio, :profile_pic_url,
-                    :follower_count, :posts_count, :is_verified,
-                    NOW(), TRUE
+                    :platform, :username, :display_name, :profile_pic_url,
+                    :external_id, 'connected', NOW()
                 )
-                ON CONFLICT (platform, username)
+                ON CONFLICT (platform, handle)
                 DO UPDATE SET
                     display_name = EXCLUDED.display_name,
-                    bio = EXCLUDED.bio,
-                    profile_pic_url = EXCLUDED.profile_pic_url,
-                    followers_count = EXCLUDED.followers_count,
-                    posts_count = EXCLUDED.posts_count,
-                    is_verified = EXCLUDED.is_verified,
-                    last_fetched_at = NOW()
+                    avatar_url = EXCLUDED.avatar_url,
+                    external_id = EXCLUDED.external_id,
+                    last_synced_at = NOW(),
+                    updated_at = NOW()
             """),
             {
                 'platform': platform,
@@ -693,8 +689,8 @@ async def _sync_rapidapi_account(session, account, platform: str, username: str)
                 SELECT 
                     id, CURRENT_DATE,
                     :follower_count, :posts_count
-                FROM social_media_accounts
-                WHERE platform = :platform AND username = :username
+                FROM social_accounts
+                WHERE platform = :platform AND handle = :username
                 ON CONFLICT (social_account_id, snapshot_date)
                 DO UPDATE SET
                     followers_count = EXCLUDED.followers_count,

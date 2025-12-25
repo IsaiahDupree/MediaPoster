@@ -66,8 +66,9 @@ async def init_db():
             db_url,
             echo=False,  # Set to True only for debugging SQL queries
             pool_pre_ping=True,
-            pool_size=10,
-            max_overflow=20
+            pool_size=20,  # Increased for batch analysis
+            max_overflow=40,  # Increased for batch analysis
+            pool_timeout=60  # Increased timeout
         )
         
         async_session_maker = async_sessionmaker(

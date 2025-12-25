@@ -7,40 +7,40 @@
 
 -- ============================================================================
 -- PART 1: CHECK-BACK SCHEDULE ENHANCEMENT
--- Add tracking columns to social_media_posts
+-- Add tracking columns to platform_posts
 -- ============================================================================
 
 -- Add check schedule fields to existing posts table
-ALTER TABLE social_media_posts 
+ALTER TABLE platform_posts 
 ADD COLUMN IF NOT EXISTS check_schedule JSONB DEFAULT '[]'::jsonb;
 
-ALTER TABLE social_media_posts 
+ALTER TABLE platform_posts 
 ADD COLUMN IF NOT EXISTS next_check_at TIMESTAMP;
 
-ALTER TABLE social_media_posts 
+ALTER TABLE platform_posts 
 ADD COLUMN IF NOT EXISTS tracking_complete BOOLEAN DEFAULT FALSE;
 
-ALTER TABLE social_media_posts 
+ALTER TABLE platform_posts 
 ADD COLUMN IF NOT EXISTS tracking_started_at TIMESTAMP;
 
-ALTER TABLE social_media_posts 
+ALTER TABLE platform_posts 
 ADD COLUMN IF NOT EXISTS checks_completed INTEGER DEFAULT 0;
 
 -- Index for finding posts that need checking
 CREATE INDEX IF NOT EXISTS idx_posts_next_check 
-ON social_media_posts(next_check_at) 
+ON platform_posts(next_check_at) 
 WHERE tracking_complete = FALSE AND next_check_at IS NOT NULL;
 
 -- Index for active tracking
 CREATE INDEX IF NOT EXISTS idx_posts_tracking_active 
-ON social_media_posts(tracking_complete) 
+ON platform_posts(tracking_complete) 
 WHERE tracking_complete = FALSE;
 
-COMMENT ON COLUMN social_media_posts.check_schedule IS 'JSON array of scheduled check times (ISO timestamps)';
-COMMENT ON COLUMN social_media_posts.next_check_at IS 'Next scheduled check timestamp';
-COMMENT ON COLUMN social_media_posts.tracking_complete IS 'True when all scheduled checks are done';
-COMMENT ON COLUMN social_media_posts.tracking_started_at IS 'When we started tracking this post';
-COMMENT ON COLUMN social_media_posts.checks_completed IS 'Number of check-back cycles completed';
+COMMENT ON COLUMN platform_posts.check_schedule IS 'JSON array of scheduled check times (ISO timestamps)';
+COMMENT ON COLUMN platform_posts.next_check_at IS 'Next scheduled check timestamp';
+COMMENT ON COLUMN platform_posts.tracking_complete IS 'True when all scheduled checks are done';
+COMMENT ON COLUMN platform_posts.tracking_started_at IS 'When we started tracking this post';
+COMMENT ON COLUMN platform_posts.checks_completed IS 'Number of check-back cycles completed';
 
 -- ============================================================================
 -- PART 2: DIRECT MESSAGES / CONVERSATIONS
@@ -239,7 +239,7 @@ SELECT
     p.tracking_started_at,
     a.username as account_username,
     EXTRACT(EPOCH FROM (NOW() - p.next_check_at)) / 60 as minutes_overdue
-FROM social_media_posts p
+FROM platform_posts p
 JOIN social_media_accounts a ON p.account_id = a.id
 WHERE p.tracking_complete = FALSE 
 AND p.next_check_at IS NOT NULL
@@ -342,21 +342,21 @@ DECLARE
     schedule JSONB;
     completed INTEGER;
 BEGIN
-    UPDATE social_media_posts
+    UPDATE platform_posts
     SET checks_completed = checks_completed + 1
     WHERE id = p_post_id;
     
     -- Get updated values
     SELECT check_schedule, checks_completed INTO schedule, completed
-    FROM social_media_posts WHERE id = p_post_id;
+    FROM platform_posts WHERE id = p_post_id;
     
     -- Update next_check_at or mark complete
     IF jsonb_array_length(schedule) <= completed THEN
-        UPDATE social_media_posts
+        UPDATE platform_posts
         SET tracking_complete = TRUE, next_check_at = NULL
         WHERE id = p_post_id;
     ELSE
-        UPDATE social_media_posts
+        UPDATE platform_posts
         SET next_check_at = (schedule->>completed)::TIMESTAMP
         WHERE id = p_post_id;
     END IF;
@@ -412,7 +412,7 @@ BEGIN
     RAISE NOTICE '   - message_templates (reusable templates)';
     RAISE NOTICE '';
     RAISE NOTICE '📈 Enhanced Tables:';
-    RAISE NOTICE '   - social_media_posts (+check_schedule, +next_check_at, +tracking_complete)';
+    RAISE NOTICE '   - platform_posts (+check_schedule, +next_check_at, +tracking_complete)';
     RAISE NOTICE '';
     RAISE NOTICE '🔧 Views:';
     RAISE NOTICE '   - posts_pending_checkback';

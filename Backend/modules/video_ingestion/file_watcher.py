@@ -49,28 +49,50 @@ class VideoFileHandler(FileSystemEventHandler):
     
     def _handle_new_file(self, file_path: Path):
         """Process a new file"""
+        print(f"[FILE_WATCHER] 🔍 Checking file: {file_path.name}")
+        logger.info(f"[FILE_WATCHER] 🔍 Checking file: {file_path.name}")
+        
         if not self.is_video_file(file_path):
+            print(f"[FILE_WATCHER] ⏭️  Skipping non-video file: {file_path.suffix}")
+            logger.debug(f"[FILE_WATCHER] ⏭️  Skipping non-video file: {file_path.suffix}")
             return
         
         # Avoid processing same file multiple times
         file_key = str(file_path.absolute())
-        if file_key in self.processing_files or file_key in self.processed_files:
+        if file_key in self.processing_files:
+            print(f"[FILE_WATCHER] ⏸️  File already processing: {file_path.name}")
+            logger.warning(f"[FILE_WATCHER] ⏸️  File already processing: {file_path.name}")
+            return
+        
+        if file_key in self.processed_files:
+            print(f"[FILE_WATCHER] ✅ File already processed: {file_path.name}")
+            logger.info(f"[FILE_WATCHER] ✅ File already processed: {file_path.name}")
             return
         
         self.processing_files.add(file_key)
-        logger.info(f"New video file detected: {file_path.name}")
+        print(f"[FILE_WATCHER] 📥 New video file detected: {file_path.name}")
+        logger.info(f"[FILE_WATCHER] 📥 New video file detected: {file_path.name}")
         
         try:
             # Wait for file to be fully written
+            print(f"[FILE_WATCHER] ⏳ Waiting for file to stabilize: {file_path.name}")
+            logger.info(f"[FILE_WATCHER] ⏳ Waiting for file to stabilize: {file_path.name}")
             if self._wait_for_file_stable(file_path):
+                print(f"[FILE_WATCHER] ✅ File stable, calling callback: {file_path.name}")
+                logger.info(f"[FILE_WATCHER] ✅ File stable, calling callback: {file_path.name}")
                 self.callback(file_path)
                 self.processed_files.add(file_key)
+                print(f"[FILE_WATCHER] ✅ Callback completed for: {file_path.name}")
+                logger.info(f"[FILE_WATCHER] ✅ Callback completed for: {file_path.name}")
             else:
-                logger.warning(f"File not stable after waiting: {file_path}")
+                print(f"[FILE_WATCHER] ⚠️  File not stable after waiting: {file_path.name}")
+                logger.warning(f"[FILE_WATCHER] ⚠️  File not stable after waiting: {file_path.name}")
         except Exception as e:
-            logger.error(f"Error processing {file_path}: {e}")
+            print(f"[FILE_WATCHER] ❌ Error processing {file_path.name}: {e}")
+            logger.error(f"[FILE_WATCHER] ❌ Error processing {file_path.name}: {e}", exc_info=True)
         finally:
             self.processing_files.discard(file_key)
+            print(f"[FILE_WATCHER] 🧹 Cleaned up processing state for: {file_path.name}")
     
     def _wait_for_file_stable(self, file_path: Path, timeout: int = 30) -> bool:
         """
@@ -159,21 +181,31 @@ class VideoFileWatcher:
         self.observer = Observer()
         
         # Schedule directories
+        print(f"[FILE_WATCHER] 📂 Scheduling {len(self.watch_dirs)} directories to watch")
+        logger.info(f"[FILE_WATCHER] 📂 Scheduling {len(self.watch_dirs)} directories to watch")
         for watch_dir in self.watch_dirs:
+            print(f"[FILE_WATCHER] 🔍 Checking directory: {watch_dir}")
+            logger.info(f"[FILE_WATCHER] 🔍 Checking directory: {watch_dir}")
             if not watch_dir.exists():
-                logger.warning(f"Watch directory does not exist: {watch_dir}")
+                print(f"[FILE_WATCHER] ❌ Watch directory does not exist: {watch_dir}")
+                logger.warning(f"[FILE_WATCHER] ❌ Watch directory does not exist: {watch_dir}")
                 continue
             
             if not watch_dir.is_dir():
-                logger.warning(f"Not a directory: {watch_dir}")
+                print(f"[FILE_WATCHER] ❌ Not a directory: {watch_dir}")
+                logger.warning(f"[FILE_WATCHER] ❌ Not a directory: {watch_dir}")
                 continue
             
             self.observer.schedule(self.event_handler, str(watch_dir), recursive=False)
-            logger.info(f"✓ Watching: {watch_dir}")
+            print(f"[FILE_WATCHER] ✅ Scheduled watching: {watch_dir}")
+            logger.info(f"[FILE_WATCHER] ✅ Scheduled watching: {watch_dir}")
         
         # Start observer
+        print(f"[FILE_WATCHER] 🚀 Starting file watcher observer...")
+        logger.info(f"[FILE_WATCHER] 🚀 Starting file watcher observer...")
         self.observer.start()
-        logger.info("File watcher started")
+        print(f"[FILE_WATCHER] ✅ File watcher started successfully")
+        logger.info(f"[FILE_WATCHER] ✅ File watcher started successfully")
     
     def stop(self):
         """Stop watching directories"""
@@ -226,6 +258,37 @@ class VideoFileWatcher:
         
         logger.info(f"Scan complete: found {found_count} recent video files")
         return found_count
+    
+    def get_all_video_files(self) -> List[Path]:
+        """
+        Get all video files in watch directories (no age filter)
+        
+        Returns:
+            List of Path objects for all video files
+        """
+        all_videos = []
+        
+        for watch_dir in self.watch_dirs:
+            if not watch_dir.exists():
+                continue
+            
+            for file_path in watch_dir.iterdir():
+                if not file_path.is_file():
+                    continue
+                
+                if file_path.suffix.lower() not in self.supported_formats:
+                    continue
+                
+                # Skip zero-size files
+                try:
+                    if file_path.stat().st_size == 0:
+                        continue
+                except:
+                    continue
+                
+                all_videos.append(file_path)
+        
+        return all_videos
 
 
 class AirDropMonitor:

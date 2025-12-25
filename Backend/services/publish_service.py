@@ -589,11 +589,11 @@ class PublishService:
                 response = await client.post(
                     "http://localhost:5555/api/posted-content/record",
                     json={
-                        "media_id": media_id,
+                        "media_id": str(media_id),  # Ensure UUID is converted to string
                         "platform": platform,
-                        "blotato_submission_id": post_submission_id,
+                        "blotato_submission_id": str(post_submission_id) if post_submission_id else None,
                         "platform_url": public_url,
-                        "blotato_account_id": account_id,
+                        "blotato_account_id": str(account_id) if account_id else None,
                         "caption": caption,
                         "status": "published"
                     }

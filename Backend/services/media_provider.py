@@ -226,17 +226,20 @@ class MediaProviderService:
         raise HTTPException(status_code=404, detail="Thumbnail not found")
     
     def _map_to_container_path(self, host_path: str) -> str:
-        """Map host filesystem paths to Docker container paths."""
+        """Map host filesystem paths to Docker container paths.
+        
+        Maps ~/Documents/IphoneImport to /media/IphoneImport (Docker volume mount)
+        """
         if not host_path:
             return host_path
         import re
-        # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/import
+        # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/IphoneImport
         pattern = r'^/Users/[^/]+/Documents/IphoneImport/(.*)$'
         match = re.match(pattern, host_path)
         if match:
-            return f"/media/import/{match.group(1)}"
+            return f"/media/IphoneImport/{match.group(1)}"
         if host_path.startswith('~/Documents/IphoneImport/'):
-            return host_path.replace('~/Documents/IphoneImport/', '/media/import/')
+            return host_path.replace('~/Documents/IphoneImport/', '/media/IphoneImport/')
         return host_path
     
     async def _update_thumbnail_path(self, media_id: str, thumbnail_path: str):

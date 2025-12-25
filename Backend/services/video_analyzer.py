@@ -270,6 +270,43 @@ class VideoAnalyzer:
             
             logger.info(f"[Analysis] Saving: source={analysis_source}, transcript={len(transcript)} chars, topics={len(topics)}, hooks={len(hooks)}, score={raw_score}")
             
+            # VALIDATE: Ensure analysis is complete before saving
+            # This prevents false positives where videos are marked as "analyzed" with incomplete data
+            is_complete = (
+                transcript and len(transcript) > 10 and  # Must have meaningful transcript
+                topics and len(topics) > 0 and  # Must have at least one topic
+                raw_score is not None  # Must have a score
+            )
+            
+            if not is_complete:
+                error_msg = (
+                    f"[Analysis] INCOMPLETE analysis for {video_id} - NOT saving to prevent false positives. "
+                    f"transcript={len(transcript) if transcript else 0} chars, "
+                    f"topics={len(topics) if topics else 0}, "
+                    f"score={raw_score}"
+                )
+                logger.error(error_msg)
+                print(f"\n{'='*80}")
+                print(f"❌ [ANALYSIS VALIDATION FAILED] Video: {video_id}")
+                print(f"   Transcript: {len(transcript) if transcript else 0} chars (required: >10)")
+                print(f"   Topics: {len(topics) if topics else 0} (required: >0)")
+                print(f"   Score: {raw_score} (required: not None)")
+                print(f"   Analysis NOT saved - will not be marked as 'analyzed'")
+                print(f"{'='*80}\n")
+                raise ValueError(f"Incomplete analysis: transcript={bool(transcript)}, topics={len(topics) if topics else 0}, score={raw_score is not None}")
+            
+            # Generate AI title (~20% of platform character limit = ~30 chars)
+            ai_title = await self._generate_ai_title(transcript, topics, hooks, video_path)
+            if ai_title:
+                # Update video record with generated title
+                from database.models import Video
+                await db_session.execute(
+                    update(Video)
+                    .where(Video.id == video_id)
+                    .values(title=ai_title)
+                )
+                logger.info(f"[Analysis] Generated title: {ai_title}")
+            
             if existing:
                 # Update existing
                 await db_session.execute(
@@ -287,7 +324,8 @@ class VideoAnalyzer:
             
             await db_session.commit()
             
-            logger.success(f"Video analysis complete for {video_id}")
+            logger.success(f"Video analysis complete for {video_id} - VALIDATED: transcript={len(transcript)} chars, topics={len(topics)}, score={raw_score}")
+            print(f"✅ [ANALYSIS SAVED] Video: {video_id} | Transcript: {len(transcript)} chars | Topics: {len(topics)} | Score: {raw_score}")
             
             return {
                 "video_id": str(video_id),
@@ -302,3 +340,80 @@ class VideoAnalyzer:
             logger.error(f"Video analysis failed for {video_id}: {e}")
             await db_session.rollback()
             raise
+    
+    async def _generate_ai_title(
+        self,
+        transcript: str,
+        topics: list,
+        hooks: list,
+        video_path: str
+    ) -> Optional[str]:
+        """
+        Generate an AI-powered title for the video.
+        Target: ~30 characters (20% of TikTok's 150 char limit)
+        
+        Platform limits:
+        - TikTok: 150 chars → target ~30 chars
+        - Instagram: 2200 chars → target ~30 chars (keep consistent)
+        - YouTube: 100 chars → target ~20 chars
+        """
+        if not self.api_key:
+            return None
+        
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key)
+            
+            # Build context for title generation
+            context_parts = []
+            if transcript and len(transcript) > 20:
+                context_parts.append(f"Transcript excerpt: {transcript[:300]}")
+            if topics:
+                context_parts.append(f"Topics: {', '.join(topics[:5])}")
+            if hooks:
+                context_parts.append(f"Hooks: {', '.join(hooks[:3])}")
+            
+            if not context_parts:
+                # No context, extract from filename
+                filename = Path(video_path).stem if video_path else ""
+                if filename and not filename.startswith(('IMG_', 'VID_', 'MOV_')):
+                    return filename[:30]
+                return None
+            
+            context = "\n".join(context_parts)
+            
+            prompt = f"""Generate a SHORT, catchy, viral-worthy video title.
+
+REQUIREMENTS:
+- Maximum 30 characters (strict limit)
+- Punchy and attention-grabbing
+- NO quotes, NO hashtags, NO emojis
+- Make people want to click and watch
+
+VIDEO CONTEXT:
+{context}
+
+Return ONLY the title text, nothing else."""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a viral content title expert. Create short, punchy titles under 30 characters."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.8,
+                max_tokens=50
+            )
+            
+            title = response.choices[0].message.content.strip()
+            # Clean up title
+            title = title.strip('"\'')
+            # Enforce 30 char limit
+            if len(title) > 30:
+                title = title[:27] + "..."
+            
+            return title if len(title) > 3 else None
+            
+        except Exception as e:
+            logger.warning(f"[Analysis] AI title generation failed: {e}")
+            return None

@@ -226,42 +226,125 @@ class AutonomousNarrativePlanner:
             await self._trigger_content_analysis()
     
     async def _auto_create_pillars(self):
-        """Auto-create narrative pillars from content themes."""
-        self._add_reasoning("Creating pillars", "Analyzing content themes to create narrative pillars")
+        """Auto-create narrative pillars using AI theme clustering."""
+        self._add_reasoning("Creating pillars", "Using AI to discover content themes and create narrative pillars")
         
         with self.engine.connect() as conn:
-            # Get content themes from video analysis
-            themes = conn.execute(text("""
-                SELECT DISTINCT 
-                    COALESCE(content_type, 'general') as theme,
-                    COUNT(*) as count
-                FROM video_analysis
-                GROUP BY content_type
-                HAVING COUNT(*) >= 3
-                ORDER BY count DESC
-                LIMIT 5
+            # Get content data for AI clustering
+            content_data = conn.execute(text("""
+                SELECT 
+                    va.topics,
+                    va.tone,
+                    va.hooks,
+                    v.file_name
+                FROM video_analysis va
+                JOIN videos v ON v.id = va.video_id
+                WHERE va.topics IS NOT NULL
+                LIMIT 50
             """))
             
-            for row in themes:
-                theme = row[0]
+            content_list = []
+            for row in content_data:
+                content_list.append({
+                    "topics": row[0],
+                    "tone": row[1],
+                    "hooks": row[2],
+                    "filename": row[3]
+                })
+            
+            if not content_list:
+                logger.warning("[NarrativePlanner] No analyzed content for pillar discovery")
+                return
+            
+            # Use AI to discover themes and create pillars
+            pillars = await self._discover_pillars_with_ai(content_list)
+            
+            for pillar in pillars:
                 # Check if pillar exists
                 exists = conn.execute(text("""
                     SELECT 1 FROM narrative_pillars 
                     WHERE LOWER(name) LIKE :theme
-                """), {"theme": f"%{theme.lower()}%"}).scalar()
+                """), {"theme": f"%{pillar['name'].lower()}%"}).scalar()
                 
                 if not exists:
-                    # Create new pillar
                     conn.execute(text("""
                         INSERT INTO narrative_pillars (id, name, description, is_active, target_percentage)
-                        VALUES (:id, :name, :desc, TRUE, 20)
+                        VALUES (:id, :name, :desc, TRUE, :pct)
                     """), {
                         "id": str(uuid4()),
-                        "name": theme.title(),
-                        "desc": f"Auto-created pillar for {theme} content"
+                        "name": pillar["name"],
+                        "desc": pillar["description"],
+                        "pct": pillar.get("target_percentage", 20)
                     })
                     conn.commit()
-                    logger.info(f"[NarrativePlanner] Created pillar: {theme}")
+                    logger.info(f"[NarrativePlanner] AI Created pillar: {pillar['name']}")
+    
+    async def _discover_pillars_with_ai(self, content_list: List[Dict]) -> List[Dict]:
+        """Use OpenAI to discover content themes and suggest pillars."""
+        try:
+            from openai import OpenAI
+            
+            client = OpenAI()
+            
+            # Prepare content summary for AI
+            content_summary = []
+            for c in content_list[:30]:  # Limit to avoid token overflow
+                topics = c.get("topics", [])
+                if isinstance(topics, list):
+                    topics = ", ".join(topics[:5])
+                content_summary.append(f"- Topics: {topics}, Tone: {c.get('tone', 'unknown')}")
+            
+            prompt = f"""Analyze this content library and discover 3-5 distinct narrative pillars (content themes).
+Each pillar should represent a recurring theme that appears across multiple videos.
+
+Content Library:
+{chr(10).join(content_summary)}
+
+Return a JSON array of pillars with this structure:
+[
+  {{
+    "name": "Short catchy pillar name (2-4 words)",
+    "description": "One sentence describing this content theme",
+    "target_percentage": 20  // Suggested % of content for this pillar
+  }}
+]
+
+Focus on themes that:
+1. Appear multiple times in the content
+2. Would resonate with a social media audience
+3. Are distinct from each other
+4. Could be used for content planning
+
+Return ONLY valid JSON, no explanation."""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=500
+            )
+            
+            import json
+            result = response.choices[0].message.content.strip()
+            # Clean up response
+            if result.startswith("```"):
+                result = result.split("```")[1]
+                if result.startswith("json"):
+                    result = result[4:]
+            
+            pillars = json.loads(result)
+            logger.info(f"[NarrativePlanner] AI discovered {len(pillars)} pillars")
+            return pillars
+            
+        except Exception as e:
+            logger.error(f"[NarrativePlanner] AI pillar discovery failed: {e}")
+            # Fallback to basic theme extraction
+            return [
+                {"name": "Lifestyle", "description": "Day-to-day life content", "target_percentage": 30},
+                {"name": "Educational", "description": "Tips and tutorials", "target_percentage": 25},
+                {"name": "Entertainment", "description": "Fun and engaging content", "target_percentage": 25},
+                {"name": "Personal", "description": "Behind the scenes and stories", "target_percentage": 20}
+            ]
     
     async def _trigger_content_analysis(self):
         """Trigger analysis for unanalyzed videos."""

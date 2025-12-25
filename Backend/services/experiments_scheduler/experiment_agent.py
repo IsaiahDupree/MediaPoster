@@ -427,16 +427,215 @@ Return as JSON array:
         return {"post_id": post_id, "scheduled": True}
     
     async def _analyze_results(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze experiment results."""
+        """Analyze experiment results with AI insights."""
         experiment_id = params.get("experiment_id")
         hypothesis_id = params.get("hypothesis_id")
         
-        # Would fetch metrics and calculate improvement
-        return {
-            "experiment_id": experiment_id,
-            "hypothesis_id": hypothesis_id,
-            "analysis": "pending_implementation"
-        }
+        if not self.openai_api_key:
+            return {
+                "success": False,
+                "error": "OpenAI API key required for results analysis"
+            }
+        
+        try:
+            from sqlalchemy import create_engine, text
+            from .hypothesis_engine import HypothesisEngine
+            from .scheduler import ExperimentsScheduler
+            
+            DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+            engine = create_engine(DATABASE_URL)
+            
+            # Fetch hypothesis data
+            with engine.connect() as conn:
+                hypothesis_result = conn.execute(text("""
+                    SELECT id, statement, independent_variable, dependent_variable,
+                           control_description, variant_description, success_metric, success_threshold
+                    FROM hypotheses
+                    WHERE id = :hypothesis_id
+                """), {"hypothesis_id": hypothesis_id})
+                
+                hyp_row = hypothesis_result.fetchone()
+                if not hyp_row:
+                    return {"success": False, "error": f"Hypothesis {hypothesis_id} not found"}
+                
+                hypothesis = {
+                    "id": str(hyp_row[0]),
+                    "statement": hyp_row[1],
+                    "independent_variable": hyp_row[2],
+                    "dependent_variable": hyp_row[3],
+                    "control_description": hyp_row[4],
+                    "variant_description": hyp_row[5],
+                    "success_metric": hyp_row[6],
+                    "success_threshold": float(hyp_row[7]) if hyp_row[7] else 1.2
+                }
+                
+                # Fetch metrics for control and variant groups
+                # Join scheduled_posts with posted_content to get metrics
+                # Try both approaches: direct from scheduled_posts or via posted_content
+                control_metrics = conn.execute(text("""
+                    SELECT COALESCE(pc.views, 0) as views, 
+                           COALESCE(pc.likes, 0) as likes, 
+                           COALESCE(pc.comments, 0) as comments, 
+                           COALESCE(pc.shares, 0) as shares, 
+                           COALESCE(pc.saves, 0) as saves, 
+                           COALESCE(pc.engagement_rate, 0.0) as engagement_rate
+                    FROM scheduled_posts sp
+                    LEFT JOIN posted_content pc ON pc.media_id::text = sp.clip_id::text 
+                        OR pc.platform_post_id = sp.platform_post_id
+                    WHERE sp.experiment_id = :experiment_id 
+                      AND sp.hypothesis_id = :hypothesis_id
+                      AND (sp.variant = 'control' OR sp.origin_type = 'experiments')
+                      AND (pc.views > 0 OR sp.status = 'posted')
+                    LIMIT 100
+                """), {
+                    "experiment_id": experiment_id,
+                    "hypothesis_id": hypothesis_id
+                }).fetchall()
+                
+                variant_metrics = conn.execute(text("""
+                    SELECT COALESCE(pc.views, 0) as views, 
+                           COALESCE(pc.likes, 0) as likes, 
+                           COALESCE(pc.comments, 0) as comments, 
+                           COALESCE(pc.shares, 0) as shares, 
+                           COALESCE(pc.saves, 0) as saves, 
+                           COALESCE(pc.engagement_rate, 0.0) as engagement_rate
+                    FROM scheduled_posts sp
+                    LEFT JOIN posted_content pc ON pc.media_id::text = sp.clip_id::text 
+                        OR pc.platform_post_id = sp.platform_post_id
+                    WHERE sp.experiment_id = :experiment_id 
+                      AND sp.hypothesis_id = :hypothesis_id
+                      AND (sp.variant = 'variant' OR sp.origin_type = 'experiments')
+                      AND (pc.views > 0 OR sp.status = 'posted')
+                    LIMIT 100
+                """), {
+                    "experiment_id": experiment_id,
+                    "hypothesis_id": hypothesis_id
+                }).fetchall()
+                
+                # If no metrics found, try alternative: check experiment_variants table
+                if not control_metrics and not variant_metrics:
+                    # Fallback: use experiment_variants if it exists
+                    try:
+                        variant_data = conn.execute(text("""
+                            SELECT control_metrics, variant_metrics
+                            FROM experiment_variants
+                            WHERE hypothesis_id = :hypothesis_id
+                            LIMIT 1
+                        """), {"hypothesis_id": hypothesis_id}).fetchone()
+                        
+                        if variant_data and variant_data[0] and variant_data[1]:
+                            # Parse JSONB metrics if stored that way
+                            import json
+                            control_metrics = [[v] for v in json.loads(variant_data[0]).get(hypothesis["success_metric"], [])]
+                            variant_metrics = [[v] for v in json.loads(variant_data[1]).get(hypothesis["success_metric"], [])]
+                    except Exception:
+                        pass
+            
+            # Extract metric values based on success_metric
+            metric_map = {
+                "view_count": 0,  # views column index
+                "likes": 1,
+                "comments": 2,
+                "shares": 3,
+                "saves": 4,
+                "engagement_rate": 5
+            }
+            
+            metric_idx = metric_map.get(hypothesis["success_metric"], 0)
+            
+            control_values = [float(row[metric_idx]) for row in control_metrics if row[metric_idx] is not None]
+            variant_values = [float(row[metric_idx]) for row in variant_metrics if row[metric_idx] is not None]
+            
+            if not control_values or not variant_values:
+                return {
+                    "success": False,
+                    "error": "Insufficient data: need metrics from both control and variant groups"
+                }
+            
+            # Statistical analysis
+            engine_stats = HypothesisEngine()
+            stats = engine_stats.analyze(
+                control_values=control_values,
+                variant_values=variant_values,
+                success_threshold=hypothesis["success_threshold"]
+            )
+            
+            # Determine status
+            status, reasoning = engine_stats.determine_status(
+                stats,
+                min_sample_size=10,
+                success_threshold=hypothesis["success_threshold"]
+            )
+            
+            # AI interpretation
+            import openai
+            client = openai.OpenAI(api_key=self.openai_api_key)
+            
+            prompt = f"""Analyze this A/B test experiment result and provide strategic insights:
+
+HYPOTHESIS: {hypothesis['statement']}
+TESTING: {hypothesis['independent_variable']} → {hypothesis['dependent_variable']}
+
+CONTROL: {hypothesis['control_description']}
+VARIANT: {hypothesis['variant_description']}
+
+RESULTS:
+- Control mean: {stats.mean_control:.2f} ({len(control_values)} samples)
+- Variant mean: {stats.mean_variant:.2f} ({len(variant_values)} samples)
+- Improvement: {(stats.improvement-1)*100:.1f}%
+- P-value: {stats.p_value:.4f}
+- Statistically significant: {stats.is_significant}
+- Status: {status.value}
+- Reasoning: {reasoning}
+
+Provide:
+1. **Interpretation**: What do these results mean in plain language?
+2. **Why**: Why might this have happened? What factors could explain the outcome?
+3. **Actionable Recommendations**: What should we do next?
+4. **Next Experiments**: What related hypotheses should we test?
+5. **Confidence**: How confident should we be in these findings?
+
+Format as JSON with keys: interpretation, why, recommendations (array), next_experiments (array), confidence_level (0-1).
+"""
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert at analyzing A/B test results and providing actionable insights for content strategy."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"}
+            )
+            
+            ai_insights = json.loads(response.choices[0].message.content)
+            
+            return {
+                "success": True,
+                "experiment_id": experiment_id,
+                "hypothesis_id": hypothesis_id,
+                "statistical_result": {
+                    "improvement": stats.improvement,
+                    "improvement_percent": (stats.improvement - 1) * 100,
+                    "p_value": stats.p_value,
+                    "is_significant": stats.is_significant,
+                    "confidence_level": stats.confidence_level,
+                    "mean_control": stats.mean_control,
+                    "mean_variant": stats.mean_variant,
+                    "sample_size_control": stats.sample_size_control,
+                    "sample_size_variant": stats.sample_size_variant
+                },
+                "status": status.value,
+                "reasoning": reasoning,
+                "ai_insights": ai_insights
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response: {e}")
+            return {"success": False, "error": f"Failed to parse AI insights: {e}"}
+        except Exception as e:
+            logger.error(f"Results analysis failed: {e}")
+            return {"success": False, "error": str(e)}
     
     async def _add_subtitles(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Add subtitles to a video."""
@@ -581,24 +780,156 @@ Return ONLY the script text, no stage directions."""
             return {"success": False, "error": str(e)}
     
     async def _detect_trends(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Detect trending topics and formats."""
+        """Detect trending topics and formats using AI analysis of recent content."""
         platform = params.get("platform", "tiktok")
         category = params.get("category", "general")
         
-        # Would integrate with trend detection APIs
-        # For now, return mock trends
-        trends = [
-            {"topic": "AI tools", "momentum": 0.85, "relevance": 0.9},
-            {"topic": "Productivity hacks", "momentum": 0.78, "relevance": 0.85},
-            {"topic": "Quick tutorials", "momentum": 0.72, "relevance": 0.88},
-        ]
+        if not self.openai_api_key:
+            return {
+                "success": False,
+                "error": "OpenAI API key required for trend detection"
+            }
         
-        return {
-            "success": True,
-            "platform": platform,
-            "category": category,
-            "trends": trends
-        }
+        try:
+            from sqlalchemy import create_engine, text
+            
+            DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
+            engine = create_engine(DATABASE_URL)
+            
+            # Fetch recent high-performing content
+            with engine.connect() as conn:
+                recent_content = conn.execute(text("""
+                    SELECT 
+                        v.title,
+                        va.pre_social_score,
+                        va.hook_rate_3s,
+                        va.avg_percent_viewed,
+                        va.topics,
+                        va.hooks,
+                        pc.views,
+                        pc.likes,
+                        pc.engagement_rate,
+                        pc.posted_at
+                    FROM videos v
+                    JOIN video_analysis va ON va.video_id = v.id
+                    LEFT JOIN posted_content pc ON pc.media_id = v.id
+                    WHERE va.pre_social_score IS NOT NULL
+                      AND (pc.posted_at >= NOW() - INTERVAL '30 days' OR pc.posted_at IS NULL)
+                    ORDER BY COALESCE(pc.views, va.pre_social_score * 100) DESC
+                    LIMIT 50
+                """)).fetchall()
+            
+            if not recent_content:
+                return {
+                    "success": False,
+                    "error": "No recent content available for trend analysis"
+                }
+            
+            # Format content for AI analysis
+            content_summary = []
+            for row in recent_content[:30]:  # Top 30 for analysis
+                title = row[0] or "Untitled"
+                score = row[1] or 0
+                hook_rate = row[2] or 0
+                watch_pct = row[3] or 0
+                topics = row[4] or []
+                hooks = row[5] or []
+                views = row[6] or 0
+                engagement = row[7] or 0
+                
+                content_summary.append({
+                    "title": title[:100],
+                    "score": f"{score:.1f}%",
+                    "hook_rate": f"{hook_rate:.2f}%",
+                    "watch_percent": f"{watch_pct:.2f}%",
+                    "topics": topics[:5] if topics else [],
+                    "hooks": hooks[:3] if hooks else [],
+                    "views": views,
+                    "engagement": engagement
+                })
+            
+            # Build AI prompt
+            prompt = f"""Analyze these recent high-performing {platform} videos and identify trending topics, formats, and patterns:
+
+RECENT TOP PERFORMERS (Last 30 days):
+{json.dumps(content_summary, indent=2)}
+
+Identify:
+1. **Emerging Topics**: Topics gaining momentum (appearing more frequently in top performers)
+2. **Format Trends**: What content formats/styles are working best
+3. **Hook Patterns**: Successful opening patterns and styles
+4. **Content Angles**: Unique approaches that are resonating
+5. **Timing Insights**: Any patterns in posting times or content timing
+
+For each trend, provide:
+- topic: The trend name/topic
+- momentum: 0-1 score indicating growth (0.8+ = strong upward trend)
+- relevance: 0-1 score indicating relevance to this account/category
+- evidence: Brief explanation of why this is trending
+- opportunity: How to leverage this trend
+
+Return as JSON:
+{{
+  "trends": [
+    {{
+      "topic": "...",
+      "momentum": 0.85,
+      "relevance": 0.9,
+      "evidence": "...",
+      "opportunity": "..."
+    }}
+  ]
+}}
+"""
+            
+            import openai
+            client = openai.OpenAI(api_key=self.openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert at identifying social media trends and content patterns. Analyze performance data to spot emerging trends."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            trends = result.get("trends", [])
+            
+            # Validate trends
+            validated_trends = []
+            for trend in trends:
+                if not all(k in trend for k in ['topic', 'momentum', 'relevance']):
+                    continue
+                validated_trends.append({
+                    "topic": trend.get("topic", ""),
+                    "momentum": float(trend.get("momentum", 0)),
+                    "relevance": float(trend.get("relevance", 0)),
+                    "evidence": trend.get("evidence", ""),
+                    "opportunity": trend.get("opportunity", "")
+                })
+            
+            return {
+                "success": True,
+                "platform": platform,
+                "category": category,
+                "trends": validated_trends,
+                "analyzed_content_count": len(recent_content)
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse trend detection response: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to parse AI response: {e}"
+            }
+        except Exception as e:
+            logger.error(f"Trend detection failed: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     async def _create_thumbnail(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a thumbnail for a video."""

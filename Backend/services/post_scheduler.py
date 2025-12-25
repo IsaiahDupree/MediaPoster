@@ -20,13 +20,26 @@ import os
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
-from uuid import uuid4
+from uuid import uuid4, UUID
 from sqlalchemy import create_engine, text
 from loguru import logger
 import httpx
 
 # Event Bus integration
 from services.event_bus import EventBus, Topics
+
+
+def _sanitize_for_json(obj):
+    """Recursively convert UUIDs and other non-JSON types to strings."""
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    return obj
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
@@ -268,8 +281,9 @@ class PostScheduler:
         # Create correlation ID for this publish workflow
         correlation_id = str(uuid4())
         post_id = str(post["id"])
-        media_id = post.get("content_id")
+        media_id = str(post.get("content_id")) if post.get("content_id") else None
         platform = post.get("platform")
+        account_id = str(post.get("account_id")) if post.get("account_id") else None
         
         # Emit schedule.due event
         await self.event_bus.publish(
@@ -278,9 +292,9 @@ class PostScheduler:
                 "post_id": post_id,
                 "media_id": media_id,
                 "platform": platform,
-                "account_id": post.get("account_id"),
+                "account_id": account_id,
                 "title": post.get("title"),
-                "scheduled_at": str(post.get("scheduled_at"))
+                "scheduled_at": str(post.get("scheduled_at")) if post.get("scheduled_at") else None
             },
             correlation_id=correlation_id
         )
@@ -345,7 +359,7 @@ class PostScheduler:
             result = await self.background_publisher.publish(request)
             
             if result.success:
-                # Emit publish.completed event
+                # Emit publish.completed event - sanitize steps to avoid UUID serialization errors
                 await self.event_bus.publish(
                     Topics.PUBLISH_COMPLETED,
                     {
@@ -354,7 +368,8 @@ class PostScheduler:
                         "platform": platform,
                         "platform_url": result.platform_url,
                         "submission_id": result.post_submission_id,
-                        "steps": result.steps
+                        "account_id": account_id,
+                        "steps": _sanitize_for_json(result.steps)
                     },
                     correlation_id=correlation_id
                 )
@@ -363,12 +378,12 @@ class PostScheduler:
                     "success": True,
                     "platform_post_id": result.post_submission_id,
                     "platform_url": result.platform_url,
-                    "verification": result.verification,
-                    "steps": result.steps,
+                    "verification": _sanitize_for_json(result.verification),
+                    "steps": _sanitize_for_json(result.steps),
                     "correlation_id": correlation_id
                 }
             else:
-                # Emit publish.failed event
+                # Emit publish.failed event - sanitize steps
                 await self.event_bus.publish(
                     Topics.PUBLISH_FAILED,
                     {
@@ -376,7 +391,8 @@ class PostScheduler:
                         "media_id": media_id,
                         "platform": platform,
                         "error": result.error or "Publish failed",
-                        "steps": result.steps
+                        "account_id": account_id,
+                        "steps": _sanitize_for_json(result.steps)
                     },
                     correlation_id=correlation_id
                 )
@@ -384,8 +400,8 @@ class PostScheduler:
                 return {
                     "success": False,
                     "error": result.error or "Publish failed",
-                    "verification": result.verification,
-                    "steps": result.steps,
+                    "verification": _sanitize_for_json(result.verification),
+                    "steps": _sanitize_for_json(result.steps),
                     "correlation_id": correlation_id
                 }
                 
@@ -399,6 +415,7 @@ class PostScheduler:
                     "post_id": post_id,
                     "media_id": media_id,
                     "platform": platform,
+                    "account_id": account_id,
                     "error": str(e)
                 },
                 correlation_id=correlation_id
@@ -435,38 +452,43 @@ class PostScheduler:
     # STATUS UPDATES
     # =========================================================================
     
-    def _mark_post_published(self, post_id: int, result: Dict):
+    def _mark_post_published(self, post_id, result: Dict):
         """Mark a post as successfully published"""
-        with self.engine.connect() as conn:
-            conn.execute(text("""
-                UPDATE scheduled_posts
-                SET 
-                    status = 'posted',
-                    platform_post_id = :platform_post_id,
-                    platform_url = :platform_url,
-                    published_at = NOW(),
-                    updated_at = NOW()
-                WHERE id = :id
-            """), {
-                "id": post_id,
-                "platform_post_id": result.get("platform_post_id"),
-                "platform_url": result.get("platform_url")
-            })
-            conn.commit()
+        try:
+            with self.engine.connect() as conn:
+                # Convert post_id to string for UUID compatibility
+                conn.execute(text("""
+                    UPDATE scheduled_posts
+                    SET 
+                        status = 'posted',
+                        platform_post_id = :platform_post_id,
+                        platform_url = :platform_url,
+                        published_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = :id
+                """), {
+                    "id": str(post_id),
+                    "platform_post_id": result.get("platform_post_id") or result.get("post_submission_id"),
+                    "platform_url": result.get("platform_url")
+                })
+                conn.commit()
+                logger.info(f"✅ Updated scheduled_posts status to 'posted' for {post_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to mark post {post_id} as published: {e}")
             
         logger.info(f"✅ Post {post_id} published: {result.get('platform_url')}")
         
         # Also create entry in posted_content for tracking
         self._create_posted_content_record(post_id, result)
     
-    def _create_posted_content_record(self, post_id: int, result: Dict):
+    def _create_posted_content_record(self, post_id, result: Dict):
         """Create a record in posted_content table for analytics tracking"""
         with self.engine.connect() as conn:
-            # Get the original post data
+            # Get the original post data - use correct column name platform_account_id
             post_data = conn.execute(text("""
-                SELECT platform, account_id, account_username, caption, hashtags
+                SELECT platform, platform_account_id, account_username, caption, hashtags
                 FROM scheduled_posts WHERE id = :id
-            """), {"id": post_id}).fetchone()
+            """), {"id": str(post_id)}).fetchone()
             
             if post_data:
                 # Handle hashtags - convert to proper format for JSONB column
@@ -487,7 +509,7 @@ class PostScheduler:
                      account_username, caption, hashtags, status, posted_at)
                     VALUES 
                     (:platform, :platform_post_id, :platform_url, :account_id,
-                     :account_username, :caption, :hashtags::jsonb, 'published', NOW())
+                     :account_username, :caption, CAST(:hashtags AS jsonb), 'published', NOW())
                 """), {
                     "platform": post_data[0],
                     "platform_post_id": result.get("platform_post_id"),
@@ -501,12 +523,13 @@ class PostScheduler:
     
     def _handle_post_failure(self, post: Dict, error: str):
         """Handle a failed publish attempt"""
+        post_id = str(post["id"])  # Convert UUID to string
         with self.engine.connect() as conn:
             # Get current retry count
             result = conn.execute(text("""
                 SELECT COALESCE(retry_count, 0) as retry_count 
                 FROM scheduled_posts WHERE id = :id
-            """), {"id": post["id"]}).fetchone()
+            """), {"id": post_id}).fetchone()
             
             current_retries = result[0] if result else 0
             
@@ -523,12 +546,13 @@ class PostScheduler:
                         updated_at = NOW()
                     WHERE id = :id
                 """), {
-                    "id": post["id"],
+                    "id": post_id,
                     "retry_count": current_retries + 1,
                     "next_retry": next_retry,
                     "error": error
                 })
-                logger.warning(f"⚠️ Post {post['id']} failed, retry {current_retries + 1}/{self.max_retries} at {next_retry}")
+                conn.commit()
+                logger.warning(f"⚠️ Post {post_id} failed, retry {current_retries + 1}/{self.max_retries} at {next_retry}")
                 
                 # Emit PUBLISH_RETRYING event
                 try:
@@ -556,12 +580,11 @@ class PostScheduler:
                         updated_at = NOW()
                     WHERE id = :id
                 """), {
-                    "id": post["id"],
+                    "id": post_id,
                     "error": f"Max retries exceeded. Last error: {error}"
                 })
-                logger.error(f"❌ Post {post['id']} failed permanently after {self.max_retries} retries")
-            
-            conn.commit()
+                conn.commit()
+                logger.error(f"❌ Post {post_id} failed permanently after {self.max_retries} retries")
     
     # =========================================================================
     # STATUS & STATS

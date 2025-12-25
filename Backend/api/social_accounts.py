@@ -43,5 +43,6 @@ async def get_social_accounts(platform: Optional[str] = Query(default=None, desc
         return result
         
     except Exception as e:
-        logger.error(f"Error fetching social accounts: {e}")
+        logger.error(f"Error fetching social accounts: {e}", exc_info=True)
+        # Return empty list instead of raising - frontend can handle empty state
         return []

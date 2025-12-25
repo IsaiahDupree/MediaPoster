@@ -79,9 +79,9 @@ def demo_file_watcher():
     logger.info("Demo 2: File Watcher")
     logger.info("-" * 60)
     
-    watch_dir = input("Enter directory to watch (or press Enter for Downloads): ").strip()
+    watch_dir = input("Enter directory to watch (or press Enter for IphoneImport): ").strip()
     if not watch_dir:
-        watch_dir = str(Path.home() / "Downloads")
+        watch_dir = str(Path.home() / "Documents" / "IphoneImport")
     
     logger.info(f"Watching: {watch_dir}")
     logger.info("Drop video files into this directory to detect them")

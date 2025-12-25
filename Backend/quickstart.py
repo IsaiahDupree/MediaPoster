@@ -22,18 +22,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Video directories
-ICLOUD_PHOTOS = Path.home() / "Pictures" / "Photos Library.photoslibrary"
-IPHONE_IMPORT = Path.home() / "Downloads" / "iPhone_Videos"
-CUSTOM_IMPORT = Path.home() / "Documents" / "IphoneImport"
-WATCH_DIRS = [
-    Path.home() / "Pictures",
-    Path.home() / "Movies",
-    Path.home() / "Desktop",
-    Path.home() / "Downloads",
-    IPHONE_IMPORT,
-    CUSTOM_IMPORT
-]
+# Video directories - SINGLE SOURCE: IphoneImport (116GB, 8491 items)
+# NO DUPLICATES - all scripts reference this folder only
+IPHONE_IMPORT = Path.home() / "Documents" / "IphoneImport"
+WATCH_DIRS = [IPHONE_IMPORT]
 
 @app.get("/")
 async def root():

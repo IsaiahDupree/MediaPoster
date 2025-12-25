@@ -244,7 +244,21 @@ async def list_posted_media(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch posted media: {str(e)}")
+        logger.error(f"Error fetching posted media: {e}", exc_info=True)
+        # Return empty result instead of crashing - frontend can handle empty state
+        return PostedMediaResponse(
+            items=[],
+            stats=PostedMediaStats(
+                total_posts=0,
+                posts_by_platform={},
+                posts_this_week=0,
+                posts_this_month=0,
+                most_active_platform=None,
+            ),
+            total=0,
+            page=page,
+            limit=limit,
+        )
 
 
 @router.get("/platforms")

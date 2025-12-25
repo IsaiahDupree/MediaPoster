@@ -7,7 +7,11 @@ services:
       - "5555:5555"
     volumes:
       - ./Backend:/app
+      # Mount IphoneImport folder - SINGLE SOURCE for all videos (116GB, 8491 items)
+      - ~/Documents/IphoneImport:/media/IphoneImport:ro
     environment:
+      # Video source directory inside container
+      - VIDEO_SOURCE_DIR=/media/IphoneImport
       # Connect to Supabase DB on host machine
       - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres
       # Connect to Supabase API on host machine

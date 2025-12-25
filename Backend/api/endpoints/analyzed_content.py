@@ -39,7 +39,7 @@ async def list_analyzed_content(
             params["min_score"] = min_score
         
         if status:
-            where_clauses.append("va.curation_status = :status")
+            where_clauses.append("v.curation_status = :status")
             params["status"] = status
         
         # Filter by media type based on file extension
@@ -91,8 +91,8 @@ async def list_analyzed_content(
         stats = conn.execute(text("""
             SELECT 
                 COUNT(*) as total,
-                COUNT(*) FILTER (WHERE va.curation_status = 'approved') as approved,
-                COUNT(*) FILTER (WHERE va.curation_status = 'pending' OR va.curation_status IS NULL) as pending,
+                COUNT(*) FILTER (WHERE v.curation_status = 'approved') as approved,
+                COUNT(*) FILTER (WHERE v.curation_status = 'pending' OR v.curation_status IS NULL) as pending,
                 AVG(va.pre_social_score) as avg_score
             FROM videos v
             INNER JOIN video_analysis va ON v.id = va.video_id

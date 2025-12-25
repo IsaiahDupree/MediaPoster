@@ -15,6 +15,17 @@ import logging
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
+from uuid import UUID
+
+
+class UUIDEncoder(json.JSONEncoder):
+    """JSON encoder that handles UUID objects."""
+    def default(self, obj):
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 from services.event_bus import EventBus, Event, Topics
 from services.workers.base import BaseWorker
@@ -83,8 +94,8 @@ class EventHistoryWorker(BaseWorker):
                         "topic": event.topic,
                         "source": event.source,
                         "correlation_id": event.correlation_id,
-                        "payload": json.dumps(event.payload),
-                        "metadata": json.dumps(event.metadata),
+                        "payload": json.dumps(event.payload, cls=UUIDEncoder),
+                        "metadata": json.dumps(event.metadata, cls=UUIDEncoder),
                         "timestamp": event.timestamp
                     })
                 
@@ -106,7 +117,12 @@ class EventHistoryWorker(BaseWorker):
                     logger.debug(f"Persisted {len(values)} events to database")
                     
         except Exception as e:
-            logger.error(f"Failed to persist events: {e}", exc_info=True)
+            # Check if it's a missing table error - don't spam logs
+            error_str = str(e).lower()
+            if "does not exist" in error_str or "relation" in error_str:
+                logger.warning(f"Event history table not available: {e}. Events will be buffered but not persisted.")
+            else:
+                logger.error(f"Failed to persist events: {e}", exc_info=True)
             # Re-add events to buffer for retry (but limit buffer size)
             async with self._buffer_lock:
                 self._event_buffer = events_to_persist[:self.BATCH_SIZE] + self._event_buffer

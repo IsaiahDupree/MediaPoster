@@ -179,19 +179,39 @@ async def list_scheduled_posts(
     
     # Use actual column names from scheduled_posts table
     # Join with videos table to get thumbnail_path and file info
-    # Also join video_analysis to get title/transcript
+    # Prioritize scheduled_posts.title and scheduled_posts.caption (actual posted content)
+    # Fall back to video file_name and transcript if not available
     query = f"""
         SELECT 
             sp.id, sp.clip_id, sp.content_variant_id, sp.platform, 
             sp.platform_account_id, sp.scheduled_time, sp.status,
             sp.platform_post_id, sp.platform_url, sp.created_at, sp.updated_at, sp.published_at,
-            COALESCE(v.file_name, 'Untitled') as title, 
-            va.transcript as caption, 
-            va.topics as hashtags, 
-            NULL as account_username, 
+            COALESCE(
+                sp.title,
+                (SELECT pc->>'title' FROM jsonb_array_elements(COALESCE(va.platform_content, '[]'::jsonb)) pc WHERE pc->>'platform' = sp.platform LIMIT 1),
+                v.title,
+                v.file_name,
+                'Untitled'
+            ) as title, 
+            COALESCE(
+                sp.caption,
+                (SELECT pc->>'description' FROM jsonb_array_elements(COALESCE(va.platform_content, '[]'::jsonb)) pc WHERE pc->>'platform' = sp.platform LIMIT 1),
+                va.transcript,
+                ''
+            ) as caption, 
+            COALESCE(
+                sp.hashtags,
+                CASE WHEN va.topics IS NOT NULL AND array_length(va.topics, 1) > 0 
+                    THEN array_to_json(va.topics)::jsonb
+                    ELSE NULL 
+                END,
+                '[]'::jsonb
+            ) as hashtags, 
+            sp.account_username,
             v.thumbnail_path as thumbnail_url,
             v.source_uri as video_source_uri,
-            COALESCE(sp.clip_id::text, sp.content_variant_id::text) as media_ref_id
+            COALESCE(sp.clip_id::text, sp.content_variant_id::text, sp.content_id) as media_ref_id,
+            COALESCE(sp.source, 'manual') as source
         FROM scheduled_posts sp
         LEFT JOIN videos v ON v.id = sp.clip_id OR v.id = sp.content_variant_id
         LEFT JOIN video_analysis va ON va.video_id = v.id
@@ -227,20 +247,31 @@ async def list_scheduled_posts(
         elif content_id:
             video_url = f'/api/media-db/video/{content_id}'
         
+        # Parse hashtags - handle both JSONB array and text array
+        hashtags_list = []
+        if row[14]:
+            if isinstance(row[14], list):
+                hashtags_list = row[14]
+            elif isinstance(row[14], str):
+                try:
+                    hashtags_list = json.loads(row[14])
+                except:
+                    hashtags_list = [h.strip() for h in row[14].split(',') if h.strip()]
+        
         posts.append({
             "id": str(row[0]),
             "content_id": content_id,
             "media_id": content_id,
-            "title": row[12] or "Untitled",
-            "caption": row[13] or "",
-            "hashtags": row[14] if isinstance(row[14], list) else [],
+            "title": row[12] or "Untitled",  # Now uses scheduled_posts.title (actual posted title)
+            "caption": row[13] or "",  # Now uses scheduled_posts.caption (actual posted caption)
+            "hashtags": hashtags_list,
             "thumbnail_url": thumbnail_url,
             "thumbnail_path": thumbnail_url,
             "video_url": video_url,
             "video_source_uri": video_source,
             "platform": row[3],
             "account_id": str(row[4]) if row[4] else None,
-            "account_username": row[15],
+            "account_username": row[15] or None,
             "account_avatar": None,
             "scheduled_at": str(row[5]) if row[5] else None,
             "status": row[6],
@@ -249,6 +280,7 @@ async def list_scheduled_posts(
             "updated_at": str(row[10]) if row[10] else None,
             "platform_url": row[8],
             "published_at": str(row[11]) if row[11] else None,
+            "source": row[19] if len(row) > 19 else "manual",
         })
     
     return {"posts": posts, "total": len(posts)}
@@ -264,23 +296,41 @@ async def create_scheduled_post(post: ScheduledPostCreate):
     blotato_id = post.blotato_account_id or post.account_id
     
     with engine.connect() as conn:
+        # Map content_id to clip_id if it's a UUID, otherwise store as content_id
+        clip_id_value = None
+        content_id_value = post.content_id
+        
+        try:
+            import uuid
+            # Try to parse as UUID - if successful, use as clip_id
+            uuid_obj = uuid.UUID(post.content_id)
+            clip_id_value = str(uuid_obj)
+            content_id_value = None  # Don't store in content_id if it's a UUID
+        except (ValueError, AttributeError):
+            # Not a UUID, store as content_id
+            pass
+        
         result = conn.execute(text("""
             INSERT INTO scheduled_posts 
-            (content_id, title, caption, hashtags, thumbnail_url, platform,
-             account_id, account_username, blotato_account_id, scheduled_time, scheduled_at, post_type, status)
+            (content_id, clip_id, title, caption, hashtags, thumbnail_url, platform,
+             account_id, account_username, platform_account_id, blotato_account_id, 
+             scheduled_time, scheduled_at, post_type, status)
             VALUES 
-            (:content_id, :title, :caption, :hashtags, :thumbnail_url, :platform,
-             :account_id, :account_username, :blotato_account_id, :scheduled_time, :scheduled_at, :post_type, 'scheduled')
+            (:content_id, :clip_id, :title, :caption, :hashtags, :thumbnail_url, :platform,
+             :account_id, :account_username, :platform_account_id, :blotato_account_id, 
+             :scheduled_time, :scheduled_at, :post_type, 'scheduled')
             RETURNING id
         """), {
-            "content_id": post.content_id,
+            "content_id": content_id_value,
+            "clip_id": clip_id_value,
             "title": post.title,
             "caption": post.caption,
-            "hashtags": json.dumps(post.hashtags),
+            "hashtags": json.dumps(post.hashtags) if post.hashtags else '[]',
             "thumbnail_url": post.thumbnail_url,
             "platform": post.platform,
             "account_id": post.account_id,
             "account_username": post.account_username,
+            "platform_account_id": post.account_id,  # Also set platform_account_id for compatibility
             "blotato_account_id": blotato_id,
             "scheduled_time": post.scheduled_at,
             "scheduled_at": post.scheduled_at,
@@ -466,6 +516,58 @@ async def reschedule_post(post_id: str, new_time: str = Query(..., description="
             raise HTTPException(status_code=404, detail="Post not found or already posted")
     
     return {"message": "Post rescheduled successfully"}
+
+
+class RecordPostedRequest(BaseModel):
+    """Request model for recording a manually posted content to schedule"""
+    media_id: str
+    platform: str
+    account_id: str
+    account_username: Optional[str] = None
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    platform_post_id: Optional[str] = None
+    platform_url: Optional[str] = None
+    status: str = "posted"
+
+
+@router.post("/record-posted")
+async def record_posted_content(request: RecordPostedRequest):
+    """
+    Record a manually posted content to the schedule calendar.
+    This ensures manually published content shows in the calendar with 'posted' status.
+    """
+    ensure_table_exists()
+    engine = get_engine()
+    
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                INSERT INTO scheduled_posts 
+                (clip_id, content_variant_id, platform, platform_account_id, 
+                 scheduled_time, status, platform_post_id, platform_url, 
+                 published_at, source, created_at, updated_at)
+                VALUES 
+                (:media_id::uuid, :media_id::uuid, :platform, :account_id,
+                 NOW(), :status, :platform_post_id, :platform_url,
+                 NOW(), 'manual', NOW(), NOW())
+                RETURNING id
+            """), {
+                "media_id": request.media_id,
+                "platform": request.platform,
+                "account_id": request.account_id,
+                "status": request.status,
+                "platform_post_id": request.platform_post_id,
+                "platform_url": request.platform_url,
+            })
+            conn.commit()
+            new_id = result.fetchone()[0]
+        
+        logger.info(f"✓ Recorded posted content to schedule: {new_id}")
+        return {"success": True, "id": str(new_id), "message": "Posted content recorded to schedule"}
+    except Exception as e:
+        logger.error(f"Failed to record posted content to schedule: {e}")
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/stats/overview")

@@ -1411,13 +1411,221 @@ async def get_scheduled_variants(experiment_id: str):
 
 @router.post("/backlog/generate-ideas")
 async def generate_ideas():
-    """Generate experiment ideas based on analytics and sentiment data."""
-    engine = get_engine()
+    """Generate AI-powered experiment ideas based on comprehensive analytics."""
+    import openai
     
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        logger.warning("OpenAI API key not found, falling back to simple heuristics")
+        return await _generate_ideas_fallback()
+    
+    engine = get_engine()
+    ideas = []
+    
+    try:
+        with engine.connect() as conn:
+            # Gather comprehensive analytics
+            analytics = {}
+            
+            # Performance metrics
+            analytics['avg_scores'] = conn.execute(text("""
+                SELECT 
+                    AVG(pre_social_score) as avg_score,
+                    AVG(hook_rate_3s) as avg_hook_rate,
+                    AVG(avg_percent_viewed) as avg_watch_percent,
+                    COUNT(*) as total_analyzed
+                FROM video_analysis
+                WHERE pre_social_score IS NOT NULL
+            """)).fetchone()
+            
+            # Top performers analysis
+            analytics['top_performers'] = conn.execute(text("""
+                SELECT 
+                    v.title,
+                    va.pre_social_score,
+                    va.hook_rate_3s,
+                    va.avg_percent_viewed,
+                    va.topics,
+                    va.hooks
+                FROM videos v
+                JOIN video_analysis va ON va.video_id = v.id
+                WHERE va.pre_social_score IS NOT NULL
+                ORDER BY va.pre_social_score DESC
+                LIMIT 10
+            """)).fetchall()
+            
+            # Bottom performers (opportunities)
+            analytics['bottom_performers'] = conn.execute(text("""
+                SELECT 
+                    v.title,
+                    va.pre_social_score,
+                    va.hook_rate_3s,
+                    va.avg_percent_viewed,
+                    va.topics
+                FROM videos v
+                JOIN video_analysis va ON va.video_id = v.id
+                WHERE va.pre_social_score IS NOT NULL
+                ORDER BY va.pre_social_score ASC
+                LIMIT 10
+            """)).fetchall()
+            
+            # Posted content performance
+            analytics['posted_performance'] = conn.execute(text("""
+                SELECT 
+                    platform,
+                    AVG(views) as avg_views,
+                    AVG(likes) as avg_likes,
+                    AVG(engagement_rate) as avg_engagement,
+                    COUNT(*) as total_posts
+                FROM posted_content
+                WHERE views > 0
+                GROUP BY platform
+            """)).fetchall()
+            
+            # Past experiment history
+            analytics['experiment_history'] = conn.execute(text("""
+                SELECT 
+                    e.name,
+                    h.statement,
+                    h.status,
+                    h.actual_improvement,
+                    h.confidence_level
+                FROM experiments e
+                JOIN hypotheses h ON h.experiment_id = e.id
+                ORDER BY e.created_at DESC
+                LIMIT 20
+            """)).fetchall()
+            
+            # Metric correlations (topics vs performance)
+            analytics['topic_performance'] = conn.execute(text("""
+                SELECT 
+                    unnest(va.topics) as topic,
+                    AVG(va.pre_social_score) as avg_score,
+                    COUNT(*) as count
+                FROM video_analysis va
+                WHERE va.topics IS NOT NULL AND array_length(va.topics, 1) > 0
+                GROUP BY topic
+                HAVING COUNT(*) >= 3
+                ORDER BY avg_score DESC
+                LIMIT 15
+            """)).fetchall()
+            
+            # Build AI prompt
+            prompt = f"""Analyze this content performance data and generate 5 strategic experiment ideas:
+
+PERFORMANCE METRICS:
+- Average score: {analytics['avg_scores'][0]:.1f}% (from {analytics['avg_scores'][3]} videos)
+- Average hook rate (3s): {analytics['avg_scores'][1]:.2f}%
+- Average watch %: {analytics['avg_scores'][2]:.2f}%
+
+TOP PERFORMERS (Top 10):
+{_format_top_performers(analytics['top_performers'])}
+
+BOTTOM PERFORMERS (Bottom 10 - Opportunities):
+{_format_bottom_performers(analytics['bottom_performers'])}
+
+POSTED CONTENT PERFORMANCE:
+{_format_posted_performance(analytics['posted_performance'])}
+
+PAST EXPERIMENTS:
+{_format_experiment_history(analytics['experiment_history'])}
+
+TOPIC PERFORMANCE:
+{_format_topic_performance(analytics['topic_performance'])}
+
+Generate experiment ideas that:
+1. Address specific performance gaps identified in the data
+2. Build on successful patterns from top performers
+3. Test new hypotheses not yet explored in past experiments
+4. Have clear, measurable success metrics
+5. Are actionable with available tools (hook editing, subtitles, music, pacing, etc.)
+
+For each idea, provide:
+- hypothesis: Clear testable statement
+- target_metric: What to measure (view_count, engagement_rate, hook_rate_3s, avg_percent_viewed, etc.)
+- expected_impact: L (Low), M (Medium), or H (High)
+- effort: S (Small), M (Medium), or L (Large)
+- confidence: L (Low), M (Medium), or H (High) - based on data support
+- priority_score: 0-100 based on potential impact and data confidence
+
+Return as JSON:
+{{
+  "ideas": [
+    {{
+      "hypothesis": "...",
+      "target_metric": "...",
+      "expected_impact": "M",
+      "effort": "S",
+      "confidence": "M",
+      "priority_score": 85
+    }}
+  ]
+}}
+"""
+            
+            client = openai.OpenAI(api_key=openai_key)
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert at designing content experiments based on performance data. Generate strategic, actionable experiment ideas."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.8,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            ideas = result.get("ideas", [])
+            
+            # Validate and add source
+            for idea in ideas:
+                if not all(k in idea for k in ['hypothesis', 'target_metric', 'expected_impact', 'effort', 'confidence', 'priority_score']):
+                    continue
+                idea['source'] = 'ai'
+                idea['priority_score'] = int(idea.get('priority_score', 50))
+            
+            # Add to backlog
+            for idea in ideas:
+                try:
+                    conn.execute(text("""
+                        INSERT INTO experiment_backlog (
+                            hypothesis, target_metric, expected_impact, effort,
+                            confidence, priority_score, source
+                        ) VALUES (
+                            :hypothesis, :metric, :impact, :effort, :conf, :priority, :source
+                        )
+                        ON CONFLICT DO NOTHING
+                    """), {
+                        'hypothesis': idea['hypothesis'],
+                        'metric': idea['target_metric'],
+                        'impact': idea['expected_impact'],
+                        'effort': idea['effort'],
+                        'conf': idea['confidence'],
+                        'priority': idea['priority_score'],
+                        'source': idea['source'],
+                    })
+                except Exception as e:
+                    logger.debug(f"Error inserting idea: {e}")
+            
+            conn.commit()
+        
+        logger.info(f"Generated {len(ideas)} AI-powered experiment ideas")
+        return {'generated': len(ideas), 'ideas': ideas}
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse AI response: {e}")
+        return await _generate_ideas_fallback()
+    except Exception as e:
+        logger.error(f"AI idea generation failed: {e}")
+        return await _generate_ideas_fallback()
+
+
+async def _generate_ideas_fallback():
+    """Fallback to simple heuristics if AI fails."""
+    engine = get_engine()
     ideas = []
     
     with engine.connect() as conn:
-        # Check for retention issues
         retention = conn.execute(text("""
             SELECT AVG(pre_social_score)
             FROM video_analysis
@@ -1432,10 +1640,9 @@ async def generate_ideas():
                 'effort': 'S',
                 'confidence': 'L',
                 'priority_score': 100,
-                'source': 'ai',
+                'source': 'heuristic',
             })
         
-        # Check for posting patterns
         posts = conn.execute(text("""
             SELECT COUNT(*) FROM posted_content WHERE views > 0
         """)).scalar()
@@ -1448,34 +1655,62 @@ async def generate_ideas():
                 'effort': 'S',
                 'confidence': 'L',
                 'priority_score': 90,
-                'source': 'ai',
+                'source': 'heuristic',
             })
-        
-        # Add to backlog
-        for idea in ideas:
-            try:
-                conn.execute(text("""
-                    INSERT INTO experiment_backlog (
-                        hypothesis, target_metric, expected_impact, effort,
-                        confidence, priority_score, source
-                    ) VALUES (
-                        :hypothesis, :metric, :impact, :effort, :conf, :priority, :source
-                    )
-                """), {
-                    'hypothesis': idea['hypothesis'],
-                    'metric': idea['target_metric'],
-                    'impact': idea['expected_impact'],
-                    'effort': idea['effort'],
-                    'conf': idea['confidence'],
-                    'priority': idea['priority_score'],
-                    'source': idea['source'],
-                })
-            except Exception as e:
-                logger.debug(f"Silent exception: {e}")
-        
-        conn.commit()
     
     return {'generated': len(ideas), 'ideas': ideas}
+
+
+def _format_top_performers(performers):
+    """Format top performers for AI prompt."""
+    if not performers:
+        return "None"
+    lines = []
+    for row in performers[:5]:
+        lines.append(f"- {row[0][:50]}: Score {row[1]:.1f}%, Hook {row[2]:.2f}%, Watch {row[3]:.2f}%")
+    return "\n".join(lines)
+
+
+def _format_bottom_performers(performers):
+    """Format bottom performers for AI prompt."""
+    if not performers:
+        return "None"
+    lines = []
+    for row in performers[:5]:
+        lines.append(f"- {row[0][:50]}: Score {row[1]:.1f}%, Hook {row[2]:.2f}%, Watch {row[3]:.2f}%")
+    return "\n".join(lines)
+
+
+def _format_posted_performance(performance):
+    """Format posted content performance for AI prompt."""
+    if not performance:
+        return "None"
+    lines = []
+    for row in performance:
+        lines.append(f"- {row[0]}: {row[4]} posts, {row[1]:.0f} avg views, {row[3]:.2f}% engagement")
+    return "\n".join(lines)
+
+
+def _format_experiment_history(history):
+    """Format experiment history for AI prompt."""
+    if not history:
+        return "No past experiments"
+    lines = []
+    for row in history[:10]:
+        status = row[2] if row[2] else "unknown"
+        improvement = f"{row[3]:.1f}x" if row[3] else "N/A"
+        lines.append(f"- {row[1][:60]}: {status}, {improvement} improvement")
+    return "\n".join(lines)
+
+
+def _format_topic_performance(topics):
+    """Format topic performance for AI prompt."""
+    if not topics:
+        return "None"
+    lines = []
+    for row in topics[:10]:
+        lines.append(f"- {row[0]}: {row[1]:.1f}% avg score ({row[2]} videos)")
+    return "\n".join(lines)
 
 
 # =============================================================================

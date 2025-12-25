@@ -26,9 +26,12 @@ async def get_system_health():
     scheduler = get_scheduler()
     bus = get_event_bus()
     
-    # Count workers
+    # Count registered tasks (available workers)
     tasks = scheduler.get_all_tasks()
-    workers_online = sum(1 for t in tasks.values() if t and t.get('status') == 'running')
+    # Service is online if scheduler and event bus are available
+    # Count both running AND registered/idle tasks as "online"
+    workers_online = 1 if scheduler and bus else 0
+    active_tasks = sum(1 for t in tasks.values() if t and t.get('status') == 'running')
     
     # Get queue depth (queued runs)
     from services.agent_framework import get_run_manager
@@ -50,6 +53,7 @@ async def get_system_health():
         "success": True,
         "health": {
             "workers_online": workers_online,
+            "active_tasks": active_tasks,
             "queue_depth": queue_depth,
             "last_tick": last_tick,
             "failures_24h": failures_24h

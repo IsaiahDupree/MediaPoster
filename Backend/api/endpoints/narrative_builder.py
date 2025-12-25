@@ -64,10 +64,10 @@ async def get_narrative_signals():
             """)).scalar() or 1
             
             used_content = conn.execute(text("""
-                SELECT COUNT(DISTINCT content_id) 
+                SELECT COUNT(DISTINCT COALESCE(clip_id, media_project_id)) 
                 FROM scheduled_posts 
-                WHERE scheduled_at > NOW() - INTERVAL '30 days'
-                AND content_id IS NOT NULL
+                WHERE scheduled_time > NOW() - INTERVAL '30 days'
+                AND (clip_id IS NOT NULL OR media_project_id IS NOT NULL)
             """)).scalar() or 0
             
             creative_fatigue = round((used_content / total_content) * 100, 1) if total_content > 0 else 0
@@ -174,13 +174,13 @@ async def get_narrative_signals():
             # 8. Posting Frequency
             frequency_results = conn.execute(text("""
                 SELECT 
-                    DATE(scheduled_at) as post_date,
+                    DATE(scheduled_time) as post_date,
                     COUNT(*) as post_count,
                     platform
                 FROM scheduled_posts
-                WHERE scheduled_at > NOW() - INTERVAL '14 days'
-                AND scheduled_at < NOW() + INTERVAL '14 days'
-                GROUP BY DATE(scheduled_at), platform
+                WHERE scheduled_time > NOW() - INTERVAL '14 days'
+                AND scheduled_time < NOW() + INTERVAL '14 days'
+                GROUP BY DATE(scheduled_time), platform
                 ORDER BY post_date
             """)).fetchall()
             
@@ -231,7 +231,7 @@ async def get_candidate_pool(
             result = conn.execute(text("""
                 SELECT 
                     v.id,
-                    v.file_name,
+                    COALESCE(v.title, v.file_name) as title,
                     v.duration_sec,
                     v.thumbnail_path,
                     v.aspect_ratio,
@@ -252,7 +252,7 @@ async def get_candidate_pool(
             candidates = []
             for i, row in enumerate(result):
                 # Row mapping:
-                # 0: id, 1: file_name, 2: duration_sec, 3: thumbnail_path, 4: aspect_ratio
+                # 0: id, 1: title (AI or file_name fallback), 2: duration_sec, 3: thumbnail_path, 4: aspect_ratio
                 # 5: pre_social_score, 6: hooks, 7: topics, 8: tone, 9: pacing
                 # 10: transcript, 11: analyzed_at
                 
@@ -336,7 +336,7 @@ async def generate_recommendations(goal: NarrativeGoal):
         result = conn.execute(text("""
             SELECT 
                 v.id,
-                v.file_name,
+                COALESCE(v.title, v.file_name) as title,
                 v.duration_sec,
                 v.thumbnail_path,
                 va.pre_social_score,
@@ -348,11 +348,11 @@ async def generate_recommendations(goal: NarrativeGoal):
             FROM videos v
             INNER JOIN video_analysis va ON v.id = va.video_id
             LEFT JOIN (
-                SELECT content_id::uuid, COUNT(*) as schedule_count
+                SELECT COALESCE(clip_id, media_project_id) as content_ref, COUNT(*) as schedule_count
                 FROM scheduled_posts
-                WHERE content_id IS NOT NULL
-                GROUP BY content_id::uuid
-            ) sp ON v.id = sp.content_id
+                WHERE clip_id IS NOT NULL OR media_project_id IS NOT NULL
+                GROUP BY COALESCE(clip_id, media_project_id)
+            ) sp ON v.id = sp.content_ref
             WHERE va.pre_social_score IS NOT NULL
             AND (sp.schedule_count IS NULL OR sp.schedule_count < 5)
             ORDER BY va.pre_social_score DESC
@@ -503,7 +503,7 @@ async def get_saved_recommendations():
                 cr.sentiment_fit, cr.novelty_score, cr.overall_score, cr.reasoning,
                 cr.suggested_caption, cr.suggested_time, cr.platforms, cr.goal_text,
                 cr.created_at,
-                v.file_name, v.duration_sec, v.thumbnail_path,
+                COALESCE(v.title, v.file_name) as title, v.duration_sec, v.thumbnail_path,
                 va.pre_social_score, va.hooks, va.topics, va.tone
             FROM narrative_recommendations cr
             JOIN videos v ON cr.video_id = v.id
@@ -757,7 +757,7 @@ async def get_seven_day_plan(use_demo: bool = True):
             # 4. Get candidate content - using only columns that exist
             try:
                 candidates = conn.execute(text("""
-                    SELECT v.id, v.file_name, va.pre_social_score, va.topics
+                    SELECT v.id, COALESCE(v.title, v.file_name) as title, va.pre_social_score, va.topics
                     FROM videos v
                     INNER JOIN video_analysis va ON v.id = va.video_id
                     WHERE va.pre_social_score >= 50
@@ -1026,20 +1026,18 @@ async def schedule_from_plan(plan_items: List[Dict[str, Any]]):
                 if account:
                     result = conn.execute(text("""
                         INSERT INTO scheduled_posts (
-                            account_id, platform, content_id, caption, scheduled_at,
-                            status, origin, goal_id
+                            blotato_account_id, platform, clip_id, scheduled_time,
+                            status, source
                         ) VALUES (
-                            :account_id, :platform, :content_id, :caption, :scheduled_at,
-                            'scheduled', 'NARRATIVE', :goal_id
+                            :account_id, :platform, :clip_id, :scheduled_time,
+                            'scheduled', 'NARRATIVE'
                         )
                         RETURNING id
                     """), {
                         'account_id': account[0],
                         'platform': item.get('platform', 'tiktok'),
-                        'content_id': item.get('content_id'),
-                        'caption': item.get('caption', ''),
-                        'scheduled_at': item.get('scheduled_at'),
-                        'goal_id': item.get('goal_id')
+                        'clip_id': item.get('content_id'),
+                        'scheduled_time': item.get('scheduled_at')
                     })
                     
                     scheduled.append({
@@ -1081,7 +1079,7 @@ async def get_content_stats():
                 SELECT 
                     COUNT(*) as total_analyzed,
                     AVG(pre_social_score) as avg_score,
-                    COUNT(*) FILTER (WHERE curation_status = 'approved') as approved,
+                    COUNT(*) FILTER (WHERE pre_social_score >= 60) as approved,
                     COUNT(*) FILTER (WHERE pre_social_score >= 70) as high_performers
                 FROM video_analysis
             """)).fetchone()
@@ -1091,8 +1089,8 @@ async def get_content_stats():
                 SELECT 
                     COUNT(*) as total_scheduled,
                     COUNT(*) FILTER (WHERE status = 'scheduled') as pending,
-                    COUNT(*) FILTER (WHERE status = 'posted') as posted,
-                    COUNT(DISTINCT content_id) as unique_content
+                    COUNT(*) FILTER (WHERE status = 'published') as posted,
+                    COUNT(DISTINCT COALESCE(clip_id, media_project_id)) as unique_content
                 FROM scheduled_posts
             """)).fetchone()
             

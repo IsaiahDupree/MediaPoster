@@ -112,15 +112,15 @@ class NarrativeScheduler:
         with self.engine.connect() as conn:
             if goal_id:
                 result = conn.execute(text("""
-                    SELECT id, goal_text, cta_type, audience_description, 
-                           time_horizon, platforms, max_posts_per_day
+                    SELECT id, goal_statement, primary_cta, target_audience, 
+                           time_horizon
                     FROM narrative_goals WHERE id = :id
                 """), {"id": goal_id})
             else:
                 result = conn.execute(text("""
-                    SELECT id, goal_text, cta_type, audience_description,
-                           time_horizon, platforms, max_posts_per_day
-                    FROM narrative_goals WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1
+                    SELECT id, goal_statement, primary_cta, target_audience,
+                           time_horizon
+                    FROM narrative_goals WHERE status = 'active' ORDER BY created_at DESC LIMIT 1
                 """))
             
             row = result.fetchone()
@@ -146,9 +146,9 @@ class NarrativeScheduler:
         with self.engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT id, name, description, pillar_type, color, keywords,
-                       target_percentage, min_posts_per_week, max_posts_per_week, priority, is_active
+                       target_percentage, min_posts_per_week, max_posts_per_week, is_active
                 FROM narrative_pillars WHERE goal_id = :goal_id AND is_active = TRUE
-                ORDER BY priority DESC
+                ORDER BY created_at DESC
             """), {"goal_id": goal_id})
             
             for row in result:
@@ -158,12 +158,12 @@ class NarrativeScheduler:
                     description=row[2] or "",
                     pillar_type=row[3] or "value",
                     color=row[4] or "#3b82f6",
-                    keywords=row[5] or [],
-                    target_percentage=row[6] or 20.0,
-                    min_posts_per_week=row[7] or 1,
-                    max_posts_per_week=row[8] or 5,
-                    priority=row[9] or 5,
-                    is_active=row[10]
+                    keywords=list(row[5]) if row[5] else [],
+                    target_percentage=float(row[6]) if row[6] else 20.0,
+                    min_posts_per_week=int(row[7]) if row[7] else 1,
+                    max_posts_per_week=int(row[8]) if row[8] else 5,
+                    priority=5,  # Default priority since column doesn't exist
+                    is_active=bool(row[9]) if row[9] is not None else True
                 ))
         
         return pillars
@@ -193,11 +193,15 @@ class NarrativeScheduler:
         
         return None
     
-    async def _load_analyzed_videos(self, constraints: SchedulingConstraints) -> List[VideoCandidate]:
-        """Load videos that have been analyzed and meet constraints"""
+    async def _load_analyzed_videos(
+        self, 
+        constraints: SchedulingConstraints
+    ) -> List[VideoCandidate]:
+        """Load videos that have been analyzed and meet score thresholds"""
         videos = []
         
         with self.engine.connect() as conn:
+            # First try with min_score threshold
             result = conn.execute(text("""
                 SELECT v.id, v.file_name, v.source_uri, v.thumbnail_path, v.duration_sec,
                        va.pre_social_score, va.transcript, va.topics, va.hooks, va.tone
@@ -208,7 +212,23 @@ class NarrativeScheduler:
                 LIMIT 500
             """), {"min_score": constraints.min_pre_social_score})
             
-            for row in result:
+            rows = list(result)
+            
+            # If no videos meet threshold, get all analyzed videos regardless of score
+            if not rows:
+                logger.info(f"[NarrativeScheduler] No videos with score >= {constraints.min_pre_social_score}, loading all analyzed videos")
+                result = conn.execute(text("""
+                    SELECT v.id, v.file_name, v.source_uri, v.thumbnail_path, v.duration_sec,
+                           COALESCE(va.pre_social_score, 50) as pre_social_score, 
+                           va.transcript, va.topics, va.hooks, va.tone
+                    FROM videos v
+                    LEFT JOIN video_analysis va ON va.video_id = v.id
+                    ORDER BY va.pre_social_score DESC NULLS LAST
+                    LIMIT 100
+                """))
+                rows = list(result)
+            
+            for row in rows:
                 # Convert Decimal to int/float for compatibility
                 score = int(row[5]) if row[5] else None
                 duration = float(row[4]) if row[4] else None
@@ -273,7 +293,7 @@ class NarrativeScheduler:
                 "pillar_dist": json.dumps(plan.pillar_distribution),
                 "platform_dist": json.dumps(plan.platform_distribution),
                 "reasoning": json.dumps([r.to_dict() for r in plan.reasoning_chain]),
-                "justification": plan.justification_summary,
+                "justification": json.dumps({"text": plan.justification_summary}) if plan.justification_summary else None,
                 "status": plan.status
             })
             
@@ -384,24 +404,37 @@ class NarrativeScheduler:
             slots = list(result)
             created = 0
             
+            # Get goal_id from plan for narrative tracking
+            goal_result = conn.execute(text("""
+                SELECT goal_id FROM weekly_schedules WHERE id = :plan_id
+            """), {"plan_id": plan_id}).fetchone()
+            goal_id = str(goal_result[0]) if goal_result and goal_result[0] else None
+            
             for slot in slots:
                 video_id, title, platform, sched_date, sched_time, pillar = slot
                 
-                # Create scheduled post
+                # Create scheduled post with narrative tracking
                 scheduled_at = datetime.combine(sched_date, datetime.strptime(sched_time, "%H:%M").time())
+                
+                # Store pillar info in recommendation_reasoning as JSON for now
+                # (We can add a dedicated pillar_tags column later if needed)
+                pillar_info = json.dumps({"pillar": pillar, "narrative_goal_id": goal_id}) if pillar else None
                 
                 conn.execute(text("""
                     INSERT INTO scheduled_posts (
-                        content_id, title, platform, scheduled_time, scheduled_at, status
+                        clip_id, title, platform, scheduled_time, scheduled_at, status, source,
+                        recommendation_reasoning, is_ai_recommended
                     ) VALUES (
-                        :content_id, :title, :platform, :scheduled_time, :scheduled_at, 'scheduled'
+                        CAST(:content_id AS uuid), :title, :platform, :scheduled_time, :scheduled_at, 'scheduled', 'narrative_builder',
+                        :pillar_info, TRUE
                     )
                 """), {
                     "content_id": video_id,
                     "title": title,
                     "platform": platform,
                     "scheduled_time": scheduled_at,
-                    "scheduled_at": scheduled_at
+                    "scheduled_at": scheduled_at,
+                    "pillar_info": pillar_info
                 })
                 created += 1
             

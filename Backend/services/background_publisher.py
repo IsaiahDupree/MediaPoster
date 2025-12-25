@@ -21,10 +21,18 @@ import asyncio
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timezone
+from uuid import UUID
 from loguru import logger
 import httpx
 from dataclasses import dataclass, field
 from enum import Enum
+
+
+def _str(val):
+    """Convert UUID or any value to string for JSON serialization."""
+    if isinstance(val, UUID):
+        return str(val)
+    return val
 
 
 class PublishStatus(Enum):
@@ -195,7 +203,8 @@ class BackgroundPublisher:
                     }
                 
                 data = res.json()
-                accounts = data.get("accounts", [])
+                # Handle both list response and dict with "accounts" key
+                accounts = data if isinstance(data, list) else data.get("accounts", [])
                 
                 # Find matching account
                 matching = None
@@ -309,13 +318,13 @@ class BackgroundPublisher:
         )
         
         # Emit publish requested event
-        correlation_id = f"publish-{request.media_id}-{request.platform}"
+        correlation_id = f"publish-{_str(request.media_id)}-{request.platform}"
         await self.event_bus.publish(
             Topics.PUBLISH_REQUESTED,
             {
-                "media_id": request.media_id,
+                "media_id": _str(request.media_id),
                 "platform": request.platform,
-                "account_id": request.blotato_account_id,
+                "account_id": _str(request.blotato_account_id),
                 "username": request.username
             },
             correlation_id=correlation_id
@@ -332,7 +341,7 @@ class BackgroundPublisher:
             await self.event_bus.publish(
                 Topics.PUBLISH_STARTED,
                 {
-                    "media_id": request.media_id,
+                    "media_id": _str(request.media_id),
                     "platform": request.platform,
                     "status": "validating"
                 },
@@ -410,7 +419,7 @@ class BackgroundPublisher:
             await self.event_bus.publish(
                 Topics.PUBLISH_UPLOADING,
                 {
-                    "media_id": request.media_id,
+                    "media_id": _str(request.media_id),
                     "platform": request.platform,
                     "status": "uploading"
                 },
@@ -424,11 +433,16 @@ class BackgroundPublisher:
             if platform_lower == "tiktok":
                 target_config.setdefault("privacy_level", "PUBLIC_TO_EVERYONE")
                 target_config.setdefault("is_ai_generated", False)
+                # TikTok requires a non-empty title
+                target_config.setdefault("title", request.title or caption[:80] or "Check this out!")
             elif platform_lower == "instagram":
                 target_config.setdefault("media_type", "reel")
             elif platform_lower == "youtube":
-                target_config.setdefault("title", request.title or caption[:100])
+                target_config.setdefault("title", request.title or caption[:100] or "Video")
                 target_config.setdefault("privacy_status", "public")
+            elif platform_lower == "pinterest":
+                # Pinterest also requires a title
+                target_config.setdefault("title", request.title or caption[:80] or "Check this out!")
             
             # Use publish service for the heavy lifting
             publish_result = await self.publish_service.full_publish_with_url_tracking(
@@ -456,13 +470,13 @@ class BackgroundPublisher:
             
             # Update correlation_id to include post_submission_id for better tracking
             if result.post_submission_id:
-                correlation_id = f"publish-{request.media_id}-{request.platform}-{result.post_submission_id}"
+                correlation_id = f"publish-{_str(request.media_id)}-{request.platform}-{result.post_submission_id}"
             
             # Emit upload completed event
             await self.event_bus.publish(
                 Topics.PUBLISH_UPLOAD_COMPLETED,
                 {
-                    "media_id": request.media_id,
+                    "media_id": _str(request.media_id),
                     "platform": request.platform,
                     "post_submission_id": result.post_submission_id
                 },
@@ -480,7 +494,7 @@ class BackgroundPublisher:
                 await self.event_bus.publish(
                     Topics.PUBLISH_POLLING,
                     {
-                        "media_id": request.media_id,
+                        "media_id": _str(request.media_id),
                         "platform": request.platform,
                         "post_submission_id": result.post_submission_id
                     },
@@ -498,7 +512,7 @@ class BackgroundPublisher:
             await self.event_bus.publish(
                 Topics.PUBLISH_COMPLETED,
                 {
-                    "media_id": request.media_id,
+                    "media_id": _str(request.media_id),
                     "platform": request.platform,
                     "post_submission_id": result.post_submission_id,
                     "platform_url": result.platform_url,
@@ -524,7 +538,7 @@ class BackgroundPublisher:
             await self.event_bus.publish(
                 Topics.PUBLISH_FAILED,
                 {
-                    "media_id": request.media_id,
+                    "media_id": _str(request.media_id),
                     "platform": request.platform,
                     "error": str(e),
                     "account_id": request.blotato_account_id

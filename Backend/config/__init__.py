@@ -5,6 +5,7 @@ Loads environment variables and provides application settings
 from pydantic_settings import BaseSettings
 from pydantic import Field, ConfigDict
 from typing import Optional
+from pathlib import Path
 import os
 
 
@@ -80,6 +81,18 @@ class Settings(BaseSettings):
     max_video_size_mb: int = Field(default=5000, env="MAX_VIDEO_SIZE_MB")  # Supports large iPhone videos
     temp_dir: str = Field(default="/tmp/mediaposter", env="TEMP_DIR")
     working_dir: str = Field(default="./workspace", env="WORKING_DIR")
+    
+    # Video Source Directory - PRIMARY: iPhone Import (116GB, 8491 items)
+    # Host path: ~/Documents/IphoneImport
+    # Docker path: /media/IphoneImport (mounted in docker-compose.yml)
+    video_source_dir: str = Field(
+        default=str(Path.home() / "Documents" / "IphoneImport"),
+        env="VIDEO_SOURCE_DIR"
+    )
+    watch_directories: Optional[str] = Field(
+        default=None,
+        env="WATCH_DIRECTORIES"
+    )  # Comma-separated list of directories to watch
     
     # Processing Settings
     max_concurrent_jobs: int = Field(default=3, env="MAX_CONCURRENT_JOBS")

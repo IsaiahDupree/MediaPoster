@@ -21,7 +21,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 BASE_URL = "http://localhost:5555"
-IMPORT_DIR = Path.home() / "Downloads" / "iPhone_Videos"
+# Primary: iPhone Import folder (116GB, 8491 items) - NO DUPLICATES
+IMPORT_DIR = Path.home() / "Documents" / "IphoneImport"
 POSTS_PER_DAY = 2  # Target posts per day
 DAYS_IN_MONTH = 30
 TARGET_VIDEOS = POSTS_PER_DAY * DAYS_IN_MONTH  # 60 videos for a month

@@ -77,51 +77,81 @@ class VideoIngestionService:
             file_path: Path to video file
             source: Source of the video (icloud, usb, airdrop, file_watcher)
         """
-        logger.info(f"Processing video from {source}: {file_path.name}")
+        print(f"[INGESTION_SERVICE] 🎬 Processing video from {source}: {file_path.name}")
+        logger.info(f"[INGESTION_SERVICE] 🎬 Processing video from {source}: {file_path.name}")
         
         # Validate video
+        print(f"[INGESTION_SERVICE] ✅ Validating video: {file_path.name}")
+        logger.info(f"[INGESTION_SERVICE] ✅ Validating video: {file_path.name}")
         is_valid, error, metadata = self.validator.validate(file_path)
         
         if not is_valid:
-            logger.warning(f"Invalid video: {error}")
+            print(f"[INGESTION_SERVICE] ❌ Invalid video: {error}")
+            logger.warning(f"[INGESTION_SERVICE] ❌ Invalid video: {error}")
             return
+        
+        print(f"[INGESTION_SERVICE] ✅ Video validated successfully")
+        logger.info(f"[INGESTION_SERVICE] ✅ Video validated successfully")
         
         # Add source to metadata
         metadata['source'] = source
         metadata['ingestion_timestamp'] = logger.opt(colors=True).info().__self__._core.now().isoformat()
         
         # Call user callback
+        print(f"[INGESTION_SERVICE] 📞 Calling user callback for: {file_path.name}")
+        logger.info(f"[INGESTION_SERVICE] 📞 Calling user callback for: {file_path.name}")
         try:
             self.callback(file_path, metadata)
+            print(f"[INGESTION_SERVICE] ✅ Callback completed successfully")
+            logger.info(f"[INGESTION_SERVICE] ✅ Callback completed successfully")
         except Exception as e:
-            logger.error(f"Error in user callback: {e}")
+            print(f"[INGESTION_SERVICE] ❌ Error in user callback: {e}")
+            logger.error(f"[INGESTION_SERVICE] ❌ Error in user callback: {e}", exc_info=True)
     
     def start_all(self):
         """Start all enabled ingestion methods"""
+        print(f"[INGESTION_SERVICE] 🔍 Checking if already running...")
+        logger.info(f"[INGESTION_SERVICE] 🔍 Checking if already running...")
         if self.running:
-            logger.warning("Ingestion service already running")
+            print(f"[INGESTION_SERVICE] ⚠️  Ingestion service already running")
+            logger.warning("[INGESTION_SERVICE] ⚠️  Ingestion service already running")
             return
         
         self.running = True
-        logger.info("Starting all ingestion methods...")
+        print(f"[INGESTION_SERVICE] 🚀 Starting all ingestion methods...")
+        logger.info("[INGESTION_SERVICE] 🚀 Starting all ingestion methods...")
         
         # Start iCloud monitoring
         if self.icloud_monitor:
+            print(f"[INGESTION_SERVICE] ☁️  Starting iCloud monitor...")
+            logger.info("[INGESTION_SERVICE] ☁️  Starting iCloud monitor...")
             self.executor.submit(self._run_icloud_monitor)
         
         # Start USB monitoring
         if self.image_capture:
+            print(f"[INGESTION_SERVICE] 📱 Starting USB monitor...")
+            logger.info("[INGESTION_SERVICE] 📱 Starting USB monitor...")
             self.executor.submit(self._run_usb_monitor)
         
         # Start AirDrop monitoring
         if self.airdrop_monitor:
+            print(f"[INGESTION_SERVICE] 📡 Starting AirDrop monitor...")
+            logger.info("[INGESTION_SERVICE] 📡 Starting AirDrop monitor...")
             self.airdrop_monitor.start(lambda p: self.process_video(p, "airdrop"))
         
         # Start file watcher
         if self.file_watcher:
+            print(f"[INGESTION_SERVICE] 📁 Starting file watcher...")
+            logger.info("[INGESTION_SERVICE] 📁 Starting file watcher...")
             self.file_watcher.start(lambda p: self.process_video(p, "file_watcher"))
+            print(f"[INGESTION_SERVICE] ✅ File watcher started")
+            logger.info("[INGESTION_SERVICE] ✅ File watcher started")
+        else:
+            print(f"[INGESTION_SERVICE] ⚠️  File watcher is None (not initialized)")
+            logger.warning("[INGESTION_SERVICE] ⚠️  File watcher is None (not initialized)")
         
-        logger.info("✓ All ingestion methods started")
+        print(f"[INGESTION_SERVICE] ✅ All ingestion methods started")
+        logger.info("[INGESTION_SERVICE] ✅ All ingestion methods started")
     
     def _run_icloud_monitor(self):
         """Run iCloud monitor in thread"""

@@ -11,7 +11,7 @@ class ImageCaptureImporter:
     """Import videos using Image Capture automation"""
     
     def __init__(self, destination=None):
-        self.destination = destination or Path.home() / "Downloads" / "iPhone_Videos"
+        self.destination = destination or Path.home() / "Documents" / "IphoneImport"
         self.destination.mkdir(parents=True, exist_ok=True)
     
     def get_device_udid(self):

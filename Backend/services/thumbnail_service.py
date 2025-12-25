@@ -14,8 +14,15 @@ from concurrent.futures import ThreadPoolExecutor
 THUMBNAIL_DIR = Path(os.getenv("TEMP_DIR", "/tmp/mediaposter")) / "thumbnails"
 THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
 
-# Thread pool for CPU-bound operations
-executor = ThreadPoolExecutor(max_workers=4)
+# Thread pool for CPU-bound operations - lazily initialized
+_executor = None
+
+def get_executor():
+    """Get or create thread pool executor, handling shutdown gracefully."""
+    global _executor
+    if _executor is None or _executor._shutdown:
+        _executor = ThreadPoolExecutor(max_workers=4)
+    return _executor
 
 
 def get_thumbnail_path(file_path: str, size: str = "medium") -> Path:
@@ -276,7 +283,7 @@ def generate_thumbnail(file_path: str, size: str = "medium") -> Optional[str]:
 async def generate_thumbnail_async(file_path: str, size: str = "medium") -> Optional[str]:
     """Async wrapper for thumbnail generation."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(executor, generate_thumbnail, file_path, size)
+    return await loop.run_in_executor(get_executor(), generate_thumbnail, file_path, size)
 
 
 def get_thumbnail_url(media_id: str, file_path: str) -> str:

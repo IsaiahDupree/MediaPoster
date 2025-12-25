@@ -271,7 +271,7 @@ class ReflectionSystem:
         
         with self.engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT goal_text, cta_type, audience_description
+                SELECT goal_statement, primary_cta, target_audience
                 FROM narrative_goals WHERE id = :id
             """), {"id": goal_id})
             
@@ -290,7 +290,124 @@ class ReflectionSystem:
         schedule_id: str,
         performance_data: Dict[str, Any]
     ) -> List[PillarInsight]:
-        """Analyze each pillar's performance"""
+        """Analyze each pillar's performance using AI."""
+        
+        # Try AI-powered pillar insights first
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if openai_api_key:
+            try:
+                return await self._analyze_pillar_performance_with_ai(
+                    performance_data, openai_api_key
+                )
+            except Exception as e:
+                logger.warning(f"[Reflection] AI pillar analysis failed: {e}")
+        
+        # Fallback to rule-based analysis
+        return self._analyze_pillar_performance_fallback(performance_data)
+    
+    async def _analyze_pillar_performance_with_ai(
+        self,
+        performance_data: Dict[str, Any],
+        api_key: str
+    ) -> List[PillarInsight]:
+        """Use real OpenAI to generate deeper pillar insights."""
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        pillar_metrics = performance_data.get("pillar_metrics", {})
+        avg_engagement = performance_data.get("avg_engagement_rate", 0)
+        
+        # Build pillar data for AI
+        pillar_data = []
+        for pillar_name, metrics in pillar_metrics.items():
+            posts = metrics.get("posts", 0)
+            views = metrics.get("views", 0)
+            engagement = metrics.get("engagement", 0)
+            avg_views = views / posts if posts > 0 else 0
+            pillar_engagement = (engagement / views * 100) if views > 0 else 0
+            vs_average = ((pillar_engagement - avg_engagement) / avg_engagement * 100) if avg_engagement > 0 else 0
+            
+            pillar_data.append({
+                "pillar": pillar_name,
+                "posts": posts,
+                "views": views,
+                "avg_views": round(avg_views, 0),
+                "engagement_rate": round(pillar_engagement, 2),
+                "vs_average_percent": round(vs_average, 1)
+            })
+        
+        prompt = f"""You are a content strategist analyzing pillar performance data.
+
+OVERALL PERFORMANCE:
+- Total Views: {performance_data.get('total_views', 0)}
+- Avg Engagement Rate: {avg_engagement:.2f}%
+
+PILLAR METRICS:
+{json.dumps(pillar_data, indent=2)}
+
+For EACH pillar, provide a deep analysis:
+1. What does the data tell us about this pillar's performance?
+2. What's the verdict: "exceeded", "met", or "underperformed"?
+3. What specific, actionable recommendation would improve results?
+
+Respond in JSON:
+{{
+    "pillar_insights": [
+        {{
+            "pillar": "pillar name",
+            "verdict": "exceeded" | "met" | "underperformed",
+            "insight": "Specific insight about what the data reveals (not generic)",
+            "recommendation": "Actionable recommendation for next week"
+        }},
+        ...
+    ]
+}}
+
+Be specific and data-driven. Reference actual numbers in your insights."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a data-driven content strategist. Provide specific, actionable insights."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            response_format={"type": "json_object"}
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        ai_insights = result.get("pillar_insights", [])
+        
+        insights = []
+        for item in ai_insights:
+            pillar_name = item.get("pillar", "")
+            metrics = pillar_metrics.get(pillar_name, {})
+            posts = metrics.get("posts", 0)
+            views = metrics.get("views", 0)
+            engagement = metrics.get("engagement", 0)
+            avg_views = views / posts if posts > 0 else 0
+            pillar_engagement = (engagement / views * 100) if views > 0 else 0
+            vs_average = ((pillar_engagement - avg_engagement) / avg_engagement * 100) if avg_engagement > 0 else 0
+            
+            insights.append(PillarInsight(
+                pillar_name=pillar_name,
+                posts_count=posts,
+                avg_views=avg_views,
+                avg_engagement=pillar_engagement,
+                performance_vs_average=vs_average,
+                verdict=item.get("verdict", "met"),
+                insight=item.get("insight", f"{pillar_name} analysis"),
+                recommendation=item.get("recommendation", "Continue monitoring")
+            ))
+        
+        logger.info(f"[AI Pillar Insights] Generated {len(insights)} AI-powered pillar insights")
+        return insights
+    
+    def _analyze_pillar_performance_fallback(
+        self,
+        performance_data: Dict[str, Any]
+    ) -> List[PillarInsight]:
+        """Fallback: Rule-based pillar analysis."""
         insights = []
         
         pillar_metrics = performance_data.get("pillar_metrics", {})
@@ -304,10 +421,8 @@ class ReflectionSystem:
             avg_views = views / posts if posts > 0 else 0
             pillar_engagement = (engagement / views * 100) if views > 0 else 0
             
-            # Compare to average
             vs_average = ((pillar_engagement - avg_engagement) / avg_engagement * 100) if avg_engagement > 0 else 0
             
-            # Determine verdict
             if vs_average > 20:
                 verdict = "exceeded"
                 insight = f"{pillar_name} significantly outperformed average"
@@ -340,10 +455,112 @@ class ReflectionSystem:
         pillar_insights: List[PillarInsight],
         performance_data: Dict[str, Any]
     ) -> List[Learning]:
-        """Generate learnings from performance analysis"""
+        """Generate learnings from performance analysis using AI."""
+        
+        # Try AI-powered learning synthesis
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if openai_api_key:
+            try:
+                return await self._generate_learnings_with_ai(
+                    schedule_id, pillar_insights, performance_data, openai_api_key
+                )
+            except Exception as e:
+                logger.warning(f"[Reflection] AI learning synthesis failed: {e}")
+        
+        # Fallback to rule-based learnings
+        return self._generate_learnings_fallback(schedule_id, pillar_insights, performance_data)
+    
+    async def _generate_learnings_with_ai(
+        self,
+        schedule_id: str,
+        pillar_insights: List[PillarInsight],
+        performance_data: Dict[str, Any],
+        api_key: str
+    ) -> List[Learning]:
+        """Use real OpenAI to synthesize deeper learnings from performance data."""
+        from openai import OpenAI
+        import json
+        client = OpenAI(api_key=api_key)
+        
+        # Build context for AI
+        pillar_summary = []
+        for insight in pillar_insights:
+            pillar_summary.append({
+                "pillar": insight.pillar_name,
+                "posts": insight.posts_count,
+                "avg_views": insight.avg_views,
+                "avg_engagement": insight.avg_engagement,
+                "vs_average": insight.performance_vs_average,
+                "verdict": insight.verdict
+            })
+        
+        prompt = f"""You are a content strategist analyzing a week's performance to generate actionable learnings.
+
+PERFORMANCE DATA:
+- Total Views: {performance_data.get('total_views', 0)}
+- Avg Engagement Rate: {performance_data.get('avg_engagement_rate', 0):.1f}%
+- Followers Gained: {performance_data.get('followers_gained', 0)}
+
+PILLAR PERFORMANCE:
+{json.dumps(pillar_summary, indent=2)}
+
+Analyze this data and identify 3-5 non-obvious learnings that will improve next week's strategy.
+
+For each learning, consider:
+1. What pattern or insight does the data reveal?
+2. How confident are we in this insight? (0.5-1.0)
+3. What specific action should we take?
+
+Respond in JSON:
+{{
+    "learnings": [
+        {{
+            "type": "content_timing" | "pillar_performance" | "audience_behavior" | "format_effectiveness" | "platform_specific",
+            "insight": "The specific insight discovered",
+            "confidence": 0.85,
+            "action": "Specific, actionable recommendation"
+        }},
+        ...
+    ]
+}}
+
+Focus on insights that are actionable and specific, not generic advice."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a data-driven content strategist. Identify actionable patterns."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            response_format={"type": "json_object"}
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        ai_learnings = result.get("learnings", [])
+        
+        learnings = []
+        for item in ai_learnings:
+            learnings.append(Learning(
+                learning_type=item.get("type", "general"),
+                insight=item.get("insight", ""),
+                confidence=item.get("confidence", 0.7),
+                action=item.get("action", ""),
+                source_schedule_id=schedule_id
+            ))
+        
+        logger.info(f"[AI Learning] Generated {len(learnings)} AI-powered learnings")
+        return learnings
+    
+    def _generate_learnings_fallback(
+        self,
+        schedule_id: str,
+        pillar_insights: List[PillarInsight],
+        performance_data: Dict[str, Any]
+    ) -> List[Learning]:
+        """Fallback: Rule-based learning generation"""
         learnings = []
         
-        # Pillar-based learnings
         for insight in pillar_insights:
             if insight.verdict == "exceeded":
                 learnings.append(Learning(
@@ -362,7 +579,6 @@ class ReflectionSystem:
                     source_schedule_id=schedule_id
                 ))
         
-        # Overall engagement learning
         avg_engagement = performance_data.get("avg_engagement_rate", 0)
         if avg_engagement > 5:
             learnings.append(Learning(
@@ -495,6 +711,139 @@ class ReflectionSystem:
                 })
             conn.commit()
     
+    async def generate_recommendations(
+        self,
+        goal_data: Dict[str, Any],
+        performance_data: Dict[str, Any],
+        pillar_insights: List[PillarInsight],
+        learnings: List[Learning]
+    ) -> List[Dict[str, Any]]:
+        """Generate AI-powered strategic recommendations for next week."""
+        
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return self._generate_recommendations_fallback(pillar_insights, learnings)
+        
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=openai_api_key)
+            
+            # Build context
+            pillar_summary = [{
+                "pillar": p.pillar_name,
+                "verdict": p.verdict,
+                "insight": p.insight
+            } for p in pillar_insights]
+            
+            learning_summary = [{
+                "type": l.learning_type,
+                "insight": l.insight,
+                "action": l.action
+            } for l in learnings[:5]]
+            
+            prompt = f"""You are a strategic content advisor generating recommendations for next week's content plan.
+
+GOAL: {goal_data.get('goal_statement', 'Build engagement')}
+TARGET AUDIENCE: {goal_data.get('target_audience', 'general audience')}
+PRIMARY CTA: {goal_data.get('primary_cta', 'follow')}
+
+THIS WEEK'S PERFORMANCE:
+- Total Views: {performance_data.get('total_views', 0)}
+- Avg Engagement: {performance_data.get('avg_engagement_rate', 0):.1f}%
+- Followers Gained: {performance_data.get('followers_gained', 0)}
+
+PILLAR INSIGHTS:
+{json.dumps(pillar_summary, indent=2)}
+
+KEY LEARNINGS:
+{json.dumps(learning_summary, indent=2)}
+
+Generate 3-5 strategic recommendations for next week. Each should be:
+1. Specific and actionable
+2. Based on the data provided
+3. Prioritized by expected impact
+
+Respond in JSON:
+{{
+    "recommendations": [
+        {{
+            "priority": 1,
+            "category": "content_mix" | "timing" | "platform" | "engagement" | "growth",
+            "title": "Short recommendation title",
+            "description": "Detailed explanation of what to do and why",
+            "expected_impact": "What improvement this should drive",
+            "implementation": "How to implement this recommendation"
+        }},
+        ...
+    ]
+}}"""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a strategic content advisor. Provide actionable, data-driven recommendations."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.5,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            recommendations = result.get("recommendations", [])
+            
+            logger.info(f"[AI Recommendations] Generated {len(recommendations)} strategic recommendations")
+            return recommendations
+            
+        except Exception as e:
+            logger.warning(f"[Recommendations] AI generation failed: {e}")
+            return self._generate_recommendations_fallback(pillar_insights, learnings)
+    
+    def _generate_recommendations_fallback(
+        self,
+        pillar_insights: List[PillarInsight],
+        learnings: List[Learning]
+    ) -> List[Dict[str, Any]]:
+        """Fallback: Generate basic recommendations from insights."""
+        recommendations = []
+        priority = 1
+        
+        # Generate from pillar insights
+        for insight in pillar_insights:
+            if insight.verdict == "exceeded":
+                recommendations.append({
+                    "priority": priority,
+                    "category": "content_mix",
+                    "title": f"Increase {insight.pillar_name} content",
+                    "description": insight.recommendation,
+                    "expected_impact": "Higher engagement based on past performance",
+                    "implementation": f"Add 1-2 more {insight.pillar_name} posts next week"
+                })
+                priority += 1
+            elif insight.verdict == "underperformed":
+                recommendations.append({
+                    "priority": priority,
+                    "category": "content_mix",
+                    "title": f"Review {insight.pillar_name} strategy",
+                    "description": insight.recommendation,
+                    "expected_impact": "Improved engagement for this pillar",
+                    "implementation": f"Analyze top performers in {insight.pillar_name} and replicate"
+                })
+                priority += 1
+        
+        # Add from learnings
+        for learning in learnings[:2]:
+            recommendations.append({
+                "priority": priority,
+                "category": learning.learning_type,
+                "title": learning.insight[:50],
+                "description": learning.action,
+                "expected_impact": "Based on accumulated learnings",
+                "implementation": learning.action
+            })
+            priority += 1
+        
+        return recommendations[:5]
+    
     async def get_accumulated_learnings(
         self,
         goal_id: Optional[str] = None,
@@ -531,3 +880,217 @@ class ReflectionSystem:
                 ))
             
             return learnings
+    
+    # =========================================================================
+    # AI AUDIENCE SEGMENTATION
+    # =========================================================================
+    
+    async def predict_audience_segments(
+        self,
+        content_data: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        AI-powered audience segmentation - predict which content resonates with specific segments.
+        """
+        try:
+            from openai import OpenAI
+            client = OpenAI()
+            
+            # Prepare content summary
+            content_summary = []
+            for c in content_data[:20]:
+                content_summary.append({
+                    "topics": c.get("topics", [])[:3],
+                    "tone": c.get("tone"),
+                    "engagement": c.get("engagement_rate", 0)
+                })
+            
+            prompt = f"""Analyze this content performance data and identify audience segments.
+
+Content Data:
+{json.dumps(content_summary, indent=2)}
+
+For each segment, predict:
+1. Segment name (e.g., "Tech Enthusiasts", "Lifestyle Seekers")
+2. Content preferences (what topics/tone they engage with)
+3. Best posting times for this segment
+4. Estimated segment size (% of audience)
+
+Return JSON:
+{{
+  "segments": [
+    {{
+      "name": "Segment Name",
+      "description": "Brief description",
+      "preferred_topics": ["topic1", "topic2"],
+      "preferred_tone": "casual/professional/inspirational",
+      "best_posting_times": ["9:00 AM", "6:00 PM"],
+      "estimated_percentage": 25
+    }}
+  ]
+}}
+
+Return ONLY valid JSON."""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=600
+            )
+            
+            result = json.loads(response.choices[0].message.content.strip())
+            logger.info(f"[AI Audience] Identified {len(result.get('segments', []))} audience segments")
+            return result.get("segments", [])
+            
+        except Exception as e:
+            logger.warning(f"[AI Audience] Segmentation failed: {e}")
+            return [
+                {"name": "General Audience", "description": "Broad audience segment", "estimated_percentage": 100}
+            ]
+    
+    # =========================================================================
+    # AI TREND INTEGRATION
+    # =========================================================================
+    
+    async def integrate_trends(
+        self,
+        current_plan: List[Dict[str, Any]],
+        trending_topics: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        AI-powered trend integration - incorporate trending topics into content planning.
+        """
+        try:
+            from openai import OpenAI
+            client = OpenAI()
+            
+            # If no trending topics provided, use placeholder
+            if not trending_topics:
+                trending_topics = ["AI technology", "sustainability", "remote work", "wellness"]
+            
+            prompt = f"""You are a social media strategist. Integrate trending topics into this content plan.
+
+Current Plan:
+{json.dumps(current_plan[:5], indent=2)}
+
+Trending Topics:
+{json.dumps(trending_topics)}
+
+For each plan item, suggest how to incorporate relevant trends without losing the original message.
+Also suggest 1-2 new content ideas based purely on trends.
+
+Return JSON:
+{{
+  "enhanced_plan": [
+    {{
+      "original_id": "video_id",
+      "trend_integration": "How to incorporate trend",
+      "suggested_hashtags": ["#trend1", "#trend2"]
+    }}
+  ],
+  "new_trend_content": [
+    {{
+      "trend": "trend name",
+      "content_idea": "Content concept",
+      "priority": "high/medium/low"
+    }}
+  ]
+}}
+
+Return ONLY valid JSON."""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=600
+            )
+            
+            result = json.loads(response.choices[0].message.content.strip())
+            logger.info(f"[AI Trends] Integrated trends into {len(result.get('enhanced_plan', []))} items")
+            return result
+            
+        except Exception as e:
+            logger.warning(f"[AI Trends] Trend integration failed: {e}")
+            return {"enhanced_plan": [], "new_trend_content": []}
+    
+    # =========================================================================
+    # AI A/B TEST DESIGN
+    # =========================================================================
+    
+    async def design_ab_tests(
+        self,
+        content_items: List[Dict[str, Any]],
+        goals: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        AI-powered A/B test design - automatically design experiments to test hypotheses.
+        """
+        try:
+            from openai import OpenAI
+            client = OpenAI()
+            
+            if not goals:
+                goals = ["increase engagement", "grow followers", "improve watch time"]
+            
+            prompt = f"""Design A/B tests for this content to achieve these goals.
+
+Content Items (sample):
+{json.dumps(content_items[:5], indent=2)}
+
+Goals:
+{json.dumps(goals)}
+
+Design 2-3 A/B tests that:
+1. Have clear hypotheses
+2. Define control vs variant
+3. Specify success metrics
+4. Estimate required sample size
+
+Return JSON:
+{{
+  "experiments": [
+    {{
+      "name": "Test Name",
+      "hypothesis": "If we do X, then Y will happen because Z",
+      "control": "Description of control version",
+      "variant": "Description of variant version",
+      "variable_tested": "What's being changed",
+      "success_metric": "engagement_rate/views/etc",
+      "minimum_sample_size": 100,
+      "expected_lift": "10-20%",
+      "priority": "high/medium/low"
+    }}
+  ]
+}}
+
+Return ONLY valid JSON."""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=700
+            )
+            
+            result = json.loads(response.choices[0].message.content.strip())
+            experiments = result.get("experiments", [])
+            logger.info(f"[AI A/B] Designed {len(experiments)} experiments")
+            return experiments
+            
+        except Exception as e:
+            logger.warning(f"[AI A/B] Test design failed: {e}")
+            return [
+                {
+                    "name": "Posting Time Test",
+                    "hypothesis": "Morning posts get higher engagement",
+                    "control": "Evening posting (6-8 PM)",
+                    "variant": "Morning posting (8-10 AM)",
+                    "variable_tested": "posting_time",
+                    "success_metric": "engagement_rate",
+                    "minimum_sample_size": 50,
+                    "expected_lift": "10-15%",
+                    "priority": "medium"
+                }
+            ]

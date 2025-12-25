@@ -256,32 +256,67 @@ async def list_media(
             )
             row = analysis_result.fetchone()
             if row:
+                # Ensure topics is a list (PostgreSQL array might be returned as list or None)
+                topics = row[2] if row[2] else None
+                if topics and not isinstance(topics, list):
+                    # If it's a string, try to parse it
+                    try:
+                        import json
+                        topics = json.loads(topics) if isinstance(topics, str) else topics
+                    except:
+                        topics = None
+                
                 analysis = {
-                    "transcript": row[1],
-                    "topics": row[2],
-                    "pre_social_score": float(row[3]) if row[3] else None
+                    "transcript": row[1] if row[1] else None,
+                    "topics": topics,
+                    "pre_social_score": float(row[3]) if row[3] is not None else None
                 }
         except Exception as e:
-            logger.debug(f"Failed to fetch analysis for video {video.id}: {e}")
+            logger.warning(f"Failed to fetch analysis for video {video.id}: {e}", exc_info=True)
         
-        status = "analyzed" if analysis else "ingested"
+        # Only mark as "analyzed" if analysis is COMPLETE (has transcript AND topics AND score)
+        # This prevents false positives from incomplete analysis
+        is_complete_analysis = (
+            analysis and
+            analysis.get("transcript") and
+            len(analysis.get("transcript", "")) > 10 and  # Must have meaningful transcript
+            analysis.get("topics") and
+            len(analysis.get("topics", [])) > 0 and  # Must have at least one topic
+            analysis.get("pre_social_score") is not None  # Must have a score
+        )
         
-        response.append(MediaStatusResponse(
-            media_id=str(video.id),
-            filename=video.file_name or "",
-            status=status,
-            file_path=video.source_uri,
-            file_size=video.file_size,
-            duration_sec=video.duration_sec,
-            resolution=video.resolution,
-            thumbnail_path=video.thumbnail_path,
-            pre_social_score=analysis["pre_social_score"] if analysis else None,
-            transcript=analysis["transcript"] if analysis else None,
-            topics=analysis["topics"] if analysis else None,
-            curation_status=None,  # Column doesn't exist in current schema
-            created_at=video.created_at.isoformat() if video.created_at else "",
-            updated_at=video.updated_at.isoformat() if video.updated_at else None
-        ))
+        status = "analyzed" if is_complete_analysis else "ingested"
+        
+        # Log if analysis exists but is incomplete (for debugging)
+        if analysis and not is_complete_analysis:
+            logger.debug(
+                f"[Status Check] Video {video.id} has incomplete analysis: "
+                f"transcript={bool(analysis.get('transcript'))}, "
+                f"topics={len(analysis.get('topics', []))}, "
+                f"score={analysis.get('pre_social_score')}"
+            )
+        
+        try:
+            response.append(MediaStatusResponse(
+                media_id=str(video.id),
+                filename=video.file_name or "",
+                status=status,
+                file_path=video.source_uri,
+                file_size=video.file_size,
+                duration_sec=video.duration_sec,
+                resolution=video.resolution,
+                thumbnail_path=video.thumbnail_path,
+                pre_social_score=analysis["pre_social_score"] if analysis else None,
+                transcript=analysis["transcript"] if analysis else None,
+                topics=analysis["topics"] if analysis else None,
+                curation_status=None,  # Column doesn't exist in current schema
+                created_at=video.created_at.isoformat() if video.created_at else "",
+                updated_at=video.updated_at.isoformat() if video.updated_at else None
+            ))
+        except Exception as e:
+            logger.error(f"Failed to create response for video {video.id}: {e}", exc_info=True)
+            # Skip this video if we can't serialize it
+            continue
     
     return response
 
@@ -346,28 +381,73 @@ async def get_media_detail(
         )
         row = analysis_result.fetchone()
         if row:
+            import json
+            
+            # Helper to parse JSONB fields that might be strings
+            def parse_jsonb(value):
+                if value is None:
+                    return None
+                if isinstance(value, (dict, list)):
+                    return value  # Already parsed
+                if isinstance(value, str):
+                    try:
+                        return json.loads(value)
+                    except (json.JSONDecodeError, TypeError):
+                        return value  # Return as-is if not valid JSON
+                return value
+            
+            # Helper to parse array fields
+            def parse_array(value):
+                if value is None:
+                    return None
+                if isinstance(value, list):
+                    return value
+                if isinstance(value, str):
+                    try:
+                        parsed = json.loads(value)
+                        return parsed if isinstance(parsed, list) else [parsed]
+                    except (json.JSONDecodeError, TypeError):
+                        return [value] if value else []
+                return value if isinstance(value, list) else [value]
+            
             analysis = {
                 "transcript": row[1],
-                "topics": row[2],
-                "hooks": row[3],
+                "topics": parse_array(row[2]),  # PostgreSQL array or JSON
+                "hooks": parse_array(row[3]) if row[3] else None,
                 "tone": row[4],
                 "pacing": row[5],
-                "pre_social_score": float(row[6]) if row[6] else None,
-                "key_moments": row[7],
+                "pre_social_score": float(row[6]) if row[6] is not None else None,
+                "key_moments": parse_jsonb(row[7]),
                 "analyzed_at": row[8],
-                "visual_analysis": row[9],
-                "deep_analysis": row[10],
-                "frame_analyses": row[11],
-                "platform_content": row[12],
+                "visual_analysis": parse_jsonb(row[9]),
+                "deep_analysis": parse_jsonb(row[10]),
+                "frame_analyses": parse_jsonb(row[11]),
+                "platform_content": parse_jsonb(row[12]),
                 "detected_hook": row[13],
-                "music_suggestion": row[14],
-                "pillar_tags": row[15],
-                "format_tags": row[16],
+                "music_suggestion": parse_jsonb(row[14]),  # This was causing the error
+                "pillar_tags": parse_array(row[15]),
+                "format_tags": parse_array(row[16]),
             }
     except Exception as e:
-        logger.warning(f"Failed to fetch analysis for {video.id}: {e}")
+        logger.error(f"Failed to fetch analysis for {video.id}: {e}", exc_info=True)
     
-    return MediaDetailResponse(
+    # Ensure all JSONB fields are properly parsed before creating response
+    if analysis:
+        import json
+        try:
+            # Parse any remaining string JSONB fields
+            for key in ['music_suggestion', 'deep_analysis', 'visual_analysis', 'key_moments', 'frame_analyses', 'platform_content']:
+                if key in analysis and analysis[key] is not None:
+                    if isinstance(analysis[key], str):
+                        try:
+                            analysis[key] = json.loads(analysis[key])
+                        except (json.JSONDecodeError, TypeError):
+                            logger.warning(f"Could not parse {key} as JSON for video {video.id}, keeping as string")
+        except Exception as e:
+            logger.error(f"Error parsing JSONB fields for video {video.id}: {e}", exc_info=True)
+    
+    try:
+        return MediaDetailResponse(
         media_id=str(video.id),
         filename=video.file_name or "",
         file_path=video.source_uri,
@@ -394,17 +474,29 @@ async def get_media_detail(
         pillar_tags=analysis["pillar_tags"] if analysis else None,
         format_tags=analysis["format_tags"] if analysis else None,
         analyzed_at=analysis["analyzed_at"].isoformat() if analysis and analysis["analyzed_at"] else None,
-    )
+        )
+    except Exception as e:
+        logger.error(f"Failed to create MediaDetailResponse for video {video.id}: {e}", exc_info=True)
+        logger.error(f"Analysis data: {analysis}")
+        raise HTTPException(status_code=500, detail=f"Failed to serialize media detail: {str(e)}")
 
 
 @router.get("/stats")
 async def get_stats(db: AsyncSession = Depends(get_db)):
     """
     Get ingestion statistics including analyzing count.
+    
+    Returns:
+    - Database stats: Videos that have been ingested into the database
+    - Folder stats: Actual files in IphoneImport folder (if available)
     """
     from sqlalchemy import func
+    import os
     
-    # Total videos
+    # =====================================================================
+    # DATABASE STATS (Ingested videos only)
+    # =====================================================================
+    # Total videos in database
     total_query = select(func.count(Video.id))
     total_result = await db.execute(total_query)
     total_videos = total_result.scalar() or 0
@@ -438,14 +530,52 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
         if job.get("status") == "running":
             analyzing_count += job.get("total", 0) - job.get("completed", 0) - job.get("failed", 0)
     
-    return {
+    # =====================================================================
+    # FOLDER STATS (Actual IphoneImport folder)
+    # =====================================================================
+    folder_stats = None
+    iphone_import_dir = Path.home() / "Documents" / "IphoneImport"
+    if iphone_import_dir.exists():
+        try:
+            video_extensions = {'.mp4', '.mov', '.MOV', '.MP4', '.avi', '.mkv', '.m4v', '.webm'}
+            image_extensions = {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.webp', '.bmp'}
+            all_extensions = video_extensions | image_extensions
+            
+            folder_file_count = 0
+            folder_total_size = 0
+            
+            for root, _, files in os.walk(iphone_import_dir):
+                for file in files:
+                    ext = Path(file).suffix.lower()
+                    if ext in all_extensions:
+                        try:
+                            full_path = os.path.join(root, file)
+                            size = os.path.getsize(full_path)
+                            folder_file_count += 1
+                            folder_total_size += size
+                        except (OSError, PermissionError):
+                            pass  # Skip files we can't access
+            
+            folder_stats = {
+                "folder_path": str(iphone_import_dir),
+                "total_files": folder_file_count,
+                "total_size_bytes": folder_total_size,
+                "total_size_gb": round(folder_total_size / (1024**3), 2)
+            }
+        except Exception as e:
+            logger.warning(f"Could not scan IphoneImport folder: {e}")
+    
+    result = {
         "total_videos": total_videos,
         "analyzed_count": analyzed_count,
         "analyzing_count": analyzing_count,
         "pending_analysis": total_videos - analyzed_count,
         "total_size_bytes": total_size,
-        "avg_duration_sec": float(avg_duration) if avg_duration else None
+        "avg_duration_sec": float(avg_duration) if avg_duration else None,
+        "folder_stats": folder_stats  # Add folder stats for comparison
     }
+    
+    return result
 
 
 @router.get("/analysis-status")
@@ -774,7 +904,16 @@ async def analyze_media(
 def run_analysis_sync(video_id: str, file_path: str, job_id: str = None):
     """
     Synchronous wrapper for analysis - runs in thread pool to avoid blocking event loop.
+    Checks for cancellation before starting.
     """
+    # Check if job was cancelled before starting
+    if job_id and job_id in _analysis_jobs:
+        if _analysis_jobs[job_id].get("status") == "cancelled":
+            logger.info(f"[Analysis] Skipping {video_id} - job {job_id} was cancelled")
+            if video_id in _analysis_jobs[job_id]["videos"]:
+                _analysis_jobs[job_id]["videos"][video_id] = {"status": "cancelled"}
+            return
+    
     import asyncio
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -797,13 +936,33 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
     event_bus = EventBus.get_instance()
     event_bus.set_source("media-analysis")
     
+    # Check if job was cancelled before starting
+    if job_id and job_id in _analysis_jobs:
+        if _analysis_jobs[job_id].get("status") == "cancelled":
+            logger.info(f"[Analysis] Job {job_id} cancelled, aborting {video_id}")
+            return
+    
+    # Check if job was cancelled before starting
+    if job_id and job_id in _analysis_jobs:
+        if _analysis_jobs[job_id].get("status") == "cancelled":
+            logger.info(f"[Analysis] Job {job_id} cancelled, aborting {video_id}")
+            return
+    
     # Update job tracker
     if job_id:
         if job_id in _analysis_jobs:
             _analysis_jobs[job_id]["videos"][video_id] = "starting"
             _analysis_jobs[job_id]["current_video"] = video_id
     
+    filename = Path(file_path).name if file_path else "unknown"
     logger.info(f"[Analysis] Starting: {video_id}")
+    print(f"\n{'='*80}")
+    print(f"🎬 [ANALYSIS START] Video: {video_id}")
+    print(f"   File: {filename}")
+    print(f"   Path: {file_path}")
+    print(f"   Job ID: {job_id}")
+    print(f"   Timestamp: {datetime.now().isoformat()}")
+    print(f"{'='*80}")
     
     # Emit analysis started event
     await event_bus.publish(
@@ -811,7 +970,7 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
         {
             "media_id": video_id,
             "job_id": job_id,
-            "filename": Path(file_path).name if file_path else None
+            "filename": filename
         },
         correlation_id=video_id
     )
@@ -857,6 +1016,10 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
     async with thread_session_maker() as db:
         try:
             video_uuid = uuid.UUID(video_id)
+            
+            # Set up comprehensive error handling
+            error_occurred = False
+            error_traceback = None
             
             # Determine if this is an image file (skip video analysis for images)
             ext = Path(file_path).suffix.lower()
@@ -917,8 +1080,30 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                             logger.debug(f"Failed to emit step event: {e}")
                     
                     def on_step(step_name):
-                        """Synchronous callback wrapper"""
+                        """Synchronous callback wrapper with cancellation check"""
+                        # Check for cancellation during steps
+                        if job_id and job_id in _analysis_jobs:
+                            if _analysis_jobs[job_id].get("status") == "cancelled":
+                                logger.info(f"[Analysis] Job {job_id} cancelled during step: {step_name}")
+                                print(f"⚠️  [ANALYSIS CANCELLED] Video: {video_id} | Step: {step_name}")
+                                return
+                        
+                        # Console log for step progress
+                        print(f"📊 [ANALYSIS STEP] Video: {video_id} | Step: {step_name} | Time: {datetime.now().strftime('%H:%M:%S')}")
+                        
                         update_video_step(job_id, video_id, step_name, filename)
+                        # Update last_update timestamp
+                        if job_id and job_id in _analysis_jobs:
+                            _analysis_jobs[job_id]["last_update"] = datetime.now().isoformat()
+                            
+                            # Log job progress
+                            job = _analysis_jobs[job_id]
+                            completed = job.get("completed", 0)
+                            failed = job.get("failed", 0)
+                            total = job.get("total", 0)
+                            progress_pct = ((completed + failed) / total * 100) if total > 0 else 0
+                            print(f"   📈 Job Progress: {completed + failed}/{total} ({progress_pct:.1f}%) | Completed: {completed} | Failed: {failed}")
+                        
                         # Emit event asynchronously (fire and forget)
                         try:
                             loop = asyncio.get_event_loop()
@@ -927,14 +1112,94 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                         except Exception:
                             pass
                     
-                    result = await analyzer.analyze_video(
-                        video_id=video_uuid,
-                        video_path=file_path,
-                        db_session=db,
-                        metadata={"video_id": str(video_uuid)},
-                        on_step_callback=on_step
-                    )
-                    logger.info(f"[Analysis] Complete for {video_id}: score={result.get('pre_social_score')}")
+                    # Check for cancellation before starting analysis
+                    if job_id and job_id in _analysis_jobs:
+                        if _analysis_jobs[job_id].get("status") == "cancelled":
+                            logger.info(f"[Analysis] Job {job_id} cancelled, aborting analysis for {video_id}")
+                            if video_id in _analysis_jobs[job_id]["videos"]:
+                                _analysis_jobs[job_id]["videos"][video_id] = {"status": "cancelled"}
+                            return
+                    
+                    # Run analysis with retry logic and full traceback visibility
+                    max_retries = 2
+                    retry_count = 0
+                    result = None
+                    
+                    while retry_count <= max_retries:
+                        try:
+                            # Check for cancellation before each retry
+                            if job_id and job_id in _analysis_jobs:
+                                if _analysis_jobs[job_id].get("status") == "cancelled":
+                                    logger.info(f"[Analysis] Job {job_id} cancelled, aborting {video_id}")
+                                    return
+                            
+                            result = await analyzer.analyze_video(
+                                video_id=video_uuid,
+                                video_path=file_path,
+                                db_session=db,
+                                metadata={"video_id": str(video_uuid)},
+                                on_step_callback=on_step
+                            )
+                            
+                            # Success - break out of retry loop
+                            break
+                            
+                        except Exception as analysis_error:
+                            retry_count += 1
+                            error_traceback = traceback.format_exc()
+                            
+                            if retry_count <= max_retries:
+                                # Show retry traceback
+                                print(f"\n{'='*80}")
+                                print(f"🔄 [ANALYSIS RETRY] Video: {video_id} | Attempt {retry_count}/{max_retries}")
+                                print(f"   File: {filename}")
+                                print(f"   Error Type: {type(analysis_error).__name__}")
+                                print(f"   Error: {str(analysis_error)}")
+                                print(f"   Retrying in {2 * retry_count} seconds...")
+                                print(f"   Time: {datetime.now().strftime('%H:%M:%S')}")
+                                print(f"{'='*80}")
+                                print("Full Traceback:")
+                                print(error_traceback)
+                                print(f"{'='*80}\n")
+                                
+                                logger.warning(
+                                    f"[Analysis] Attempt {retry_count}/{max_retries} failed for {video_id}: {analysis_error}. Retrying..."
+                                )
+                                await asyncio.sleep(2 * retry_count)  # Exponential backoff
+                            else:
+                                # All retries exhausted - show final traceback and re-raise
+                                print(f"\n{'='*80}")
+                                print(f"❌ [ANALYSIS RETRIES EXHAUSTED] Video: {video_id}")
+                                print(f"   File: {filename}")
+                                print(f"   All {max_retries} retry attempts failed")
+                                print(f"   Final Error Type: {type(analysis_error).__name__}")
+                                print(f"   Final Error: {str(analysis_error)}")
+                                print(f"{'='*80}")
+                                print("Final Traceback:")
+                                print(error_traceback)
+                                print(f"{'='*80}\n")
+                                
+                                logger.error(f"[Analysis] All {max_retries} retries exhausted for {video_id}")
+                                raise  # Re-raise to be caught by outer exception handler
+                    
+                    # Check for cancellation after analysis
+                    if job_id and job_id in _analysis_jobs:
+                        if _analysis_jobs[job_id].get("status") == "cancelled":
+                            logger.info(f"[Analysis] Job {job_id} cancelled after analysis of {video_id}")
+                            return
+                    
+                    if result:
+                        score = result.get('pre_social_score', 0)
+                        logger.info(f"[Analysis] Complete for {video_id}: score={score}")
+                        print(f"✅ [ANALYSIS COMPLETE] Video: {video_id}")
+                        print(f"   Score: {score}")
+                        print(f"   Topics: {len(result.get('topics', []))}")
+                        print(f"   Hooks: {len(result.get('hooks', []))}")
+                        print(f"   Time: {datetime.now().strftime('%H:%M:%S')}")
+                    else:
+                        logger.warning(f"[Analysis] No result returned for {video_id}")
+                        print(f"⚠️  [ANALYSIS NO RESULT] Video: {video_id} - No result returned")
+                        return
                     
                     # Always run comprehensive image analysis as part of full analysis
                     update_video_step(job_id, video_id, "5/5 Analysis", filename)
@@ -966,7 +1231,18 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                                         await db.commit()
                                         logger.success(f"[Analysis] Thumbnail generated for {video_id}")
                                 except Exception as thumb_err:
+                                    thumb_traceback = traceback.format_exc()
                                     logger.warning(f"[Analysis] Could not generate thumbnail: {thumb_err}")
+                                    # Print traceback for thumbnail generation errors
+                                    print(f"\n{'='*80}")
+                                    print(f"⚠️  [THUMBNAIL GENERATION ERROR] Video: {video_id}")
+                                    print(f"   File: {filename}")
+                                    print(f"   Error Type: {type(thumb_err).__name__}")
+                                    print(f"   Error: {str(thumb_err)}")
+                                    print(f"{'='*80}")
+                                    print("Full Traceback:")
+                                    print(thumb_traceback)
+                                    print(f"{'='*80}\n")
                             
                             # Run comprehensive image analysis (always part of full analysis)
                             deep_res = await client.post(
@@ -1011,7 +1287,19 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                             else:
                                 logger.warning(f"[Analysis] Image analysis failed for {video_id}: status {deep_res.status_code}")
                     except Exception as e:
+                        error_traceback = traceback.format_exc()
                         logger.warning(f"[Analysis] Image analysis error for {video_id}: {e}")
+                        # Print traceback for image analysis errors
+                        print(f"\n{'='*80}")
+                        print(f"⚠️  [IMAGE ANALYSIS ERROR] Video: {video_id}")
+                        print(f"   File: {filename}")
+                        print(f"   Error Type: {type(e).__name__}")
+                        print(f"   Error: {str(e)}")
+                        print(f"   Note: Video analysis completed, but image analysis failed")
+                        print(f"{'='*80}")
+                        print("Full Traceback:")
+                        print(error_traceback)
+                        print(f"{'='*80}\n")
                     
                     logger.success(f"[Analysis] Complete: {video_id}")
                     
@@ -1040,34 +1328,98 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                         _analysis_jobs[job_id]["videos"][video_id] = {
                             "status": "completed",
                             "filename": filename,
-                            "score": result.get('pre_social_score')
+                            "score": result.get('pre_social_score'),
+                            "completed_at": datetime.now().isoformat()
                         }
                         _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
-                        logger.info(f"[Batch Analysis] ✅ Completed: {video_id} ({filename}) - score: {result.get('pre_social_score')}")
+                        _analysis_jobs[job_id]["last_update"] = datetime.now().isoformat()
+                        
+                        # Emit progress update
+                        try:
+                            from services.event_bus import EventBus, Topics
+                            event_bus = EventBus.get_instance()
+                            job = _analysis_jobs[job_id]
+                            await event_bus.publish(
+                                Topics.ANALYSIS_PROGRESS,
+                                {
+                                    "media_id": video_id,
+                                    "job_id": job_id,
+                                    "progress": int((job["completed"] + job.get("failed", 0)) / job["total"] * 100),
+                                    "completed": job["completed"],
+                                    "failed": job.get("failed", 0),
+                                    "total": job["total"]
+                                },
+                                correlation_id=job_id
+                            )
+                        except Exception as e:
+                            logger.debug(f"Failed to emit progress event: {e}")
+                        
+                        logger.info(f"[Batch Analysis] ✅ Completed: {video_id} ({filename}) - score: {result.get('pre_social_score')} | Progress: {job['completed']}/{job['total']}")
+                        
                         # Check if job is complete
                         job = _analysis_jobs[job_id]
                         if job["completed"] + job.get("failed", 0) >= job["total"]:
                             job["status"] = "completed"
-                            logger.success(f"[Batch Analysis] Job {job_id} completed: {job['completed']} succeeded, {job.get('failed', 0)} failed")
+                            job["completed_at"] = datetime.now().isoformat()
+                            success_rate = (job['completed'] / job['total'] * 100) if job['total'] > 0 else 0
+                            logger.success(
+                                f"[Batch Analysis] ✅ Job {job_id} completed: "
+                                f"{job['completed']} succeeded ({success_rate:.1f}%), "
+                                f"{job.get('failed', 0)} failed"
+                            )
+                            
+                            # Emit job completion event
+                            try:
+                                from services.event_bus import EventBus, Topics
+                                event_bus = EventBus.get_instance()
+                                await event_bus.publish(
+                                    Topics.ANALYSIS_COMPLETED,
+                                    {
+                                        "job_id": job_id,
+                                        "total": job["total"],
+                                        "completed": job["completed"],
+                                        "failed": job.get("failed", 0),
+                                        "success_rate": success_rate
+                                    },
+                                    correlation_id=job_id
+                                )
+                            except Exception as e:
+                                logger.debug(f"Failed to emit job completion event: {e}")
                     return
                     
                 except ImportError as e:
                     logger.warning(f"[Analysis] VideoAnalyzer not available: {e}, using fallback")
                 except Exception as e:
+                    error_traceback = traceback.format_exc()
                     logger.warning(f"[Analysis] VideoAnalyzer failed for {video_id}: {e}, using fallback")
-                    traceback.print_exc()
+                    logger.warning(f"[Analysis] VideoAnalyzer traceback:\n{error_traceback}")
+                    
+                    # Print traceback for visibility - this is a fallback scenario
+                    print(f"\n{'='*80}")
+                    print(f"⚠️  [VIDEO ANALYZER FALLBACK] Video: {video_id}")
+                    print(f"   File: {filename}")
+                    print(f"   Error Type: {type(e).__name__}")
+                    print(f"   Error: {str(e)}")
+                    print(f"   Using fallback analysis instead of full AI analysis")
+                    print(f"{'='*80}")
+                    print("Full Traceback:")
+                    print(error_traceback)
+                    print(f"{'='*80}\n")
             
             # Fallback: Create basic analysis without AI
+            # NOTE: This creates a minimal analysis record, but it should NOT be marked as "analyzed"
+            # The status check now requires complete analysis (transcript + topics + score)
             import random
             
             # Determine media type
             ext = Path(file_path).suffix.lower()
             is_image = ext in {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'}
             
+            # Create fallback analysis - but mark it clearly as incomplete
             analysis = VideoAnalysis(
                 video_id=video_uuid,
                 transcript="" if is_image else "Transcription requires OpenAI API key",
-                topics=["content", "media"],
+                topics=["content", "media"],  # Minimal fallback topics
                 hooks=["Visual content"],
                 tone="informative" if is_image else "conversational",
                 pacing="static" if is_image else "moderate",
@@ -1076,7 +1428,8 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             
             db.add(analysis)
             await db.commit()
-            logger.success(f"[Analysis] Complete: {video_id} (basic fallback)")
+            logger.warning(f"[Analysis] Fallback analysis saved for {video_id} - this is INCOMPLETE and will not be marked as 'analyzed'")
+            print(f"⚠️  [FALLBACK ANALYSIS] Video: {video_id} - Saved minimal fallback analysis (will NOT be marked as 'analyzed')")
             
             # Emit analysis completed event (fallback)
             try:
@@ -1112,11 +1465,25 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                     logger.success(f"[Batch Analysis] Job {job_id} completed: {job['completed']} succeeded, {job.get('failed', 0)} failed")
             
         except Exception as e:
-            logger.error(f"[Analysis] Error for {video_id}: {e}")
-            traceback.print_exc()
+            # Full traceback logging for debugging
+            error_traceback = traceback.format_exc()
+            logger.error(f"[Analysis] ❌ FAILED for {video_id} ({filename}): {e}")
+            logger.error(f"[Analysis] Full traceback:\n{error_traceback}")
+            
+            # Print traceback to console for visibility and debugging
+            print(f"\n{'='*80}")
+            print(f"❌ [ANALYSIS FAILURE] Video: {video_id}")
+            print(f"   File: {filename}")
+            print(f"   Error Type: {type(e).__name__}")
+            print(f"   Error: {str(e)}")
+            print(f"{'='*80}")
+            print("Full Traceback:")
+            print(error_traceback)
+            print(f"{'='*80}\n")
+            
             await db.rollback()
             
-            # Emit analysis failed event
+            # Emit analysis failed event with full traceback
             try:
                 from services.event_bus import EventBus, Topics
                 event_bus = EventBus.get_instance()
@@ -1126,6 +1493,8 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                         "media_id": video_id,
                         "job_id": job_id,
                         "error": str(e),
+                        "error_type": type(e).__name__,
+                        "traceback": error_traceback,
                         "filename": filename
                     },
                     correlation_id=video_id
@@ -1133,15 +1502,39 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             except Exception as fail_event_err:
                 logger.debug(f"Failed to emit failure event: {fail_event_err}")
             
-            # Update job tracker
+            # Update job tracker with detailed error info
             if job_id and job_id in _analysis_jobs:
-                _analysis_jobs[job_id]["videos"][video_id] = f"failed:{str(e)[:50]}"
+                error_summary = f"failed:{type(e).__name__}:{str(e)[:100]}"
+                _analysis_jobs[job_id]["videos"][video_id] = {
+                    "status": "failed",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "traceback": error_traceback,
+                    "filename": filename
+                }
                 _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
-                # Check if job is complete (even with failures)
+                
+                # Log failure summary
                 job = _analysis_jobs[job_id]
+                logger.error(
+                    f"[Batch Analysis] ❌ Failed: {video_id} ({filename}) | "
+                    f"Progress: {job['completed']}/{job['total']} completed, "
+                    f"{job.get('failed', 0)}/{job['total']} failed"
+                )
+                
+                # Check if job is complete (even with failures)
                 if job["completed"] + job.get("failed", 0) >= job["total"]:
                     job["status"] = "completed"
-                    logger.success(f"[Batch Analysis] Job {job_id} completed: {job['completed']} succeeded, {job.get('failed', 0)} failed")
+                    success_rate = (job['completed'] / job['total'] * 100) if job['total'] > 0 else 0
+                    logger.success(
+                        f"[Batch Analysis] Job {job_id} completed: "
+                        f"{job['completed']} succeeded ({success_rate:.1f}%), "
+                        f"{job.get('failed', 0)} failed"
+                    )
+            
+            # Don't re-raise - continue processing other videos even if one fails
+            # This ensures the batch job completes even with individual failures
+            logger.info(f"[Analysis] Continuing batch job despite failure of {video_id}")
 
 
 @router.post("/batch/analyze")
@@ -1264,7 +1657,15 @@ async def batch_analyze(
     import concurrent.futures
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
     
+    # Store executor in job for potential cancellation
+    _analysis_jobs[job_id]["executor"] = executor
+    
     for video in valid_videos:
+        # Check if job was cancelled before queuing
+        if _analysis_jobs[job_id].get("status") == "cancelled":
+            logger.info(f"[Batch Analysis] Job {job_id} cancelled, stopping queue")
+            break
+        
         _analysis_jobs[job_id]["videos"][str(video.id)] = "queued"
         executor.submit(run_analysis_sync, str(video.id), video.source_uri, job_id)
     
@@ -1273,24 +1674,209 @@ async def batch_analyze(
     return {"status": "started", "count": len(valid_videos), "job_id": job_id}
 
 
+@router.post("/batch/cancel")
+async def cancel_batch_analysis():
+    """
+    Cancel all running batch analysis jobs.
+    Marks jobs as cancelled and stops queuing new videos.
+    """
+    cancelled_count = 0
+    cancelled_jobs = []
+    
+    # Find all running jobs and mark them as cancelled
+    for job_id, job in _analysis_jobs.items():
+        if job.get("status") in ["running", "queued"]:
+            job["status"] = "cancelled"
+            job["cancelled_at"] = datetime.now().isoformat()
+            cancelled_count += 1
+            cancelled_jobs.append(job_id)
+            logger.info(f"[Batch Analysis] Cancelled job: {job_id}")
+    
+    if cancelled_count > 0:
+        logger.success(f"[Batch Analysis] Cancelled {cancelled_count} analysis job(s)")
+        return {
+            "success": True,
+            "cancelled": cancelled_count,
+            "job_ids": cancelled_jobs,
+            "message": f"Cancelled {cancelled_count} analysis job(s)"
+        }
+    else:
+        return {
+            "success": False,
+            "cancelled": 0,
+            "message": "No running analysis jobs to cancel"
+        }
+
+
+@router.post("/batch/cancel/{job_id}")
+async def cancel_specific_batch_analysis(job_id: str):
+    """
+    Cancel a specific batch analysis job by ID.
+    """
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
+    job = _analysis_jobs[job_id]
+    
+    if job.get("status") in ["completed", "cancelled", "failed"]:
+        return {
+            "success": False,
+            "message": f"Job {job_id} is already {job.get('status')}",
+            "status": job.get("status")
+        }
+    
+    # Mark job as cancelled
+    job["status"] = "cancelled"
+    job["cancelled_at"] = datetime.now().isoformat()
+    
+    # Mark all queued/processing videos as cancelled
+    for video_id, video_status in job.get("videos", {}).items():
+        if isinstance(video_status, dict):
+            if video_status.get("status") in ["queued", "processing", "starting"]:
+                video_status["status"] = "cancelled"
+        elif video_status in ["queued", "processing", "starting"]:
+            job["videos"][video_id] = {"status": "cancelled"}
+    
+    logger.info(f"[Batch Analysis] Cancelled job: {job_id}")
+    
+    return {
+        "success": True,
+        "job_id": job_id,
+        "message": f"Job {job_id} cancelled",
+        "status": "cancelled"
+    }
+
+
+@router.get("/batch/analyze/status/{job_id}")
+async def get_batch_analysis_status(job_id: str):
+    """Get status of a batch analysis job."""
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = _analysis_jobs[job_id]
+    
+    # Calculate completion percentage
+    total = job.get("total", 0)
+    completed = job.get("completed", 0)
+    failed = job.get("failed", 0)
+    in_progress = total - completed - failed
+    
+    job["completion_percent"] = ((completed + failed) / total * 100) if total > 0 else 0
+    job["success_rate"] = (completed / total * 100) if total > 0 else 0
+    job["in_progress"] = in_progress
+    
+    return job
+
+
+@router.get("/batch/analyze/test-completion")
+async def test_analysis_completion(
+    db: AsyncSession = Depends(get_db),
+    job_id: Optional[str] = Query(None, description="Job ID to test (optional)")
+):
+    """
+    Test endpoint to verify 100% analysis completion.
+    Checks all videos in a batch job and reports completion status with full traceback on failures.
+    """
+    from sqlalchemy import select, func, exists
+    
+    if job_id and job_id in _analysis_jobs:
+        # Check specific job
+        job = _analysis_jobs[job_id]
+        video_ids = list(job.get("videos", {}).keys())
+        
+        # Query database for actual analysis status
+        results = []
+        for video_id in video_ids:
+            try:
+                video_uuid = uuid.UUID(video_id)
+                analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+                analysis_result = await db.execute(analysis_query)
+                analysis = analysis_result.scalar_one_or_none()
+                
+                has_transcript = analysis and analysis.transcript
+                has_topics = analysis and analysis.topics
+                has_platform_content = analysis and analysis.platform_content
+                
+                job_status = job["videos"].get(video_id, {})
+                if isinstance(job_status, dict):
+                    job_status_str = job_status.get("status", "unknown")
+                    error_info = job_status.get("error")
+                    traceback_info = job_status.get("traceback")
+                else:
+                    job_status_str = str(job_status)
+                    error_info = None
+                    traceback_info = None
+                
+                results.append({
+                    "video_id": video_id,
+                    "has_analysis": analysis is not None,
+                    "has_transcript": has_transcript,
+                    "has_topics": has_topics,
+                    "has_platform_content": has_platform_content,
+                    "complete": has_transcript and has_topics and has_platform_content,
+                    "job_status": job_status_str,
+                    "error": error_info,
+                    "traceback": traceback_info
+                })
+            except Exception as e:
+                import traceback
+                results.append({
+                    "video_id": video_id,
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                    "job_status": job["videos"].get(video_id, "unknown")
+                })
+        
+        complete_count = sum(1 for r in results if r.get("complete", False))
+        failed_count = sum(1 for r in results if "error" in r or r.get("job_status", "").startswith("failed"))
+        total_count = len(results)
+        
+        return {
+            "job_id": job_id,
+            "total_videos": total_count,
+            "complete": complete_count,
+            "failed": failed_count,
+            "incomplete": total_count - complete_count - failed_count,
+            "completion_rate": (complete_count / total_count * 100) if total_count > 0 else 0,
+            "success_rate": ((complete_count) / total_count * 100) if total_count > 0 else 0,
+            "details": results
+        }
+    else:
+        # Check all videos without analysis
+        query = select(func.count(Video.id)).where(
+            ~exists().where(VideoAnalysis.video_id == Video.id)
+        )
+        result = await db.execute(query)
+        unanalyzed_count = result.scalar() or 0
+        
+        return {
+            "message": "No specific job provided",
+            "unanalyzed_videos": unanalyzed_count,
+            "note": "Provide job_id query parameter to check specific batch job completion"
+        }
+
+
 # =============================================================================
 # ENDPOINTS - THUMBNAIL
 # =============================================================================
 
 def map_host_to_container_path(host_path: str) -> str:
-    """Map host filesystem paths to Docker container paths."""
+    """Map host filesystem paths to Docker container paths.
+    
+    Maps ~/Documents/IphoneImport to /media/IphoneImport (Docker volume mount)
+    """
     if not host_path:
         return host_path
-    # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/import
+    # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/IphoneImport
     import re
     # Handle expanded home directory paths
     pattern = r'^/Users/[^/]+/Documents/IphoneImport/(.*)$'
     match = re.match(pattern, host_path)
     if match:
-        return f"/media/import/{match.group(1)}"
+        return f"/media/IphoneImport/{match.group(1)}"
     # Handle ~ paths (shouldn't happen but just in case)
     if host_path.startswith('~/Documents/IphoneImport/'):
-        return host_path.replace('~/Documents/IphoneImport/', '/media/import/')
+        return host_path.replace('~/Documents/IphoneImport/', '/media/IphoneImport/')
     return host_path
 
 
@@ -1859,17 +2445,17 @@ async def save_analysis(
             analysis.pacing = request.pacing
         if request.key_moments is not None:
             analysis.key_moments = request.key_moments
-        # Columns that don't exist in DB - skip them
-        # if request.visual_analysis is not None:
-        #     analysis.visual_analysis = request.visual_analysis
-        # if request.frame_analyses is not None:
-        #     analysis.frame_analyses = request.frame_analyses
-        # if request.music_suggestion is not None:
-        #     analysis.music_suggestion = request.music_suggestion
-        # if request.platform_content is not None:
-        #     analysis.platform_content = request.platform_content
-        # if request.deep_analysis is not None:
-        #     analysis.deep_analysis = request.deep_analysis
+        # JSONB columns - these DO exist in the database
+        if request.visual_analysis is not None:
+            analysis.visual_analysis = request.visual_analysis
+        if request.frame_analyses is not None:
+            analysis.frame_analyses = request.frame_analyses
+        if request.music_suggestion is not None:
+            analysis.music_suggestion = request.music_suggestion
+        if request.platform_content is not None:
+            analysis.platform_content = request.platform_content
+        if request.deep_analysis is not None:
+            analysis.deep_analysis = request.deep_analysis
         if request.pre_social_score is not None:
             analysis.pre_social_score = request.pre_social_score
         analysis.analysis_version = "3.0"
@@ -1884,12 +2470,12 @@ async def save_analysis(
             tone=request.tone,
             pacing=request.pacing,
             key_moments=request.key_moments,
-            # Columns that don't exist in DB - skip them
-            # visual_analysis=request.visual_analysis,
-            # frame_analyses=request.frame_analyses,
-            # music_suggestion=request.music_suggestion,
-            # platform_content=request.platform_content,
-            # deep_analysis=request.deep_analysis,
+            # JSONB columns - these DO exist in the database
+            visual_analysis=request.visual_analysis,
+            frame_analyses=request.frame_analyses,
+            music_suggestion=request.music_suggestion,
+            platform_content=request.platform_content,
+            deep_analysis=request.deep_analysis,
             pre_social_score=request.pre_social_score,
             analysis_version="3.0"
         )

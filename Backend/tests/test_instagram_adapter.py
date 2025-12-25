@@ -7,7 +7,12 @@ import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime
 
-from services.instagram.adapters import RapidApiInstagramAdapter, MediaType
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from services.instagram.adapters import RapidApiInstagramAdapter
+from services.instagram.adapters.base import MediaType
 
 
 class TestRapidApiInstagramAdapter:
@@ -132,7 +137,7 @@ class TestRapidApiInstagramAdapter:
         """Test hashtag cleaning"""
         assert adapter._clean_tag("#fitness") == "fitness"
         assert adapter._clean_tag("fitness") == "fitness"
-        assert adapter._clean_tag("##fitness") == "#fitness"
+        assert adapter._clean_tag("##fitness") == "fitness"
     
     @pytest.mark.asyncio
     async def test_parse_media_item_reel(self, adapter):

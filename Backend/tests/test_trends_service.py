@@ -6,6 +6,10 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import date, timedelta
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from services.instagram.trend_crawler import TrendCrawler
 from services.instagram.velocity_engine import VelocityEngine
 from services.instagram.trend_cards_library import TrendCardsLibrary

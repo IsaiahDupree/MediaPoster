@@ -29,6 +29,12 @@ TOPICS = {
     "EXPERIMENTS_DAILY_ANALYZE_RESULTS": "experiments.daily.analyze_results",
     "EXPERIMENTS_WINNER_DETECTION": "experiments.weekly.winner_detection",
     "EXPERIMENTS_PROMOTE_TO_NARRATIVE": "experiments.weekly.promote_to_narrative",
+    
+    # Content Mix Planner
+    "CONTENT_MIX_GENERATE_PLAN": "content_mix.generate_plan",
+    "CONTENT_MIX_ASSIGN_CONTENT": "content_mix.assign_content",
+    "CONTENT_MIX_APPROVE_PLAN": "content_mix.approve_plan",
+    "CONTENT_MIX_CREATE_CONTENT": "content_mix.create_content",
 }
 
 # Handler type
@@ -96,6 +102,23 @@ async def _get_dynamic_handler(topic: str) -> TopicHandler:
     if topic == TOPICS["EXPERIMENTS_PROMOTE_TO_NARRATIVE"]:
         from .services.experiments_service import run_experiments_promote
         return run_experiments_promote
+    
+    # Content Mix handlers
+    if topic == TOPICS["CONTENT_MIX_GENERATE_PLAN"]:
+        from .services.content_mix_service import run_content_mix_generate_plan
+        return run_content_mix_generate_plan
+    
+    if topic == TOPICS["CONTENT_MIX_ASSIGN_CONTENT"]:
+        from .services.content_mix_service import run_content_mix_assign_content
+        return run_content_mix_assign_content
+    
+    if topic == TOPICS["CONTENT_MIX_APPROVE_PLAN"]:
+        from .services.content_mix_service import run_content_mix_approve_plan
+        return run_content_mix_approve_plan
+    
+    if topic == TOPICS["CONTENT_MIX_CREATE_CONTENT"]:
+        from .services.content_mix_service import run_content_mix_create_content
+        return run_content_mix_create_content
     
     return None
 

@@ -105,14 +105,37 @@ class MediaProviderService:
             return self._cache[media_id]
         
         with self.engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT id, file_name, source_uri, file_size, duration_sec, 
-                       resolution, thumbnail_path
-                FROM videos WHERE id = :id
-            """), {"id": media_id})
-            row = result.fetchone()
+            # Handle UUID properly - PostgreSQL requires explicit casting
+            try:
+                import uuid as uuid_lib
+                # Validate UUID format
+                try:
+                    uuid_lib.UUID(media_id)  # Validate UUID format
+                    # Use UUID casting for proper comparison
+                    result = conn.execute(text("""
+                        SELECT id, file_name, source_uri, file_size, duration_sec, 
+                               resolution, thumbnail_path
+                        FROM videos WHERE id = CAST(:id AS uuid)
+                    """), {"id": media_id})
+                except ValueError:
+                    # Not a valid UUID format, try as text match (for backwards compatibility)
+                    logger.warning(f"Media ID is not a valid UUID format, trying text match: {media_id}")
+                    result = conn.execute(text("""
+                        SELECT id, file_name, source_uri, file_size, duration_sec, 
+                               resolution, thumbnail_path
+                        FROM videos WHERE id::text = :id OR file_name = :id
+                    """), {"id": media_id})
+                
+                row = result.fetchone()
+            except Exception as e:
+                # Database query errors should be logged as errors, not warnings
+                logger.error(f"Database error querying media {media_id}: {e}", exc_info=True)
+                return None
             
             if not row:
+                # Media not found - this is expected in some cases (e.g., deleted media)
+                # But we should log it as a warning so we know when thumbnails fail
+                logger.warning(f"Media not found in videos table: {media_id} - thumbnail requests will fail")
                 return None
             
             media_info = MediaInfo(
@@ -204,12 +227,17 @@ class MediaProviderService:
             )
         
         # Try to generate on-the-fly from source file (like media-db does)
-        if media_info.file_path and self.validate_file_exists(media_info.file_path):
+        if media_info.file_path:
             try:
                 from services.thumbnail_service import generate_thumbnail
-                # Map host paths to container paths if needed
-                file_path = self._map_to_container_path(media_info.file_path)
+                # Try original path first (host), then mapped path (container)
+                file_path = media_info.file_path
+                if not Path(file_path).exists():
+                    # Try container mapping as fallback
+                    file_path = self._map_to_container_path(media_info.file_path)
+                
                 if file_path and Path(file_path).exists():
+                    logger.info(f"Generating thumbnail on-the-fly for media {media_id} from {file_path}")
                     generated_thumb = generate_thumbnail(file_path, size)
                     if generated_thumb and Path(generated_thumb).exists():
                         # Update database with thumbnail path
@@ -219,11 +247,18 @@ class MediaProviderService:
                             media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=86400"}
                         )
+                    else:
+                        logger.warning(f"Thumbnail generation returned no file for media {media_id}")
+                else:
+                    logger.warning(f"Source file not found for media {media_id}: {media_info.file_path}")
             except Exception as e:
-                logger.warning(f"Failed to generate thumbnail on-the-fly: {e}")
+                # Log error with full context - thumbnail generation failures should be visible
+                logger.error(f"Failed to generate thumbnail on-the-fly for media {media_id}: {e}", exc_info=True)
+                # Continue to try other methods or return 404
         
-        # No thumbnail - return placeholder or 404
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
+        # No thumbnail found - log this as a warning so we know when thumbnails are missing
+        logger.warning(f"Thumbnail not found for media {media_id} - tried: stored path, thumbnail dir, and on-the-fly generation")
+        raise HTTPException(status_code=404, detail=f"Thumbnail not found for media {media_id}")
     
     def _map_to_container_path(self, host_path: str) -> str:
         """Map host filesystem paths to Docker container paths.

@@ -659,6 +659,14 @@ app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discov
 # Content Analyzer API (AI-powered video analysis)
 from api.endpoints import content_analyzer_api
 app.include_router(content_analyzer_api.router, prefix="/api/content-analyzer", tags=["Content Analyzer"])
+
+# Posting Optimizer API (Best time to post)
+from api.endpoints import posting_optimizer_api
+app.include_router(posting_optimizer_api.router, prefix="/api/posting-optimizer", tags=["Posting Optimizer"])
+
+# Hashtag Generator API (AI-powered hashtag recommendations)
+from api.endpoints import hashtag_generator_api
+app.include_router(hashtag_generator_api.router, prefix="/api/hashtags", tags=["Hashtag Generator"])
 app.include_router(posted_media.router, tags=["Posted Media"])
 
 # Database Backup endpoints

@@ -716,6 +716,10 @@ app.include_router(rapidapi_metrics.router, tags=["RapidAPI Metrics"])
 from api.endpoints import narrative_scheduler
 app.include_router(narrative_scheduler.router, tags=["Narrative Scheduler"])
 
+# Content Mix Planner (Long-term scheduling with mixed content types)
+from api.endpoints import content_mix_api
+app.include_router(content_mix_api.router, tags=["Content Mix Planner"])
+
 # Comment Automation (AI-powered comment engagement across platforms)
 from api import comment_automation
 app.include_router(comment_automation.router, tags=["Comment Automation"])

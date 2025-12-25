@@ -44,6 +44,8 @@ class DuplicateGroup(BaseModel):
     videos: List[Dict[str, Any]]
     similarity_score: float
     transcript_preview: str
+    is_caption_variant: bool = False  # True if videos might be caption vs no-caption versions
+    caption_variant_reason: Optional[str] = None  # Explanation of why flagged as caption variant
 
 class AutoCurationSettings(BaseModel):
     auto_deny_threshold: float = -0.5
@@ -275,12 +277,59 @@ async def get_sentiment_job_status(job_id: str):
 # DUPLICATE DETECTION
 # =============================================================================
 
+def detect_caption_variant(videos: List) -> tuple[bool, str]:
+    """
+    Detect if a group of videos with same transcript might be caption variants.
+    Returns (is_caption_variant, reason)
+    
+    Indicators:
+    - Significant file size difference (>20%) with same duration suggests captions added
+    - Different resolutions with same content
+    - Filename contains 'caption', 'sub', 'text' keywords
+    """
+    if len(videos) < 2:
+        return False, ""
+    
+    file_sizes = [v.file_size or 0 for v in videos]
+    filenames = [v.file_name.lower() if v.file_name else "" for v in videos]
+    resolutions = [v.resolution for v in videos]
+    
+    reasons = []
+    
+    # Check for caption-related keywords in filenames
+    caption_keywords = ['caption', 'captions', 'captioned', 'sub', 'subs', 'subtitle', 'text', 'titled']
+    has_caption_keyword = any(
+        any(kw in fn for kw in caption_keywords) 
+        for fn in filenames
+    )
+    if has_caption_keyword:
+        reasons.append("Filename contains caption-related keyword")
+    
+    # Check for significant file size difference (>20%)
+    if min(file_sizes) > 0:
+        size_ratio = max(file_sizes) / min(file_sizes)
+        if size_ratio > 1.2:  # 20% difference
+            reasons.append(f"File size varies by {((size_ratio-1)*100):.0f}% (caption encoding)")
+    
+    # Check for different resolutions (re-encoded with captions might change)
+    unique_resolutions = set(r for r in resolutions if r)
+    if len(unique_resolutions) > 1:
+        reasons.append(f"Different resolutions: {', '.join(unique_resolutions)}")
+    
+    is_variant = len(reasons) > 0
+    return is_variant, "; ".join(reasons) if reasons else ""
+
 @router.get("/duplicates")
 async def find_duplicates(
     threshold: float = Query(0.9, description="Similarity threshold (0.0-1.0)"),
+    include_caption_variants: bool = Query(False, description="Include potential caption variants"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Find videos with duplicate/similar transcripts."""
+    """Find videos with duplicate/similar transcripts.
+    
+    Caption variants (same transcript, one with captions burned in) are flagged
+    and excluded by default to prevent accidental deletion of valuable content.
+    """
     from rapidfuzz import fuzz
     
     # Get all videos with transcripts and hashes
@@ -290,10 +339,12 @@ async def find_duplicates(
             VideoAnalysis.transcript,
             VideoAnalysis.transcript_hash,
             VideoAnalysis.pre_social_score,
+            VideoAnalysis.visual_analysis,
             Video.file_name,
             Video.source_uri,
             Video.file_size,
-            Video.resolution
+            Video.resolution,
+            Video.duration_sec
         )
         .join(Video, Video.id == VideoAnalysis.video_id)
         .where(VideoAnalysis.transcript.isnot(None))
@@ -302,7 +353,7 @@ async def find_duplicates(
     videos = result.fetchall()
     
     if len(videos) < 2:
-        return {"groups": [], "total_duplicates": 0}
+        return {"groups": [], "total_duplicates": 0, "caption_variants_excluded": 0}
     
     # First pass: group by exact hash match
     hash_groups = {}
@@ -314,13 +365,16 @@ async def find_duplicates(
     
     # Find groups with duplicates
     duplicate_groups = []
+    caption_variant_groups = []
     processed_ids = set()
     
     for h, group in hash_groups.items():
         if len(group) > 1:
-            # Exact duplicates
+            # Check if this might be a caption variant
+            is_caption_variant, caption_reason = detect_caption_variant(group)
+            
             group_id = str(uuid.uuid4())
-            duplicate_groups.append(DuplicateGroup(
+            dup_group = DuplicateGroup(
                 group_id=group_id,
                 videos=[{
                     "video_id": str(v.video_id),
@@ -328,11 +382,20 @@ async def find_duplicates(
                     "file_path": v.source_uri,
                     "file_size": v.file_size,
                     "resolution": v.resolution,
+                    "duration_sec": v.duration_sec,
                     "score": float(v.pre_social_score) if v.pre_social_score else 0
                 } for v in group],
                 similarity_score=1.0,
-                transcript_preview=group[0].transcript[:200] if group[0].transcript else ""
-            ))
+                transcript_preview=group[0].transcript[:200] if group[0].transcript else "",
+                is_caption_variant=is_caption_variant,
+                caption_variant_reason=caption_reason if is_caption_variant else None
+            )
+            
+            if is_caption_variant:
+                caption_variant_groups.append(dup_group)
+            else:
+                duplicate_groups.append(dup_group)
+            
             for v in group:
                 processed_ids.add(str(v.video_id))
     
@@ -358,8 +421,12 @@ async def find_duplicates(
             
             if len(similar) > 1:
                 processed_ids.add(str(v1.video_id))
+                
+                # Check for caption variants in fuzzy matches too
+                is_caption_variant, caption_reason = detect_caption_variant(similar)
+                
                 group_id = str(uuid.uuid4())
-                duplicate_groups.append(DuplicateGroup(
+                dup_group = DuplicateGroup(
                     group_id=group_id,
                     videos=[{
                         "video_id": str(v.video_id),
@@ -367,19 +434,36 @@ async def find_duplicates(
                         "file_path": v.source_uri,
                         "file_size": v.file_size,
                         "resolution": v.resolution,
+                        "duration_sec": v.duration_sec,
                         "score": float(v.pre_social_score) if v.pre_social_score else 0
                     } for v in similar],
                     similarity_score=threshold,
-                    transcript_preview=v1.transcript[:200] if v1.transcript else ""
-                ))
+                    transcript_preview=v1.transcript[:200] if v1.transcript else "",
+                    is_caption_variant=is_caption_variant,
+                    caption_variant_reason=caption_reason if is_caption_variant else None
+                )
+                
+                if is_caption_variant:
+                    caption_variant_groups.append(dup_group)
+                else:
+                    duplicate_groups.append(dup_group)
     
     # Calculate total duplicates (videos that could be deleted)
     total_duplicates = sum(len(g.videos) - 1 for g in duplicate_groups)
+    caption_variants_excluded = sum(len(g.videos) - 1 for g in caption_variant_groups)
+    
+    # Optionally include caption variants if requested
+    result_groups = duplicate_groups
+    if include_caption_variants:
+        result_groups = duplicate_groups + caption_variant_groups
     
     return {
-        "groups": [g.model_dump() for g in duplicate_groups],
-        "total_groups": len(duplicate_groups),
-        "total_duplicates": total_duplicates
+        "groups": [g.model_dump() for g in result_groups],
+        "total_groups": len(result_groups),
+        "total_duplicates": total_duplicates,
+        "caption_variants_excluded": caption_variants_excluded,
+        "caption_variant_groups": len(caption_variant_groups),
+        "message": f"Found {len(duplicate_groups)} true duplicate groups. Excluded {len(caption_variant_groups)} potential caption variant groups (use include_caption_variants=true to see them)."
     }
 
 @router.post("/duplicates/delete")

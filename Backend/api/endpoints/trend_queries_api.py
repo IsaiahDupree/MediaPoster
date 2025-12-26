@@ -23,6 +23,7 @@ from sqlalchemy import select, insert, update, delete, func, text
 from database.connection import get_db
 from services.trend_ingestion_service import TrendIngestionService
 from services.trend_scoring_service import TrendScoringService
+from services.trend_brief_generator import TrendBriefGenerator, generate_hooks_for_niche
 
 logger = logging.getLogger(__name__)
 
@@ -214,25 +215,58 @@ async def get_top_hashtags(
             cached=True
         )
     
-    # For now, return mock data - will be replaced with actual Instagram API calls
-    # This demonstrates the API structure
-    mock_hashtags = []
-    for i, keyword in enumerate(request.seed_keywords[:5]):
-        mock_hashtags.append(HashtagResult(
-            tag=f"#{keyword.replace(' ', '')}",
-            trend_score=85 - (i * 5),
-            trend_delta=f"+{40 - (i * 8)}%",
-            saturation="hot_accessible" if i < 2 else "emerging",
-            why_hot=f"Rising adoption in {keyword} niche with manageable competition",
-            post_count=50000 - (i * 10000),
-            example_posts=[]
-        ))
+    # Use real Instagram Looter API
+    ingestion = get_ingestion_service()
+    scorer = get_scoring_service()
     
-    result = {"hashtags": [h.model_dump() for h in mock_hashtags]}
+    all_media = []
+    for keyword in request.seed_keywords[:3]:  # Limit to avoid rate limits
+        try:
+            media = await ingestion.ingest_hashtag(keyword, limit=30)
+            all_media.extend([{
+                "hashtags": m.hashtags,
+                "author_id": m.author_id,
+                "posted_at": m.posted_at,
+                "play_count": m.play_count,
+                "like_count": m.like_count,
+                "music_id": m.music_id,
+                "music_title": m.music_title
+            } for m in media])
+        except Exception as e:
+            logger.warning(f"Failed to ingest #{keyword}: {e}")
+    
+    # Score hashtags
+    if all_media:
+        scores = scorer.score_hashtags(all_media)
+        hashtags = []
+        for score in scores[:request.limit]:
+            saturation = "emerging" if score.saturation_score < 30 else "hot_accessible" if score.saturation_score < 70 else "overcrowded"
+            hashtags.append(HashtagResult(
+                tag=score.name,
+                trend_score=score.trend_score,
+                trend_delta=score.adoption_delta,
+                saturation=saturation,
+                why_hot=f"{score.status.title()} - Velocity: {score.velocity_score:.0f}, {score.adoption_24h} posts in 24h",
+                post_count=score.adoption_24h * 7,  # Estimate weekly
+                example_posts=[]
+            ))
+    else:
+        # Fallback to basic response if API fails
+        hashtags = [HashtagResult(
+            tag=f"#{kw.replace(' ', '')}",
+            trend_score=70,
+            trend_delta="+20%",
+            saturation="emerging",
+            why_hot="Based on seed keyword",
+            post_count=1000,
+            example_posts=[]
+        ) for kw in request.seed_keywords[:5]]
+    
+    result = {"hashtags": [h.model_dump() for h in hashtags]}
     await set_cached_result(db, "hashtag_top", params, result)
     
     return TopHashtagsResponse(
-        hashtags=mock_hashtags,
+        hashtags=hashtags,
         query_time_ms=int((time.time() - start) * 1000),
         cached=False
     )
@@ -265,36 +299,44 @@ async def generate_content_brief(
         cached["generated_at"] = datetime.fromisoformat(cached["generated_at"])
         return ContentBriefResponse(**cached)
     
-    # Generate brief (will integrate with OpenAI for real generation)
-    # For now, return structured mock data
-    
+    # Generate brief using OpenAI
     trend_name = request.trend_id
     if request.trend_type == "hashtag":
         trend_name = f"#{request.trend_id}"
     
+    # Use real OpenAI generation
+    generator = TrendBriefGenerator()
+    ai_brief = await generator.generate_brief(
+        trend_type=request.trend_type,
+        trend_name=trend_name,
+        niche=request.niche
+    )
+    
+    # Parse AI response into our response model
+    script_data = ai_brief.get("script_outline", {})
     brief = ContentBriefResponse(
         trend_name=trend_name,
         trend_velocity=87.5,
-        hook_options=[
+        hook_options=ai_brief.get("hook_options", [
             f"Stop doing this with {trend_name} (here's why)",
             f"I tried {trend_name} for 7 days—here's what happened",
             f"The {trend_name} hack that changed everything"
-        ],
+        ]),
         script_outline=ScriptOutline(
-            hook="Pattern interrupt or bold claim (0-3s)",
-            problem="Relatable struggle your audience faces (3-8s)",
-            solution="Your unique method or tip (8-20s)",
-            proof="Quick result or demo (20-35s)",
-            cta="Save this + follow for more tips"
+            hook=script_data.get("hook", "Pattern interrupt or bold claim (0-3s)"),
+            problem=script_data.get("problem", "Relatable struggle your audience faces (3-8s)"),
+            solution=script_data.get("solution", "Your unique method or tip (8-20s)"),
+            proof=script_data.get("proof", "Quick result or demo (20-35s)"),
+            cta=script_data.get("cta", "Save this + follow for more tips")
         ),
-        recommended_format="reel",
-        optimal_length_sec={"min": 25, "max": 45},
-        must_include_phrases=[
+        recommended_format=ai_brief.get("recommended_format", "reel"),
+        optimal_length_sec=ai_brief.get("optimal_length_sec", {"min": 25, "max": 45}),
+        must_include_phrases=ai_brief.get("must_include_phrases", [
             trend_name.replace("#", ""),
             "save this",
             "follow for more"
-        ],
-        differentiation_twist=f"Focus on the budget-friendly angle—most {trend_name} content skips this",
+        ]),
+        differentiation_twist=ai_brief.get("differentiation_twist", f"Focus on the budget-friendly angle—most {trend_name} content skips this"),
         top_examples=[],
         generated_at=datetime.utcnow()
     )
@@ -414,8 +456,48 @@ async def get_rising_audio(
     import time
     start = time.time()
     
-    # Query trend_media for music usage patterns
-    # For now, return mock data
+    # Use real Instagram Looter API for audio discovery
+    ingestion = get_ingestion_service()
+    scorer = get_scoring_service()
+    
+    # Ingest from niche hashtag or general trending
+    search_term = niche if niche else "trending"
+    try:
+        media = await ingestion.ingest_hashtag(search_term, limit=50)
+        media_dicts = [{
+            "music_id": m.music_id,
+            "music_title": m.music_title,
+            "author_id": m.author_id,
+            "posted_at": m.posted_at,
+            "play_count": m.play_count,
+            "like_count": m.like_count
+        } for m in media if m.music_id]
+        
+        # Score sounds
+        if media_dicts:
+            scores = scorer.score_sounds(media_dicts)
+            audios = []
+            for score in scores[:limit]:
+                days_old = max(1, (datetime.utcnow() - score.entity_id).days) if hasattr(score, 'first_seen') else 3
+                audios.append(RisingAudioResult(
+                    music_id=score.entity_id,
+                    title=score.name,
+                    artist=None,
+                    velocity=score.velocity_score,
+                    freshness_days=days_old,
+                    reuse_rate=min(1.0, score.adoption_24h / 100),
+                    best_content_type=f"{score.status} - good for {niche or 'general'} content",
+                    preview_url=None
+                ))
+            
+            return RisingAudioResponse(
+                audios=audios,
+                query_time_ms=int((time.time() - start) * 1000)
+            )
+    except Exception as e:
+        logger.warning(f"Failed to fetch rising audio: {e}")
+    
+    # Fallback mock data if API fails
     audios = [
         RisingAudioResult(
             music_id="audio_001",

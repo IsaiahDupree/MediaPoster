@@ -132,7 +132,7 @@ async def check_storage() -> dict:
 
 
 @router.get("/detailed")
-async def detailed_health_check(request: Optional[Request] = None):
+async def detailed_health_check():
     """
     Detailed health check - checks all dependencies.
     
@@ -144,8 +144,8 @@ async def detailed_health_check(request: Optional[Request] = None):
     - Event Bus
     - Storage
     """
-    # Get correlation ID from request state (set by middleware) or generate
-    correlation_id = getattr(request.state, "correlation_id", None) if request else str(uuid.uuid4())
+    # Correlation ID will be in response headers from middleware
+    correlation_id = str(uuid.uuid4())
     checks = {}
     
     # Run checks in parallel
@@ -214,12 +214,12 @@ async def readiness_check():
 
 
 @router.get("/live")
-async def liveness_check(request: Optional[Request] = None):
+async def liveness_check():
     """
     Liveness check for Kubernetes.
     Returns 200 if the process is alive (even if dependencies are down).
     """
-    correlation_id = getattr(request.state, "correlation_id", None) if request else None
+    correlation_id = None  # Will be in response headers from middleware
     return {
         "status": "alive",
         "timestamp": datetime.utcnow().isoformat(),

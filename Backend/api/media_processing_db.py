@@ -318,10 +318,13 @@ async def list_media(
         
         # Log if analysis exists but is incomplete (for debugging)
         if analysis and not is_complete_analysis:
+            # Safely get topics length - handle None case
+            topics_list = analysis.get('topics') or []
+            topics_len = len(topics_list) if topics_list else 0
             logger.debug(
                 f"[Status Check] Video {video.id} has incomplete analysis: "
                 f"transcript={bool(analysis.get('transcript'))}, "
-                f"topics={len(analysis.get('topics', []))}, "
+                f"topics={topics_len}, "
                 f"score={analysis.get('pre_social_score')}"
             )
         

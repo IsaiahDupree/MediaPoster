@@ -96,6 +96,7 @@ async def trigger_social_data_fetch(
 async def fetch_social_data_background(accounts: List[dict], force_refresh: bool):
     """
     Background task to fetch social data from RapidAPI
+    Wrapped in global try-except to prevent crashes
     """
     fetcher = RapidAPISocialFetcher()
     analytics_service = SocialAnalyticsService()

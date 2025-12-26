@@ -2,7 +2,7 @@
 Publishing Queue API Endpoints
 Manages scheduled publishing queue
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -71,60 +71,53 @@ def get_publishing_analytics(
 @router.post("/add")
 def add_to_queue(
     request: QueueItemCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    http_request: Request = None  # For correlation ID
 ):
     """Add item to publishing queue"""
-    # BUG FIX: Validate inputs before processing
-    from datetime import datetime, timezone
+    # BUG FIX: Use standardized validation utilities
+    from utils.input_validation import (
+        validate_platform,
+        validate_scheduled_time,
+        validate_url,
+        validate_priority,
+        validate_uuid
+    )
+    from utils.error_handling import ValidationError
     
-    # Validate scheduled_for is in the future
-    if request.scheduled_for:
-        now = datetime.now(timezone.utc)
-        if request.scheduled_for.tzinfo is None:
-            # Assume UTC if no timezone
-            request.scheduled_for = request.scheduled_for.replace(tzinfo=timezone.utc)
-        
-        if request.scheduled_for <= now:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Scheduled time must be in the future. Got: {request.scheduled_for}, Now: {now}"
-            )
-    
-    # Validate platform
-    valid_platforms = ['tiktok', 'instagram', 'youtube', 'twitter', 'facebook']
-    if request.platform.lower() not in valid_platforms:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid platform: {request.platform}. Valid platforms: {', '.join(valid_platforms)}"
-        )
-    
-    # Validate at least one content reference
-    if not request.content_item_id and not request.clip_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Either content_item_id or clip_id must be provided"
-        )
-    
-    # Validate video_url if provided
-    if request.video_url:
-        from urllib.parse import urlparse
-        parsed = urlparse(request.video_url)
-        if not parsed.scheme or not parsed.netloc:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid video_url format: {request.video_url}"
-            )
-    
-    # Validate priority range
-    if request.priority < 0 or request.priority > 100:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Priority must be between 0 and 100. Got: {request.priority}"
-        )
-    
-    service = PublishingQueueService(db)
+    # Get correlation ID from request state (set by middleware)
+    correlation_id = getattr(http_request.state, "correlation_id", None) if http_request else None
     
     try:
+        # Validate scheduled_for is in the future
+        if request.scheduled_for:
+            request.scheduled_for = validate_scheduled_time(request.scheduled_for, "scheduled_for")
+        
+        # Validate platform
+        request.platform = validate_platform(request.platform)
+        
+        # Validate at least one content reference
+        if not request.content_item_id and not request.clip_id:
+            raise ValidationError(
+                "Either content_item_id or clip_id must be provided",
+                correlation_id=correlation_id
+            )
+        
+        # Validate UUIDs if provided
+        if request.content_item_id:
+            request.content_item_id = validate_uuid(request.content_item_id, "content_item_id")
+        if request.clip_id:
+            request.clip_id = validate_uuid(request.clip_id, "clip_id")
+        
+        # Validate video_url if provided
+        if request.video_url:
+            request.video_url = validate_url(request.video_url, "video_url")
+        
+        # Validate priority range
+        request.priority = validate_priority(request.priority)
+        
+        service = PublishingQueueService(db)
+        
         item = service.add_to_queue(
             platform=request.platform,
             scheduled_for=request.scheduled_for,
@@ -143,12 +136,20 @@ def add_to_queue(
             "id": str(item.id),
             "status": "queued",
             "scheduled_for": item.scheduled_for.isoformat(),
-            "message": "Item added to queue successfully"
+            "message": "Item added to queue successfully",
+            "correlation_id": correlation_id
         }
     except HTTPException:
         raise  # Re-raise HTTP exceptions
+    except ValidationError as e:
+        # Re-raise with correlation ID
+        if correlation_id and not e.correlation_id:
+            e.correlation_id = correlation_id
+        raise e.to_http_exception()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        from utils.error_handling import handle_exception
+        http_exc = handle_exception(e, correlation_id, {"endpoint": "/api/publishing/add"})
+        raise http_exc
 
 
 @router.post("/bulk")

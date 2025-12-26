@@ -21,8 +21,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, update, delete, func, text
 
 from database.connection import get_db
+from services.trend_ingestion_service import TrendIngestionService
+from services.trend_scoring_service import TrendScoringService
 
 logger = logging.getLogger(__name__)
+
+# Initialize services
+_ingestion_service = None
+_scoring_service = None
+
+def get_ingestion_service() -> TrendIngestionService:
+    global _ingestion_service
+    if _ingestion_service is None:
+        _ingestion_service = TrendIngestionService()
+    return _ingestion_service
+
+def get_scoring_service() -> TrendScoringService:
+    global _scoring_service
+    if _scoring_service is None:
+        _scoring_service = TrendScoringService()
+    return _scoring_service
 
 router = APIRouter(prefix="/api/trend-queries", tags=["Trend Queries"])
 

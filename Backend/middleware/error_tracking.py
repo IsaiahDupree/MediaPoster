@@ -64,31 +64,51 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """
-    Middleware that logs all requests for debugging and monitoring.
+    Logs all requests with correlation ID context.
+    
+    BUG FIX: Enhanced logging with correlation IDs and structured context.
     """
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip logging for health checks and static files
-        skip_paths = ["/health", "/favicon.ico", "/static"]
+        skip_paths = ["/health", "/favicon.ico", "/static", "/api/health"]
         if any(request.url.path.startswith(p) for p in skip_paths):
             return await call_next(request)
         
+        # BUG FIX: Use correlation ID from request state (set by CorrelationIDMiddleware)
+        correlation_id = getattr(request.state, 'correlation_id', None)
         request_id = getattr(request.state, 'request_id', 'unknown')
         
-        # Log request
-        logger.debug(
-            f"[{request_id}] → {request.method} {request.url.path}"
+        # Use correlation_id if available, otherwise request_id
+        log_id = correlation_id or request_id
+        
+        # Log request with correlation ID
+        logger.info(
+            f"[{log_id}] → {request.method} {request.url.path}",
+            extra={
+                "correlation_id": correlation_id,
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "client": request.client.host if request.client else "unknown"
+            }
         )
         
         start_time = time.time()
         response = await call_next(request)
         duration = time.time() - start_time
         
-        # Log response
-        log_level = "warning" if response.status_code >= 400 else "debug"
+        # Log response with correlation ID
+        log_level = "warning" if response.status_code >= 400 else "info"
         getattr(logger, log_level)(
-            f"[{request_id}] ← {response.status_code} {request.method} {request.url.path} "
-            f"({duration:.3f}s)"
+            f"[{log_id}] ← {response.status_code} {request.method} {request.url.path} "
+            f"({duration:.3f}s)",
+            extra={
+                "correlation_id": correlation_id,
+                "request_id": request_id,
+                "status_code": response.status_code,
+                "duration": duration
+            }
         )
         
         return response

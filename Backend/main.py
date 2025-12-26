@@ -5,10 +5,11 @@ Main application entry point
 from dotenv import load_dotenv
 load_dotenv()  # Load .env file before any other imports
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 import os
 from contextlib import asynccontextmanager
 from loguru import logger
@@ -262,6 +263,58 @@ app.add_middleware(
 from middleware.error_tracking import ErrorTrackingMiddleware, RequestLoggingMiddleware
 app.add_middleware(ErrorTrackingMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+
+# BUG FIX: Add correlation ID middleware (must be early in the stack)
+from middleware.correlation_id import CorrelationIDMiddleware
+app.add_middleware(CorrelationIDMiddleware)
+
+# BUG FIX: Add rate limiting middleware
+from middleware.rate_limiting import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware, default_limit=100, default_window=60)
+
+# BUG FIX: Add global exception handlers for standardized error handling
+from utils.error_handling import handle_exception, AppError, ValidationError
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    """Handle custom application errors."""
+    correlation_id = getattr(request.state, "correlation_id", exc.correlation_id)
+    http_exc = exc.to_http_exception()
+    return JSONResponse(
+        status_code=http_exc.status_code,
+        content=http_exc.detail,
+        headers={"X-Correlation-ID": correlation_id}
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors."""
+    correlation_id = getattr(request.state, "correlation_id", "unknown")
+    logger.warning(
+        f"[{correlation_id}] Validation error: {exc.errors()}",
+        extra={"correlation_id": correlation_id, "errors": exc.errors()}
+    )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": "Validation error",
+            "correlation_id": correlation_id,
+            "error_code": "VALIDATION_ERROR",
+            "details": exc.errors()
+        },
+        headers={"X-Correlation-ID": correlation_id}
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all other exceptions."""
+    correlation_id = getattr(request.state, "correlation_id", "unknown")
+    http_exc = handle_exception(exc, correlation_id, {"path": request.url.path, "method": request.method})
+    return JSONResponse(
+        status_code=http_exc.status_code,
+        content=http_exc.detail,
+        headers={"X-Correlation-ID": correlation_id}
+    )
 
 # Mount static files for thumbnails
 THUMBNAIL_DIR = "/tmp/mediaposter/thumbnails"

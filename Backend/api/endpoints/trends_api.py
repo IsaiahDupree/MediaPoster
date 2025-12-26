@@ -4,9 +4,10 @@ TrendTok-style trending content discovery for Instagram
 """
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from loguru import logger
 
+from services.keyword_extraction_service import get_keyword_service
 from services.instagram.trend_crawler import get_trend_crawler
 from services.instagram.velocity_engine import get_velocity_engine
 from services.instagram.trend_cards_library import get_trend_cards_library
@@ -160,6 +161,70 @@ async def get_trending_formats(
         }
     except Exception as e:
         logger.error(f"Error fetching trending formats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/keywords")
+async def get_trending_keywords(
+    limit: int = Query(20, ge=1, le=100, description="Number of results per category")
+):
+    """
+    Get trending keywords extracted from top-performing content.
+    
+    Returns keywords grouped by type:
+    - hooks: Opening phrases ("POV:", "Nobody talks about...")
+    - formats: Content format markers ("3 things...", "Day in the life")
+    - hashtags: Trending hashtags
+    - phrases: Common n-grams from captions
+    - engagement: Engagement bait phrases
+    """
+    try:
+        from services.competitor_service import get_competitor_service
+        
+        # Get captions from competitor content for analysis
+        service = get_competitor_service()
+        accounts = service.get_stored_accounts()
+        
+        all_captions = []
+        
+        # Fetch recent content from tracked competitors
+        for username in accounts[:5]:  # Limit to 5 accounts
+            reels = await service.fetch_user_reels(username, count=20)
+            posts = await service.fetch_user_posts(username, count=20)
+            
+            for content in reels + posts:
+                if content.caption:
+                    all_captions.append({
+                        "caption": content.caption,
+                        "play_count": content.play_count or 0,
+                        "like_count": content.like_count or 0
+                    })
+        
+        # Extract keywords
+        keyword_service = get_keyword_service()
+        keywords = keyword_service.get_trending_keywords(all_captions, limit=limit)
+        
+        # Convert to JSON-serializable format
+        result = {}
+        for category, items in keywords.items():
+            result[category] = [
+                {
+                    "keyword": item.keyword,
+                    "type": item.keyword_type,
+                    "frequency": item.frequency,
+                    "avg_engagement": item.avg_engagement,
+                    "examples": item.examples[:2] if item.examples else []
+                }
+                for item in items
+            ]
+        
+        return {
+            "total_captions_analyzed": len(all_captions),
+            "keywords": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching trending keywords: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

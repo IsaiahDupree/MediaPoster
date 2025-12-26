@@ -831,6 +831,48 @@ async def get_enriched_accounts():
                     
                     account_data['fetch_status'] = 'success'
                     account_data['last_fetched_at'] = datetime.now().isoformat()
+                    
+                    # Save to account_hydration table for hydration
+                    try:
+                        from sqlalchemy import create_engine, text
+                        import os
+                        engine = create_engine(os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres"))
+                        with engine.connect() as conn:
+                            conn.execute(text("""
+                                INSERT INTO account_hydration 
+                                    (blotato_id, platform, username, display_name, followers_count, following_count, 
+                                     posts_count, profile_pic_url, bio, is_verified, last_fetched_at, updated_at)
+                                VALUES 
+                                    (:blotato_id, :platform, :username, :display_name, :followers, :following,
+                                     :posts, :profile_pic, :bio, :verified, NOW(), NOW())
+                                ON CONFLICT (platform, blotato_id) 
+                                DO UPDATE SET 
+                                    username = EXCLUDED.username,
+                                    display_name = EXCLUDED.display_name,
+                                    followers_count = EXCLUDED.followers_count,
+                                    following_count = EXCLUDED.following_count,
+                                    posts_count = EXCLUDED.posts_count,
+                                    profile_pic_url = EXCLUDED.profile_pic_url,
+                                    bio = EXCLUDED.bio,
+                                    is_verified = EXCLUDED.is_verified,
+                                    last_fetched_at = NOW(),
+                                    updated_at = NOW()
+                            """), {
+                                'blotato_id': acc_id,
+                                'username': username,
+                                'platform': acc_platform,
+                                'display_name': account_data.get('display_name', username),
+                                'followers': account_data.get('followers_count', 0),
+                                'following': account_data.get('following_count', 0),
+                                'posts': account_data.get('posts_count', 0),
+                                'profile_pic': account_data.get('profile_pic_url'),
+                                'bio': account_data.get('bio'),
+                                'verified': account_data.get('is_verified', False),
+                            })
+                            conn.commit()
+                            logger.info(f"Saved hydration data for {acc_platform}/@{username}")
+                    except Exception as save_err:
+                        logger.warning(f"Failed to save hydration data: {save_err}")
                 else:
                     account_data['fetch_status'] = 'error'
                     account_data['error'] = result.error if result else 'No data returned'
@@ -848,5 +890,84 @@ async def get_enriched_accounts():
         'total': len(enriched_accounts),
         'fetched': len([a for a in enriched_accounts if a['fetch_status'] == 'success']),
         'errors': len([a for a in enriched_accounts if a['fetch_status'] == 'error']),
+    }
+
+
+@router.get("/hydrated")
+async def get_hydrated_accounts():
+    """
+    Get accounts with last known state from database (hydration).
+    Returns cached data from social_analytics_latest without making RapidAPI calls.
+    """
+    from config.blotato_accounts import BLOTATO_ACCOUNTS
+    from sqlalchemy import create_engine, text
+    import os
+    from dataclasses import asdict
+    
+    engine = create_engine(os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres"))
+    
+    hydrated_accounts = []
+    
+    for account in BLOTATO_ACCOUNTS:
+        # Handle both dataclass and dict formats
+        if hasattr(account, '__dataclass_fields__'):
+            acc_id = account.id
+            acc_platform = account.platform.lower()
+            username = account.username
+        else:
+            acc_id = account.get('id')
+            acc_platform = account.get('platform', '').lower()
+            username = account.get('username', '')
+        
+        account_data = {
+            'id': acc_id,
+            'platform': acc_platform,
+            'username': username,
+            'display_name': username,
+            'is_active': True,
+            'followers_count': 0,
+            'following_count': 0,
+            'posts_count': 0,
+            'profile_pic_url': None,
+            'bio': None,
+            'is_verified': False,
+            'last_fetched_at': None,
+            'hydrated': False,
+        }
+        
+        # Try to load from account_hydration table
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT display_name, followers_count, following_count, posts_count, 
+                           profile_pic_url, bio, is_verified, last_fetched_at
+                    FROM account_hydration
+                    WHERE platform = :platform AND blotato_id = :blotato_id
+                    LIMIT 1
+                """), {'platform': acc_platform, 'blotato_id': acc_id})
+                
+                row = result.fetchone()
+                if row:
+                    account_data['display_name'] = row[0] or username
+                    account_data['followers_count'] = row[1] or 0
+                    account_data['following_count'] = row[2] or 0
+                    account_data['posts_count'] = row[3] or 0
+                    account_data['profile_pic_url'] = row[4]
+                    account_data['bio'] = row[5]
+                    account_data['is_verified'] = row[6] or False
+                    account_data['last_fetched_at'] = str(row[7]) if row[7] else None
+                    account_data['hydrated'] = True
+        except Exception as e:
+            logger.warning(f"Failed to load hydration data for {acc_platform}/@{username}: {e}")
+        
+        hydrated_accounts.append(account_data)
+    
+    hydrated_count = len([a for a in hydrated_accounts if a['hydrated']])
+    
+    return {
+        'accounts': hydrated_accounts,
+        'total': len(hydrated_accounts),
+        'hydrated': hydrated_count,
+        'needs_refresh': len(hydrated_accounts) - hydrated_count,
     }
 

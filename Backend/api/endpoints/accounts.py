@@ -935,19 +935,20 @@ async def get_hydrated_accounts():
             'hydrated': False,
         }
         
-        # Try to load from account_hydration table
+        # Try to load from social_media_accounts first (where RapidAPI data is stored)
         try:
             with engine.connect() as conn:
+                # First check social_media_accounts (populated by social-data/fetch-all)
                 result = conn.execute(text("""
-                    SELECT display_name, followers_count, following_count, posts_count, 
+                    SELECT display_name, followers_count, 0 as following_count, posts_count, 
                            profile_pic_url, bio, is_verified, last_fetched_at
-                    FROM account_hydration
-                    WHERE platform = :platform AND blotato_id = :blotato_id
+                    FROM social_media_accounts
+                    WHERE platform = :platform AND username = :username
                     LIMIT 1
-                """), {'platform': acc_platform, 'blotato_id': acc_id})
+                """), {'platform': acc_platform, 'username': username})
                 
                 row = result.fetchone()
-                if row:
+                if row and (row[1] or row[3]):  # Has followers or posts
                     account_data['display_name'] = row[0] or username
                     account_data['followers_count'] = row[1] or 0
                     account_data['following_count'] = row[2] or 0
@@ -957,6 +958,27 @@ async def get_hydrated_accounts():
                     account_data['is_verified'] = row[6] or False
                     account_data['last_fetched_at'] = str(row[7]) if row[7] else None
                     account_data['hydrated'] = True
+                else:
+                    # Fallback to account_hydration table
+                    result = conn.execute(text("""
+                        SELECT display_name, followers_count, following_count, posts_count, 
+                               profile_pic_url, bio, is_verified, last_fetched_at
+                        FROM account_hydration
+                        WHERE platform = :platform AND blotato_id = :blotato_id
+                        LIMIT 1
+                    """), {'platform': acc_platform, 'blotato_id': acc_id})
+                    
+                    row = result.fetchone()
+                    if row:
+                        account_data['display_name'] = row[0] or username
+                        account_data['followers_count'] = row[1] or 0
+                        account_data['following_count'] = row[2] or 0
+                        account_data['posts_count'] = row[3] or 0
+                        account_data['profile_pic_url'] = row[4]
+                        account_data['bio'] = row[5]
+                        account_data['is_verified'] = row[6] or False
+                        account_data['last_fetched_at'] = str(row[7]) if row[7] else None
+                        account_data['hydrated'] = True
         except Exception as e:
             logger.warning(f"Failed to load hydration data for {acc_platform}/@{username}: {e}")
         

@@ -561,6 +561,10 @@ app.include_router(websocket.router, prefix="/api", tags=["WebSocket"])
 # Event History (Querying & Replay)
 app.include_router(event_history.router, tags=["Event History"])
 
+# Trend Queries (Advanced Discovery System)
+from api.endpoints import trend_queries_api
+app.include_router(trend_queries_api.router, tags=["Trend Queries"])
+
 # Video Orientation & Routing (YouTube Integration)
 app.include_router(video_routing_api.router, prefix="/api/videos", tags=["Video Routing"])
 

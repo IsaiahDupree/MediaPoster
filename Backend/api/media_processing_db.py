@@ -81,6 +81,10 @@ class MediaStatusResponse(BaseModel):
     pre_social_score: Optional[float] = None
     transcript: Optional[str] = None
     topics: Optional[List[str]] = None
+    hooks: Optional[List[str]] = None  # Detected hooks for search
+    tone: Optional[str] = None  # Content tone for search
+    visual_summary: Optional[str] = None  # Visual analysis summary for search
+    detected_hook: Optional[str] = None  # Main detected hook for search
     curation_status: Optional[str] = None  # 'pending', 'approved', 'rejected'
     created_at: str
     updated_at: Optional[str] = None
@@ -253,48 +257,61 @@ async def list_media(
         analysis = None
         curation_status = None
         try:
-            # First try with curation_status
+            # Fetch analysis with all searchable fields
             try:
                 analysis_result = await db.execute(
-                    text("SELECT video_id, transcript, topics, pre_social_score, curation_status FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
+                    text("""SELECT video_id, transcript, topics, pre_social_score, curation_status,
+                            hooks, tone, detected_hook, 
+                            visual_analysis->>'visual_summary' as visual_summary
+                        FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"""),
                     {"vid": str(video.id)}
                 )
                 row = analysis_result.fetchone()
                 if row and len(row) >= 5:
-                    # Has curation_status column
                     curation_status = row[4] if row[4] is not None else None
                 elif row:
-                    # Row exists but might not have curation_status column
                     curation_status = None
             except Exception as curation_error:
-                # If curation_status column doesn't exist, try without it
-                logger.warning(f"Curation status column might not exist for video {video.id}, trying without it: {curation_error}", exc_info=True)
+                # If query fails, try simpler query
+                logger.warning(f"Full analysis query failed for video {video.id}: {curation_error}")
                 try:
                     analysis_result = await db.execute(
                         text("SELECT video_id, transcript, topics, pre_social_score FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
                         {"vid": str(video.id)}
                     )
                     row = analysis_result.fetchone()
-                    curation_status = None  # Column doesn't exist
+                    curation_status = None
                 except Exception as e2:
-                    logger.error(f"Failed to fetch analysis (fallback) for video {video.id}: {e2}", exc_info=True)
+                    logger.error(f"Failed to fetch analysis (fallback) for video {video.id}: {e2}")
                     row = None
             
             if row:
-                # Ensure topics is a list (PostgreSQL array might be returned as list or None)
+                # Ensure topics is a list
                 topics = row[2] if len(row) > 2 and row[2] else None
                 if topics and not isinstance(topics, list):
-                    # If it's a string, try to parse it
                     try:
                         import json
                         topics = json.loads(topics) if isinstance(topics, str) else topics
                     except Exception:
                         topics = None
                 
+                # Parse hooks array
+                hooks = row[5] if len(row) > 5 and row[5] else None
+                if hooks and not isinstance(hooks, list):
+                    try:
+                        import json
+                        hooks = json.loads(hooks) if isinstance(hooks, str) else hooks
+                    except Exception:
+                        hooks = None
+                
                 analysis = {
                     "transcript": row[1] if len(row) > 1 and row[1] else None,
                     "topics": topics,
-                    "pre_social_score": float(row[3]) if len(row) > 3 and row[3] is not None else None
+                    "pre_social_score": float(row[3]) if len(row) > 3 and row[3] is not None else None,
+                    "hooks": hooks,
+                    "tone": row[6] if len(row) > 6 else None,
+                    "detected_hook": row[7] if len(row) > 7 else None,
+                    "visual_summary": row[8] if len(row) > 8 else None
                 }
         except Exception as e:
             # Log error but continue - we can still return the video without analysis
@@ -337,10 +354,18 @@ async def list_media(
             pre_social_score = None
             transcript = None
             topics = None
+            hooks = None
+            tone = None
+            detected_hook = None
+            visual_summary = None
             if analysis:
                 pre_social_score = analysis.get("pre_social_score") if analysis.get("pre_social_score") is not None else None
                 transcript = analysis.get("transcript") if analysis.get("transcript") else None
                 topics = analysis.get("topics") if analysis.get("topics") else None
+                hooks = analysis.get("hooks") if analysis.get("hooks") else None
+                tone = analysis.get("tone") if analysis.get("tone") else None
+                detected_hook = analysis.get("detected_hook") if analysis.get("detected_hook") else None
+                visual_summary = analysis.get("visual_summary") if analysis.get("visual_summary") else None
             
             response.append(MediaStatusResponse(
                 media_id=str(video.id),  # This is the video_id, which media-provider needs
@@ -354,6 +379,10 @@ async def list_media(
                 pre_social_score=pre_social_score,
                 transcript=transcript,
                 topics=topics,
+                hooks=hooks,
+                tone=tone,
+                detected_hook=detected_hook,
+                visual_summary=visual_summary,
                 curation_status=curation_status,  # Will be None if not curated, or 'pending'/'approved'/'rejected' if set
                 created_at=video.created_at.isoformat() if video.created_at else "",
                 updated_at=video.updated_at.isoformat() if video.updated_at else None

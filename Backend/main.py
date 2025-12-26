@@ -632,6 +632,17 @@ app.include_router(clip_extraction.router, prefix="/api", tags=["Clip Extraction
 from api import media_processing_db
 app.include_router(media_processing_db.router, tags=["Media Processing (Database)"])
 
+# Redirect /api/media-db to /api/media-db/list for backwards compatibility
+from fastapi.responses import RedirectResponse
+@app.get("/api/media-db", include_in_schema=False)
+async def media_db_redirect(limit: int = 50, offset: int = 0, analyzed_only: bool = False, media_type: str = None):
+    params = f"limit={limit}&offset={offset}"
+    if analyzed_only:
+        params += "&analyzed_only=true"
+    if media_type:
+        params += f"&media_type={media_type}"
+    return RedirectResponse(url=f"/api/media-db/list?{params}", status_code=307)
+
 # Blotato API Integration (Social Publishing & AI Videos)
 from api import blotato_router
 app.include_router(blotato_router.router, tags=["Blotato API"])

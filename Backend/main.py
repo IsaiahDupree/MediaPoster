@@ -659,6 +659,14 @@ app.include_router(instagram_api.router, prefix="/api/instagram", tags=["Instagr
 from api.endpoints import instagram_automation
 app.include_router(instagram_automation.router, prefix="/api", tags=["Instagram Automation"])
 
+# TikTok Automation (DM automation)
+from api.endpoints import tiktok_automation
+app.include_router(tiktok_automation.router, prefix="/api", tags=["TikTok Automation"])
+
+# Twitter/X Automation (DM automation)
+from api.endpoints import twitter_automation
+app.include_router(twitter_automation.router, prefix="/api", tags=["Twitter Automation"])
+
 # Trends API (Trending audio, hashtags, formats)
 from api.endpoints import trends_api
 app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discovery"])

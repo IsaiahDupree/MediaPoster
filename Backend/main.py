@@ -255,6 +255,11 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Error tracking middleware
+from middleware.error_tracking import ErrorTrackingMiddleware, RequestLoggingMiddleware
+app.add_middleware(ErrorTrackingMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+
 # Mount static files for thumbnails
 THUMBNAIL_DIR = "/tmp/mediaposter/thumbnails"
 if os.path.exists(THUMBNAIL_DIR):
@@ -571,6 +576,10 @@ app.include_router(accounts.router, tags=["Accounts"])
 # App Settings
 from api.endpoints import app_settings
 app.include_router(app_settings.router, tags=["Settings"])
+
+# Health Checks
+from api.endpoints import health
+app.include_router(health.router, tags=["Health"])
 
 # Post-Social Score (Phase 3)
 from api.endpoints import post_social_score

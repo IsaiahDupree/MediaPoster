@@ -911,11 +911,11 @@ async def get_hydrated_accounts():
     for account in BLOTATO_ACCOUNTS:
         # Handle both dataclass and dict formats
         if hasattr(account, '__dataclass_fields__'):
-            acc_id = account.id
+            acc_id = account.blotato_id
             acc_platform = account.platform.lower()
             username = account.username
         else:
-            acc_id = account.get('id')
+            acc_id = account.get('blotato_id') or account.get('id')
             acc_platform = account.get('platform', '').lower()
             username = account.get('username', '')
         

@@ -89,33 +89,33 @@ async def get_weekly_schedules():
     with scheduler.engine.connect() as conn:
         from sqlalchemy import text
         
-        result = conn.execute(text("""
-            SELECT 
-                ws.id,
-                ws.goal_id,
-                ng.goal as goal_title,
-                ws.status,
-                ws.justification_summary,
-                ws.created_at,
-                ws.updated_at,
-                (SELECT COUNT(*) FROM scheduled_posts sp WHERE sp.weekly_schedule_id = ws.id) as post_count
-            FROM weekly_schedules ws
-            LEFT JOIN narrative_goals ng ON ws.goal_id = ng.id
-            ORDER BY ws.created_at DESC
-            LIMIT 20
-        """))
+        # First check if weekly_schedules table exists
+        try:
+            result = conn.execute(text("""
+                SELECT 
+                    ws.id,
+                    ws.goal_id,
+                    ws.status,
+                    ws.justification_summary,
+                    ws.created_at,
+                    ws.updated_at
+                FROM weekly_schedules ws
+                ORDER BY ws.created_at DESC
+                LIMIT 20
+            """))
+        except Exception:
+            # Table doesn't exist yet
+            return {"schedules": [], "total": 0}
         
         schedules = []
         for row in result:
             schedules.append({
                 "id": str(row[0]),
                 "goal_id": str(row[1]) if row[1] else None,
-                "goal_title": row[2],
-                "status": row[3],
-                "justification_summary": row[4],
-                "created_at": str(row[5]) if row[5] else None,
-                "updated_at": str(row[6]) if row[6] else None,
-                "post_count": row[7] or 0,
+                "status": row[2],
+                "justification_summary": row[3],
+                "created_at": str(row[4]) if row[4] else None,
+                "updated_at": str(row[5]) if row[5] else None,
             })
         
         return {"schedules": schedules, "total": len(schedules)}
@@ -156,25 +156,27 @@ async def suggest_goal():
         stats = stats_result.fetchone()
         
         # Get top performing topics
-        topics_result = conn.execute(text("""
-            SELECT unnest(topics) as topic, COUNT(*) as cnt
-            FROM video_analysis
-            WHERE analyzed_at > NOW() - INTERVAL '30 days'
-            GROUP BY topic
-            ORDER BY cnt DESC
-            LIMIT 5
-        """))
-        top_topics = [row[0] for row in topics_result]
+        try:
+            topics_result = conn.execute(text("""
+                SELECT unnest(topics) as topic, COUNT(*) as cnt
+                FROM video_analysis
+                WHERE analyzed_at > NOW() - INTERVAL '30 days'
+                GROUP BY topic
+                ORDER BY cnt DESC
+                LIMIT 5
+            """))
+            top_topics = [row[0] for row in topics_result]
+        except Exception:
+            top_topics = []
         
-        # Get content inventory
-        inventory_result = conn.execute(text("""
-            SELECT COUNT(*) FROM video_analysis 
-            WHERE NOT EXISTS (
-                SELECT 1 FROM scheduled_posts sp 
-                WHERE sp.media_project_id = video_analysis.media_project_id
-            )
-        """))
-        unused_content = inventory_result.scalar() or 0
+        # Get content inventory (total analyzed content)
+        try:
+            inventory_result = conn.execute(text("""
+                SELECT COUNT(*) FROM video_analysis
+            """))
+            unused_content = inventory_result.scalar() or 0
+        except Exception:
+            unused_content = 0
     
     # Build prompt for OpenAI
     prompt = f"""You are a social media content strategist. Based on the following data, suggest ONE specific, actionable content goal for the next 7 days.

@@ -568,6 +568,10 @@ app.include_router(inventory_scheduler.router, tags=["Inventory Scheduler"])
 from api.endpoints import accounts
 app.include_router(accounts.router, tags=["Accounts"])
 
+# App Settings
+from api.endpoints import settings
+app.include_router(settings.router, tags=["Settings"])
+
 # Post-Social Score (Phase 3)
 from api.endpoints import post_social_score
 app.include_router(post_social_score.router, tags=["Post-Social Score"])

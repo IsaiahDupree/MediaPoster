@@ -91,25 +91,37 @@ class AudioService:
             
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                # Fetch reel/post info which includes audio data
-                response = await client.get(
-                    f"{self.base_url}/v1/post",
-                    params={"code_or_id_or_url": reel_url},
-                    headers=self._get_headers()
-                )
-                response.raise_for_status()
-                data = response.json()
+                # Extract username from URL if provided, or use as shortcode
+                username = self._extract_username_from_url(reel_url)
                 
-                post_data = data.get("data", {})
-                
-                # Extract audio info from the response
-                audio_info = self._extract_audio_from_post(post_data)
-                
-                if audio_info:
-                    logger.info(f"Found audio: {audio_info.title} by {audio_info.artist}")
-                    return audio_info
+                if username:
+                    # Fetch profile media to find video with audio
+                    response = await client.get(
+                        f"{self.base_url}/profile",
+                        params={"username": username},
+                        headers=self._get_headers()
+                    )
+                    response.raise_for_status()
+                    data = response.json()
                     
-                logger.warning(f"No audio found in reel: {reel_url}")
+                    # Find first video post
+                    timeline = data.get("edge_owner_to_timeline_media", {})
+                    edges = timeline.get("edges", [])
+                    
+                    for edge in edges:
+                        node = edge.get("node", {})
+                        if node.get("is_video"):
+                            video_url = node.get("video_url")
+                            if video_url:
+                                return AudioMetadata(
+                                    audio_id=str(node.get("id", "")),
+                                    title=self._extract_title(node),
+                                    artist=username,
+                                    audio_url=video_url,
+                                    cover_url=node.get("thumbnail_src") or node.get("display_url")
+                                )
+                
+                logger.warning(f"No video audio found for: {reel_url}")
                 return None
                 
             except httpx.HTTPStatusError as e:
@@ -118,6 +130,29 @@ class AudioService:
             except Exception as e:
                 logger.error(f"Error fetching reel audio: {e}")
                 return None
+    
+    def _extract_username_from_url(self, url: str) -> Optional[str]:
+        """Extract username from Instagram URL or return as-is if it's a username"""
+        import re
+        # Match instagram.com/username or instagram.com/reel/xxx
+        match = re.search(r'instagram\.com/([^/]+)', url)
+        if match:
+            username = match.group(1)
+            if username not in ('reel', 'p', 'stories'):
+                return username
+        # If it's just a username without URL
+        if not url.startswith('http'):
+            return url
+        return None
+    
+    def _extract_title(self, node: Dict[str, Any]) -> str:
+        """Extract title from post node"""
+        caption = node.get("edge_media_to_caption", {}).get("edges", [])
+        if caption:
+            text = caption[0].get("node", {}).get("text", "")
+            # Take first 50 chars as title
+            return text[:50] if text else "Instagram Audio"
+        return "Instagram Audio"
     
     def _extract_audio_from_post(self, post_data: Dict[str, Any]) -> Optional[AudioMetadata]:
         """Extract audio metadata from post/reel data"""

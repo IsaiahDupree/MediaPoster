@@ -34,15 +34,22 @@ class AudioMetadata(BaseModel):
 class AudioService:
     """
     Service for fetching and storing Instagram audio files.
-    Uses RapidAPI instagram-looter2 or similar APIs.
+    Uses Instagram Scraper Stable API (primary) with fallback to looter2.
     """
     
     def __init__(self):
         self.api_key = os.getenv("RAPIDAPI_KEY")
-        self.host = "instagram-looter2.p.rapidapi.com"
-        self.base_url = f"https://{self.host}"
         self.timeout = 30.0
         self.storage_dir = AUDIO_STORAGE_DIR
+        
+        # Primary API: Instagram Scraper Stable (RockSolid APIs)
+        # Host from: https://rapidapi.com/thetechguy32744/api/instagram-scraper-stable-api
+        self.primary_host = "instagram-scraper-stable-api.p.rapidapi.com"
+        self.primary_base_url = f"https://{self.primary_host}"
+        
+        # Fallback API: instagram-looter2
+        self.fallback_host = "instagram-looter2.p.rapidapi.com"
+        self.fallback_base_url = f"https://{self.fallback_host}"
         
         # Cache for audio metadata
         self._audio_cache: Dict[str, AudioMetadata] = {}
@@ -50,12 +57,115 @@ class AudioService:
         if not self.api_key:
             logger.warning("RAPIDAPI_KEY not set - audio fetching will fail")
     
-    def _get_headers(self) -> Dict[str, str]:
-        """Get RapidAPI headers"""
+    def _get_headers(self, host: str) -> Dict[str, str]:
+        """Get RapidAPI headers for specified host"""
         return {
             "X-RapidAPI-Key": self.api_key,
-            "X-RapidAPI-Host": self.host
+            "X-RapidAPI-Host": host,
+            "Content-Type": "application/json"
         }
+    
+    async def fetch_reels_with_audio(self, username: str) -> List[AudioMetadata]:
+        """
+        Fetch user reels using Instagram Scraper Stable API.
+        Returns list of reels with audio URLs.
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                # Try primary API (Instagram Scraper Stable)
+                response = await client.post(
+                    f"{self.primary_base_url}/v1/reels",
+                    headers=self._get_headers(self.primary_host),
+                    json={"username_or_id_or_url": username, "count": 12}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    items = data.get("data", {}).get("items", [])
+                    
+                    reels = []
+                    for item in items:
+                        audio = self._extract_audio_from_reel(item, username)
+                        if audio and audio.audio_url:
+                            reels.append(audio)
+                    
+                    logger.info(f"Fetched {len(reels)} reels with audio for @{username}")
+                    return reels
+                    
+                logger.warning(f"Primary API returned {response.status_code}")
+                
+            except Exception as e:
+                logger.error(f"Error fetching reels from primary API: {e}")
+        
+        return []
+    
+    def _extract_audio_from_reel(self, item: Dict[str, Any], username: str) -> Optional[AudioMetadata]:
+        """Extract audio metadata from reel API response"""
+        try:
+            # Get video URL (can be used as audio source)
+            video_url = None
+            video_versions = item.get("video_versions", [])
+            if video_versions:
+                video_url = video_versions[0].get("url")
+            
+            # Get audio from clips_metadata
+            audio_url = None
+            audio_title = "Instagram Audio"
+            audio_artist = username
+            
+            clips_metadata = item.get("clips_metadata", {})
+            music_info = clips_metadata.get("music_info", {})
+            
+            if music_info:
+                music_asset = music_info.get("music_asset_info", {})
+                audio_url = music_asset.get("progressive_download_url")
+                audio_title = music_asset.get("title", audio_title)
+                audio_artist = music_asset.get("display_artist", audio_artist)
+            
+            # Fallback to original sound
+            if not audio_url:
+                original_sound = clips_metadata.get("original_sound_info", {})
+                if original_sound:
+                    audio_asset = original_sound.get("audio_asset_info", {})
+                    audio_url = audio_asset.get("progressive_download_url")
+                    audio_title = original_sound.get("original_audio_title", "Original Sound")
+                    ig_artist = original_sound.get("ig_artist", {})
+                    audio_artist = ig_artist.get("username", username)
+            
+            # Use video URL if no direct audio URL
+            if not audio_url:
+                audio_url = video_url
+            
+            if not audio_url:
+                return None
+            
+            # Get cover art
+            cover_url = None
+            image_versions = item.get("image_versions2", {})
+            candidates = image_versions.get("candidates", [])
+            if candidates:
+                cover_url = candidates[0].get("url")
+            
+            # Get caption for title
+            caption = item.get("caption", {})
+            if isinstance(caption, dict):
+                caption_text = caption.get("text", "")[:50]
+                if caption_text and audio_title == "Instagram Audio":
+                    audio_title = caption_text
+            
+            return AudioMetadata(
+                audio_id=str(item.get("id", item.get("pk", ""))),
+                title=audio_title,
+                artist=audio_artist,
+                duration_ms=int(item.get("video_duration", 0) * 1000) if item.get("video_duration") else None,
+                audio_url=audio_url,
+                cover_url=cover_url,
+                source="instagram-stable"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error extracting audio from reel: {e}")
+            return None
     
     def _get_audio_filename(self, audio_id: str, title: str) -> str:
         """Generate safe filename for audio file"""
@@ -80,7 +190,7 @@ class AudioService:
         Fetch audio information and URL from an Instagram reel.
         
         Args:
-            reel_url: Instagram reel URL or shortcode
+            reel_url: Instagram reel URL, shortcode, or username
             
         Returns:
             AudioMetadata with audio_url if available
@@ -88,23 +198,52 @@ class AudioService:
         if not self.api_key:
             logger.error("Cannot fetch audio: RAPIDAPI_KEY not configured")
             return None
-            
+        
+        # Extract username from URL if provided
+        username = self._extract_username_from_url(reel_url)
+        if not username:
+            username = reel_url  # Assume it's a username
+        
+        # Try primary API first (Instagram Scraper Stable)
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                # Extract username from URL if provided, or use as shortcode
-                username = self._extract_username_from_url(reel_url)
+                logger.info(f"Fetching reels for @{username} via Instagram Scraper Stable API")
+                # Endpoint: POST /v1.2/reels (from API docs)
+                response = await client.post(
+                    f"{self.primary_base_url}/v1.2/reels",
+                    headers=self._get_headers(self.primary_host),
+                    json={"username_or_id_or_url": username}
+                )
                 
-                if username:
-                    # Fetch profile media to find video with audio
-                    response = await client.get(
-                        f"{self.base_url}/profile",
-                        params={"username": username},
-                        headers=self._get_headers()
-                    )
-                    response.raise_for_status()
+                if response.status_code == 200:
                     data = response.json()
+                    items = data.get("data", {}).get("items", [])
                     
-                    # Find first video post
+                    for item in items:
+                        audio = self._extract_audio_from_reel(item, username)
+                        if audio and audio.audio_url:
+                            logger.info(f"Found audio: {audio.title} by {audio.artist}")
+                            return audio
+                    
+                    logger.warning(f"No reels with audio found for @{username}")
+                else:
+                    logger.warning(f"Primary API returned {response.status_code}: {response.text[:200]}")
+                    
+            except Exception as e:
+                logger.error(f"Primary API error: {e}")
+        
+        # Fallback to looter2 API
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                logger.info(f"Trying fallback API for @{username}")
+                response = await client.get(
+                    f"{self.fallback_base_url}/profile",
+                    params={"username": username},
+                    headers=self._get_headers(self.fallback_host)
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
                     timeline = data.get("edge_owner_to_timeline_media", {})
                     edges = timeline.get("edges", [])
                     
@@ -118,18 +257,15 @@ class AudioService:
                                     title=self._extract_title(node),
                                     artist=username,
                                     audio_url=video_url,
-                                    cover_url=node.get("thumbnail_src") or node.get("display_url")
+                                    cover_url=node.get("thumbnail_src") or node.get("display_url"),
+                                    source="instagram-looter2"
                                 )
-                
-                logger.warning(f"No video audio found for: {reel_url}")
-                return None
-                
-            except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error fetching reel audio: {e}")
-                return None
+                                
             except Exception as e:
-                logger.error(f"Error fetching reel audio: {e}")
-                return None
+                logger.error(f"Fallback API error: {e}")
+        
+        logger.warning(f"No audio found for: {reel_url}")
+        return None
     
     def _extract_username_from_url(self, url: str) -> Optional[str]:
         """Extract username from Instagram URL or return as-is if it's a username"""

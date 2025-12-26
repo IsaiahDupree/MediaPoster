@@ -47,12 +47,11 @@ async def get_event_timeline(
     Fetches from database for persistence across restarts.
     """
     import os
-    from sqlalchemy import create_engine, text
     import json
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
     
     DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres")
-    engine = create_engine(DATABASE_URL)
-    
     since = datetime.now() - timedelta(minutes=minutes_ago)
     
     # Map frontend agent types to database values
@@ -63,59 +62,67 @@ async def get_event_timeline(
     }
     db_agent_type = agent_type_map.get(agent_type, agent_type) if agent_type else None
     
+    conn = None
     try:
-        with engine.connect() as conn:
-            # Build query with optional filters
-            query = """
-                SELECT id, agent_type, event_type, title, description, 
-                       event_data, created_at
-                FROM agent_events
-                WHERE created_at >= :since
-            """
-            params = {"since": since, "limit": limit}
+        # Parse connection string and connect directly with psycopg2
+        conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Build query with optional filters
+        query = """
+            SELECT id, agent_type, event_type, title, description, 
+                   event_data, created_at
+            FROM agent_events
+            WHERE created_at >= %s
+        """
+        params = [since]
+        
+        if db_agent_type:
+            query += " AND agent_type = %s"
+            params.append(db_agent_type)
+        
+        if event_type:
+            query += " AND event_type = %s"
+            params.append(event_type)
+        
+        query += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+        
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        
+        events = []
+        for row in rows:
+            event_data = row['event_data']
+            if isinstance(event_data, str):
+                try:
+                    event_data = json.loads(event_data)
+                except:
+                    event_data = {}
             
-            if db_agent_type:
-                query += " AND agent_type = :agent_type"
-                params["agent_type"] = db_agent_type
-            
-            if event_type:
-                query += " AND event_type = :event_type"
-                params["event_type"] = event_type
-            
-            query += " ORDER BY created_at DESC LIMIT :limit"
-            
-            result = conn.execute(text(query), params)
-            
-            events = []
-            for row in result:
-                event_data = row[5]
-                if isinstance(event_data, str):
-                    try:
-                        event_data = json.loads(event_data)
-                    except:
-                        event_data = {}
-                
-                events.append({
-                    "id": str(row[0]),
-                    "agent_type": row[1],
-                    "event_type": row[2],
-                    "title": row[3],
-                    "description": row[4],
-                    "data": event_data,
-                    "timestamp": row[6].isoformat() if row[6] else None
-                })
-            
-            return {
-                "success": True,
-                "events": events,
-                "count": len(events),
-                "filters": {
-                    "agent_type": agent_type,
-                    "event_type": event_type,
-                    "limit": limit,
-                    "since": since.isoformat()
-                }
+            events.append({
+                "id": str(row['id']),
+                "agent_type": row['agent_type'],
+                "event_type": row['event_type'],
+                "title": row['title'],
+                "description": row['description'],
+                "data": event_data,
+                "timestamp": row['created_at'].isoformat() if row['created_at'] else None
+            })
+        
+        cur.close()
+        
+        return {
+            "success": True,
+            "events": events,
+            "count": len(events),
+            "filters": {
+                "agent_type": agent_type,
+                "event_type": event_type,
+                "limit": limit,
+                "since": since.isoformat()
             }
+        }
     except Exception as e:
         logger.error(f"[Timeline] Database error: {e}")
         return {
@@ -124,6 +131,9 @@ async def get_event_timeline(
             "count": 0,
             "error": str(e)
         }
+    finally:
+        if conn:
+            conn.close()
 
 
 @router.get("/narrative-planner/timeline")

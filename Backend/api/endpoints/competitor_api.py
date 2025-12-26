@@ -8,6 +8,7 @@ from typing import Optional, List
 from loguru import logger
 
 from services.competitor_service import get_competitor_service
+from services.competitor_analysis_service import get_analysis_service
 
 router = APIRouter(prefix="/api/competitors", tags=["Competitor Research"])
 
@@ -155,4 +156,59 @@ async def get_account_posts(username: str, count: int = 50):
         
     except Exception as e:
         logger.error(f"Error fetching posts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/accounts/{username}/analyze")
+async def analyze_account(username: str, max_content: int = 20):
+    """
+    Analyze competitor content using AI.
+    
+    Extracts:
+    - Top performing hooks
+    - Content formats
+    - Themes and patterns
+    - Replication tips
+    - Content ideas
+    
+    Results saved to CompetitorResearch/accounts/{username}/analysis/
+    """
+    analysis_service = get_analysis_service()
+    
+    try:
+        learnings = await analysis_service.analyze_account(username, max_content)
+        
+        if not learnings:
+            raise HTTPException(status_code=404, detail="No content to analyze")
+        
+        return {
+            "status": "analyzed",
+            "username": username,
+            "learnings": learnings.model_dump()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing account: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/accounts/{username}/analysis")
+async def get_account_analysis(username: str):
+    """Get stored analysis results for a competitor account"""
+    from pathlib import Path
+    import json
+    
+    analysis_path = Path(f"/Users/isaiahdupree/Documents/CompetitorResearch/accounts/{username}/analysis/learnings.json")
+    
+    if not analysis_path.exists():
+        raise HTTPException(status_code=404, detail="No analysis found. Run POST /analyze first.")
+    
+    try:
+        with open(analysis_path) as f:
+            learnings = json.load(f)
+        return learnings
+    except Exception as e:
+        logger.error(f"Error reading analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -38,7 +38,9 @@ class AudioService:
     """
     
     def __init__(self):
-        self.api_key = os.getenv("RAPIDAPI_KEY")
+        # Strip any newlines from API key (fixes duplicate .env entries issue)
+        raw_key = os.getenv("RAPIDAPI_KEY", "")
+        self.api_key = raw_key.strip().split('\n')[0] if raw_key else None
         self.timeout = 30.0
         self.storage_dir = AUDIO_STORAGE_DIR
         
@@ -208,19 +210,25 @@ class AudioService:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 logger.info(f"Fetching reels for @{username} via Instagram Scraper Stable API")
-                # Endpoint: POST /v1.2/reels (from API docs)
+                # Endpoint: POST /get_ig_user_reels.php (form-urlencoded)
+                headers = self._get_headers(self.primary_host)
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
+                
                 response = await client.post(
-                    f"{self.primary_base_url}/v1.2/reels",
-                    headers=self._get_headers(self.primary_host),
-                    json={"username_or_id_or_url": username}
+                    f"{self.primary_base_url}/get_ig_user_reels.php",
+                    headers=headers,
+                    data={"username_or_url": username, "amount": "10"}
                 )
                 
                 if response.status_code == 200:
                     data = response.json()
-                    items = data.get("data", {}).get("items", [])
+                    # API returns {"reels": [{"node": {"media": {...}}}]}
+                    items = data.get("reels", [])
                     
                     for item in items:
-                        audio = self._extract_audio_from_reel(item, username)
+                        # Extract media from nested structure
+                        media = item.get("node", {}).get("media", item.get("media", item))
+                        audio = self._extract_audio_from_reel(media, username)
                         if audio and audio.audio_url:
                             logger.info(f"Found audio: {audio.title} by {audio.artist}")
                             return audio

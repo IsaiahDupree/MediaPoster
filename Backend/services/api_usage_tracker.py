@@ -20,6 +20,7 @@ class APIProvider(Enum):
     RAPIDAPI_TIKTOK_SCRAPER7 = "rapidapi_tiktok_scraper7"
     RAPIDAPI_INSTAGRAM = "rapidapi_instagram"
     RAPIDAPI_INSTAGRAM_STATS = "rapidapi_instagram_stats"
+    RAPIDAPI_INSTAGRAM_STABLE = "rapidapi_instagram_stable"  # Instagram Scraper Stable API
     RAPIDAPI_YOUTUBE = "rapidapi_youtube"
     RAPIDAPI_TWITTER = "rapidapi_twitter"
     BLOTATO = "blotato"
@@ -247,6 +248,42 @@ RAPIDAPI_INSTAGRAM_RATE_LIMITS = {
 }
 
 # =============================================================================
+# RapidAPI Instagram Scraper Stable API (RockSolid APIs) - VERIFIED WORKING
+# Host: instagram-scraper-stable-api.p.rapidapi.com
+# Provider: RockSolid APIs (thetechguy32744)
+# Docs: https://rapidapi.com/thetechguy32744/api/instagram-scraper-stable-api
+# Used for: Audio extraction, competitor research, profile info
+# Last updated: Dec 2024
+# =============================================================================
+RAPIDAPI_INSTAGRAM_STABLE_HOST = "instagram-scraper-stable-api.p.rapidapi.com"
+
+RAPIDAPI_INSTAGRAM_STABLE_TIERS = {
+    "basic": APITier("BASIC", monthly_limit=100, cost_usd=0.0),  # Free tier
+    "pro": APITier("PRO", monthly_limit=10000, cost_usd=25.0, overage_cost_per_call=0.004),
+    "ultra": APITier("ULTRA", monthly_limit=100000, cost_usd=100.0, overage_cost_per_call=0.002),
+    "mega": APITier("MEGA", monthly_limit=500000, cost_usd=250.0, overage_cost_per_call=0.001),
+}
+
+RAPIDAPI_INSTAGRAM_STABLE_ENDPOINTS = {
+    "profile_info": "/v1/info",               # POST - User profile info (VERIFIED WORKING)
+    "reels": "/v1/reels",                     # POST - User reels with audio URLs (VERIFIED WORKING)
+    "reels_v2": "/v1.2/reels",                # POST - User reels v2 (VERIFIED WORKING)
+    "posts": "/v1/posts",                     # POST - User posts
+    "followers": "/v1/followers",             # POST - User followers
+    "following": "/v1/following",             # POST - User following
+    "highlights": "/v1/highlights",           # POST - User highlights
+    "stories": "/v1/stories",                 # POST - User stories
+    "search": "/v1/search",                   # POST - Search users/hashtags
+}
+
+RAPIDAPI_INSTAGRAM_STABLE_RATE_LIMITS = {
+    "basic": 1,     # 1 request/second
+    "pro": 5,       # 5 requests/second
+    "ultra": 10,    # 10 requests/second
+    "mega": 20,     # 20 requests/second
+}
+
+# =============================================================================
 # RapidAPI YouTube (YT-API) - from https://rapidapi.com/ytjar/api/yt-api
 # Host: yt-api.p.rapidapi.com
 # Last updated: Dec 2024
@@ -312,6 +349,13 @@ ALL_API_PROVIDERS = {
         "tiers": RAPIDAPI_INSTAGRAM_TIERS,
         "endpoints": RAPIDAPI_INSTAGRAM_STATS_ENDPOINTS,
         "rate_limits": RAPIDAPI_INSTAGRAM_RATE_LIMITS,
+    },
+    APIProvider.RAPIDAPI_INSTAGRAM_STABLE: {
+        "host": RAPIDAPI_INSTAGRAM_STABLE_HOST,
+        "display_name": "IG Scraper Stable (Audio)",
+        "tiers": RAPIDAPI_INSTAGRAM_STABLE_TIERS,
+        "endpoints": RAPIDAPI_INSTAGRAM_STABLE_ENDPOINTS,
+        "rate_limits": RAPIDAPI_INSTAGRAM_STABLE_RATE_LIMITS,
     },
     # YouTube API
     APIProvider.RAPIDAPI_YOUTUBE: {
@@ -456,6 +500,19 @@ class APIUsageTracker:
             tier = RAPIDAPI_INSTAGRAM_TIERS.get("basic")
             self._budgets[APIProvider.RAPIDAPI_INSTAGRAM.value] = MonthlyBudget(
                 provider=APIProvider.RAPIDAPI_INSTAGRAM.value,
+                tier_name=tier.name,
+                monthly_limit=tier.monthly_limit,
+                monthly_cost=tier.cost_usd,
+                period_start=period_start,
+                period_end=period_end,
+                current_usage=0
+            )
+        
+        # Initialize Instagram Scraper Stable API budget (for audio extraction)
+        if APIProvider.RAPIDAPI_INSTAGRAM_STABLE.value not in self._budgets:
+            tier = RAPIDAPI_INSTAGRAM_STABLE_TIERS.get("basic")
+            self._budgets[APIProvider.RAPIDAPI_INSTAGRAM_STABLE.value] = MonthlyBudget(
+                provider=APIProvider.RAPIDAPI_INSTAGRAM_STABLE.value,
                 tier_name=tier.name,
                 monthly_limit=tier.monthly_limit,
                 monthly_cost=tier.cost_usd,

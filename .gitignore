@@ -112,3 +112,4 @@ Backend/automation/tests/screenshots/
 Backend/.env.backup*
 Backend/token.pickle
 Backend/thumbnails/
+Backend/venv311/

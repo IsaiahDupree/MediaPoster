@@ -1,16 +1,17 @@
 """
 Instagram Scraper Stable API Adapter
-Implementation using instagram-scraper-api2.p.rapidapi.com (RockSolid APIs)
+Implementation using instagram-scraper-stable-api.p.rapidapi.com (RockSolid APIs)
 
 PRO Plan Limits:
 - Rate limit varies by endpoint
 - Real-time data (no caching)
 
-Key Endpoints:
-- POST /v1/user_reels - Get user reels with audio
-- GET /v1/reel_by_shortcode - Detailed reel data with play_count
-- GET /v1/media_by_shortcode - Detailed media data
-- POST /v1/info - User profile info
+Key Endpoints (uses form-urlencoded, .php suffix):
+- POST /get_ig_user_reels.php - Get user reels with audio (username_or_url, amount)
+- POST /get_ig_user_posts.php - Get user posts (username_or_url, amount)
+- POST /get_ig_account_data.php - Get account/profile data (username_or_url)
+- GET /get_ig_reel_data.php - Detailed reel data with play_count (code_or_id_or_url)
+- POST /search_ig.php - Search users and hashtags (query)
 """
 import os
 import httpx
@@ -84,12 +85,13 @@ class InstagramStableAdapter(InstagramAdapter):
         if not self.api_key:
             logger.warning("RAPIDAPI_KEY not configured - adapter will fail")
     
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self, use_form: bool = False) -> Dict[str, str]:
         """Get required RapidAPI headers"""
+        content_type = "application/x-www-form-urlencoded" if use_form else "application/json"
         return {
             "X-RapidAPI-Key": self.api_key,
             "X-RapidAPI-Host": self.host,
-            "Content-Type": "application/json"
+            "Content-Type": content_type
         }
     
     def _update_rate_limits(self, response: httpx.Response):
@@ -102,34 +104,35 @@ class InstagramStableAdapter(InstagramAdapter):
         """
         Fetch Instagram profile information.
         
-        Endpoint: POST /v1/info
+        Endpoint: POST /get_ig_account_data.php
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 response = await client.post(
-                    f"{self.base_url}/v1/info",
-                    headers=self._get_headers(),
-                    json={"username_or_id_or_url": username}
+                    f"{self.base_url}/get_ig_account_data.php",
+                    headers=self._get_headers(use_form=True),
+                    data={"username_or_url": username}
                 )
                 response.raise_for_status()
                 self._update_rate_limits(response)
                 
-                data = response.json().get("data", {})
+                data = response.json()
+                user_data = data.get("user", data)
                 
                 return Profile(
-                    id=str(data.get("id", "")),
-                    username=data.get("username", username),
-                    full_name=data.get("full_name", ""),
-                    bio=data.get("biography", ""),
-                    followers_count=data.get("follower_count", 0),
-                    following_count=data.get("following_count", 0),
-                    media_count=data.get("media_count", 0),
-                    is_verified=data.get("is_verified", False),
-                    profile_pic_url=data.get("profile_pic_url_hd", data.get("profile_pic_url", "")),
+                    id=str(user_data.get("id", user_data.get("pk", ""))),
+                    username=user_data.get("username", username),
+                    full_name=user_data.get("full_name", ""),
+                    bio=user_data.get("biography", ""),
+                    followers_count=user_data.get("follower_count", 0),
+                    following_count=user_data.get("following_count", 0),
+                    media_count=user_data.get("media_count", 0),
+                    is_verified=user_data.get("is_verified", False),
+                    profile_pic_url=user_data.get("profile_pic_url_hd", user_data.get("profile_pic_url", "")),
                     provider=self.name,
-                    external_url=data.get("external_url"),
-                    is_business=data.get("is_business_account", False),
-                    category=data.get("category_name")
+                    external_url=user_data.get("external_url"),
+                    is_business=user_data.get("is_business_account", False),
+                    category=user_data.get("category_name")
                 )
                 
             except httpx.HTTPStatusError as e:
@@ -148,33 +151,35 @@ class InstagramStableAdapter(InstagramAdapter):
         """
         Fetch user reels with audio information.
         
-        Endpoint: POST /v1/reels
+        Endpoint: POST /get_ig_user_reels.php
+        Params: username_or_url, amount
         
         Returns reels with video URLs and audio metadata.
         """
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                payload = {
-                    "username_or_id_or_url": username,
-                    "count": count
+                form_data = {
+                    "username_or_url": username,
+                    "amount": str(count)
                 }
-                if pagination_token:
-                    payload["pagination_token"] = pagination_token
                 
                 response = await client.post(
-                    f"{self.base_url}/v1/reels",
-                    headers=self._get_headers(),
-                    json=payload
+                    f"{self.base_url}/get_ig_user_reels.php",
+                    headers=self._get_headers(use_form=True),
+                    data=form_data
                 )
                 response.raise_for_status()
                 self._update_rate_limits(response)
                 
                 data = response.json()
-                items = data.get("data", {}).get("items", [])
+                # API returns {"reels": [{"node": {"media": {...}}}]}
+                items = data.get("reels", [])
                 
                 reels = []
                 for item in items:
-                    reel = self._parse_reel_item(item)
+                    # Extract media from nested structure
+                    media = item.get("node", {}).get("media", item.get("media", item))
+                    reel = self._parse_reel_item(media)
                     if reel:
                         reels.append(reel)
                 

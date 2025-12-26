@@ -706,6 +706,12 @@ app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discov
 from api.endpoints import audio_api
 app.include_router(audio_api.router, tags=["Audio Service"])
 
+# iOS Import (device import with duplicate detection)
+from api.endpoints import ios_import_api
+app.include_router(ios_import_api.router, tags=["iOS Import"])
+from api.endpoints import voice_cloning_quality
+app.include_router(voice_cloning_quality.router, prefix="/api/voice-cloning-quality", tags=["Voice Cloning Quality"])
+
 # Competitor Research (track and analyze competitor content)
 from api.endpoints import competitor_api
 app.include_router(competitor_api.router, tags=["Competitor Research"])

@@ -228,6 +228,67 @@ async def get_trending_keywords(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/niches/search")
+async def search_niche(
+    query: str = Query(..., description="Niche to search for (e.g., 'entrepreneur', 'fitness')"),
+):
+    """
+    Search Instagram for a niche using RapidAPI.
+    
+    Returns related hashtags, top accounts, and places for the niche.
+    """
+    try:
+        from services.niche_search_service import get_niche_search_service
+        service = get_niche_search_service()
+        
+        niche_data = await service.discover_niche(query)
+        
+        return {
+            "niche": niche_data.niche_name,
+            "hashtags": niche_data.related_hashtags,
+            "accounts": niche_data.top_accounts,
+            "places": niche_data.places,
+            "searched_at": niche_data.searched_at.isoformat() if niche_data.searched_at else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching niche: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/niches/discover")
+async def discover_niches(
+    niches: List[str] = Query(..., description="List of niches to discover")
+):
+    """
+    Discover multiple niches at once.
+    
+    Returns aggregated data for each niche including hashtags, accounts, and places.
+    """
+    try:
+        from services.niche_search_service import get_niche_search_service
+        service = get_niche_search_service()
+        
+        results = await service.search_multiple_niches(niches)
+        
+        return {
+            "count": len(results),
+            "niches": [
+                {
+                    "niche": r.niche_name,
+                    "hashtags": r.related_hashtags,
+                    "accounts": r.top_accounts,
+                    "places": r.places
+                }
+                for r in results
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error discovering niches: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/niches")
 async def get_trending_niches(
     limit: int = Query(10, ge=1, le=50, description="Number of results"),
@@ -568,4 +629,108 @@ async def get_trend_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching trend stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/velocity")
+async def get_velocity_scores(
+    trend_type: Optional[str] = Query(None, description="Filter by type: hashtag, sound, keyword"),
+    sort_by: str = Query("trending_score", description="Sort by: trending_score, acceleration, velocity_7d"),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """
+    Get trends with velocity scores.
+    
+    Velocity = rate of change over time
+    Acceleration = how fast velocity is increasing
+    Trending Score = combined score factoring in volume + velocity + acceleration
+    """
+    try:
+        from services.trend_velocity_service import get_trend_velocity_service
+        service = get_trend_velocity_service()
+        
+        if sort_by == "acceleration":
+            trends = service.get_top_accelerating(trend_type, limit)
+        else:
+            trends = service.get_top_trending(trend_type, limit)
+        
+        return {
+            "count": len(trends),
+            "sort_by": sort_by,
+            "trends": [t.model_dump() for t in trends]
+        }
+    except Exception as e:
+        logger.error(f"Error fetching velocity scores: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/brief/{trend_type}/{trend_id}")
+async def generate_trend_brief(
+    trend_type: str,
+    trend_id: str,
+    trend_name: str = Query(..., description="Display name of the trend")
+):
+    """
+    Generate an AI-powered brief for a specific trend.
+    
+    Returns:
+    - Summary of the trend
+    - Why it's trending
+    - Content ideas
+    - Example hooks
+    - Target audience
+    - Best posting time
+    """
+    try:
+        from services.trend_brief_service import get_trend_brief_service
+        from services.trend_velocity_service import get_trend_velocity_service
+        
+        brief_service = get_trend_brief_service()
+        velocity_service = get_trend_velocity_service()
+        
+        # Get velocity data for context
+        velocity_data = None
+        velocities = velocity_service.get_top_trending(trend_type, 100)
+        for v in velocities:
+            if v.trend_id == trend_id:
+                velocity_data = v.model_dump()
+                break
+        
+        brief = await brief_service.generate_brief(
+            trend_type=trend_type,
+            trend_id=trend_id,
+            trend_name=trend_name,
+            velocity_data=velocity_data
+        )
+        
+        if not brief:
+            raise HTTPException(status_code=500, detail="Failed to generate brief")
+        
+        return brief.model_dump()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating brief: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/briefs")
+async def get_trend_briefs(
+    trend_type: Optional[str] = Query(None, description="Filter by type"),
+    limit: int = Query(20, ge=1, le=50)
+):
+    """Get all cached trend briefs"""
+    try:
+        from services.trend_brief_service import get_trend_brief_service
+        service = get_trend_brief_service()
+        
+        briefs = service.get_all_briefs(trend_type, limit)
+        
+        return {
+            "count": len(briefs),
+            "briefs": [b.model_dump() for b in briefs]
+        }
+    except Exception as e:
+        logger.error(f"Error fetching briefs: {e}")
         raise HTTPException(status_code=500, detail=str(e))

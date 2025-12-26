@@ -76,3 +76,160 @@ async def get_live_reasoning(goal_id: str):
     # For now, return the latest reasoning chain
     # In production, this could be enhanced with Redis pub/sub or WebSocket
     return await get_reasoning_chain(goal_id)
+
+
+@router.get("/weekly-schedules")
+async def get_weekly_schedules():
+    """
+    Get all weekly schedules/plans history.
+    Returns list of generated plans with their status.
+    """
+    scheduler = NarrativeScheduler()
+    
+    with scheduler.engine.connect() as conn:
+        from sqlalchemy import text
+        
+        result = conn.execute(text("""
+            SELECT 
+                ws.id,
+                ws.goal_id,
+                ng.goal as goal_title,
+                ws.status,
+                ws.justification_summary,
+                ws.created_at,
+                ws.updated_at,
+                (SELECT COUNT(*) FROM scheduled_posts sp WHERE sp.weekly_schedule_id = ws.id) as post_count
+            FROM weekly_schedules ws
+            LEFT JOIN narrative_goals ng ON ws.goal_id = ng.id
+            ORDER BY ws.created_at DESC
+            LIMIT 20
+        """))
+        
+        schedules = []
+        for row in result:
+            schedules.append({
+                "id": str(row[0]),
+                "goal_id": str(row[1]) if row[1] else None,
+                "goal_title": row[2],
+                "status": row[3],
+                "justification_summary": row[4],
+                "created_at": str(row[5]) if row[5] else None,
+                "updated_at": str(row[6]) if row[6] else None,
+                "post_count": row[7] or 0,
+            })
+        
+        return {"schedules": schedules, "total": len(schedules)}
+
+
+@router.post("/suggest-goal")
+async def suggest_goal():
+    """
+    Use AI to suggest a content goal based on current signals and performance.
+    Makes a real OpenAI API call to generate personalized suggestions.
+    """
+    import os
+    import openai
+    from datetime import datetime
+    
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    
+    if not openai.api_key:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    
+    scheduler = NarrativeScheduler()
+    
+    # Gather context for AI
+    with scheduler.engine.connect() as conn:
+        from sqlalchemy import text
+        
+        # Get recent posting stats
+        stats_result = conn.execute(text("""
+            SELECT 
+                COUNT(*) as total_posts,
+                COUNT(CASE WHEN platform = 'tiktok' THEN 1 END) as tiktok_posts,
+                COUNT(CASE WHEN platform = 'instagram' THEN 1 END) as ig_posts,
+                COUNT(CASE WHEN platform = 'youtube' THEN 1 END) as yt_posts
+            FROM scheduled_posts
+            WHERE scheduled_time > NOW() - INTERVAL '30 days'
+            AND status = 'published'
+        """))
+        stats = stats_result.fetchone()
+        
+        # Get top performing topics
+        topics_result = conn.execute(text("""
+            SELECT unnest(topics) as topic, COUNT(*) as cnt
+            FROM video_analysis
+            WHERE analyzed_at > NOW() - INTERVAL '30 days'
+            GROUP BY topic
+            ORDER BY cnt DESC
+            LIMIT 5
+        """))
+        top_topics = [row[0] for row in topics_result]
+        
+        # Get content inventory
+        inventory_result = conn.execute(text("""
+            SELECT COUNT(*) FROM video_analysis 
+            WHERE NOT EXISTS (
+                SELECT 1 FROM scheduled_posts sp 
+                WHERE sp.media_project_id = video_analysis.media_project_id
+            )
+        """))
+        unused_content = inventory_result.scalar() or 0
+    
+    # Build prompt for OpenAI
+    prompt = f"""You are a social media content strategist. Based on the following data, suggest ONE specific, actionable content goal for the next 7 days.
+
+Current Stats (last 30 days):
+- Total posts published: {stats[0] if stats else 0}
+- TikTok posts: {stats[1] if stats else 0}
+- Instagram posts: {stats[2] if stats else 0}
+- YouTube posts: {stats[3] if stats else 0}
+
+Top Content Topics: {', '.join(top_topics) if top_topics else 'No data yet'}
+Unused Content Available: {unused_content} pieces
+
+Today's Date: {datetime.now().strftime('%B %d, %Y')}
+
+Respond in JSON format with these fields:
+{{
+    "goal": "A specific, measurable goal statement",
+    "rationale": "Why this goal makes sense based on the data",
+    "suggested_pillars": ["pillar1", "pillar2", "pillar3"],
+    "recommended_platforms": ["platform1", "platform2"],
+    "posts_per_day": 2,
+    "content_mix": {{"educational": 40, "entertaining": 30, "promotional": 20, "community": 10}}
+}}"""
+
+    try:
+        client = openai.OpenAI()
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a social media strategist. Always respond with valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        suggestion_text = response.choices[0].message.content
+        # Parse JSON from response
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', suggestion_text)
+        if json_match:
+            suggestion = json.loads(json_match.group())
+        else:
+            suggestion = {"goal": suggestion_text, "rationale": "AI-generated suggestion"}
+        
+        return {
+            "success": True,
+            "suggestion": suggestion,
+            "context": {
+                "total_posts_30d": stats[0] if stats else 0,
+                "top_topics": top_topics,
+                "unused_content": unused_content
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI suggestion failed: {str(e)}")

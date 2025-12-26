@@ -710,3 +710,129 @@ async def _sync_rapidapi_account(session, account, platform: str, username: str)
         logger.error(f"Error syncing {platform} account via RapidAPI: {e}")
         raise
 
+
+@router.get("/enriched")
+async def get_enriched_accounts():
+    """
+    Get all Blotato accounts enriched with RapidAPI profile data.
+    Fetches followers, posts count, profile pics, etc. from RapidAPI.
+    """
+    from config.blotato_accounts import BLOTATO_ACCOUNTS
+    from services.platform_data_orchestrator import PlatformDataOrchestrator, Platform
+    
+    orchestrator = PlatformDataOrchestrator()
+    enriched_accounts = []
+    
+    # Map platform strings to Platform enum
+    platform_map = {
+        'tiktok': Platform.TIKTOK,
+        'instagram': Platform.INSTAGRAM,
+        'youtube': Platform.YOUTUBE,
+        'twitter': Platform.TWITTER,
+        'bluesky': Platform.BLUESKY,
+        'threads': Platform.THREADS if hasattr(Platform, 'THREADS') else None,
+        'pinterest': Platform.PINTEREST if hasattr(Platform, 'PINTEREST') else None,
+        'linkedin': Platform.LINKEDIN if hasattr(Platform, 'LINKEDIN') else None,
+        'facebook': Platform.FACEBOOK if hasattr(Platform, 'FACEBOOK') else None,
+    }
+    
+    for account in BLOTATO_ACCOUNTS:
+        account_data = {
+            'id': account.get('id'),
+            'platform': account.get('platform', '').lower(),
+            'username': account.get('username', ''),
+            'display_name': account.get('fullname') or account.get('username', ''),
+            'profile_pic_url': None,
+            'followers_count': 0,
+            'following_count': 0,
+            'posts_count': 0,
+            'is_verified': False,
+            'is_active': True,
+            'bio': None,
+            'last_fetched_at': None,
+            'fetch_status': 'pending',
+        }
+        
+        platform_enum = platform_map.get(account_data['platform'])
+        username = account_data['username'].lstrip('@')
+        
+        # Try to fetch profile data from RapidAPI if we have a provider for this platform
+        if platform_enum and username:
+            try:
+                result = await orchestrator.fetch_profile(platform_enum, username)
+                if result.success and result.data:
+                    data = result.data
+                    
+                    # Parse based on platform response format
+                    if account_data['platform'] == 'tiktok':
+                        user = data.get('data', {}).get('user', {}) or data.get('user', {})
+                        stats = data.get('data', {}).get('stats', {}) or data.get('stats', {})
+                        account_data['profile_pic_url'] = user.get('avatarThumb') or user.get('avatar_larger') or user.get('avatarMedium')
+                        account_data['followers_count'] = stats.get('followerCount') or stats.get('follower_count', 0)
+                        account_data['following_count'] = stats.get('followingCount') or stats.get('following_count', 0)
+                        account_data['posts_count'] = stats.get('videoCount') or stats.get('video_count', 0)
+                        account_data['is_verified'] = user.get('verified', False)
+                        account_data['bio'] = user.get('signature', '')
+                        account_data['display_name'] = user.get('nickname') or account_data['display_name']
+                        
+                    elif account_data['platform'] == 'instagram':
+                        user = data.get('data', {}) if 'data' in data else data
+                        account_data['profile_pic_url'] = user.get('profile_pic_url') or user.get('profile_pic_url_hd')
+                        account_data['followers_count'] = user.get('follower_count') or user.get('edge_followed_by', {}).get('count', 0)
+                        account_data['following_count'] = user.get('following_count') or user.get('edge_follow', {}).get('count', 0)
+                        account_data['posts_count'] = user.get('media_count') or user.get('edge_owner_to_timeline_media', {}).get('count', 0)
+                        account_data['is_verified'] = user.get('is_verified', False)
+                        account_data['bio'] = user.get('biography', '')
+                        account_data['display_name'] = user.get('full_name') or account_data['display_name']
+                        
+                    elif account_data['platform'] == 'youtube':
+                        # YouTube uses channel data
+                        items = data.get('items', [])
+                        if items:
+                            snippet = items[0].get('snippet', {})
+                            stats = items[0].get('statistics', {})
+                            account_data['profile_pic_url'] = snippet.get('thumbnails', {}).get('default', {}).get('url')
+                            account_data['followers_count'] = int(stats.get('subscriberCount', 0))
+                            account_data['posts_count'] = int(stats.get('videoCount', 0))
+                            account_data['bio'] = snippet.get('description', '')
+                            account_data['display_name'] = snippet.get('title') or account_data['display_name']
+                            
+                    elif account_data['platform'] == 'twitter':
+                        user = data.get('user', {}) or data
+                        account_data['profile_pic_url'] = user.get('profile_image_url_https') or user.get('avatar')
+                        account_data['followers_count'] = user.get('followers_count') or user.get('sub_count', 0)
+                        account_data['following_count'] = user.get('friends_count') or user.get('following_count', 0)
+                        account_data['posts_count'] = user.get('statuses_count') or user.get('tweets_count', 0)
+                        account_data['is_verified'] = user.get('verified', False)
+                        account_data['bio'] = user.get('description', '')
+                        account_data['display_name'] = user.get('name') or account_data['display_name']
+                        
+                    elif account_data['platform'] == 'bluesky':
+                        account_data['profile_pic_url'] = data.get('avatar')
+                        account_data['followers_count'] = data.get('followersCount', 0)
+                        account_data['following_count'] = data.get('followsCount', 0)
+                        account_data['posts_count'] = data.get('postsCount', 0)
+                        account_data['bio'] = data.get('description', '')
+                        account_data['display_name'] = data.get('displayName') or account_data['display_name']
+                    
+                    account_data['fetch_status'] = 'success'
+                    account_data['last_fetched_at'] = datetime.now().isoformat()
+                else:
+                    account_data['fetch_status'] = 'error'
+                    account_data['error'] = result.error if result else 'No data returned'
+            except Exception as e:
+                logger.warning(f"Error fetching profile for {account_data['platform']}/@{username}: {e}")
+                account_data['fetch_status'] = 'error'
+                account_data['error'] = str(e)
+        else:
+            account_data['fetch_status'] = 'unsupported'
+        
+        enriched_accounts.append(account_data)
+    
+    return {
+        'accounts': enriched_accounts,
+        'total': len(enriched_accounts),
+        'fetched': len([a for a in enriched_accounts if a['fetch_status'] == 'success']),
+        'errors': len([a for a in enriched_accounts if a['fetch_status'] == 'error']),
+    }
+

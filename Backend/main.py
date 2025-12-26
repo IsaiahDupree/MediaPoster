@@ -655,6 +655,10 @@ from api import posted_media
 from api.endpoints import instagram_api
 app.include_router(instagram_api.router, prefix="/api/instagram", tags=["Instagram TrendTok"])
 
+# Instagram Automation (Comment/DM automation based on Riona-AI-Agent)
+from api.endpoints import instagram_automation
+app.include_router(instagram_automation.router, prefix="/api", tags=["Instagram Automation"])
+
 # Trends API (Trending audio, hashtags, formats)
 from api.endpoints import trends_api
 app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discovery"])

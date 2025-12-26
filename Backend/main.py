@@ -569,8 +569,8 @@ from api.endpoints import accounts
 app.include_router(accounts.router, tags=["Accounts"])
 
 # App Settings
-from api.endpoints import settings
-app.include_router(settings.router, tags=["Settings"])
+from api.endpoints import app_settings
+app.include_router(app_settings.router, tags=["Settings"])
 
 # Post-Social Score (Phase 3)
 from api.endpoints import post_social_score

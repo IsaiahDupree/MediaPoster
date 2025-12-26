@@ -581,6 +581,10 @@ app.include_router(app_settings.router, tags=["Settings"])
 from api.endpoints import health
 app.include_router(health.router, tags=["Health"])
 
+# Virtual Environment Manager (Python 3.11 for AI/ML tasks)
+from api.endpoints import venv_status
+app.include_router(venv_status.router, tags=["Virtual Environments"])
+
 # Post-Social Score (Phase 3)
 from api.endpoints import post_social_score
 app.include_router(post_social_score.router, tags=["Post-Social Score"])

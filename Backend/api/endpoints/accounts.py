@@ -737,11 +737,25 @@ async def get_enriched_accounts():
     }
     
     for account in BLOTATO_ACCOUNTS:
+        # Handle both dataclass and dict formats
+        if hasattr(account, 'blotato_id'):
+            # Dataclass format
+            acc_id = account.blotato_id
+            acc_platform = account.platform.lower()
+            acc_username = account.username
+            acc_display_name = account.display_name or account.username
+        else:
+            # Dict format
+            acc_id = account.get('id') or account.get('blotato_id')
+            acc_platform = (account.get('platform', '') or '').lower()
+            acc_username = account.get('username', '')
+            acc_display_name = account.get('fullname') or account.get('display_name') or acc_username
+        
         account_data = {
-            'id': account.get('id'),
-            'platform': account.get('platform', '').lower(),
-            'username': account.get('username', ''),
-            'display_name': account.get('fullname') or account.get('username', ''),
+            'id': acc_id,
+            'platform': acc_platform,
+            'username': acc_username,
+            'display_name': acc_display_name,
             'profile_pic_url': None,
             'followers_count': 0,
             'following_count': 0,
@@ -753,8 +767,8 @@ async def get_enriched_accounts():
             'fetch_status': 'pending',
         }
         
-        platform_enum = platform_map.get(account_data['platform'])
-        username = account_data['username'].lstrip('@')
+        platform_enum = platform_map.get(acc_platform)
+        username = acc_username.lstrip('@')
         
         # Try to fetch profile data from RapidAPI if we have a provider for this platform
         if platform_enum and username:
@@ -764,7 +778,7 @@ async def get_enriched_accounts():
                     data = result.data
                     
                     # Parse based on platform response format
-                    if account_data['platform'] == 'tiktok':
+                    if acc_platform == 'tiktok':
                         user = data.get('data', {}).get('user', {}) or data.get('user', {})
                         stats = data.get('data', {}).get('stats', {}) or data.get('stats', {})
                         account_data['profile_pic_url'] = user.get('avatarThumb') or user.get('avatar_larger') or user.get('avatarMedium')
@@ -775,7 +789,7 @@ async def get_enriched_accounts():
                         account_data['bio'] = user.get('signature', '')
                         account_data['display_name'] = user.get('nickname') or account_data['display_name']
                         
-                    elif account_data['platform'] == 'instagram':
+                    elif acc_platform == 'instagram':
                         user = data.get('data', {}) if 'data' in data else data
                         account_data['profile_pic_url'] = user.get('profile_pic_url') or user.get('profile_pic_url_hd')
                         account_data['followers_count'] = user.get('follower_count') or user.get('edge_followed_by', {}).get('count', 0)
@@ -785,7 +799,7 @@ async def get_enriched_accounts():
                         account_data['bio'] = user.get('biography', '')
                         account_data['display_name'] = user.get('full_name') or account_data['display_name']
                         
-                    elif account_data['platform'] == 'youtube':
+                    elif acc_platform == 'youtube':
                         # YouTube uses channel data
                         items = data.get('items', [])
                         if items:
@@ -797,7 +811,7 @@ async def get_enriched_accounts():
                             account_data['bio'] = snippet.get('description', '')
                             account_data['display_name'] = snippet.get('title') or account_data['display_name']
                             
-                    elif account_data['platform'] == 'twitter':
+                    elif acc_platform == 'twitter':
                         user = data.get('user', {}) or data
                         account_data['profile_pic_url'] = user.get('profile_image_url_https') or user.get('avatar')
                         account_data['followers_count'] = user.get('followers_count') or user.get('sub_count', 0)
@@ -807,7 +821,7 @@ async def get_enriched_accounts():
                         account_data['bio'] = user.get('description', '')
                         account_data['display_name'] = user.get('name') or account_data['display_name']
                         
-                    elif account_data['platform'] == 'bluesky':
+                    elif acc_platform == 'bluesky':
                         account_data['profile_pic_url'] = data.get('avatar')
                         account_data['followers_count'] = data.get('followersCount', 0)
                         account_data['following_count'] = data.get('followsCount', 0)
@@ -821,7 +835,7 @@ async def get_enriched_accounts():
                     account_data['fetch_status'] = 'error'
                     account_data['error'] = result.error if result else 'No data returned'
             except Exception as e:
-                logger.warning(f"Error fetching profile for {account_data['platform']}/@{username}: {e}")
+                logger.warning(f"Error fetching profile for {acc_platform}/@{username}: {e}")
                 account_data['fetch_status'] = 'error'
                 account_data['error'] = str(e)
         else:

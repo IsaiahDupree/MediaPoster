@@ -25,6 +25,8 @@ class TrendingAudioResponse(BaseModel):
     usage_count: int
     velocity_7d: float
     trending_score: float
+    audio_url: Optional[str] = None  # Backend stream URL when available
+    cover_url: Optional[str] = None  # Album/cover art URL
 
 
 class TrendingHashtagResponse(BaseModel):
@@ -78,18 +80,29 @@ async def get_trending_audio(
     Get trending audio tracks on Instagram.
     
     Returns top audio tracks ranked by velocity and usage.
+    If audio files are stored locally, includes stream URLs.
     """
     try:
+        from services.audio_service import get_audio_service
+        
         engine = get_velocity_engine()
         trending_audio = engine.get_trending_audio(limit, region)
+        audio_service = get_audio_service()
+        
+        # Enhance with stored audio URLs
+        enhanced_audio = []
+        for audio in trending_audio:
+            audio_data = dict(audio)
+            # Check if we have this audio stored locally
+            stored_path = audio_service.get_stored_audio_path(audio.get("audio_id", ""))
+            if stored_path:
+                audio_data["audio_url"] = f"/api/audio/stream/{audio.get('audio_id')}"
+            enhanced_audio.append(TrendingAudioResponse(**audio_data))
         
         return {
-            "count": len(trending_audio),
+            "count": len(enhanced_audio),
             "region": region,
-            "audio": [
-                TrendingAudioResponse(**audio)
-                for audio in trending_audio
-            ]
+            "audio": enhanced_audio
         }
     except Exception as e:
         logger.error(f"Error fetching trending audio: {e}")

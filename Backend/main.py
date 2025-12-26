@@ -702,6 +702,10 @@ app.include_router(twitter_automation.router, prefix="/api", tags=["Twitter Auto
 from api.endpoints import trends_api
 app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discovery"])
 
+# Audio Service (Instagram audio fetch, store, stream)
+from api.endpoints import audio_api
+app.include_router(audio_api.router, tags=["Audio Service"])
+
 # Content Analyzer API (AI-powered video analysis)
 from api.endpoints import content_analyzer_api
 app.include_router(content_analyzer_api.router, prefix="/api/content-analyzer", tags=["Content Analyzer"])

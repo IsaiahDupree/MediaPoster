@@ -596,3 +596,240 @@ async def get_supported_platforms():
             {"id": "google", "name": "Google Play Store", "icon": "🤖"},
         ]
     }
+
+
+# =============================================================================
+# RAPIDAPI TREND FETCHING
+# =============================================================================
+
+import httpx
+import os
+
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
+
+RAPIDAPI_SOURCES = {
+    "tiktok": {
+        "host": "tiktok-scraper2.p.rapidapi.com",
+        "trending_endpoint": "/trending/feed",
+        "hashtag_endpoint": "/hashtag/posts"
+    },
+    "instagram": {
+        "host": "instagram-looter2.p.rapidapi.com",
+        "trending_endpoint": "/v1/explore",
+        "hashtag_endpoint": "/v1/hashtag"
+    },
+    "twitter": {
+        "host": "twitter154.p.rapidapi.com",
+        "trending_endpoint": "/trends/",
+        "hashtag_endpoint": "/search/search"
+    },
+    "youtube": {
+        "host": "youtube-search-and-download.p.rapidapi.com",
+        "trending_endpoint": "/trending",
+        "hashtag_endpoint": "/search"
+    },
+    "threads": {
+        "host": "threads-api4.p.rapidapi.com",
+        "trending_endpoint": "/api/explore",
+        "hashtag_endpoint": "/api/hashtag"
+    }
+}
+
+
+@router.post("/fetch/{platform}")
+async def fetch_trends_from_source(platform: str):
+    """
+    Trigger a live fetch of trends from RapidAPI source.
+    Stores results in database for caching.
+    """
+    if not RAPIDAPI_KEY:
+        return {
+            "success": False,
+            "error": "RAPIDAPI_KEY not configured",
+            "message": "Set RAPIDAPI_KEY environment variable to enable trend fetching"
+        }
+    
+    if platform not in RAPIDAPI_SOURCES:
+        return {
+            "success": False,
+            "error": f"Unknown platform: {platform}",
+            "supported": list(RAPIDAPI_SOURCES.keys())
+        }
+    
+    source = RAPIDAPI_SOURCES[platform]
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {
+                "X-RapidAPI-Key": RAPIDAPI_KEY,
+                "X-RapidAPI-Host": source["host"]
+            }
+            
+            # Fetch trending content
+            response = await client.get(
+                f"https://{source['host']}{source['trending_endpoint']}",
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Process and store trends based on platform
+                trends_saved = await _process_platform_trends(platform, data)
+                
+                return {
+                    "success": True,
+                    "platform": platform,
+                    "trends_saved": trends_saved,
+                    "fetched_at": datetime.utcnow().isoformat()
+                }
+            else:
+                logger.error(f"RapidAPI {platform} error: {response.status_code} - {response.text[:200]}")
+                return {
+                    "success": False,
+                    "error": f"API returned {response.status_code}",
+                    "platform": platform
+                }
+                
+    except Exception as e:
+        logger.error(f"Error fetching {platform} trends: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "platform": platform
+        }
+
+
+async def _process_platform_trends(platform: str, data: dict) -> int:
+    """Process and store trends from RapidAPI response."""
+    supabase = get_supabase()
+    saved_count = 0
+    
+    try:
+        if platform == "tiktok":
+            # TikTok trending response structure
+            items = data.get("data", {}).get("items", []) or data.get("items", [])
+            for i, item in enumerate(items[:50]):
+                try:
+                    # Extract hashtags from description
+                    desc = item.get("desc", "") or item.get("description", "")
+                    hashtags = [tag.strip("#") for tag in desc.split() if tag.startswith("#")]
+                    
+                    for tag in hashtags[:3]:  # Top 3 hashtags per video
+                        supabase.table("trend_hashtags").upsert({
+                            "platform": "tiktok",
+                            "hashtag": tag.lower(),
+                            "rank": i + 1,
+                            "view_count": item.get("stats", {}).get("playCount", 0),
+                            "region": "global",
+                            "snapshot_at": datetime.utcnow().isoformat()
+                        }, on_conflict="platform,hashtag,region").execute()
+                        saved_count += 1
+                        
+                    # Extract audio
+                    music = item.get("music", {})
+                    if music.get("title"):
+                        supabase.table("trend_sounds").upsert({
+                            "platform": "tiktok",
+                            "sound_id": str(music.get("id", "")),
+                            "sound_name": music.get("title", ""),
+                            "artist_name": music.get("authorName", ""),
+                            "rank": i + 1,
+                            "usage_count": music.get("playCount", 0),
+                            "region": "global",
+                            "snapshot_at": datetime.utcnow().isoformat()
+                        }, on_conflict="platform,sound_id,region").execute()
+                        saved_count += 1
+                except Exception as e:
+                    logger.warning(f"Error processing TikTok item: {e}")
+                    
+        elif platform == "instagram":
+            items = data.get("data", {}).get("items", []) or data.get("items", [])
+            for i, item in enumerate(items[:50]):
+                try:
+                    caption = item.get("caption", {}).get("text", "") if isinstance(item.get("caption"), dict) else ""
+                    hashtags = [tag.strip("#") for tag in caption.split() if tag.startswith("#")]
+                    
+                    for tag in hashtags[:3]:
+                        supabase.table("trend_hashtags").upsert({
+                            "platform": "instagram",
+                            "hashtag": tag.lower(),
+                            "rank": i + 1,
+                            "view_count": item.get("play_count", item.get("view_count", 0)),
+                            "post_count": item.get("like_count", 0),
+                            "region": "global",
+                            "snapshot_at": datetime.utcnow().isoformat()
+                        }, on_conflict="platform,hashtag,region").execute()
+                        saved_count += 1
+                except Exception as e:
+                    logger.warning(f"Error processing Instagram item: {e}")
+                    
+        elif platform == "twitter":
+            trends = data.get("trends", []) or data.get("data", [])
+            for i, trend in enumerate(trends[:50]):
+                try:
+                    name = trend.get("name", "") or trend.get("query", "")
+                    if name.startswith("#"):
+                        supabase.table("trend_hashtags").upsert({
+                            "platform": "twitter",
+                            "hashtag": name.strip("#").lower(),
+                            "rank": i + 1,
+                            "post_count": trend.get("tweet_volume", 0),
+                            "region": "global",
+                            "snapshot_at": datetime.utcnow().isoformat()
+                        }, on_conflict="platform,hashtag,region").execute()
+                    else:
+                        supabase.table("trend_topics").upsert({
+                            "platform": "twitter",
+                            "topic": name,
+                            "rank": i + 1,
+                            "mention_count": trend.get("tweet_volume", 0),
+                            "region": "global",
+                            "snapshot_at": datetime.utcnow().isoformat()
+                        }, on_conflict="platform,topic,region").execute()
+                    saved_count += 1
+                except Exception as e:
+                    logger.warning(f"Error processing Twitter trend: {e}")
+                    
+        elif platform == "youtube":
+            items = data.get("contents", []) or data.get("items", [])
+            for i, item in enumerate(items[:50]):
+                try:
+                    title = item.get("title", "") or item.get("video", {}).get("title", "")
+                    supabase.table("trend_topics").upsert({
+                        "platform": "youtube",
+                        "topic": title[:100],
+                        "rank": i + 1,
+                        "mention_count": item.get("viewCount", 0),
+                        "region": "global",
+                        "snapshot_at": datetime.utcnow().isoformat()
+                    }, on_conflict="platform,topic,region").execute()
+                    saved_count += 1
+                except Exception as e:
+                    logger.warning(f"Error processing YouTube item: {e}")
+                    
+    except Exception as e:
+        logger.error(f"Error processing {platform} trends: {e}")
+    
+    logger.info(f"Saved {saved_count} trends from {platform}")
+    return saved_count
+
+
+@router.get("/sources/status")
+async def get_sources_status():
+    """Get status of all RapidAPI sources."""
+    return {
+        "sources": [
+            {
+                "platform": platform,
+                "host": config["host"],
+                "configured": bool(RAPIDAPI_KEY),
+                "endpoints": {
+                    "trending": config["trending_endpoint"],
+                    "hashtag": config["hashtag_endpoint"]
+                }
+            }
+            for platform, config in RAPIDAPI_SOURCES.items()
+        ],
+        "api_key_configured": bool(RAPIDAPI_KEY)
+    }

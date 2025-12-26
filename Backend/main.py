@@ -2,6 +2,9 @@
 MediaPoster FastAPI Backend
 Main application entry point
 """
+from dotenv import load_dotenv
+load_dotenv()  # Load .env file before any other imports
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse

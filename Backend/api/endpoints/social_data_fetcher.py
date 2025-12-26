@@ -46,34 +46,22 @@ async def trigger_social_data_fetch(
     - /trends page (trending topics)
     """
     try:
-        # Get accounts from Blotato
-        conn = engine.connect()
-        
-        query = """
-            SELECT platform, username, id as blotato_id, fullname
-            FROM blotato_accounts
-            WHERE is_active = TRUE
-        """
-        
-        params = {}
-        if request.platforms:
-            placeholders = ','.join([f':platform_{i}' for i in range(len(request.platforms))])
-            query += f" AND platform IN ({placeholders})"
-            for i, platform in enumerate(request.platforms):
-                params[f'platform_{i}'] = platform
-        
-        results = conn.execute(text(query), params).fetchall()
-        conn.close()
+        # Get accounts from config (not database)
+        from config.blotato_accounts import BLOTATO_ACCOUNTS
         
         accounts_to_fetch = []
-        for row in results:
-            platform_str, username, blotato_id, fullname = row
-            accounts_to_fetch.append({
-                'platform': platform_str,
-                'username': username,
-                'blotato_id': blotato_id,
-                'fullname': fullname
-            })
+        for account in BLOTATO_ACCOUNTS:
+            # Filter by platform if specified
+            if request.platforms and account.platform not in request.platforms:
+                continue
+            
+            if account.is_active:
+                accounts_to_fetch.append({
+                    'platform': account.platform,
+                    'username': account.username,
+                    'blotato_id': account.blotato_id,
+                    'fullname': account.display_name or account.username
+                })
         
         if not accounts_to_fetch:
             return FetchStatus(
@@ -157,12 +145,34 @@ async def fetch_social_data_background(accounts: List[dict], force_refresh: bool
                 display_name=account_data.get('fullname')
             )
             
-            # Fetch analytics from RapidAPI
+            # Fetch analytics from RapidAPI using platform-specific methods
             logger.info(f"Fetching {platform_str}/@{username} from RapidAPI...")
-            analytics = await fetcher.fetch_account_analytics(social_account)
+            
+            # Call the appropriate fetch method based on platform
+            if platform == Platform.TIKTOK:
+                analytics = await fetcher.fetch_tiktok_analytics(username)
+            elif platform == Platform.INSTAGRAM:
+                analytics = await fetcher.fetch_instagram_analytics(username)
+            elif platform == Platform.YOUTUBE:
+                analytics = await fetcher.fetch_youtube_analytics(username)
+            elif platform == Platform.TWITTER:
+                analytics = await fetcher.fetch_twitter_analytics(username)
+            elif platform == Platform.THREADS:
+                analytics = await fetcher.fetch_threads_analytics(username)
+            elif platform == Platform.LINKEDIN:
+                analytics = await fetcher.fetch_linkedin_analytics(username)
+            elif platform == Platform.PINTEREST:
+                analytics = await fetcher.fetch_pinterest_analytics(username)
+            elif platform == Platform.FACEBOOK:
+                analytics = await fetcher.fetch_facebook_analytics(username)
+            elif platform == Platform.BLUESKY:
+                analytics = await fetcher.fetch_bluesky_analytics(username)
+            else:
+                logger.warning(f"No fetch method for platform: {platform_str}")
+                continue
             
             if analytics:
-                # Save to database
+                # Save to database - update account with metrics
                 account_id = await analytics_service.get_or_create_account(
                     platform=platform_str,
                     username=username,
@@ -175,10 +185,31 @@ async def fetch_social_data_background(accounts: List[dict], force_refresh: bool
                     }
                 )
                 
-                # Save analytics snapshot
-                await analytics_service.save_account_snapshot(
+                # Update account metrics directly in social_media_accounts table
+                conn = engine.connect()
+                try:
+                    conn.execute(text("""
+                        UPDATE social_media_accounts SET
+                            followers_count = :followers,
+                            posts_count = :posts,
+                            total_views = :views,
+                            updated_at = NOW(),
+                            last_fetched_at = NOW()
+                        WHERE id = :account_id
+                    """), {
+                        'followers': analytics.followers_count or 0,
+                        'posts': analytics.posts_count or 0,
+                        'views': analytics.total_views or 0,
+                        'account_id': account_id
+                    })
+                    conn.commit()
+                finally:
+                    conn.close()
+                
+                # Save analytics snapshot for historical tracking
+                await analytics_service.save_analytics_snapshot(
                     account_id=account_id,
-                    snapshot_data={
+                    analytics_data={
                         'followers_count': analytics.followers_count,
                         'following_count': analytics.following_count,
                         'posts_count': analytics.posts_count,
@@ -189,13 +220,6 @@ async def fetch_social_data_background(accounts: List[dict], force_refresh: bool
                         'engagement_rate': analytics.engagement_rate
                     }
                 )
-                
-                # Save recent posts
-                for post in analytics.recent_posts[:10]:  # Limit to 10 most recent
-                    await analytics_service.save_post_metrics(
-                        account_id=account_id,
-                        post_data=post
-                    )
                 
                 logger.success(f"✅ Fetched {platform_str}/@{username}: {analytics.followers_count} followers, {analytics.posts_count} posts")
             else:

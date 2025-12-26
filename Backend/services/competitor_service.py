@@ -148,15 +148,17 @@ class CompetitorService:
                         logger.warning(f"API error fetching reels: {data.get('error')}")
                         return []
                     
-                    items = data.get("data", {}).get("items", [])
-                    if not items and isinstance(data, list):
-                        items = data
+                    # Parse reels from response - structure is reels[].node.media
+                    raw_reels = data.get("reels", [])
                     
                     reels = []
-                    for item in items[:count]:
-                        reel = self._parse_content_item(item, "reel")
-                        if reel:
-                            reels.append(reel)
+                    for reel_wrapper in raw_reels[:count]:
+                        node = reel_wrapper.get("node", {})
+                        media = node.get("media", {})
+                        if media:
+                            reel = self._parse_content_item(media, "reel")
+                            if reel:
+                                reels.append(reel)
                     
                     logger.info(f"Fetched {len(reels)} reels for @{username}")
                     return reels
@@ -191,15 +193,16 @@ class CompetitorService:
                         logger.warning(f"API error fetching posts: {data.get('error')}")
                         return []
                     
-                    items = data.get("data", {}).get("items", [])
-                    if not items and isinstance(data, list):
-                        items = data
+                    # Parse posts from response - structure is posts[].node
+                    raw_posts = data.get("posts", [])
                     
                     posts = []
-                    for item in items[:count]:
-                        post = self._parse_content_item(item, "post")
-                        if post:
-                            posts.append(post)
+                    for post_wrapper in raw_posts[:count]:
+                        node = post_wrapper.get("node", {})
+                        if node:
+                            post = self._parse_post_node(node)
+                            if post:
+                                posts.append(post)
                     
                     logger.info(f"Fetched {len(posts)} posts for @{username}")
                     return posts
@@ -210,6 +213,59 @@ class CompetitorService:
             except Exception as e:
                 logger.error(f"Error fetching posts: {e}")
                 return []
+    
+    def _parse_post_node(self, node: Dict[str, Any]) -> Optional[CompetitorContent]:
+        """Parse post node from posts API response"""
+        try:
+            # Get video URL if video
+            video_url = None
+            video_versions = node.get("video_versions", [])
+            if video_versions:
+                video_url = video_versions[0].get("url")
+            
+            # Get thumbnail
+            thumbnail_url = None
+            image_versions = node.get("image_versions2", {})
+            candidates = image_versions.get("candidates", [])
+            if candidates:
+                thumbnail_url = candidates[0].get("url")
+            
+            # Get caption
+            caption = ""
+            caption_data = node.get("caption")
+            if caption_data:
+                caption = caption_data.get("text", "") if isinstance(caption_data, dict) else str(caption_data)
+            
+            # Determine media type
+            media_type = "post"
+            if video_versions:
+                media_type = "video"
+            
+            # Get timestamp
+            posted_at = None
+            taken_at = node.get("taken_at")
+            if taken_at:
+                try:
+                    posted_at = datetime.fromtimestamp(taken_at)
+                except:
+                    pass
+            
+            return CompetitorContent(
+                media_id=str(node.get("id", node.get("pk", ""))),
+                shortcode=node.get("code", ""),
+                media_type=media_type,
+                caption=caption[:500] if caption else None,
+                play_count=node.get("play_count", 0),
+                like_count=node.get("like_count", 0),
+                comment_count=node.get("comment_count", 0),
+                video_url=video_url,
+                thumbnail_url=thumbnail_url,
+                posted_at=posted_at
+            )
+            
+        except Exception as e:
+            logger.error(f"Error parsing post node: {e}")
+            return None
     
     def _parse_content_item(self, item: Dict[str, Any], media_type: str) -> Optional[CompetitorContent]:
         """Parse content item from API response"""

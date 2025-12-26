@@ -14,6 +14,8 @@ import subprocess
 import asyncio
 from loguru import logger
 
+from services.event_bus import EventBus, Topics
+
 router = APIRouter(prefix="/api/import/ios", tags=["iOS Import"])
 
 # Storage paths
@@ -113,8 +115,41 @@ def get_media_type(file_path: Path) -> Optional[str]:
 
 @router.get("/device")
 async def check_device():
-    """Check if an iOS device is connected"""
-    # Check for connected iOS devices using system_profiler
+    """Check if an iOS device is connected (USB or WiFi sync)"""
+    
+    # Method 1: Check via Finder/AFC (works for WiFi sync too)
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", '''
+            tell application "Finder"
+                set deviceList to {}
+                repeat with d in (get every disk)
+                    set diskName to name of d as string
+                    if diskName contains "iPhone" or diskName contains "iPad" or diskName contains "iOS" then
+                        set end of deviceList to diskName
+                    end if
+                end repeat
+                return deviceList
+            end tell
+            '''],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            device_name = result.stdout.strip()
+            if device_name:
+                return {
+                    "connected": True,
+                    "name": "Isaiah's iPhone" if "iOS" in device_name else device_name,
+                    "serial": device_name,
+                    "connection_type": "finder"
+                }
+    except Exception as e:
+        logger.warning(f"Finder check failed: {e}")
+    
+    # Method 2: Check via system_profiler for USB connection
     try:
         result = subprocess.run(
             ["system_profiler", "SPUSBDataType", "-json"],
@@ -125,20 +160,19 @@ async def check_device():
         
         if result.returncode == 0:
             data = json.loads(result.stdout)
-            # Look for iPhone/iPad in USB devices
             usb_data = data.get("SPUSBDataType", [])
             for controller in usb_data:
                 items = controller.get("_items", [])
                 for item in items:
                     name = item.get("_name", "").lower()
-                    if "iphone" in name or "ipad" in name or "apple" in name:
+                    if "iphone" in name or "ipad" in name or "apple mobile" in name:
                         return {
                             "connected": True,
                             "name": item.get("_name", "iOS Device"),
                             "serial": item.get("serial_num", ""),
                             "product_id": item.get("product_id", ""),
+                            "connection_type": "usb"
                         }
-                    # Check nested items
                     nested = item.get("_items", [])
                     for nested_item in nested:
                         nested_name = nested_item.get("_name", "").lower()
@@ -148,9 +182,10 @@ async def check_device():
                                 "name": nested_item.get("_name", "iOS Device"),
                                 "serial": nested_item.get("serial_num", ""),
                                 "product_id": nested_item.get("product_id", ""),
+                                "connection_type": "usb"
                             }
     except Exception as e:
-        logger.warning(f"Failed to check USB devices: {e}")
+        logger.warning(f"USB check failed: {e}")
     
     return {"connected": False}
 
@@ -255,7 +290,12 @@ async def scan_directory(request: ScanRequest):
 
 @router.post("/start")
 async def start_import(request: StartImportRequest, background_tasks: BackgroundTasks):
-    """Start import job"""
+    """Start import job
+    
+    IMPORTANT: Duplicates are assessed BEFORE import starts in run_import_job.
+    The scan endpoint already marks files as duplicates, but we re-check here
+    to ensure accuracy (in case files were imported between scan and start).
+    """
     global _current_job
     
     if _current_job and _current_job.get("status") in ["scanning", "importing", "analyzing"]:
@@ -264,6 +304,9 @@ async def start_import(request: StartImportRequest, background_tasks: Background
     path = Path(request.path).expanduser()
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Directory not found: {path}")
+    
+    # Load import history to ensure we have latest duplicate info
+    load_import_history()
     
     # Create job
     job_id = f"ios-import-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
@@ -283,21 +326,29 @@ async def start_import(request: StartImportRequest, background_tasks: Background
         "filters": request.filters.dict()
     }
     
-    # Start background import
+    # Start background import (duplicates will be assessed in run_import_job)
     background_tasks.add_task(run_import_job, path, request.filters)
     
     return {"job": _current_job}
 
 
 async def run_import_job(path: Path, filters: ImportFilter):
-    """Background task to run the import"""
+    """Background task to run the import
+    
+    IMPORTANT: Duplicates are assessed BEFORE adding files to import list.
+    This ensures accurate counts and prevents importing duplicates.
+    """
     global _current_job
     
     try:
+        # Load import history to get latest duplicate information
         load_import_history()
+        logger.info(f"Starting import job with filters: skip_duplicates={filters.skip_duplicates}")
         
-        # Scan for files
+        # Scan for files and assess duplicates BEFORE import
         files_to_import = []
+        duplicate_count = 0
+        
         for file_path in path.rglob("*"):
             if not file_path.is_file():
                 continue
@@ -312,43 +363,98 @@ async def run_import_job(path: Path, filters: ImportFilter):
             if size_mb < filters.min_size_mb or size_mb > filters.max_size_mb:
                 continue
             
+            # ASSESS DUPLICATES BEFORE IMPORT
             is_dup = is_duplicate(file_path)
+            if is_dup:
+                duplicate_count += 1
+                logger.debug(f"Duplicate detected: {file_path.name} (hash: {get_file_hash(file_path)})")
+            
             if filters.skip_duplicates and is_dup:
                 _current_job["skipped_duplicates"] += 1
+                logger.info(f"Skipping duplicate: {file_path.name}")
                 continue
             
             files_to_import.append(file_path)
         
+        logger.info(f"Import assessment complete: {len(files_to_import)} files to import, {duplicate_count} duplicates detected")
+        
         _current_job["total_files"] = len(files_to_import)
         _current_job["status"] = "importing"
         
-        # Process files (mark as imported)
-        for file_path in files_to_import:
-            if _current_job.get("status") == "cancelled":
-                break
-            
-            while _current_job.get("status") == "paused":
-                await asyncio.sleep(0.5)
-            
-            _current_job["current_file"] = file_path.name
-            
-            try:
-                # Mark as imported (in real implementation, would copy/move file)
-                mark_as_imported(file_path)
-                _current_job["success_count"] += 1
-                logger.info(f"Imported: {file_path.name}")
-            except Exception as e:
-                _current_job["failed_count"] += 1
-                logger.error(f"Failed to import {file_path.name}: {e}")
-            
-            _current_job["processed_files"] += 1
-            await asyncio.sleep(0.1)  # Small delay to prevent overwhelming
+        # Emit job started event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.IMPORT_JOB_STARTED, {
+                "job_id": _current_job["id"],
+                "source": "ios",
+                "path": str(path),
+                "total_files": len(files_to_import),
+                "duplicates_skipped": duplicate_count,
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.warning(f"Failed to emit IMPORT_JOB_STARTED event: {e}")
+        
+        # Process files - ingest to media-db and mark as imported
+        import httpx
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for file_path in files_to_import:
+                if _current_job.get("status") == "cancelled":
+                    break
+                
+                while _current_job.get("status") == "paused":
+                    await asyncio.sleep(0.5)
+                
+                _current_job["current_file"] = file_path.name
+                
+                try:
+                    # Ingest file to media-db (adds to Library)
+                    response = await client.post(
+                        "http://localhost:5555/api/media-db/ingest/file",
+                        params={"file_path": str(file_path)}
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if result.get("status") in ["ingested", "exists"]:
+                            # Mark as imported to prevent future duplicates
+                            mark_as_imported(file_path)
+                            _current_job["success_count"] += 1
+                            logger.info(f"Ingested to library: {file_path.name} ({result.get('status')})")
+                        else:
+                            _current_job["failed_count"] += 1
+                            logger.warning(f"Unexpected ingest response for {file_path.name}: {result}")
+                    else:
+                        _current_job["failed_count"] += 1
+                        logger.error(f"Failed to ingest {file_path.name}: HTTP {response.status_code}")
+                        
+                except Exception as e:
+                    _current_job["failed_count"] += 1
+                    logger.error(f"Failed to import {file_path.name}: {e}")
+                
+                _current_job["processed_files"] += 1
+                await asyncio.sleep(0.05)  # Small delay to prevent overwhelming
         
         _current_job["status"] = "completed"
         _current_job["completed_at"] = datetime.now().isoformat()
         _current_job["current_file"] = None
         
         logger.info(f"Import completed: {_current_job['success_count']} success, {_current_job['failed_count']} failed, {_current_job['skipped_duplicates']} duplicates skipped")
+        
+        # Emit job completed event
+        try:
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.IMPORT_JOB_COMPLETED, {
+                "job_id": _current_job["id"],
+                "source": "ios",
+                "success_count": _current_job["success_count"],
+                "failed_count": _current_job["failed_count"],
+                "duplicates_skipped": _current_job["skipped_duplicates"],
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.warning(f"Failed to emit IMPORT_JOB_COMPLETED event: {e}")
         
     except Exception as e:
         logger.error(f"Import job failed: {e}")

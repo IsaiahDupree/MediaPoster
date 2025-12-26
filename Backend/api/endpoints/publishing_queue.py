@@ -74,6 +74,54 @@ def add_to_queue(
     db: Session = Depends(get_db)
 ):
     """Add item to publishing queue"""
+    # BUG FIX: Validate inputs before processing
+    from datetime import datetime, timezone
+    
+    # Validate scheduled_for is in the future
+    if request.scheduled_for:
+        now = datetime.now(timezone.utc)
+        if request.scheduled_for.tzinfo is None:
+            # Assume UTC if no timezone
+            request.scheduled_for = request.scheduled_for.replace(tzinfo=timezone.utc)
+        
+        if request.scheduled_for <= now:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Scheduled time must be in the future. Got: {request.scheduled_for}, Now: {now}"
+            )
+    
+    # Validate platform
+    valid_platforms = ['tiktok', 'instagram', 'youtube', 'twitter', 'facebook']
+    if request.platform.lower() not in valid_platforms:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid platform: {request.platform}. Valid platforms: {', '.join(valid_platforms)}"
+        )
+    
+    # Validate at least one content reference
+    if not request.content_item_id and not request.clip_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Either content_item_id or clip_id must be provided"
+        )
+    
+    # Validate video_url if provided
+    if request.video_url:
+        from urllib.parse import urlparse
+        parsed = urlparse(request.video_url)
+        if not parsed.scheme or not parsed.netloc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid video_url format: {request.video_url}"
+            )
+    
+    # Validate priority range
+    if request.priority < 0 or request.priority > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Priority must be between 0 and 100. Got: {request.priority}"
+        )
+    
     service = PublishingQueueService(db)
     
     try:
@@ -97,6 +145,8 @@ def add_to_queue(
             "scheduled_for": item.scheduled_for.isoformat(),
             "message": "Item added to queue successfully"
         }
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

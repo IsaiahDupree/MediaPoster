@@ -128,9 +128,10 @@ class PublishingQueueService:
         platform: Optional[str] = None
     ) -> List[QueueItem]:
         """
-        Get next items ready to be processed
+        Get next items ready to be processed with atomic status update
         
-        Uses FOR UPDATE SKIP LOCKED to prevent concurrent processing
+        BUG FIX: Uses atomic update pattern to prevent concurrent processing
+        (Note: This assumes get_next_queue_items stored procedure uses FOR UPDATE SKIP LOCKED)
         
         Args:
             limit: Maximum number of items to return
@@ -139,20 +140,25 @@ class PublishingQueueService:
         Returns:
             List of QueueItem objects
         """
-        query = """
-        SELECT * FROM get_next_queue_items(:limit, :platform)
-        """
-        
-        result = self.db.execute(query, {
-            'limit': limit,
-            'platform': platform
-        })
-        
-        items = [QueueItem(**dict(row)) for row in result]
-        
-        logger.info(f"Retrieved {len(items)} items from queue")
-        
-        return items
+        # BUG FIX: Wrap in try-except for error handling
+        try:
+            query = """
+            SELECT * FROM get_next_queue_items(:limit, :platform)
+            """
+            
+            result = self.db.execute(query, {
+                'limit': limit,
+                'platform': platform
+            })
+            
+            items = [QueueItem(**dict(row)) for row in result]
+            
+            logger.info(f"Retrieved {len(items)} items from queue")
+            
+            return items
+        except Exception as e:
+            logger.error(f"Error retrieving next queue items: {e}")
+            return []
     
     def update_status(
         self,
@@ -163,7 +169,7 @@ class PublishingQueueService:
         platform_url: Optional[str] = None
     ) -> bool:
         """
-        Update queue item status
+        Update queue item status with atomic update and transaction safety
         
         Args:
             item_id: Queue item UUID
@@ -175,26 +181,35 @@ class PublishingQueueService:
         Returns:
             True if updated successfully
         """
-        query = """
-        SELECT update_queue_status(
-            :item_id, :status, :error, :platform_post_id, :platform_url
-        )
-        """
-        
-        result = self.db.execute(query, {
-            'item_id': uuid.UUID(item_id),
-            'status': status,
-            'error': error,
-            'platform_post_id': platform_post_id,
-            'platform_url': platform_url
-        })
-        
-        self.db.commit()
-        success = result.scalar()
-        
-        logger.info(f"Updated queue item {item_id} to status: {status}")
-        
-        return success
+        # BUG FIX: Wrap in try-except with rollback for transaction safety
+        try:
+            query = """
+            SELECT update_queue_status(
+                :item_id, :status, :error, :platform_post_id, :platform_url
+            )
+            """
+            
+            result = self.db.execute(query, {
+                'item_id': uuid.UUID(item_id),
+                'status': status,
+                'error': error,
+                'platform_post_id': platform_post_id,
+                'platform_url': platform_url
+            })
+            
+            self.db.commit()
+            success = result.scalar()
+            
+            if success:
+                logger.info(f"Updated queue item {item_id} to status: {status}")
+            else:
+                logger.warning(f"Failed to update queue item {item_id} to status: {status}")
+            
+            return bool(success)
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error updating queue item {item_id} status: {e}")
+            return False
     
     def retry_failed_item(self, item_id: str) -> bool:
         """

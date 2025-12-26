@@ -63,6 +63,37 @@ class AnalysisWorker(BaseWorker):
             logger.warning(f"[{self.worker_id}] No media_id in event payload")
             return
         
+        # BUG FIX: Idempotency check - verify analysis not already in progress or completed
+        analysis_status = await self._check_analysis_status(media_id)
+        if analysis_status == "in_progress":
+            logger.info(f"[{self.worker_id}] Analysis already in progress for {media_id}, skipping")
+            return
+        elif analysis_status == "completed":
+            logger.info(f"[{self.worker_id}] Analysis already completed for {media_id}, skipping")
+            return
+        
+        # BUG FIX: File verification before starting analysis
+        file_check = await self._verify_media_file(media_id)
+        if not file_check.get("valid"):
+            error = file_check.get("error", "File verification failed")
+            logger.error(f"[{self.worker_id}] File verification failed for {media_id}: {error}")
+            await self.emit(
+                Topics.ANALYSIS_FAILED,
+                {
+                    "media_id": media_id,
+                    "error": error,
+                    "file_verification_failed": True,
+                    "failed_at": datetime.now(timezone.utc).isoformat()
+                },
+                event.correlation_id
+            )
+            return
+        
+        # Mark analysis as in progress atomically
+        if not await self._mark_analysis_in_progress(media_id):
+            logger.warning(f"[{self.worker_id}] Could not mark analysis as in_progress for {media_id} (may be locked)")
+            return
+        
         # Run the analysis pipeline
         await self._run_analysis_pipeline(media_id, event.correlation_id)
     
@@ -234,6 +265,117 @@ class AnalysisWorker(BaseWorker):
         except Exception as e:
             logger.warning(f"Could not get video path: {e}")
             return None
+    
+    async def _check_analysis_status(self, media_id: str) -> Optional[str]:
+        """Check if analysis is already in progress or completed (idempotency check)."""
+        try:
+            from sqlalchemy import create_engine, text
+            import os
+            
+            DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+            engine = create_engine(DATABASE_URL)
+            
+            with engine.connect() as conn:
+                # Check if analysis exists and its status
+                result = conn.execute(
+                    text("""
+                        SELECT 
+                            CASE 
+                                WHEN va.video_id IS NOT NULL THEN 'completed'
+                                ELSE NULL
+                            END as status
+                        FROM videos v
+                        LEFT JOIN video_analysis va ON v.id = va.video_id
+                        WHERE v.id = :id
+                    """),
+                    {"id": media_id}
+                ).fetchone()
+                
+                if result and result[0]:
+                    return result[0]
+            return None
+        except Exception as e:
+            logger.warning(f"Could not check analysis status: {e}")
+            return None
+    
+    async def _mark_analysis_in_progress(self, media_id: str) -> bool:
+        """Atomically mark analysis as in progress (idempotency)."""
+        try:
+            from sqlalchemy import create_engine, text
+            import os
+            
+            DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+            engine = create_engine(DATABASE_URL)
+            
+            with engine.connect() as conn:
+                # Try to create analysis record with in_progress status
+                # This acts as a lock - only one worker can create it
+                result = conn.execute(
+                    text("""
+                        INSERT INTO video_analysis (video_id, status, created_at)
+                        VALUES (:video_id, 'in_progress', NOW())
+                        ON CONFLICT (video_id) DO NOTHING
+                        RETURNING video_id
+                    """),
+                    {"video_id": media_id}
+                )
+                conn.commit()
+                
+                # If we inserted a row, we got the lock
+                return result.rowcount > 0
+        except Exception as e:
+            logger.warning(f"Could not mark analysis in progress: {e}")
+            return False
+    
+    async def _verify_media_file(self, media_id: str) -> Dict[str, Any]:
+        """Verify media file exists and is accessible (validation)."""
+        try:
+            video_path = await self._get_video_path(media_id)
+            if not video_path:
+                return {
+                    "valid": False,
+                    "error": f"No file path found for media {media_id}"
+                }
+            
+            import os
+            from pathlib import Path
+            
+            # Expand user path if needed
+            file_path = os.path.expanduser(video_path)
+            path = Path(file_path)
+            
+            if not path.exists():
+                return {
+                    "valid": False,
+                    "error": f"File does not exist: {file_path}",
+                    "file_path": str(path)
+                }
+            
+            if not path.is_file():
+                return {
+                    "valid": False,
+                    "error": f"Path is not a file: {file_path}",
+                    "file_path": str(path)
+                }
+            
+            if not os.access(file_path, os.R_OK):
+                return {
+                    "valid": False,
+                    "error": f"File is not readable: {file_path}",
+                    "file_path": str(path)
+                }
+            
+            return {
+                "valid": True,
+                "file_path": str(path),
+                "file_size": path.stat().st_size
+            }
+        except Exception as e:
+            logger.error(f"File verification failed: {e}")
+            return {
+                "valid": False,
+                "error": str(e)
+            }
 
 
 # Convenience function to create and start worker

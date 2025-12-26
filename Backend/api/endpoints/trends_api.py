@@ -6,8 +6,11 @@ from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from loguru import logger
+from datetime import datetime
 
+from services.event_bus import EventBus, Topics
 from services.keyword_extraction_service import get_keyword_service
+from services.trending_keywords_service import get_trending_keywords_service
 from services.instagram.trend_crawler import get_trend_crawler
 from services.instagram.velocity_engine import get_velocity_engine
 from services.instagram.trend_cards_library import get_trend_cards_library
@@ -479,9 +482,25 @@ async def start_trend_crawl(
     
     async def crawl_task():
         try:
+            # Emit crawl started event
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(Topics.TREND_SYNC_PROVIDER, {
+                "job_id": job_id,
+                "provider": "instagram",
+                "reels_per_account": reels_per_account,
+                "timestamp": datetime.now().isoformat()
+            })
+            
             crawler = get_trend_crawler()
             result = await crawler.crawl_all_seeds(reels_per_account)
             logger.info(f"Crawl job {job_id} completed: {result}")
+            
+            # Emit crawl completed event
+            await event_bus.publish(Topics.TREND_RAW_INGESTED, {
+                "job_id": job_id,
+                "result": str(result),
+                "timestamp": datetime.now().isoformat()
+            })
         except Exception as e:
             logger.error(f"Crawl job {job_id} failed: {e}")
     
@@ -734,3 +753,190 @@ async def get_trend_briefs(
     except Exception as e:
         logger.error(f"Error fetching briefs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# TRENDING KEYWORDS ENDPOINTS
+# =============================================================================
+
+@router.get("/trending-keywords")
+async def get_trending_keywords(
+    keyword_type: Optional[str] = Query(None, description="Filter by type: hook, cta, phrase"),
+    niche: Optional[str] = Query(None, description="Filter by niche"),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """
+    Get trending keywords extracted from competitor content.
+    Keywords include hooks, CTAs, and viral phrases.
+    """
+    try:
+        service = get_trending_keywords_service()
+        keywords = service.get_trending_keywords(keyword_type, niche, limit)
+        
+        return {
+            "count": len(keywords),
+            "keywords": keywords
+        }
+    except Exception as e:
+        logger.error(f"Error fetching trending keywords: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trending-keywords/hooks")
+async def get_trending_hooks(limit: int = Query(10, ge=1, le=50)):
+    """Get top trending hook phrases."""
+    try:
+        service = get_trending_keywords_service()
+        hooks = service.get_hooks(limit)
+        
+        return {
+            "count": len(hooks),
+            "hooks": hooks
+        }
+    except Exception as e:
+        logger.error(f"Error fetching hooks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trending-keywords/ctas")
+async def get_trending_ctas(limit: int = Query(10, ge=1, le=50)):
+    """Get top trending call-to-action phrases."""
+    try:
+        service = get_trending_keywords_service()
+        ctas = service.get_ctas(limit)
+        
+        return {
+            "count": len(ctas),
+            "ctas": ctas
+        }
+    except Exception as e:
+        logger.error(f"Error fetching CTAs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trending-keywords/extract")
+async def extract_keywords_from_competitors(background_tasks: BackgroundTasks):
+    """
+    Extract trending keywords from all competitor content.
+    Processes captions to identify hooks, CTAs, and viral phrases.
+    """
+    try:
+        service = get_trending_keywords_service()
+        result = service.process_competitor_data()
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error extracting keywords: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/crawler/populate-hashtags")
+async def populate_hashtags_from_competitors():
+    """
+    Populate trending hashtags from competitor content.
+    Extracts hashtags from downloaded content and calculates trends.
+    """
+    from pathlib import Path
+    import json
+    import re
+    from collections import Counter
+    
+    accounts_dir = Path("/Users/isaiahdupree/Documents/CompetitorResearch/accounts")
+    if not accounts_dir.exists():
+        return {"status": "no_data", "hashtags": []}
+    
+    hashtag_counter = Counter()
+    hashtag_engagement = {}
+    
+    for account_dir in accounts_dir.iterdir():
+        if not account_dir.is_dir() or account_dir.name.startswith('.'):
+            continue
+        
+        # Process download_manifest.json (primary source)
+        manifest_file = account_dir / "download_manifest.json"
+        if manifest_file.exists():
+            try:
+                with open(manifest_file) as f:
+                    manifest = json.load(f)
+                videos = manifest.get("videos", {})
+                for shortcode, data in videos.items():
+                    if isinstance(data, dict):
+                        caption = data.get("caption", "")
+                        engagement = data.get("views", 0)
+                        tags = re.findall(r'#(\w+)', caption)
+                        for tag in tags:
+                            tag_lower = tag.lower()
+                            hashtag_counter[tag_lower] += 1
+                            if tag_lower not in hashtag_engagement:
+                                hashtag_engagement[tag_lower] = []
+                            hashtag_engagement[tag_lower].append(engagement)
+            except Exception as e:
+                logger.error(f"Error processing manifest: {e}")
+        
+        # Process reels
+        reels_file = account_dir / "reels" / "reels.json"
+        if reels_file.exists():
+            try:
+                with open(reels_file) as f:
+                    reels = json.load(f)
+                for reel in reels:
+                    caption = reel.get("caption", "")
+                    engagement = reel.get("play_count", 0) + reel.get("like_count", 0)
+                    tags = re.findall(r'#(\w+)', caption)
+                    for tag in tags:
+                        tag_lower = tag.lower()
+                        hashtag_counter[tag_lower] += 1
+                        if tag_lower not in hashtag_engagement:
+                            hashtag_engagement[tag_lower] = []
+                        hashtag_engagement[tag_lower].append(engagement)
+            except Exception as e:
+                logger.error(f"Error processing reels: {e}")
+        
+        # Process posts
+        posts_file = account_dir / "posts" / "posts.json"
+        if posts_file.exists():
+            try:
+                with open(posts_file) as f:
+                    posts = json.load(f)
+                for post in posts:
+                    caption = post.get("caption", "")
+                    engagement = post.get("like_count", 0) + post.get("comment_count", 0)
+                    tags = re.findall(r'#(\w+)', caption)
+                    for tag in tags:
+                        tag_lower = tag.lower()
+                        hashtag_counter[tag_lower] += 1
+                        if tag_lower not in hashtag_engagement:
+                            hashtag_engagement[tag_lower] = []
+                        hashtag_engagement[tag_lower].append(engagement)
+            except Exception as e:
+                logger.error(f"Error processing posts: {e}")
+    
+    # Build trending hashtags list
+    trending_hashtags = []
+    for tag, count in hashtag_counter.most_common(50):
+        avg_engagement = sum(hashtag_engagement.get(tag, [0])) / max(1, len(hashtag_engagement.get(tag, [1])))
+        trending_hashtags.append({
+            "tag": f"#{tag}",
+            "media_count": count,
+            "avg_engagement": round(avg_engagement),
+            "trending_score": round(count * 10 + avg_engagement / 100, 1)
+        })
+    
+    # Sort by trending score
+    trending_hashtags.sort(key=lambda x: x["trending_score"], reverse=True)
+    
+    # Save to file
+    output_path = accounts_dir.parent / "learnings" / "trending_hashtags.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, 'w') as f:
+        json.dump({
+            "updated_at": __import__('datetime').datetime.now().isoformat(),
+            "total": len(trending_hashtags),
+            "hashtags": trending_hashtags
+        }, f, indent=2)
+    
+    return {
+        "status": "success",
+        "hashtags_extracted": len(trending_hashtags),
+        "top_hashtags": trending_hashtags[:10]
+    }

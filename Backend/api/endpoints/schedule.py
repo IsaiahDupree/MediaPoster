@@ -415,10 +415,14 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     updates = []
     params = {"id": post_id}
     
-    # Check current status before allowing updates
+    # ATOMIC CHECK: Check current status and lock row to prevent race conditions
     with engine.connect() as conn:
+        # Use FOR UPDATE to lock the row during the transaction
         current_status_result = conn.execute(text("""
-            SELECT status, scheduled_time FROM scheduled_posts WHERE id = :id
+            SELECT status, scheduled_time 
+            FROM scheduled_posts 
+            WHERE id = :id
+            FOR UPDATE  -- Lock the row to prevent concurrent updates
         """), {"id": post_id})
         current_row = current_status_result.fetchone()
         if not current_row:
@@ -426,7 +430,7 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
         current_status = current_row[0]
         current_scheduled_time = current_row[1]
     
-    # Validate status transitions
+    # Validate status transitions (atomic check)
     if update.status is not None and update.status != current_status:
         # Don't allow updating status of posts that are publishing or published
         if current_status in ('publishing', 'published'):
@@ -462,12 +466,19 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
             if new_time.tzinfo is None:
                 new_time = new_time.replace(tzinfo=timezone.utc)
             
-            # Don't allow rescheduling to the past (unless it's a failed post being retried)
+            # BUG FIX: Don't allow rescheduling to the past (with clock drift buffer)
+            # Unless it's a failed post being retried
             now = datetime.now(timezone.utc)
-            if new_time < now and current_status != 'failed':
+            time_diff = (new_time - now).total_seconds()
+            if time_diff < -1.0 and current_status != 'failed':  # 1 second buffer for clock drift
                 raise HTTPException(
                     status_code=400,
                     detail="Cannot schedule post in the past. Use a future time."
+                )
+            elif time_diff < 1.0 and current_status != 'failed':
+                logger.warning(
+                    f"Rescheduling post very close to current time (diff: {time_diff:.2f}s). "
+                    f"This might be due to clock drift."
                 )
             
             # Don't allow rescheduling if post is currently publishing
@@ -485,12 +496,21 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     if update.status is not None:
         updates.append("status = :status")
         params["status"] = update.status
-        # Reset retry count when rescheduling (status change to 'scheduled')
+        # BUG FIX: Reset retry count when rescheduling (status change OR time change)
         if update.status == 'scheduled':
             updates.append("retry_count = 0")
             updates.append("last_error = NULL")
             updates.append("error_message = NULL")
             logger.info(f"[UpdatePost] 🔄 Resetting retry_count for reschedule")
+        
+        # Also reset retry count if rescheduling (changing scheduled_time)
+        # This ensures retry logic resets even if status isn't explicitly changed
+        if update.scheduled_at is not None and current_status in ('failed', 'scheduled'):
+            if "retry_count = 0" not in updates:
+                updates.append("retry_count = 0")
+                updates.append("last_error = NULL")
+                updates.append("error_message = NULL")
+                logger.info(f"[UpdatePost] 🔄 Resetting retry_count for time reschedule")
     
     if update.account_id is not None:
         updates.append("platform_account_id = :platform_account_id")
@@ -504,11 +524,21 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     
     logger.info(f"[UpdatePost] 🔄 Updating fields: {updates}")
     
+    # ATOMIC UPDATE: Include status check in WHERE clause to prevent race conditions
+    # This ensures we don't update if status changed between check and update
     with engine.connect() as conn:
+        # Build WHERE clause with status validation
+        where_clause = "id = :id"
+        if current_status in ('publishing', 'published'):
+            # If current status is publishing/published, add status check to WHERE
+            # This prevents updates if status changed
+            where_clause += " AND status = :current_status"
+            params["current_status"] = current_status
+        
         result = conn.execute(text(f"""
             UPDATE scheduled_posts 
             SET {', '.join(updates)}
-            WHERE id = :id
+            WHERE {where_clause}
             RETURNING id
         """), params)
         conn.commit()

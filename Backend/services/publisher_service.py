@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from loguru import logger
 
 from database.models import ScheduledPost, VideoClip, ContentVariant
@@ -25,17 +25,31 @@ class PublisherService:
         self.db = db
         self.multi_publisher = MultiPlatformPublisher(db)
     
-    async def publish_scheduled_post(self, post_id: UUID) -> PublishResult:
+    async def publish_scheduled_post(self, post_id: UUID, skip_status_check: bool = False) -> PublishResult:
         """
         Publish a single scheduled post
         
+        NOTE: If skip_status_check=False, this will attempt to atomically mark
+        the post as 'publishing'. If another process already did so, it will fail.
+        Set skip_status_check=True if you've already called mark_post_as_publishing().
+        
         Args:
             post_id: ID of scheduled post
+            skip_status_check: If True, skip the atomic status update (assumes already 'publishing')
             
         Returns:
             PublishResult with status and platform post ID
         """
         try:
+            # Atomically mark as publishing (unless caller already did so)
+            if not skip_status_check:
+                can_publish = await self.mark_post_as_publishing(post_id)
+                if not can_publish:
+                    raise ServiceError(
+                        f"Post {post_id} could not be marked as publishing "
+                        f"(already processing or not found)"
+                    )
+            
             # Get scheduled post
             result = await self.db.execute(
                 select(ScheduledPost).where(ScheduledPost.id == post_id)
@@ -45,8 +59,11 @@ class PublisherService:
             if not post:
                 raise ServiceError(f"Scheduled post {post_id} not found")
             
-            # Mark as publishing
-            await self.mark_post_as_publishing(post_id)
+            # Verify post is in 'publishing' status
+            if post.status != 'publishing':
+                raise ServiceError(
+                    f"Post {post_id} is not in 'publishing' status (current: {post.status})"
+                )
             
             # Get content (clip or variant)
             clip = None
@@ -135,26 +152,37 @@ class PublisherService:
     
     async def mark_post_as_publishing(self, post_id: UUID) -> bool:
         """
-        Mark post status as 'publishing'
+        Atomically mark post status as 'publishing' only if still 'scheduled'
+        
+        This prevents race conditions where multiple workers try to publish
+        the same post simultaneously.
         
         Args:
             post_id: Post ID
             
         Returns:
-            True if updated
+            True if updated (i.e., post was in 'scheduled' state and is now 'publishing')
         """
         try:
+            # ATOMIC UPDATE: Only update if status is still 'scheduled'
+            # This prevents multiple workers from both marking the same post as 'publishing'
             result = await self.db.execute(
-                select(ScheduledPost).where(ScheduledPost.id == post_id)
+                update(ScheduledPost)
+                .where(
+                    ScheduledPost.id == post_id,
+                    ScheduledPost.status == 'scheduled'  # Only update if still scheduled
+                )
+                .values(status='publishing')
             )
-            post = result.scalar_one_or_none()
+            await self.db.commit()
             
-            if post:
-                post.status = 'publishing'
-                await self.db.commit()
+            if result.rowcount > 0:
+                logger.info(f"Atomically marked post {post_id} as publishing")
                 return True
-            
-            return False
+            else:
+                # Post not found or already in different status
+                logger.warning(f"Could not mark post {post_id} as publishing (not found or already processing)")
+                return False
             
         except Exception as e:
             await self.db.rollback()
@@ -168,7 +196,10 @@ class PublisherService:
         platform_url: Optional[str] = None
     ) -> bool:
         """
-        Mark post as successfully published
+        Atomically mark post as successfully published
+        
+        Uses atomic UPDATE to prevent race conditions and ensure all fields
+        are updated together in a transaction.
         
         Args:
             post_id: Post ID
@@ -179,23 +210,27 @@ class PublisherService:
             True if updated
         """
         try:
+            # ATOMIC UPDATE: Update all fields in one transaction
             result = await self.db.execute(
-                select(ScheduledPost).where(ScheduledPost.id == post_id)
+                update(ScheduledPost)
+                .where(ScheduledPost.id == post_id)
+                .values(
+                    status='published',
+                    published_at=datetime.now(),
+                    platform_post_id=platform_post_id,
+                    platform_url=platform_url,
+                    last_error=None,  # Clear any previous errors
+                    error_message=None  # Clear error message too
+                )
             )
-            post = result.scalar_one_or_none()
+            await self.db.commit()
             
-            if post:
-                post.status = 'published'
-                post.published_at = datetime.now()
-                post.platform_post_id = platform_post_id
-                post.platform_url = platform_url
-                post.last_error = None  # Clear any previous errors
-                
-                await self.db.commit()
-                logger.info(f"Marked post {post_id} as published")
+            if result.rowcount > 0:
+                logger.info(f"Atomically marked post {post_id} as published")
                 return True
-            
-            return False
+            else:
+                logger.warning(f"Post {post_id} not found for marking as published")
+                return False
             
         except Exception as e:
             await self.db.rollback()
@@ -209,7 +244,7 @@ class PublisherService:
         retry_in_seconds: Optional[int] = None
     ) -> bool:
         """
-        Mark post as failed
+        Atomically mark post as failed
         
         Args:
             post_id: Post ID
@@ -220,23 +255,29 @@ class PublisherService:
             True if updated
         """
         try:
+            update_values = {
+                'status': 'failed',
+                'last_error': error,
+                'error_message': error
+            }
+            
+            if retry_in_seconds:
+                update_values['next_retry_at'] = datetime.now() + timedelta(seconds=retry_in_seconds)
+            
+            # ATOMIC UPDATE: Update all fields in one transaction
             result = await self.db.execute(
-                select(ScheduledPost).where(ScheduledPost.id == post_id)
+                update(ScheduledPost)
+                .where(ScheduledPost.id == post_id)
+                .values(**update_values)
             )
-            post = result.scalar_one_or_none()
+            await self.db.commit()
             
-            if post:
-                post.status = 'failed'
-                post.last_error = error
-                
-                if retry_in_seconds:
-                    post.next_retry_at = datetime.now() + timedelta(seconds=retry_in_seconds)
-                
-                await self.db.commit()
-                logger.info(f"Marked post {post_id} as failed")
+            if result.rowcount > 0:
+                logger.info(f"Atomically marked post {post_id} as failed")
                 return True
-            
-            return False
+            else:
+                logger.warning(f"Post {post_id} not found for marking as failed")
+                return False
             
         except Exception as e:
             await self.db.rollback()
@@ -247,44 +288,61 @@ class PublisherService:
         """
         Handle publish failure with retry logic
         
+        Uses atomic updates to prevent race conditions.
+        
         Args:
             post_id: Post ID
             error: Error message
         """
         try:
+            # Get current retry count atomically
             result = await self.db.execute(
                 select(ScheduledPost).where(ScheduledPost.id == post_id)
             )
             post = result.scalar_one_or_none()
             
             if not post:
+                logger.warning(f"Post {post_id} not found for failure handling")
                 return
             
             # Increment retry count
-            post.retry_count = (post.retry_count or 0) + 1
+            new_retry_count = (post.retry_count or 0) + 1
             
             # Check if we should retry
-            if post.retry_count < self.MAX_RETRIES:
+            if new_retry_count < self.MAX_RETRIES:
                 # Schedule retry with exponential backoff
-                retry_delay = self.RETRY_DELAYS[post.retry_count - 1]
+                retry_delay = self.RETRY_DELAYS[new_retry_count - 1]
                 await self.mark_post_as_failed(post_id, error, retry_delay)
                 logger.warning(
-                    f"Post {post_id} failed ({post.retry_count}/{self.MAX_RETRIES}). "
+                    f"Post {post_id} failed ({new_retry_count}/{self.MAX_RETRIES}). "
                     f"Retrying in {retry_delay}s"
                 )
             else:
-                # Max retries reached
-                post.status = 'max_retries_reached'
-                post.last_error = f"Max retries reached. Last error: {error}"
+                # Max retries reached - use atomic update
+                from sqlalchemy import update
+                await self.db.execute(
+                    update(ScheduledPost)
+                    .where(ScheduledPost.id == post_id)
+                    .values(
+                        status='max_retries_reached',
+                        last_error=f"Max retries reached. Last error: {error}",
+                        error_message=f"Max retries reached. Last error: {error}"
+                    )
+                )
                 await self.db.commit()
                 logger.error(f"Post {post_id} failed permanently after {self.MAX_RETRIES} retries")
                 
         except Exception as e:
+            await self.db.rollback()
             logger.error(f"Error handling failure for post {post_id}: {e}")
     
     async def get_posts_due_for_publishing(self, cutoff_time: Optional[datetime] = None) -> list[ScheduledPost]:
         """
         Get posts that are due for publishing
+        
+        NOTE: This method is used by Celery tasks. The PostScheduler uses
+        its own _get_due_posts() method with FOR UPDATE SKIP LOCKED for
+        proper concurrency control.
         
         Args:
             cutoff_time: Posts scheduled before this time (default: now)
@@ -296,6 +354,9 @@ class PublisherService:
             cutoff_time = datetime.now()
         
         try:
+            # NOTE: This query does NOT use FOR UPDATE SKIP LOCKED
+            # The actual publishing should use mark_post_as_publishing() which
+            # atomically updates status, preventing race conditions
             result = await self.db.execute(
                 select(ScheduledPost).where(
                     ScheduledPost.scheduled_time <= cutoff_time,

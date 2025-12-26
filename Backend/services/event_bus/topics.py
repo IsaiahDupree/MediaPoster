@@ -222,6 +222,31 @@ class Topics:
     UI_ACTIVITY_FEED = "mp.ui.evt.activity"                       # Activity feed item
     
     # =========================================================================
+    # COMPETITOR RESEARCH
+    # =========================================================================
+    COMPETITOR_ADDED = "competitor.added"                 # New competitor account tracked
+    COMPETITOR_REMOVED = "competitor.removed"             # Competitor account removed
+    COMPETITOR_SYNC_STARTED = "competitor.sync.started"   # Sync job started
+    COMPETITOR_SYNC_COMPLETED = "competitor.sync.completed"  # Sync job finished
+    COMPETITOR_ANALYZED = "competitor.analyzed"           # AI analysis complete
+    COMPETITOR_CONTENT_DOWNLOADED = "competitor.content.downloaded"  # Videos downloaded
+    
+    # =========================================================================
+    # DEVICE IMPORT (iOS/Android)
+    # =========================================================================
+    IMPORT_SCAN_STARTED = "import.scan.started"           # Scanning folder for files
+    IMPORT_SCAN_COMPLETED = "import.scan.completed"       # Scan finished, files found
+    IMPORT_JOB_STARTED = "import.job.started"             # Import job began
+    IMPORT_JOB_PROGRESS = "import.job.progress"           # Progress update
+    IMPORT_FILE_INGESTED = "import.file.ingested"         # Single file imported
+    IMPORT_FILE_SKIPPED = "import.file.skipped"           # Duplicate skipped
+    IMPORT_JOB_COMPLETED = "import.job.completed"         # Import job finished
+    IMPORT_JOB_FAILED = "import.job.failed"               # Import job error
+    IMPORT_JOB_PAUSED = "import.job.paused"               # Import paused
+    IMPORT_JOB_RESUMED = "import.job.resumed"             # Import resumed
+    IMPORT_JOB_CANCELLED = "import.job.cancelled"         # Import cancelled
+    
+    # =========================================================================
     # SYSTEM
     # =========================================================================
     SYSTEM_STARTUP = "system.startup"                     # Backend started

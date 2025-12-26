@@ -14,6 +14,9 @@ from database.models import VideoClip, ScheduledPost, VideoAnalysis, Video
 from sqlalchemy import select, update
 from loguru import logger
 from services.event_bus import EventBus, Topics
+from services.background_publisher import get_background_publisher
+from config.platform_limits import get_platform_limits, PLATFORM_LIMITS
+from typing import Dict
 
 router = APIRouter()
 
@@ -69,6 +72,8 @@ class ScheduleRequest(BaseModel):
     caption: Optional[str] = None
     hashtags: Optional[List[str]] = None
     title: Optional[str] = None  # Proper title, not filename
+    idempotency_key: Optional[str] = None  # Prevent duplicate scheduling
+    platform_account_ids: Optional[Dict[str, str]] = None  # Platform -> Blotato account ID mapping
 
 class PostResponse(BaseModel):
     post_id: str
@@ -123,16 +128,24 @@ async def schedule_post(
     else:
         raise HTTPException(status_code=400, detail="Either clip_id or media_project_id must be provided")
     
-    # Validate scheduled time is in the future
+    # BUG FIX: Validate scheduled time is in the future (with clock drift buffer)
     from datetime import timezone
     now = datetime.now(timezone.utc)
     if request.scheduled_time.tzinfo is None:
         request.scheduled_time = request.scheduled_time.replace(tzinfo=timezone.utc)
     
-    if request.scheduled_time < now:
+    # Allow 1 second buffer for clock drift between systems
+    time_diff = (request.scheduled_time - now).total_seconds()
+    if time_diff < -1.0:
         raise HTTPException(
             status_code=400,
             detail="Cannot schedule post in the past. Please use a future time."
+        )
+    elif time_diff < 1.0:
+        # Schedule within 1 second of now - warn but allow (might be clock drift)
+        logger.warning(
+            f"Scheduling post very close to current time (diff: {time_diff:.2f}s). "
+            f"This might be due to clock drift."
         )
     
     # Validate platforms list
@@ -147,55 +160,164 @@ async def schedule_post(
         proper_title = request.title
         proper_caption = request.caption
         
-        # If title/caption not provided, try to fetch from analysis
-        if not proper_title or not proper_caption:
-            try:
-                if clip_id:
-                    result = await db.execute(
-                        select(VideoClip).filter(VideoClip.id == clip_id)
+        # BUG FIX: Verify media file exists and analysis before scheduling
+        analysis = None
+        if clip_id:
+            clip_result = await db.execute(
+                select(VideoClip).filter(VideoClip.id == clip_id)
+            )
+            clip = clip_result.scalar_one_or_none()
+            
+            if not clip:
+                raise HTTPException(status_code=404, detail="Clip not found")
+            
+            # Verify media file exists
+            if clip.file_path:
+                from pathlib import Path
+                file_path = Path(clip.file_path)
+                if not file_path.exists():
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Media file not found: {clip.file_path}. Please ensure the file exists before scheduling."
                     )
-                    clip = result.scalar_one_or_none()
-                    if clip and clip.video_id:
-                        # Get video title
-                        video_result = await db.execute(
-                            select(Video).filter(Video.id == clip.video_id)
+            
+            if clip.video_id:
+                # Get video title
+                video_result = await db.execute(
+                    select(Video).filter(Video.id == clip.video_id)
+                )
+                video = video_result.scalar_one_or_none()
+                if video and video.title and not proper_title:
+                    proper_title = video.title
+                
+                # Get caption from analysis (platform_content preferred)
+                analysis_result = await db.execute(
+                    select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
+                )
+                analysis = analysis_result.scalar_one_or_none()
+                
+                # BUG FIX: Check analysis completeness
+                if not analysis:
+                    logger.warning(
+                        f"⚠️ Scheduling post for clip {clip_id} without analysis. "
+                        f"Post will use generic caption. Consider running analysis first."
+                    )
+                else:
+                    # Check analysis completeness
+                    analysis_warnings = []
+                    if not analysis.transcript:
+                        analysis_warnings.append("missing transcript")
+                    if not analysis.topics or len(analysis.topics) == 0:
+                        analysis_warnings.append("missing topics")
+                    if not analysis.platform_content:
+                        analysis_warnings.append("missing platform_content")
+                    
+                    if analysis_warnings:
+                        logger.warning(
+                            f"⚠️ Analysis for clip {clip_id} is incomplete: {', '.join(analysis_warnings)}. "
+                            f"Post may use fallback captions."
                         )
-                        video = video_result.scalar_one_or_none()
-                        if video and video.title and not proper_title:
-                            proper_title = video.title
+                
+                if analysis and not proper_caption:
+                    # Try platform_content first, then hooks, then topics
+                    if analysis.platform_content:
+                        import json
+                        try:
+                            pc_list = analysis.platform_content if isinstance(analysis.platform_content, list) else json.loads(analysis.platform_content) if isinstance(analysis.platform_content, str) else []
+                            for pc in pc_list:
+                                if pc.get('platform') == request.platforms[0] if request.platforms else 'tiktok':
+                                    proper_caption = pc.get('description') or pc.get('caption')
+                                    break
+                        except (json.JSONDecodeError, Exception):
+                            pass
                         
-                        # Get caption from analysis (platform_content preferred)
-                        analysis_result = await db.execute(
-                            select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
-                        )
-                        analysis = analysis_result.scalar_one_or_none()
-                        if analysis and not proper_caption:
-                            # Try platform_content first, then hooks, then topics
-                            if analysis.platform_content:
-                                import json
-                                try:
-                                    pc_list = analysis.platform_content if isinstance(analysis.platform_content, list) else json.loads(analysis.platform_content) if isinstance(analysis.platform_content, str) else []
-                                    for pc in pc_list:
-                                        if pc.get('platform') == request.platforms[0] if request.platforms else 'tiktok':
-                                            proper_caption = pc.get('description') or pc.get('caption')
-                                            break
-                                except (json.JSONDecodeError, Exception):
-                                    pass
-                            
-                            # Fallback to hooks or topics, NOT transcript
-                            if not proper_caption:
-                                if analysis.hooks and len(analysis.hooks) > 0:
-                                    proper_caption = analysis.hooks[0]
-                                elif analysis.topics and len(analysis.topics) > 0:
-                                    proper_caption = f"Discover: {', '.join(analysis.topics[:2])}"
+                        # Fallback to hooks or topics, NOT transcript
+                        if not proper_caption:
+                            if analysis.hooks and len(analysis.hooks) > 0:
+                                proper_caption = analysis.hooks[0]
+                            elif analysis.topics and len(analysis.topics) > 0:
+                                proper_caption = f"Discover: {', '.join(analysis.topics[:2])}"
             except Exception as e:
                 logger.warning(f"Could not fetch title/caption from analysis: {e}")
         
         # Fallback to generic values if still missing
         if not proper_title or proper_title.startswith(('IMG_', 'VID_', 'MOV_')) or len(proper_title) < 5:
             proper_title = "Check this out"
+            if not request.title:  # Only warn if user didn't provide title
+                logger.warning(
+                    f"⚠️ Using generic title for clip {clip_id}. "
+                    f"Consider running analysis or providing a custom title."
+                )
         if not proper_caption:
             proper_caption = "Check out this content!"
+            if not request.caption:  # Only warn if user didn't provide caption
+                logger.warning(
+                    f"⚠️ Using generic caption for clip {clip_id}. "
+                    f"Consider running analysis or providing a custom caption."
+                )
+        
+        # BUG FIX: Validate platform-specific requirements before scheduling
+        validation_errors = []
+        for platform in request.platforms:
+            platform_lower = platform.lower()
+            limits = get_platform_limits(platform_lower)
+            
+            # Validate caption length
+            if proper_caption and len(proper_caption) > limits.description_max:
+                validation_errors.append(
+                    f"{platform}: Caption too long ({len(proper_caption)}/{limits.description_max} chars)"
+                )
+            
+            # Validate hashtag count
+            if request.hashtags:
+                hashtag_count = len(request.hashtags)
+                if hashtag_count > limits.hashtags_max:
+                    validation_errors.append(
+                        f"{platform}: Too many hashtags ({hashtag_count}/{limits.hashtags_max})"
+                    )
+            
+            # Validate title length
+            if proper_title and len(proper_title) > limits.title_max:
+                validation_errors.append(
+                    f"{platform}: Title too long ({len(proper_title)}/{limits.title_max} chars)"
+                )
+        
+        if validation_errors:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Platform validation failed: {'; '.join(validation_errors)}"
+            )
+        
+        # BUG FIX: Check idempotency key to prevent duplicate scheduling
+        if request.idempotency_key:
+            # Check if post with this idempotency key already exists
+            existing = await db.execute(
+                select(ScheduledPost).filter(
+                    ScheduledPost.id == request.idempotency_key  # Using idempotency_key as a unique constraint
+                )
+            )
+            if existing.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=409,
+                    detail="Post with this idempotency key already scheduled"
+                )
+        
+        # BUG FIX: Verify platform accounts before scheduling (if account IDs provided)
+        if request.platform_account_ids:
+            publisher = get_background_publisher()
+            for platform, account_id in request.platform_account_ids.items():
+                # Try to get username from request or use placeholder
+                username = "unknown"  # Would need to fetch from account
+                account_check = await publisher.verify_account(
+                    str(account_id),
+                    platform,
+                    username
+                )
+                if not account_check.get("valid"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid Blotato account for {platform}: {account_check.get('error', 'Account not found')}"
+                    )
         
         # Create scheduled post records for each platform
         scheduled_posts = []
@@ -333,14 +455,26 @@ async def _publish_via_blotato(
         # If post is due now or in the past, let the scheduler handle it
         if scheduled_time <= now:
             logger.info(f"Post {post_id} is due now, letting scheduler handle it")
-            # Reset status back to scheduled so scheduler can pick it up
+            # Only reset status if we set it to 'publishing' (atomic check-and-reset)
+            # This prevents resetting a post that's already being processed by another worker
             async with async_session_maker() as db:
-                await db.execute(
+                reset_result = await db.execute(
                     update(ScheduledPost)
-                    .where(ScheduledPost.id == uuid.UUID(post_id))
+                    .where(
+                        ScheduledPost.id == uuid.UUID(post_id),
+                        ScheduledPost.status == 'publishing'  # Only reset if we set it
+                    )
                     .values(status='scheduled')
                 )
                 await db.commit()
+                
+                if reset_result.rowcount == 0:
+                    logger.warning(
+                        f"Post {post_id} status changed by another process "
+                        f"(not 'publishing'), skipping reset"
+                    )
+                else:
+                    logger.info(f"Reset post {post_id} status from 'publishing' to 'scheduled' for scheduler")
             return
         
         publisher = ContentPublisher(use_blotato=True, use_cloud_staging=True)

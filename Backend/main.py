@@ -709,6 +709,10 @@ app.include_router(audio_api.router, tags=["Audio Service"])
 # iOS Import (device import with duplicate detection)
 from api.endpoints import ios_import_api
 app.include_router(ios_import_api.router, tags=["iOS Import"])
+
+# Android Import (device import via ADB with duplicate detection)
+from api.endpoints import android_import_api
+app.include_router(android_import_api.router, tags=["Android Import"])
 from api.endpoints import voice_cloning_quality
 app.include_router(voice_cloning_quality.router, prefix="/api/voice-cloning-quality", tags=["Voice Cloning Quality"])
 

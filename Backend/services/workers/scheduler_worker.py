@@ -151,6 +151,8 @@ class SchedulerWorker(BaseWorker):
     async def _check_for_due_posts(self) -> None:
         """Check database for posts that are due and emit events."""
         try:
+            # BUG FIX: _get_due_posts now atomically marks posts as 'processing'
+            # So we don't need to call _mark_post_processing again
             due_posts = await self._get_due_posts()
             
             if due_posts:
@@ -158,6 +160,7 @@ class SchedulerWorker(BaseWorker):
                 
                 for post in due_posts:
                     # Emit schedule.due event for each post
+                    # Posts are already marked as 'processing' by _get_due_posts
                     await self.emit(
                         Topics.SCHEDULE_DUE,
                         {
@@ -169,9 +172,6 @@ class SchedulerWorker(BaseWorker):
                             "title": post.get("title")
                         }
                     )
-                    
-                    # Mark as processing to prevent duplicate events
-                    await self._mark_post_processing(post["id"])
             else:
                 logger.debug(f"[{self.worker_id}] No due posts")
                 
@@ -179,7 +179,7 @@ class SchedulerWorker(BaseWorker):
             logger.error(f"[{self.worker_id}] Error checking for due posts: {e}")
     
     async def _get_due_posts(self) -> List[Dict[str, Any]]:
-        """Get posts that are due for publishing."""
+        """Get posts that are due for publishing (with atomic status update)."""
         try:
             from sqlalchemy import create_engine, text
             import os
@@ -188,22 +188,32 @@ class SchedulerWorker(BaseWorker):
             engine = create_engine(DATABASE_URL)
             
             with engine.connect() as conn:
+                # BUG FIX: Use atomic update with FOR UPDATE SKIP LOCKED pattern
+                # This prevents multiple workers from processing the same posts
                 result = conn.execute(text("""
-                    SELECT id, content_id, title, platform, account_id, scheduled_at
-                    FROM scheduled_posts
-                    WHERE status = 'scheduled'
-                      AND scheduled_at <= NOW()
-                    ORDER BY scheduled_at ASC
-                    LIMIT 10
+                    UPDATE scheduled_posts
+                    SET status = 'processing', updated_at = NOW()
+                    WHERE id IN (
+                        SELECT id
+                        FROM scheduled_posts
+                        WHERE status = 'scheduled'
+                          AND scheduled_time <= NOW()
+                        ORDER BY scheduled_time ASC
+                        LIMIT 10
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    RETURNING id, clip_id, media_project_id, platform, platform_account_id, scheduled_time, title
                 """)).fetchall()
+                
+                conn.commit()
                 
                 return [
                     {
-                        "id": row[0],
-                        "content_id": row[1],
-                        "title": row[2],
+                        "id": str(row[0]),
+                        "content_id": str(row[1]) if row[1] else (str(row[2]) if row[2] else None),
+                        "title": row[6] if len(row) > 6 else None,
                         "platform": row[3],
-                        "account_id": row[4],
+                        "account_id": str(row[4]) if row[4] else None,
                         "scheduled_at": str(row[5]) if row[5] else None
                     }
                     for row in result
@@ -212,8 +222,8 @@ class SchedulerWorker(BaseWorker):
             logger.error(f"Error fetching due posts: {e}")
             return []
     
-    async def _mark_post_processing(self, post_id: str) -> None:
-        """Mark a post as being processed to prevent duplicate events."""
+    async def _mark_post_processing(self, post_id: str) -> bool:
+        """Atomically mark a post as being processed to prevent duplicate events (idempotency)."""
         try:
             from sqlalchemy import create_engine, text
             import os
@@ -222,14 +232,20 @@ class SchedulerWorker(BaseWorker):
             engine = create_engine(DATABASE_URL)
             
             with engine.connect() as conn:
-                conn.execute(text("""
+                # BUG FIX: Atomic update with return value to check if update succeeded
+                result = conn.execute(text("""
                     UPDATE scheduled_posts
                     SET status = 'processing', updated_at = NOW()
                     WHERE id = :id AND status = 'scheduled'
+                    RETURNING id
                 """), {"id": post_id})
                 conn.commit()
+                
+                # Return True if we successfully updated (got the lock)
+                return result.rowcount > 0
         except Exception as e:
             logger.error(f"Error marking post as processing: {e}")
+            return False
     
     def get_stats(self) -> Dict[str, Any]:
         """Get scheduler statistics."""

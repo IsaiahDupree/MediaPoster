@@ -71,9 +71,13 @@ class PublishWorker(BaseWorker):
             # Extract from scheduled post
             post_id = event.payload.get("post_id")
             if post_id:
+                # BUG FIX: Atomic status update - mark as publishing before processing
+                if not await self._mark_post_publishing(post_id):
+                    logger.warning(f"[{self.worker_id}] Post {post_id} already being processed, skipping")
+                    return
                 await self._publish_scheduled_post(post_id, event.correlation_id)
         else:
-            # Direct publish request
+            # Direct publish request - no status to update
             await self._run_publish_pipeline(event.payload, event.correlation_id)
     
     async def _publish_scheduled_post(self, post_id: str, correlation_id: str) -> None:
@@ -208,26 +212,81 @@ class PublishWorker(BaseWorker):
             )
             raise
     
+    async def _mark_post_publishing(self, post_id: str) -> bool:
+        """Atomically mark post as publishing (idempotency check)."""
+        try:
+            from sqlalchemy import create_engine, text
+            import os
+            
+            DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+            engine = create_engine(DATABASE_URL)
+            
+            with engine.connect() as conn:
+                # BUG FIX: Atomic update - only if status is 'scheduled'
+                result = conn.execute(text("""
+                    UPDATE scheduled_posts
+                    SET status = 'publishing', updated_at = NOW()
+                    WHERE id = :id AND status = 'scheduled'
+                    RETURNING id
+                """), {"id": post_id})
+                conn.commit()
+                
+                # If we updated a row, we got the lock
+                return result.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error marking post as publishing: {e}")
+            return False
+    
     async def _verify_publish_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Verify the publish request has all required data."""
+        """Verify the publish request has all required data (validation)."""
         media_id = payload.get("media_id") or payload.get("content_id")
         account_id = payload.get("account_id")
+        platform = payload.get("platform")
         
+        # BUG FIX: Enhanced validation
         if not media_id:
             return {"valid": False, "error": "Missing media_id"}
         if not account_id:
             return {"valid": False, "error": "Missing account_id"}
+        if not platform:
+            return {"valid": False, "error": "Missing platform"}
         
         # Get file path
         file_path = await self._get_video_path(media_id)
         if not file_path:
             return {"valid": False, "error": f"Video file not found for {media_id}"}
         
+        # BUG FIX: Enhanced file verification
         import os
-        if not os.path.exists(file_path):
-            return {"valid": False, "error": f"File does not exist: {file_path}"}
+        from pathlib import Path
         
-        return {"valid": True, "file_path": file_path}
+        path = Path(file_path)
+        if not path.exists():
+            return {
+                "valid": False,
+                "error": f"File does not exist: {file_path}",
+                "file_path": str(path)
+            }
+        
+        if not path.is_file():
+            return {
+                "valid": False,
+                "error": f"Path is not a file: {file_path}",
+                "file_path": str(path)
+            }
+        
+        if not os.access(file_path, os.R_OK):
+            return {
+                "valid": False,
+                "error": f"File is not readable: {file_path}",
+                "file_path": str(path)
+            }
+        
+        return {
+            "valid": True,
+            "file_path": file_path,
+            "file_size": path.stat().st_size
+        }
     
     async def _upload_to_cloud(self, file_path: str) -> str:
         """Upload video to cloud storage (Google Drive or Supabase)."""

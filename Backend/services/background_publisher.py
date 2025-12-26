@@ -134,12 +134,22 @@ class BackgroundPublisher:
                         "error": "No file path for media"
                     }
                 
-                # Verify file exists
+                # BUG FIX: Verify file exists with detailed error handling
                 path = Path(file_path.strip())
                 if not path.exists():
                     return {
                         "valid": False,
-                        "error": f"File not found: {file_path}"
+                        "error": f"Media file not found on disk: {file_path}. File may have been deleted after scheduling.",
+                        "file_deleted": True,
+                        "file_path": str(path)
+                    }
+                
+                # Check file is readable
+                if not path.is_file():
+                    return {
+                        "valid": False,
+                        "error": f"Media path is not a file: {file_path}",
+                        "invalid_path": True
                     }
                 
                 return {
@@ -160,6 +170,8 @@ class BackgroundPublisher:
         """
         Step 2: Verify analysis exists and get platform content
         Replicates: /post-content/:id analysis fetch
+        
+        BUG FIX: Enhanced analysis completeness check
         """
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -168,11 +180,32 @@ class BackgroundPublisher:
                     return {
                         "valid": False,
                         "has_analysis": False,
-                        "platform_content": []
+                        "platform_content": [],
+                        "completeness": "none",
+                        "warnings": ["Analysis not found"]
                     }
                 
                 data = res.json()
                 platform_content = data.get("platform_content", [])
+                
+                # BUG FIX: Check analysis completeness
+                completeness_checks = {
+                    "has_transcript": bool(data.get("transcript")),
+                    "has_topics": bool(data.get("topics")) and len(data.get("topics", [])) > 0,
+                    "has_platform_content": bool(platform_content) and len(platform_content) > 0,
+                    "has_hooks": bool(data.get("hooks")) and len(data.get("hooks", [])) > 0,
+                }
+                
+                completeness_score = sum(completeness_checks.values()) / len(completeness_checks)
+                completeness_level = "complete" if completeness_score >= 0.75 else "partial" if completeness_score >= 0.5 else "incomplete"
+                
+                warnings = []
+                if not completeness_checks["has_transcript"]:
+                    warnings.append("Missing transcript")
+                if not completeness_checks["has_topics"]:
+                    warnings.append("Missing topics")
+                if not completeness_checks["has_platform_content"]:
+                    warnings.append("Missing platform_content")
                 
                 return {
                     "valid": True,
@@ -183,10 +216,14 @@ class BackgroundPublisher:
                     "deep_analysis": data.get("deep_analysis"),
                     "suggested_caption": data.get("deep_analysis", {}).get("suggested_caption"),
                     "suggested_hashtags": data.get("deep_analysis", {}).get("suggested_hashtags", []),
+                    "completeness": completeness_level,
+                    "completeness_score": completeness_score,
+                    "completeness_checks": completeness_checks,
+                    "warnings": warnings
                 }
         except Exception as e:
             logger.error(f"Analysis verification failed: {e}")
-            return {"valid": False, "error": str(e), "platform_content": []}
+            return {"valid": False, "error": str(e), "platform_content": [], "completeness": "error"}
     
     async def verify_account(self, blotato_account_id: str, platform: str, username: str) -> Dict[str, Any]:
         """

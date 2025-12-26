@@ -61,6 +61,9 @@ def publish_scheduled_post(self, post_id: str):
                 publisher = PublisherService(db)
                 post_uuid = UUID(post_id)
                 
+                # SAFEGUARD: publish_scheduled_post() internally calls mark_post_as_publishing()
+                # which atomically checks and updates status. This prevents multiple Celery
+                # workers from processing the same post.
                 result = await publisher.publish_scheduled_post(post_uuid)
                 
                 if result.success:

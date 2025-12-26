@@ -1,0 +1,67 @@
+================================================================================
+VOICE CLONING QUALITY ASSESSMENT REPORT
+================================================================================
+
+File: IMG_3577.MOV
+Path: /Users/isaiahdupree/Documents/IphoneImport/IMG_3577.MOV
+Assessment Date: 2025-12-26 13:29:12
+
+--------------------------------------------------------------------------------
+
+📊 OVERALL ASSESSMENT
+--------------------------------------------------------------------------------
+Overall Score: 0.31/1.00 [███████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+Suitability: POOR
+
+🎤 SIGNAL QUALITY
+--------------------------------------------------------------------------------
+Signal-to-Noise Ratio: N/A
+Background Noise: N/A
+Speech Clarity: 0.00/1.00 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+
+🔊 AUDIO CHARACTERISTICS
+--------------------------------------------------------------------------------
+Duration: 243.3 seconds (4.1 minutes)
+Duration Status: ⚠️  Fair
+Mean Volume: N/A
+Volume Consistency: 0.00/1.00 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+
+⚙️  TECHNICAL SPECIFICATIONS
+--------------------------------------------------------------------------------
+Sample Rate: 44100 Hz ✅ Excellent
+Bitrate: 705 kbps
+Channels: 1 ✅ Mono
+Audio Format: pcm_s16le
+
+📡 FREQUENCY ANALYSIS
+--------------------------------------------------------------------------------
+Fundamental Frequency: N/A
+Frequency Response Score: 0.00/1.00 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+Voice Range Coverage: ⚠️  Limited
+
+🗣️  SPEECH ANALYSIS
+--------------------------------------------------------------------------------
+Speech Percentage: 89.0%
+Silence Percentage: 11.0% ✅ Good
+Pause Count: 35
+Average Pause Duration: 0.76 seconds
+
+🔍 DISTORTION DETECTION
+--------------------------------------------------------------------------------
+Distortion: ✅ None
+Clipping: ✅ None
+Distortion Score: 1.00/1.00 [██████████████████████████████]
+
+💡 RECOMMENDATIONS
+--------------------------------------------------------------------------------
+1. Improve volume consistency - use audio normalization
+2. Increase duration (current: 243.3s, recommended: >300.0s)
+3. Ensure voice frequency range is well-represented
+
+================================================================================
+SUMMARY
+================================================================================
+❌ This audio is POOR for voice cloning training.
+   Significant improvements needed before use.
+
+================================================================================

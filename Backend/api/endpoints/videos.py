@@ -379,32 +379,77 @@ async def upload_video(
     import shutil
     from modules.video_ingestion.video_validator import VideoValidator
     
-    # Validate file type
+    # BUG FIX: Enhanced file validation
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    
+    # Validate file type by extension
     if not file.filename.lower().endswith(('.mp4', '.mov', '.m4v', '.avi', '.mkv')):
         raise HTTPException(status_code=400, detail="Unsupported file type")
     
+    # BUG FIX: Validate file size before saving (prevent DoS)
+    MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500 MB
+    file_size = 0
+    if hasattr(file.file, 'seek') and hasattr(file.file, 'tell'):
+        file.file.seek(0, 2)  # Seek to end
+        file_size = file.file.tell()
+        file.file.seek(0)  # Reset to beginning
+        
+        if file_size > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large: {file_size / (1024*1024):.2f} MB. Maximum size: {MAX_UPLOAD_SIZE / (1024*1024):.2f} MB"
+            )
+    
+    # BUG FIX: Ensure temp directory exists and is writable
+    temp_dir = Path(settings.temp_dir)
+    try:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        # Test write permission
+        test_file = temp_dir / ".test_write"
+        test_file.touch()
+        test_file.unlink()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Temp directory not accessible: {settings.temp_dir}. Error: {e}"
+        )
+    
     # Save uploaded file temporarily
-    temp_path = Path(settings.temp_dir) / file.filename
-    temp_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / file.filename
+    temp_file_created = False
     
     try:
+        # BUG FIX: Check if file already exists (prevent overwrite)
+        if temp_path.exists():
+            # Generate unique filename
+            import time
+            name_parts = temp_path.stem, int(time.time()), temp_path.suffix
+            temp_path = temp_dir / f"{name_parts[0]}_{name_parts[1]}{name_parts[2]}"
+        
         with temp_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        temp_file_created = True
         
-        # Validate video
+        # BUG FIX: Validate actual video format (not just extension)
         validator = VideoValidator()
         is_valid, error, metadata = validator.validate(temp_path)
         
         if not is_valid:
-            temp_path.unlink()
             raise HTTPException(status_code=400, detail=f"Invalid video: {error}")
+        
+        # BUG FIX: Validate metadata before creating record
+        if not metadata or not metadata.get('duration'):
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to extract video metadata. File may be corrupted."
+            )
         
         # Create database record
         from database.models import Video
         import uuid
         
         # Use a placeholder user ID until auth is fully implemented
-        # This matches the placeholder used in scan_directory
         current_user_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
         
         # Map source to allowed values
@@ -432,9 +477,22 @@ async def upload_video(
             "duration": metadata['duration']
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (they already have proper status codes)
+        # BUG FIX: Clean up temp file on any error
+        if temp_file_created and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass  # Ignore cleanup errors
+        raise
     except Exception as e:
-        if temp_path.exists():
-            temp_path.unlink()
+        # BUG FIX: Clean up temp file on any error
+        if temp_file_created and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass  # Ignore cleanup errors
         raise HTTPException(status_code=500, detail=str(e))
 
 class ScanRequest(BaseModel):

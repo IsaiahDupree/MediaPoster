@@ -285,7 +285,7 @@ class PostScheduler:
         Publish a single scheduled post using BackgroundPublisher.
         
         This uses the SAME verified flow as the frontend:
-        1. Media verification
+        1. Media verification (with file existence check)
         2. Analysis/caption retrieval  
         3. Account verification
         4. Full publish (GDrive → Blotato → Platform)
@@ -297,6 +297,10 @@ class PostScheduler:
         - Checks if already posted before publishing
         - Uses idempotency keys to prevent duplicate API calls
         - Locks post during publishing to prevent concurrent attempts
+        
+        BUG FIX: Media deletion handling
+        - Verifies media file exists before publishing
+        - Handles gracefully if file was deleted after scheduling
         """
         # Create correlation ID for this publish workflow
         correlation_id = str(uuid4())
@@ -304,6 +308,29 @@ class PostScheduler:
         media_id = str(post.get("content_id")) if post.get("content_id") else None
         platform = post.get("platform")
         account_id = str(post.get("account_id")) if post.get("account_id") else None
+        
+        # BUG FIX: Verify media file still exists (might have been deleted after scheduling)
+        # This is a pre-check; BackgroundPublisher will also verify during publish
+        if media_id:
+            try:
+                # Use BackgroundPublisher to verify media (reuses same logic)
+                publisher = self.background_publisher
+                media_check = await publisher.verify_media(str(media_id))
+                if not media_check.get("valid"):
+                    error = media_check.get("error", "Media verification failed")
+                    if media_check.get("file_deleted"):
+                        logger.error(f"❌ Media file deleted after scheduling: {error}")
+                        return {
+                            "success": False,
+                            "error": error,
+                            "file_deleted": True
+                        }
+                    else:
+                        logger.warning(f"⚠️ Media verification issue: {error}")
+                        # Continue - might be transient issue
+            except Exception as e:
+                logger.warning(f"Could not verify media file existence: {e}")
+                # Continue anyway - BackgroundPublisher will verify again during publish
         
         # SAFEGUARD 1: Check if already posted
         if media_id and self.dedup_guard.is_already_posted(media_id, platform, account_id):

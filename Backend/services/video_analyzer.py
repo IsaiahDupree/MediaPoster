@@ -66,6 +66,28 @@ class VideoAnalyzer:
         
         logger.info(f"Starting analysis for video {video_id}: {Path(video_path).name}")
         
+        # BUG FIX: Verify file exists before starting analysis
+        from pathlib import Path as PathLib
+        import os
+        
+        analysis_path = PathLib(video_path)
+        if not analysis_path.exists():
+            error_msg = f"Video file not found: {video_path}"
+            logger.error(f"[Analysis] {error_msg}")
+            raise FileNotFoundError(error_msg)
+        
+        if not analysis_path.is_file():
+            error_msg = f"Path is not a file: {video_path}"
+            logger.error(f"[Analysis] {error_msg}")
+            raise ValueError(error_msg)
+        
+        if not os.access(str(analysis_path), os.R_OK):
+            error_msg = f"File is not readable: {video_path}"
+            logger.error(f"[Analysis] {error_msg}")
+            raise PermissionError(error_msg)
+        
+        logger.info(f"[Analysis] File verified: {video_path} ({analysis_path.stat().st_size / (1024*1024):.2f} MB)")
+        
         try:
             # Step 1: Transcribe video
             logger.info("Step 1/4: Transcribing with Whisper")
@@ -288,6 +310,28 @@ class VideoAnalyzer:
                 print(f"   Score: {raw_score} (required: not None)")
                 print(f"   Analysis NOT saved - will not be marked as 'analyzed'")
                 print(f"{'='*80}\n")
+                
+                # BUG FIX: Clean up any partial analysis data before raising error
+                # Don't save incomplete analysis to prevent false positives
+                # Emit failure event for tracking
+                try:
+                    from services.event_bus import EventBus, Topics
+                    event_bus = EventBus.get_instance()
+                    await event_bus.publish(
+                        Topics.ANALYSIS_FAILED,
+                        {
+                            "media_id": str(video_id),
+                            "error": error_msg,
+                            "incomplete": True,
+                            "transcript_length": len(transcript) if transcript else 0,
+                            "topics_count": len(topics) if topics else 0,
+                            "has_score": raw_score is not None
+                        },
+                        correlation_id=str(video_id)
+                    )
+                except Exception:
+                    pass  # Don't fail if event emission fails
+                
                 raise ValueError(f"Incomplete analysis: transcript={bool(transcript)}, topics={len(topics) if topics else 0}, score={raw_score is not None}")
             
             # Generate AI title (~20% of platform character limit = ~30 chars)

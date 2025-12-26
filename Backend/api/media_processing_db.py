@@ -715,35 +715,99 @@ async def ingest_single_file(
     """
     Ingest a single file into the database.
     """
+    # BUG FIX: Enhanced file validation
     path = Path(file_path)
     if not path.exists():
         raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
     
-    # Check for duplicate
-    existing_query = select(Video).where(Video.source_uri == str(path))
-    existing_result = await db.execute(existing_query)
-    existing = existing_result.scalar_one_or_none()
+    if not path.is_file():
+        raise HTTPException(status_code=400, detail=f"Path is not a file: {file_path}")
     
-    if existing:
-        return {"status": "exists", "media_id": str(existing.id)}
+    import os
+    if not os.access(str(path), os.R_OK):
+        raise HTTPException(status_code=400, detail=f"File is not readable: {file_path}")
     
-    # Get metadata
+    # BUG FIX: Atomic duplicate check and insert to prevent race condition
+    # Use ON CONFLICT to handle concurrent inserts
+    from sqlalchemy.dialects.postgresql import insert
+    
+    # Get metadata first (before insert)
     metadata = await get_video_metadata(str(path))
     
-    # Create video record
-    video = Video(
+    # BUG FIX: Enhanced metadata validation before creating record
+    if not metadata:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to extract video metadata for {file_path}. File may be corrupted or unsupported."
+        )
+    
+    # Validate required metadata fields with fallback values
+    duration_sec = metadata.get('duration_sec')
+    if not duration_sec or duration_sec <= 0:
+        logger.warning(f"Invalid or missing duration for {file_path}, using fallback")
+        duration_sec = 0  # Fallback value
+    
+    resolution = metadata.get('resolution')
+    if not resolution:
+        logger.warning(f"Missing resolution for {file_path}, using fallback")
+        resolution = "unknown"  # Fallback value
+    
+    aspect_ratio = metadata.get('aspect_ratio')
+    if not aspect_ratio:
+        logger.warning(f"Missing aspect ratio for {file_path}, using fallback")
+        aspect_ratio = None  # Can be None
+    
+    # Validate file size
+    try:
+        file_size = path.stat().st_size
+        if file_size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File is empty: {file_path}"
+            )
+    except OSError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot access file: {file_path}. Error: {e}"
+        )
+    
+    # BUG FIX: Atomic insert with conflict handling
+    # This prevents race condition where two processes try to insert same file
+    stmt = insert(Video).values(
         user_id=DEFAULT_USER_ID,
         source_type="local",
         source_uri=str(path),
         file_name=path.name,
-        file_size=path.stat().st_size,
-        duration_sec=metadata.get('duration_sec'),
-        resolution=metadata.get('resolution'),
-        aspect_ratio=metadata.get('aspect_ratio')
-    )
+        file_size=file_size,  # Use validated file_size
+        duration_sec=duration_sec,  # Use validated duration
+        resolution=resolution,  # Use validated resolution
+        aspect_ratio=aspect_ratio  # Use validated aspect_ratio
+    ).on_conflict_do_nothing(
+        index_elements=['source_uri']  # Assuming unique constraint on source_uri
+    ).returning(Video)
     
-    db.add(video)
+    result = await db.execute(stmt)
     await db.commit()
+    
+    # Check if insert succeeded or was skipped (duplicate)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        # Insert was skipped due to conflict - fetch existing record
+        existing_query = select(Video).where(Video.source_uri == str(path))
+        existing_result = await db.execute(existing_query)
+        existing = existing_result.scalar_one_or_none()
+        
+        if existing:
+            logger.info(f"File already ingested (race condition handled): {file_path}")
+            return {"status": "exists", "media_id": str(existing.id)}
+        else:
+            # This shouldn't happen, but handle gracefully
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create or find video record for {file_path}"
+            )
+    
     await db.refresh(video)
     
     # Emit media.ingested event for event-driven processing (e.g., thumbnail generation)
@@ -832,9 +896,15 @@ async def process_batch_ingest(job_id: str, files: List[Path], resume: bool):
     
     event_bus = EventBus.get_instance()
     
+    # BUG FIX: Wrap batch operations in transaction for consistency
     async with async_session_maker() as db:
-        for file_path in files:
-            try:
+        success_count = 0
+        failed_count = 0
+        failed_files = []
+        
+        try:
+            for file_path in files:
+                try:
                 # Check if already exists (resume)
                 if resume:
                     existing_query = select(Video).where(Video.source_uri == str(file_path))
@@ -1014,16 +1084,26 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
     event_bus = EventBus.get_instance()
     event_bus.set_source("media-analysis")
     
-    # Check if job was cancelled before starting
+    # BUG FIX: Atomic cancellation check (removed duplicate)
+    # Check if job was cancelled before starting - single atomic check
     if job_id and job_id in _analysis_jobs:
-        if _analysis_jobs[job_id].get("status") == "cancelled":
+        job_status = _analysis_jobs[job_id].get("status")
+        if job_status == "cancelled":
             logger.info(f"[Analysis] Job {job_id} cancelled, aborting {video_id}")
-            return
-    
-    # Check if job was cancelled before starting
-    if job_id and job_id in _analysis_jobs:
-        if _analysis_jobs[job_id].get("status") == "cancelled":
-            logger.info(f"[Analysis] Job {job_id} cancelled, aborting {video_id}")
+            # Emit cancellation event for tracking
+            try:
+                await event_bus.publish(
+                    Topics.ANALYSIS_FAILED,
+                    {
+                        "media_id": video_id,
+                        "job_id": job_id,
+                        "error": "Job was cancelled",
+                        "cancelled": True
+                    },
+                    correlation_id=video_id
+                )
+            except Exception:
+                pass  # Don't fail if event emission fails
             return
     
     # Update job tracker
@@ -1069,6 +1149,7 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
     # Map host path to container path (for Docker)
     container_path = map_host_to_container_path(file_path) if file_path else None
     
+    # BUG FIX: Enhanced file verification with proper error handling
     # Try container path first, then original path
     actual_path = None
     if container_path and os.path.exists(container_path):
@@ -1077,11 +1158,33 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
         actual_path = file_path
     
     if not actual_path:
-        logger.warning(f"[Analysis] File not found for {video_id}: {file_path}")
+        error_msg = f"File not found for {video_id}: {file_path} (container: {container_path})"
+        logger.error(f"[Analysis] {error_msg}")
+        
+        # BUG FIX: Emit failure event instead of silent return
+        try:
+            await event_bus.publish(
+                Topics.ANALYSIS_FAILED,
+                {
+                    "media_id": video_id,
+                    "job_id": job_id,
+                    "error": error_msg,
+                    "file_not_found": True,
+                    "file_path": file_path,
+                    "container_path": container_path
+                },
+                correlation_id=video_id
+            )
+        except Exception as e:
+            logger.warning(f"Failed to emit analysis failure event: {e}")
+        
+        # Update job tracker
         if job_id and job_id in _analysis_jobs:
-            _analysis_jobs[job_id]["videos"][video_id] = "failed:file_not_found"
+            _analysis_jobs[job_id]["videos"][video_id] = {"status": "failed", "error": "file_not_found"}
             _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
-        return
+        
+        # BUG FIX: Raise exception instead of silent return for consistent error handling
+        raise FileNotFoundError(error_msg)
     
     file_path = actual_path
     filename = Path(file_path).name

@@ -18,6 +18,7 @@ You have **58 API subscriptions** on RapidAPI. This documentation covers all API
 | [openapi-unified.yaml](./openapi-unified.yaml) | **Unified OpenAPI schema (normalized)** |
 | [tiktok-scraper7.md](./tiktok-scraper7.md) | TikTok Scraper7 detailed docs |
 | [tiktok-video-feature-summary.md](./tiktok-video-feature-summary.md) | TikTok Feature Summary docs |
+| [instagram-scraper-stable-api.md](./instagram-scraper-stable-api.md) | Instagram Scraper Stable API (RockSolid) detailed docs |
 | [instagram-looter2.md](./instagram-looter2.md) | Instagram Looter2 detailed docs |
 | [instagram-statistics-api.md](./instagram-statistics-api.md) | Instagram Statistics API docs |
 | [yt-api.md](./yt-api.md) | YouTube YT-API detailed docs |
@@ -39,6 +40,7 @@ You have **58 API subscriptions** on RapidAPI. This documentation covers all API
 |----------|-----|---------------|--------|
 | 🎵 TikTok | Scraper7 | [tiktok-scraper7.md](./tiktok-scraper7.md) | ✅ Working |
 | 🎵 TikTok | Video Feature Summary | [tiktok-video-feature-summary.md](./tiktok-video-feature-summary.md) | ✅ Working |
+| 📸 Instagram | Scraper Stable API | [instagram-scraper-stable-api.md](./instagram-scraper-stable-api.md) | ✅ Working |
 | 📸 Instagram | Looter2 | [instagram-looter2.md](./instagram-looter2.md) | ✅ Working |
 | 📸 Instagram | Statistics API | [instagram-statistics-api.md](./instagram-statistics-api.md) | ✅ Working |
 | ▶️ YouTube | YT-API | [yt-api.md](./yt-api.md) | ✅ Working |
@@ -64,6 +66,7 @@ tiktok-scraper7.p.rapidapi.com
 tiktok-video-feature-summary.p.rapidapi.com
 
 # Instagram  
+instagram-scraper-stable-api.p.rapidapi.com
 instagram-looter2.p.rapidapi.com
 instagram-statistics-api.p.rapidapi.com
 
@@ -92,6 +95,14 @@ soundcloud-api3.p.rapidapi.com
 - ✅ `/user/posts` - User videos with metrics
 - ✅ `/user/followers` - Followers list
 - ✅ `/user/following` - Following list
+
+### Instagram Scraper Stable API
+- ✅ `POST /v1/info` - User profile
+- ✅ `POST /v1/reels` - User reels with audio
+- ✅ `GET /v1/reel_by_shortcode` - Reel details
+- ✅ `GET /v1/media_by_shortcode` - Media details
+- ✅ `POST /v1/posts` - User posts
+- ✅ `POST /v1/search` - Search users/hashtags
 
 ### Instagram Looter2
 - ✅ `/profile` - User profile with 12 recent posts

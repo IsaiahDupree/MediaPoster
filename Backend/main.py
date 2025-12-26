@@ -706,6 +706,10 @@ app.include_router(trends_api.router, prefix="/api/trends", tags=["Trends Discov
 from api.endpoints import audio_api
 app.include_router(audio_api.router, tags=["Audio Service"])
 
+# Competitor Research (track and analyze competitor content)
+from api.endpoints import competitor_api
+app.include_router(competitor_api.router, tags=["Competitor Research"])
+
 # Content Analyzer API (AI-powered video analysis)
 from api.endpoints import content_analyzer_api
 app.include_router(content_analyzer_api.router, prefix="/api/content-analyzer", tags=["Content Analyzer"])

@@ -60,7 +60,52 @@ Endpoints verified by direct API testing with your RapidAPI key on December 20, 
 
 ## 📸 Instagram APIs
 
-### Instagram Looter2 (PRIMARY ✅)
+### Instagram Scraper Stable API (PRIMARY ✅)
+- **Host**: `instagram-scraper-stable-api.p.rapidapi.com`
+- **Provider**: RockSolid APIs (thetechguy32744)
+- **Docs**: https://rapidapi.com/thetechguy32744/api/instagram-scraper-stable-api
+- **Status**: ✅ Working
+- **Last Verified**: 2024-12-25
+
+| Endpoint | Method | Status | Parameters | Description |
+|----------|--------|--------|------------|-------------|
+| `/v1/info` | POST | ✅ | `username_or_id_or_url` | Get user profile with followers, bio, etc. |
+| `/v1/reels` | POST | ✅ | `username_or_id_or_url`, `count`, `pagination_token` | Get user reels with audio URLs |
+| `/v1/reel_by_shortcode` | GET | ✅ | `shortcode` | Get detailed reel data by shortcode |
+| `/v1/media_by_shortcode` | GET | ✅ | `shortcode` | Get media (post/reel) by shortcode |
+| `/v1/posts` | POST | ✅ | `username_or_id_or_url`, `count`, `pagination_token` | Get user posts (photos/videos/carousels) |
+| `/v1/search` | POST | ✅ | `query` | Search for users and hashtags |
+
+**Key Features**:
+- Real-time data (no caching)
+- Audio URL extraction from reels
+- Video download URLs
+- Play count for videos
+- Pagination support
+
+**Response Example (reels)**:
+```json
+{
+  "data": {
+    "items": [{
+      "id": "reel_id",
+      "code": "shortcode",
+      "video_versions": [{"url": "https://..."}],
+      "clips_metadata": {
+        "music_info": {
+          "music_asset_info": {
+            "progressive_download_url": "https://audio.mp3"
+          }
+        }
+      },
+      "play_count": 12345,
+      "like_count": 678
+    }]
+  }
+}
+```
+
+### Instagram Looter2 (SECONDARY ✅)
 - **Host**: `instagram-looter2.p.rapidapi.com`
 - **Docs**: https://rapidapi.com/irror-systems/api/instagram-looter
 - **Status**: ✅ Working

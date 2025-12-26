@@ -227,7 +227,7 @@ async def get_candidate_pool(
         engine = get_engine()
         
         with engine.connect() as conn:
-            # Get videos with analysis - using only columns that exist
+            # Get videos with analysis - ONLY approved content
             result = conn.execute(text("""
                 SELECT 
                     v.id,
@@ -245,6 +245,7 @@ async def get_candidate_pool(
                 FROM videos v
                 INNER JOIN video_analysis va ON v.id = va.video_id
                 WHERE va.pre_social_score IS NOT NULL
+                  AND va.curation_status = 'approved'
                 ORDER BY va.pre_social_score DESC NULLS LAST
                 LIMIT :limit
             """), {'limit': limit}).fetchall()

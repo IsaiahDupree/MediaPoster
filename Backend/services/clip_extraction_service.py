@@ -758,7 +758,7 @@ OUTPUT FORMAT (JSON):
             elif len(parts) == 3:
                 return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
             return float(timestamp)
-        except:
+        except Exception:
             return 0.0
     
     def _parse_transcript_line(self, line: str) -> Optional[Tuple[str, str, str]]:

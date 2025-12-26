@@ -134,7 +134,7 @@ async def list_people(
                             "relationship": row[7],
                             "last_interaction": str(row[8]) if row[8] else None
                         })
-            except:
+            except Exception:
                 pass  # people table might not exist
                 
     except Exception as e:

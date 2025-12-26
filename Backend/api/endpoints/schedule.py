@@ -263,7 +263,7 @@ async def list_scheduled_posts(
             elif isinstance(row[14], str):
                 try:
                     hashtags_list = json.loads(row[14])
-                except:
+                except (json.JSONDecodeError, Exception):
                     hashtags_list = [h.strip() for h in row[14].split(',') if h.strip()]
         
         posts.append({
@@ -1014,7 +1014,7 @@ async def publish_scheduled_post(post_id: str):
     if isinstance(hashtags, str):
         try:
             hashtags = json.loads(hashtags)
-        except:
+        except (json.JSONDecodeError, Exception):
             hashtags = []
     
     pub_request = PublishRequest(

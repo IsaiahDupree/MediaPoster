@@ -380,7 +380,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Cleanup subtitle file
         try:
             os.remove(subtitle_path)
-        except:
+        except Exception:
             pass
         
         return success, output_path if success else video_path

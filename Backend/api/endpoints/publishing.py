@@ -179,7 +179,7 @@ async def schedule_post(
                                         if pc.get('platform') == request.platforms[0] if request.platforms else 'tiktok':
                                             proper_caption = pc.get('description') or pc.get('caption')
                                             break
-                                except:
+                                except (json.JSONDecodeError, Exception):
                                     pass
                             
                             # Fallback to hooks or topics, NOT transcript

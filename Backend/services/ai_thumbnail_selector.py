@@ -381,7 +381,7 @@ Respond in JSON format:
         for f in Path(self.temp_dir).glob(f"{video_name}_frame_*"):
             try:
                 f.unlink()
-            except:
+            except Exception:
                 pass
         
         return thumb_path, {

@@ -304,7 +304,7 @@ async def get_experiment_accounts():
                     WHERE account_role = 'EXPERIMENT_ARM' AND is_active = true
                     ORDER BY platform, handle
                 """)).fetchall()
-            except:
+            except Exception:
                 # Fallback if account_role doesn't exist yet
                 try:
                     result = conn.execute(text("""
@@ -313,7 +313,7 @@ async def get_experiment_accounts():
                         WHERE is_active = true
                         ORDER BY platform, handle
                     """)).fetchall()
-                except:
+                except Exception:
                     # Table might not exist at all
                     return {'accounts': [], 'count': 0}
             
@@ -1332,7 +1332,7 @@ async def schedule_experiment_variant(request: VariantScheduleRequest):
                     status_code=400, 
                     detail=f"Account role {account[1]} doesn't match experiment role {exp[2]}"
                 )
-        except:
+        except Exception:
             pass  # account_role column might not exist
         
         # Check fairness controls (time bucket matching)

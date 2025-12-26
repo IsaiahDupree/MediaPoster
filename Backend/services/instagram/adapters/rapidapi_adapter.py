@@ -365,12 +365,12 @@ class RapidApiInstagramAdapter(InstagramAdapter):
         if "taken_at" in item_data:
             try:
                 timestamp = datetime.fromtimestamp(item_data["taken_at"])
-            except:
+            except Exception:
                 pass
         elif "timestamp" in item_data:
             try:
                 timestamp = datetime.fromisoformat(item_data["timestamp"].replace("Z", "+00:00"))
-            except:
+            except Exception:
                 pass
         
         # Get video URL if available

@@ -317,7 +317,7 @@ class ClipExtractionWorker(BaseWorker):
             if len(parts) == 2:
                 return int(parts[0]) * 60 + int(parts[1])
             return float(timestamp)
-        except:
+        except Exception:
             return 0.0
     
     def _get_extraction_service(self, options: Dict[str, Any]):

@@ -112,7 +112,7 @@ async def send_email(
                 "subject": request.subject,
                 "error": str(e),
             })
-        except:
+        except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 

@@ -97,7 +97,7 @@ async def get_event_timeline(
             if isinstance(event_data, str):
                 try:
                     event_data = json.loads(event_data)
-                except:
+                except (json.JSONDecodeError, Exception):
                     event_data = {}
             
             events.append({
@@ -302,7 +302,7 @@ async def get_narrative_panel_data():
     try:
         planner_status = await planner.get_status()
         draft = await planner.get_draft_plan()
-    except:
+    except Exception:
         planner_status = {}
         draft = None
     
@@ -347,7 +347,7 @@ async def get_experiments_panel_data():
             }
             for c in candidates[:10]
         ]
-    except:
+    except Exception:
         runner_status = {}
         backlog = []
     

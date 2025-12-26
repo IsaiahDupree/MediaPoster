@@ -288,7 +288,7 @@ async def list_media(
                     try:
                         import json
                         topics = json.loads(topics) if isinstance(topics, str) else topics
-                    except:
+                    except Exception:
                         topics = None
                 
                 analysis = {

@@ -244,7 +244,7 @@ return JSON.stringify([...new Set(videos)]);
         if self._engagement:
             try:
                 await self._engagement.close()
-            except:
+            except Exception:
                 pass
             self._engagement = None
             self._initialized = False

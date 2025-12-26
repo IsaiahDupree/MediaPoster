@@ -87,24 +87,24 @@ class DataHydrationService:
             # Count records in each table
             try:
                 accounts = conn.execute(text("SELECT COUNT(*) FROM social_media_accounts")).scalar() or 0
-            except:
+            except Exception:
                 accounts = 0
             
             try:
                 posts = conn.execute(text("SELECT COUNT(*) FROM posted_content")).scalar() or 0
-            except:
+            except Exception:
                 posts = 0
             
             try:
                 followers = conn.execute(text("SELECT COUNT(*) FROM top_engaged_followers")).scalar() or 0
-            except:
+            except Exception:
                 followers = 0
             
             try:
                 last_refresh = conn.execute(text(
                     "SELECT MAX(last_fetched_at) FROM social_media_accounts"
                 )).scalar()
-            except:
+            except Exception:
                 last_refresh = None
         
         return {
@@ -580,7 +580,7 @@ class DataHydrationService:
                     "SELECT value FROM hydration_cache WHERE key = 'account_totals'"
                 )).fetchone()
                 totals = eval(totals_row[0]) if totals_row else {}
-            except:
+            except Exception:
                 totals = {}
             
             # Get platform breakdown
@@ -589,7 +589,7 @@ class DataHydrationService:
                     "SELECT value FROM hydration_cache WHERE key = 'platform_breakdown'"
                 )).fetchone()
                 breakdown = eval(breakdown_row[0]) if breakdown_row else {}
-            except:
+            except Exception:
                 breakdown = {}
             
             # Get accounts list
@@ -694,7 +694,7 @@ class DataHydrationService:
                     "SELECT value FROM hydration_cache WHERE key = 'engagement_stats'"
                 )).fetchone()
                 stats = eval(stats_row[0]) if stats_row else {}
-            except:
+            except Exception:
                 stats = {}
             
             return {
@@ -830,7 +830,7 @@ class DataHydrationService:
                     WHERE status IN ('scheduled', 'pending')
                     GROUP BY platform
                 """)).fetchall()
-        except:
+        except Exception:
             platform_stats = []
         
         # Get schedule stats
@@ -844,7 +844,7 @@ class DataHydrationService:
                         COUNT(*) as total
                     FROM scheduled_posts
                 """)).fetchone()
-        except:
+        except Exception:
             stats = (0, 0, 0, 0)
         
         return {
@@ -909,7 +909,7 @@ class DataHydrationService:
                     ORDER BY overall_score DESC NULLS LAST
                     LIMIT 50
                 """)).fetchall()
-        except:
+        except Exception:
             candidates = []
         
         # Get accounts for platform selection
@@ -919,7 +919,7 @@ class DataHydrationService:
                     SELECT id, platform, username, display_name
                     FROM social_media_accounts WHERE is_active = TRUE
                 """)).fetchall()
-        except:
+        except Exception:
             accounts = []
         
         # Get recent scheduled posts
@@ -932,7 +932,7 @@ class DataHydrationService:
                     ORDER BY scheduled_at ASC
                     LIMIT 20
                 """)).fetchall()
-        except:
+        except Exception:
             recent_scheduled = []
         
         # Get saved recommendations
@@ -946,7 +946,7 @@ class DataHydrationService:
                     ORDER BY narrative_score DESC
                     LIMIT 10
                 """)).fetchall()
-        except:
+        except Exception:
             recommendations = []
         
         return {

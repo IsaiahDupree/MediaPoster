@@ -293,7 +293,7 @@ async def auto_sync_iphone_import(background_tasks: BackgroundTasks, limit: int 
             try:
                 if f.stat().st_size > 0:  # Skip empty files
                     all_videos.append(f)
-            except:
+            except Exception:
                 continue
     
     logger.info(f"[AUTO-SYNC] Found {len(all_videos)} video files in IphoneImport")

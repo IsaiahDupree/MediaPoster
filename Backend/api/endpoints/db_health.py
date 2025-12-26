@@ -24,7 +24,7 @@ def check_port_open(host: str, port: int, timeout: float = 2.0) -> bool:
         result = sock.connect_ex((host, port))
         sock.close()
         return result == 0
-    except:
+    except Exception:
         return False
 
 
@@ -154,7 +154,7 @@ async def list_tables() -> Dict[str, Any]:
                 try:
                     count = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar()
                     result.append({"name": table_name, "rows": count})
-                except:
+                except Exception:
                     result.append({"name": table_name, "rows": "error"})
             
             return {

@@ -531,7 +531,7 @@ class PostScheduler:
             try:
                 import json
                 return json.loads(hashtags)
-            except:
+            except Exception:
                 return [h.strip() for h in hashtags.split(",") if h.strip()]
         return []
     

@@ -712,7 +712,7 @@ Schedule ALL {len(selected_videos)} videos across the 7 days."""
                     # Parse date
                     try:
                         sched_date = datetime.strptime(item.get("date", ""), "%Y-%m-%d").date()
-                    except:
+                    except Exception:
                         sched_date = current_date
                     
                     scheduled_slot = ScheduledSlot(

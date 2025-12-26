@@ -543,7 +543,7 @@ Return only the text, nothing else."""
             try:
                 font_size = int(img.width * 0.1)  # 10% of width
                 font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", font_size)
-            except:
+            except Exception:
                 font = ImageFont.load_default()
             
             # Get text size

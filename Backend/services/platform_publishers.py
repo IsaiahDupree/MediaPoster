@@ -214,7 +214,7 @@ class TikTokPublisher(BasePlatformPublisher):
                 params={"fields": "open_id,union_id,display_name"},
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
     
     async def get_account_info(self) -> Dict:
@@ -500,7 +500,7 @@ class YouTubePublisher(BasePlatformPublisher):
                 params={"part": "snippet", "mine": "true"},
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
     
     async def get_account_info(self) -> Dict:
@@ -750,7 +750,7 @@ class InstagramPublisher(BasePlatformPublisher):
                 },
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
     
     async def get_account_info(self) -> Dict:
@@ -845,7 +845,7 @@ class TwitterPublisher(BasePlatformPublisher):
                 headers={"Authorization": f"Bearer {self.credentials.get('bearer_token')}"},
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
     
     async def get_account_info(self) -> Dict:
@@ -948,7 +948,7 @@ class LinkedInPublisher(BasePlatformPublisher):
                 headers={"Authorization": f"Bearer {self.credentials.get('access_token')}"},
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
     
     async def get_account_info(self) -> Dict:

@@ -481,7 +481,7 @@ class APIUsageTracker:
                 record_time = datetime.fromisoformat(record.timestamp)
                 if record_time >= month_start and not record.cached:
                     count += 1
-            except:
+            except Exception:
                 pass
         
         return count
@@ -634,7 +634,7 @@ class APIUsageTracker:
                 # Cache expired
                 del self._response_cache[cache_key]
                 return None
-        except:
+        except Exception:
             return None
         
         return cached.get('data')
@@ -754,7 +754,7 @@ class APIUsageTracker:
                 endpoint = record.endpoint
                 day.calls_by_endpoint[endpoint] = day.calls_by_endpoint.get(endpoint, 0) + 1
                 
-            except:
+            except Exception:
                 pass
         
         # Sort by date

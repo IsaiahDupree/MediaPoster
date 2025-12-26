@@ -437,7 +437,7 @@ class OptimizedHydrationService:
             for table in ["social_media_accounts", "posted_content", "top_engaged_followers"]:
                 try:
                     counts[table] = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar() or 0
-                except:
+                except Exception:
                     counts[table] = 0
         
         return {
@@ -537,7 +537,7 @@ class OptimizedHydrationService:
                 result = await orchestrator.fetch_profile(platform, identifier)
                 if result.success:
                     return orchestrator._parse_profile_data(platform, result.data)
-            except:
+            except Exception:
                 pass
             return None
         
@@ -776,7 +776,7 @@ class OptimizedHydrationService:
                 totals = conn.execute(text(
                     "SELECT value FROM hydration_cache WHERE key = 'account_totals'"
                 )).scalar()
-            except:
+            except Exception:
                 totals = None
         
         data = {

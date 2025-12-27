@@ -218,7 +218,8 @@ async def list_media(
     analyzed_only: bool = Query(default=False),
     media_type: Optional[str] = Query(default=None, description="Filter by media type: 'video' or 'image'"),
     curation_status: Optional[str] = Query(default=None, description="Filter by curation status: 'uncurated', 'pending', 'approved', 'rejected'"),
-    has_music: Optional[bool] = Query(default=None, description="Filter by background music: true=has music, false=no music, null=any")
+    has_music: Optional[bool] = Query(default=None, description="Filter by background music: true=has music, false=no music, null=any"),
+    format_type: Optional[str] = Query(default=None, description="Filter by format: 'broll_text', 'pure_broll', 'talking_head', 'voiceover'")
 ):
     """
     List all media from database.
@@ -254,10 +255,11 @@ async def list_media(
     # Store filters for use in the loop
     curation_status_filter = curation_status if curation_status else None
     has_music_filter = has_music  # Can be True, False, or None
+    format_type_filter = format_type  # broll_text, pure_broll, talking_head, voiceover
     
     # Increase limit to account for filtering (fetch more, filter, then return requested amount)
-    needs_extra_fetch = curation_status_filter or has_music_filter is not None
-    fetch_limit = limit * 3 if needs_extra_fetch else limit
+    needs_extra_fetch = curation_status_filter or has_music_filter is not None or format_type_filter
+    fetch_limit = limit * 5 if needs_extra_fetch else limit
     query = query.offset(offset).limit(fetch_limit)
     
     result = await db.execute(query)
@@ -393,6 +395,47 @@ async def list_media(
                 f"topics={topics_len}, "
                 f"score={analysis.get('pre_social_score')}"
             )
+        
+        # Apply format_type filter (b-roll candidates, talking head, etc.)
+        if format_type_filter:
+            from services.format_classifier import FormatClassifier, VideoFormat
+            classifier = FormatClassifier()
+            
+            # Quick classification based on available data
+            has_transcript = bool(transcript and len(transcript) > 50)
+            has_speech = bool(transcript and len(transcript) > 10)  # Simplified: transcript = speech
+            
+            # Check for face/person in visual analysis
+            has_face = False
+            face_presence_pct = 0.0
+            if video.visual_analysis:
+                va = video.visual_analysis
+                people = va.get('people_detected', [])
+                has_face = bool(people) or bool(va.get('has_person'))
+                face_presence_pct = 50.0 if has_face else 0.0
+            
+            classification = classifier.classify_from_analysis(
+                has_face=has_face,
+                face_presence_pct=face_presence_pct,
+                has_speech=has_speech,
+                speech_ratio=0.5 if has_speech else 0.0,
+                has_transcript=has_transcript,
+                transcript_length=len(transcript) if transcript else 0,
+            )
+            
+            # Filter based on format type
+            if format_type_filter == 'broll_text':
+                if classification.format != VideoFormat.BROLL_TEXT_CANDIDATE:
+                    continue
+            elif format_type_filter == 'pure_broll':
+                if classification.format not in [VideoFormat.PURE_BROLL, VideoFormat.MUSIC_ONLY, VideoFormat.SILENT]:
+                    continue
+            elif format_type_filter == 'talking_head':
+                if classification.format != VideoFormat.TALKING_HEAD:
+                    continue
+            elif format_type_filter == 'voiceover':
+                if classification.format != VideoFormat.VOICEOVER:
+                    continue
         
         try:
             # Ensure thumbnail_path is always included, even if None

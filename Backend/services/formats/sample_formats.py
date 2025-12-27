@@ -214,6 +214,131 @@ UGC_CORNER_FORMAT = {
     ]
 }
 
+# B-Roll + Text Overlay Format
+# Automatically finds videos with person not talking OR pure b-roll footage
+# Perfect for adding text overlays, quotes, tips, etc.
+BROLL_TEXT_FORMAT = {
+    "id": "broll_text_v1",
+    "name": "B-Roll + Text Overlay",
+    "description": "Auto-finds b-roll clips (person not talking or no person) and adds text overlays. Perfect for tips, quotes, and educational content.",
+    "version": "1.0.0",
+    "status": "active",
+    "composition": {
+        "remotionCompositionId": "BrollText",
+        "fps": 30,
+        "width": 1080,
+        "height": 1920,
+        "defaultDurationSec": 15,
+        "variantSets": [
+            {"id": "shorts_9x16", "label": "Shorts/Reels/TikTok", "width": 1080, "height": 1920, "maxDurationSec": 60},
+            {"id": "square_1x1", "label": "Square (Feed)", "width": 1080, "height": 1080, "maxDurationSec": 60},
+            {"id": "story_9x16", "label": "Story", "width": 1080, "height": 1920, "maxDurationSec": 15}
+        ]
+    },
+    "defaults": {
+        "params": {
+            "hookIntensity": 0.7,
+            "captionStyle": "bold_pop",
+            "textPosition": "center",  # center, top, bottom
+            "textAnimation": "fade_scale",  # fade_scale, typewriter, slide_up
+            "backgroundDim": 0.3,  # Dim the video slightly for text readability
+            "autoFindClips": True,  # Key feature: auto-discovery
+            "clipFilter": "broll_text"  # Uses format classifier
+        },
+        "providers": {
+            "music": {"provider": "library", "mood": "upbeat"},
+            "visuals": {"provider": "local"}
+        },
+        "qualityProfileId": "qp_shortform_v1"
+    },
+    "dataSources": [
+        # Auto-discover b-roll candidates from library
+        {
+            "id": "brollCandidates",
+            "type": "local_library",
+            "libraryId": "media_db",
+            "filter": {
+                "format_type": "broll_text",  # Person visible but not talking
+                "limit": 50,
+                "has_captions": False
+            }
+        },
+        {
+            "id": "pureBrollCandidates",
+            "type": "local_library",
+            "libraryId": "media_db",
+            "filter": {
+                "format_type": "pure_broll",  # No person, no speech
+                "limit": 50,
+                "has_captions": False
+            }
+        }
+    ],
+    "bindings": [
+        {"target": "visuals.broll", "from": "brollCandidates.items", "required": False},
+        {"target": "visuals.pureBroll", "from": "pureBrollCandidates.items", "required": False},
+        {"target": "script.segments", "from": "params.textSegments"}  # User provides text
+    ],
+    "gates": [
+        {"id": "max_duration", "type": "duration", "level": "fail", "config": {"maxSec": 60}},
+        {"id": "has_broll", "type": "visual", "level": "warn", "config": {"requireBroll": True}}
+    ]
+}
+
+# Pure B-Roll Format (no person at all)
+PURE_BROLL_FORMAT = {
+    "id": "pure_broll_v1",
+    "name": "Pure B-Roll + Text",
+    "description": "Auto-finds footage without people for cinematic text overlays. Great for motivational content, quotes, and aesthetic posts.",
+    "version": "1.0.0",
+    "status": "active",
+    "composition": {
+        "remotionCompositionId": "PureBrollText",
+        "fps": 30,
+        "width": 1080,
+        "height": 1920,
+        "defaultDurationSec": 15,
+        "variantSets": [
+            {"id": "shorts_9x16", "label": "Shorts/Reels/TikTok", "width": 1080, "height": 1920, "maxDurationSec": 60},
+            {"id": "square_1x1", "label": "Square (Feed)", "width": 1080, "height": 1080, "maxDurationSec": 60}
+        ]
+    },
+    "defaults": {
+        "params": {
+            "captionStyle": "clean_subs",
+            "textPosition": "center",
+            "textAnimation": "fade_scale",
+            "backgroundDim": 0.2,
+            "autoFindClips": True,
+            "clipFilter": "pure_broll"
+        },
+        "providers": {
+            "music": {"provider": "library", "mood": "calm"},
+            "visuals": {"provider": "local"}
+        },
+        "qualityProfileId": "qp_shortform_v1"
+    },
+    "dataSources": [
+        {
+            "id": "pureBroll",
+            "type": "local_library",
+            "libraryId": "media_db",
+            "filter": {
+                "format_type": "pure_broll",
+                "limit": 50,
+                "has_captions": False
+            }
+        }
+    ],
+    "bindings": [
+        {"target": "visuals.broll", "from": "pureBroll.items", "required": True},
+        {"target": "script.segments", "from": "params.textSegments"}
+    ],
+    "gates": [
+        {"id": "max_duration", "type": "duration", "level": "fail", "config": {"maxSec": 60}}
+    ]
+}
+
 # All sample formats
 SAMPLE_FORMATS = [
     DEV_VLOG_MEME_FORMAT,
@@ -221,6 +346,8 @@ SAMPLE_FORMATS = [
     TREND_BREAKDOWN_FORMAT,
     PRODUCT_PROMO_FORMAT,
     UGC_CORNER_FORMAT,
+    BROLL_TEXT_FORMAT,
+    PURE_BROLL_FORMAT,
 ]
 
 

@@ -766,6 +766,10 @@ app.include_router(coaching.router, tags=["Coaching"])
 from api.endpoints import narrative_builder
 app.include_router(narrative_builder.router, tags=["Narrative Builder"])
 
+# Format Discovery (B-Roll + Text Candidate Detection)
+from api.endpoints import format_discovery
+app.include_router(format_discovery.router, tags=["Format Discovery"])
+
 # Prompt Generation Settings (Voice, Tone, Style, Limits)
 from api.endpoints import prompt_settings
 app.include_router(prompt_settings.router, prefix="/api", tags=["Prompt Settings"])

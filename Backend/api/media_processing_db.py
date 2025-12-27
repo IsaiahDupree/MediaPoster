@@ -2636,6 +2636,29 @@ async def get_analysis(
             "message": "No analysis available. Run analysis first."
         }
     
+    # Build platform_content from deep_analysis if not already present
+    # This ensures AI-generated captions are available for publishing
+    platform_content = analysis.platform_content or []
+    
+    # If no platform_content but we have deep_analysis with suggested_caption,
+    # create platform_content entries for each platform
+    if not platform_content and analysis.deep_analysis:
+        deep = analysis.deep_analysis
+        suggested_caption = deep.get("suggested_caption") or deep.get("description") or ""
+        suggested_hashtags = deep.get("suggested_hashtags") or []
+        title = deep.get("title") or ""
+        
+        if suggested_caption or title:
+            # Create entries for common platforms using AI-generated content
+            for platform in ["tiktok", "instagram", "youtube", "twitter", "threads"]:
+                platform_content.append({
+                    "platform": platform,
+                    "title": title,
+                    "description": suggested_caption,
+                    "caption": suggested_caption,
+                    "hashtags": suggested_hashtags,
+                })
+    
     return {
         "media_id": media_id,
         "has_analysis": True,
@@ -2650,6 +2673,7 @@ async def get_analysis(
         "analyzed_at": analysis.analyzed_at.isoformat() if analysis.analyzed_at else None,
         "visual_analysis": analysis.visual_analysis,
         "deep_analysis": analysis.deep_analysis,  # Always include deep analysis if available
+        "platform_content": platform_content,  # Include platform-specific content for publishing
     }
 
 

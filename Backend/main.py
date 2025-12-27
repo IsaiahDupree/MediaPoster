@@ -798,6 +798,10 @@ app.include_router(influencer_analysis.router, prefix="/api/influencer", tags=["
 from api.endpoints import music_crawler
 app.include_router(music_crawler.router, prefix="/api/music-crawler", tags=["Music Crawler"])
 
+# Competitor Audit System
+from api.endpoints import competitor_audit
+app.include_router(competitor_audit.router, prefix="/api/competitor-audit", tags=["Competitor Audit"])
+
 # Publishing endpoints
 from api.endpoints import publishing
 app.include_router(publishing.router, prefix="/api/publishing", tags=["Publishing"])

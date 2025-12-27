@@ -770,6 +770,10 @@ app.include_router(narrative_builder.router, tags=["Narrative Builder"])
 from api.endpoints import format_discovery
 app.include_router(format_discovery.router, tags=["Format Discovery"])
 
+# Formats API (Video Format Templates)
+from api.endpoints import formats_api
+app.include_router(formats_api.router, tags=["Formats"])
+
 # Prompt Generation Settings (Voice, Tone, Style, Limits)
 from api.endpoints import prompt_settings
 app.include_router(prompt_settings.router, prefix="/api", tags=["Prompt Settings"])

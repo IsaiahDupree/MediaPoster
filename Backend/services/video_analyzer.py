@@ -97,10 +97,42 @@ class VideoAnalyzer:
             transcript_error = None
             has_audio = True
             
+            # Store full transcription metadata for later use
+            transcription_metadata = {}
+            
             try:
                 transcript_data = self.transcriber.transcribe_video(video_path)
                 transcript = transcript_data.get("text", "")
                 has_audio = not transcript_data.get("no_audio", False)
+                
+                # Capture all transcription metadata from OpenAI Whisper
+                transcription_metadata = {
+                    "language": transcript_data.get("language"),
+                    "duration": transcript_data.get("duration"),
+                    "words": transcript_data.get("words", []),
+                    "segments": transcript_data.get("segments", []),
+                    "word_count": len(transcript_data.get("words", [])),
+                    "segment_count": len(transcript_data.get("segments", [])),
+                }
+                
+                # Calculate transcription statistics
+                if transcript_data.get("words"):
+                    stats = self.transcriber.get_transcript_statistics(transcript_data)
+                    transcription_metadata["words_per_minute"] = stats.get("words_per_minute")
+                    transcription_metadata["significant_pauses"] = stats.get("significant_pauses", [])
+                    transcription_metadata["total_pauses"] = stats.get("total_pauses", 0)
+                
+                # Calculate average confidence from segments
+                segments = transcript_data.get("segments", [])
+                if segments:
+                    logprobs = [s.get("avg_logprob") for s in segments if s.get("avg_logprob") is not None]
+                    if logprobs:
+                        transcription_metadata["avg_confidence"] = sum(logprobs) / len(logprobs)
+                    
+                    # Calculate silence ratio from no_speech_prob
+                    no_speech_probs = [s.get("no_speech_prob", 0) for s in segments if s.get("no_speech_prob") is not None]
+                    if no_speech_probs:
+                        transcription_metadata["silence_ratio"] = sum(no_speech_probs) / len(no_speech_probs)
                 
                 if not transcript and not has_audio:
                     logger.warning(f"[Analysis] No audio stream in video {video_id}")
@@ -109,7 +141,7 @@ class VideoAnalyzer:
                     logger.warning(f"[Analysis] Empty transcript for {video_id}")
                     transcript_error = "Transcription returned empty"
                 else:
-                    logger.info(f"[Analysis] Transcript: {len(transcript)} chars, {len(transcript.split())} words")
+                    logger.info(f"[Analysis] Transcript: {len(transcript)} chars, {len(transcript.split())} words, lang={transcription_metadata.get('language')}")
                     
             except Exception as e:
                 logger.error(f"[Analysis] Transcription failed for {video_id}: {e}")
@@ -281,8 +313,27 @@ class VideoAnalyzer:
                 "format_tags": format_tags,
                 "music_suggestion": analysis.get("music_suggestion"),
                 "pre_social_score": float(raw_score),
-                "analysis_version": "3.0",  # Version with all deep analysis fields
-                "analyzed_at": datetime.utcnow()
+                "analysis_version": "3.2",  # Version with creative brief fields
+                "analyzed_at": datetime.utcnow(),
+                # Comprehensive transcription metadata from OpenAI Whisper
+                "transcription_data": transcription_metadata if transcription_metadata else None,
+                "transcription_language": transcription_metadata.get("language"),
+                "transcription_duration_sec": transcription_metadata.get("duration"),
+                "transcription_word_count": transcription_metadata.get("word_count"),
+                "transcription_segment_count": transcription_metadata.get("segment_count"),
+                "words_per_minute": transcription_metadata.get("words_per_minute"),
+                "significant_pauses": transcription_metadata.get("significant_pauses"),
+                "avg_confidence": transcription_metadata.get("avg_confidence"),
+                "silence_ratio": transcription_metadata.get("silence_ratio"),
+                "transcribed_at": datetime.utcnow() if transcription_metadata else None,
+                # NEW: Creative Brief Generation Fields (v3.2)
+                "pain_points": analysis.get("pain_points", []),
+                "emotional_drivers": analysis.get("emotional_drivers", []),
+                "emotional_journey": analysis.get("emotional_journey", {}),
+                "call_to_action": analysis.get("call_to_action", {}),
+                "scene_structure": analysis.get("scene_structure", []),
+                "content_type": analysis.get("content_type"),
+                "target_audience": analysis.get("target_audience", {}),
             }
             
             logger.info(f"[Analysis] Saving: source={analysis_source}, transcript={len(transcript)} chars, topics={len(topics)}, hooks={len(hooks)}, score={raw_score}")

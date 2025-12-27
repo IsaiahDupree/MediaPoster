@@ -782,6 +782,14 @@ app.include_router(optimal_posting_times.router, tags=["Optimal Posting Times"])
 from api.endpoints import media_creation
 app.include_router(media_creation.router, tags=["Media Creation"])
 
+# Formats System (Clips Studio - Parameterized Video Generation)
+from api.endpoints import formats
+app.include_router(formats.router, prefix="/api/formats", tags=["Formats"])
+
+# Content Pipeline (CopyPlan + RemotionRenderSpec)
+from api.endpoints import content_pipeline
+app.include_router(content_pipeline.router, prefix="/api/content-pipeline", tags=["Content Pipeline"])
+
 # Publishing endpoints
 from api.endpoints import publishing
 app.include_router(publishing.router, prefix="/api/publishing", tags=["Publishing"])

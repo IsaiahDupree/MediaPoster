@@ -16,7 +16,7 @@ import json
 import os
 from pathlib import Path
 
-from database.session import get_db
+from database.connection import get_db
 from services.music_selector import MusicSelector, MusicMatch, MusicTrack
 
 router = APIRouter(prefix="/api/music", tags=["Music Matching"])

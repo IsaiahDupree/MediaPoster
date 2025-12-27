@@ -36,6 +36,7 @@ class ScheduledPostCreate(BaseModel):
     post_type: str = "reel"
     thumbnail_url: Optional[str] = None
     blotato_account_id: Optional[str] = None  # Blotato account ID for publishing
+    media_type: Optional[str] = None  # 'reel' | 'story' for Instagram, defaults to 'reel'
 
 
 class ScheduledPostUpdate(BaseModel):
@@ -46,6 +47,7 @@ class ScheduledPostUpdate(BaseModel):
     status: Optional[str] = None
     account_id: Optional[str] = None
     account_username: Optional[str] = None
+    media_type: Optional[str] = None  # 'reel' | 'story' for Instagram
 
 
 class ScheduledPost(BaseModel):
@@ -62,6 +64,7 @@ class ScheduledPost(BaseModel):
     scheduled_at: str
     status: str
     post_type: str
+    media_type: Optional[str] = None  # 'reel' | 'story' for Instagram
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -217,7 +220,8 @@ async def list_scheduled_posts(
             v.source_uri as video_source_uri,
             v.id as video_id,  -- Add video_id for media-provider thumbnail lookup
             COALESCE(sp.clip_id::text, sp.content_variant_id::text, sp.content_id) as media_ref_id,
-            COALESCE(sp.source, 'manual') as source
+            COALESCE(sp.source, 'manual') as source,
+            sp.media_type
         FROM scheduled_posts sp
         LEFT JOIN video_clips vc ON vc.id = sp.clip_id  -- Join video_clips to get video_id
         LEFT JOIN videos v ON v.id = COALESCE(vc.video_id, sp.content_variant_id)  -- Join videos using video_id from clip or content_variant_id
@@ -285,11 +289,12 @@ async def list_scheduled_posts(
             "scheduled_at": str(row[5]) if row[5] else None,
             "status": row[6],
             "post_type": "reel",
+            "media_type": row[21] if len(row) > 21 else None,  # media_type for Story/Reel
             "created_at": str(row[9]) if row[9] else None,
             "updated_at": str(row[10]) if row[10] else None,
             "platform_url": row[8],
             "published_at": str(row[11]) if row[11] else None,
-            "source": row[20] if len(row) > 20 else "manual",  # Updated index
+            "source": row[20] if len(row) > 20 else "manual",
         })
     
     return {"posts": posts, "total": len(posts)}
@@ -319,15 +324,20 @@ async def create_scheduled_post(post: ScheduledPostCreate):
             # Not a UUID, store as content_id
             pass
         
+        # Default media_type to 'reel' for Instagram if not specified
+        media_type_value = post.media_type
+        if post.platform.lower() == 'instagram' and not media_type_value:
+            media_type_value = 'reel'
+        
         result = conn.execute(text("""
             INSERT INTO scheduled_posts 
             (content_id, clip_id, title, caption, hashtags, thumbnail_url, platform,
              account_id, account_username, platform_account_id, blotato_account_id, 
-             scheduled_time, scheduled_at, post_type, status)
+             scheduled_time, scheduled_at, post_type, media_type, status)
             VALUES 
             (:content_id, :clip_id, :title, :caption, :hashtags, :thumbnail_url, :platform,
              :account_id, :account_username, :platform_account_id, :blotato_account_id, 
-             :scheduled_time, :scheduled_at, :post_type, 'scheduled')
+             :scheduled_time, :scheduled_at, :post_type, :media_type, 'scheduled')
             RETURNING id
         """), {
             "content_id": content_id_value,
@@ -344,6 +354,7 @@ async def create_scheduled_post(post: ScheduledPostCreate):
             "scheduled_time": post.scheduled_at,
             "scheduled_at": post.scheduled_at,
             "post_type": post.post_type,
+            "media_type": media_type_value,
         })
         conn.commit()
         new_id = result.fetchone()[0]

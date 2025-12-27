@@ -1335,6 +1335,18 @@ class VideoAnalysis(Base):
     music_alternatives = Column(JSONB)  # Array of alternative music options
     music_matched_at = Column(TIMESTAMP(timezone=True))  # When music matching was performed
     
+    # Comprehensive transcription metadata (OpenAI Whisper)
+    transcription_data = Column(JSONB)  # Full transcription response (words, segments, etc.)
+    transcription_language = Column(Text)  # Detected language (e.g., 'en', 'es')
+    transcription_duration_sec = Column(Numeric(10, 3))  # Duration in seconds from Whisper
+    transcription_word_count = Column(Integer)  # Total word count
+    transcription_segment_count = Column(Integer)  # Total segment count
+    words_per_minute = Column(Numeric(6, 2))  # Speaking pace
+    significant_pauses = Column(JSONB)  # Array of pauses > 1s
+    avg_confidence = Column(Numeric(6, 4))  # Average logprob across segments
+    silence_ratio = Column(Numeric(4, 3))  # Ratio of silence/no-speech
+    transcribed_at = Column(TIMESTAMP(timezone=True))  # When transcription was performed
+    
     # Sentiment analysis fields
     sentiment_score = Column(Numeric(4, 3))  # -1.0 to 1.0
     sentiment_label = Column(Text)  # 'very_negative', 'negative', 'neutral', 'positive', 'very_positive'
@@ -1343,6 +1355,15 @@ class VideoAnalysis(Base):
     # Curation fields
     curation_status = Column(Text)  # 'pending', 'approved', 'rejected'
     curated_at = Column(TIMESTAMP(timezone=True))
+    
+    # Creative Brief Generation Fields (Enhanced Analysis v3.2)
+    pain_points = Column(ARRAY(Text))  # Problems/frustrations the content addresses
+    emotional_drivers = Column(ARRAY(Text))  # Motivations (FOMO, transformation, belonging)
+    emotional_journey = Column(JSONB)  # {opening_emotion, peak_emotion, closing_emotion}
+    call_to_action = Column(JSONB)  # {type, text, strength, timestamp_hint}
+    scene_structure = Column(JSONB)  # [{start_sec, end_sec, role, summary, emotion}]
+    content_type = Column(Text)  # tutorial/storytime/review/transformation/etc.
+    target_audience = Column(JSONB)  # {demographic, interests[], awareness_level}
     
     # Relationships
     video = relationship("Video", back_populates="analysis")

@@ -74,6 +74,7 @@ class ScheduleRequest(BaseModel):
     title: Optional[str] = None  # Proper title, not filename
     idempotency_key: Optional[str] = None  # Prevent duplicate scheduling
     platform_account_ids: Optional[Dict[str, str]] = None  # Platform -> Blotato account ID mapping
+    media_type: Optional[str] = None  # 'reel' | 'story' for Instagram (default: 'reel')
 
 class PostResponse(BaseModel):
     post_id: str

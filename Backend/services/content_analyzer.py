@@ -70,48 +70,127 @@ class ContentAnalyzer:
             raise RuntimeError(f"Content analysis failed: {e}")
     
     def _build_analysis_prompt(self, transcript: str, metadata: dict = None) -> str:
-        """Build GPT-4 analysis prompt"""
+        """Build GPT-4 analysis prompt with comprehensive extraction"""
         
-        prompt = """Analyze this video transcript for viral potential and content patterns.
+        # Calculate estimated duration for scene structure
+        word_count = len(transcript.split())
+        estimated_duration = (word_count / 150) * 60  # ~150 words per minute
+        
+        prompt = """Analyze this video transcript for viral potential, content patterns, and creative brief generation.
 
 TRANSCRIPT:
 """ + transcript + """
 
-Provide analysis in JSON format with the following structure:
+Provide COMPREHENSIVE analysis in JSON format with the following structure:
 {
   "topics": [list of 3-5 main topics/themes],
   "hooks": [list of 2-4 attention-grabbing phrases or hooks],
-  "tone": "overall tone (energetic/calm/educational/entertaining/inspirational)",
+  "detected_hook": "the single best/strongest hook phrase from the content",
+  "tone": "overall tone (energetic/calm/educational/entertaining/inspirational/motivational/humorous)",
   "pacing": "delivery speed (fast/medium/slow)",
   "key_moments": {
-    "timestamp": "description of important moment"
+    "0-3": "hook/opening description",
+    "middle": "main content description",
+    "end": "closing/CTA description"
   },
-  "emotional_triggers": [list of emotional elements used],
-  "calls_to_action": [any CTAs mentioned],
+  
+  "pain_points": [
+    "specific problem or frustration the content addresses",
+    "another pain point mentioned or implied"
+  ],
+  
+  "emotional_drivers": [
+    "primary emotional motivation (e.g., fear of missing out, desire for transformation)",
+    "secondary emotional element"
+  ],
+  
+  "emotional_journey": {
+    "opening_emotion": "emotion evoked at start (curiosity/shock/relatability)",
+    "peak_emotion": "strongest emotional moment (excitement/revelation/empathy)",
+    "closing_emotion": "ending emotional state (inspiration/urgency/satisfaction)"
+  },
+  
+  "call_to_action": {
+    "type": "follow/subscribe/purchase/dm/link/comment/share/none",
+    "text": "exact CTA text if present, or suggested CTA if none",
+    "strength": "strong/medium/weak/none",
+    "timestamp_hint": "beginning/middle/end"
+  },
+  
+  "scene_structure": [
+    {
+      "start_sec": 0,
+      "end_sec": 3,
+      "role": "hook",
+      "summary": "attention-grabbing opening",
+      "emotion": "curiosity"
+    },
+    {
+      "start_sec": 3,
+      "end_sec": 15,
+      "role": "problem",
+      "summary": "establishes the pain point",
+      "emotion": "relatability"
+    },
+    {
+      "start_sec": 15,
+      "end_sec": 25,
+      "role": "solution",
+      "summary": "presents the answer/method",
+      "emotion": "hope"
+    },
+    {
+      "start_sec": 25,
+      "end_sec": 30,
+      "role": "cta",
+      "summary": "call to action",
+      "emotion": "urgency"
+    }
+  ],
+  
   "viral_score": <0-100 score for viral potential>,
   "viral_analysis": "explanation of viral potential",
-  "improvement_suggestions": [2-3 suggestions to increase engagement],
+  "improvement_suggestions": [2-3 actionable suggestions to increase engagement],
+  
+  "content_type": "tutorial/storytime/review/transformation/lifestyle/comedy/educational/promotional",
+  
+  "target_audience": {
+    "demographic": "who this appeals to",
+    "interests": ["relevant interests"],
+    "awareness_level": "problem-aware/solution-aware/product-aware"
+  },
+  
   "music_suggestion": {
-      "mood": "mood of the music (e.g., upbeat, suspenseful, chill)",
-      "genre": "genre (e.g., lo-fi, cinematic, hip-hop)",
-      "tempo": "fast/medium/slow",
-      "reasoning": "why this music fits"
+    "mood": "mood of the music (e.g., upbeat, suspenseful, chill, inspiring)",
+    "genre": "genre (e.g., lo-fi, cinematic, hip-hop, electronic, acoustic)",
+    "tempo": "fast/medium/slow",
+    "energy": "high/medium/low",
+    "reasoning": "why this music fits the content"
   }
 }
 
+IMPORTANT EXTRACTION GUIDELINES:
+1. PAIN POINTS: Identify specific problems, frustrations, or challenges mentioned or implied
+2. EMOTIONAL DRIVERS: What motivates the viewer - fear, desire, curiosity, belonging, transformation
+3. CTA: Even if no explicit CTA, suggest what would work best for this content
+4. SCENE STRUCTURE: Break down the content flow - estimate timestamps based on ~150 words/minute
+5. Focus on actionable insights for recreating similar content
+
 Focus on identifying:
-- Strong opening hooks
-- Emotional resonance
-- Pattern interrupts
+- Strong opening hooks (first 3 seconds)
+- Emotional resonance and relatability
+- Pattern interrupts and attention retention
 - Social proof elements
-- Scarcity/urgency
+- Scarcity/urgency triggers
 - Curiosity gaps
-- Relatability
+- Transformation promises
 - Suitable background music to enhance the mood
 """
         
         if metadata:
-            prompt += "\nVIDEO METADATA: " + json.dumps(metadata)
+            prompt += f"\n\nVIDEO METADATA: {json.dumps(metadata)}"
+            if metadata.get("duration"):
+                prompt += f"\nNote: Actual video duration is {metadata['duration']} seconds. Adjust scene_structure timestamps accordingly."
         
         return prompt
     
@@ -123,15 +202,49 @@ Focus on identifying:
         if raw_score <= 10:
             raw_score = raw_score * 10  # Convert 0-10 scale to 0-100
         
+        # Extract detected_hook - use first hook if not explicitly provided
+        detected_hook = raw_analysis.get("detected_hook")
+        if not detected_hook and raw_analysis.get("hooks"):
+            detected_hook = raw_analysis["hooks"][0]
+        
+        # Normalize CTA - handle both old format (list) and new format (object)
+        cta_data = raw_analysis.get("call_to_action", {})
+        if isinstance(cta_data, list):
+            # Old format - convert to new
+            cta_data = {
+                "type": "none" if not cta_data else "follow",
+                "text": cta_data[0] if cta_data else "",
+                "strength": "medium" if cta_data else "none"
+            }
+        
         return {
+            # Core fields
             "topics": raw_analysis.get("topics", []),
             "hooks": raw_analysis.get("hooks", []),
+            "detected_hook": detected_hook,
             "tone": raw_analysis.get("tone", "unknown"),
             "pacing": raw_analysis.get("pacing", "medium"),
             "key_moments": raw_analysis.get("key_moments", {}),
             "pre_social_score": raw_score,
-            "emotional_triggers": raw_analysis.get("emotional_triggers", []),
-            "calls_to_action": raw_analysis.get("calls_to_action", []),
+            
+            # NEW: Pain points and emotional drivers for creative briefs
+            "pain_points": raw_analysis.get("pain_points", []),
+            "emotional_drivers": raw_analysis.get("emotional_drivers", []),
+            "emotional_journey": raw_analysis.get("emotional_journey", {}),
+            
+            # NEW: Structured CTA extraction
+            "call_to_action": cta_data,
+            
+            # NEW: Scene structure for video generation
+            "scene_structure": raw_analysis.get("scene_structure", []),
+            
+            # NEW: Content classification
+            "content_type": raw_analysis.get("content_type", "general"),
+            "target_audience": raw_analysis.get("target_audience", {}),
+            
+            # Existing fields (backward compatible)
+            "emotional_triggers": raw_analysis.get("emotional_triggers", raw_analysis.get("emotional_drivers", [])),
+            "calls_to_action": [cta_data.get("text")] if cta_data.get("text") else [],
             "viral_analysis": raw_analysis.get("viral_analysis", ""),
             "suggestions": raw_analysis.get("improvement_suggestions", []),
             "music_suggestion": raw_analysis.get("music_suggestion", {})

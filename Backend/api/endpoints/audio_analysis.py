@@ -12,7 +12,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
-from database.session import get_db
+from database.connection import get_db
 from services.audio_analyzer import get_audio_analyzer, AudioAnalysisResult
 
 router = APIRouter(prefix="/api/analysis/audio", tags=["Audio Analysis"])
@@ -44,8 +44,63 @@ async def health_check():
     }
 
 
-@router.post("/{media_id}")
-async def analyze_audio(
+class BatchAnalysisRequest(BaseModel):
+    """Request for batch audio analysis"""
+    media_ids: List[str] = []
+
+
+# NOTE: /batch MUST be defined BEFORE /{media_id} for route matching to work correctly
+@router.post("/batch")
+async def analyze_audio_batch(
+    request: BatchAnalysisRequest,
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Analyze audio for multiple videos.
+    Returns summary of results.
+    """
+    media_ids = request.media_ids
+    
+    if not media_ids:
+        return {
+            "total": 0,
+            "success": 0,
+            "failed": 0,
+            "results": {},
+            "message": "No media IDs provided"
+        }
+    
+    results = {
+        "total": len(media_ids),
+        "success": 0,
+        "failed": 0,
+        "results": {}
+    }
+    
+    for media_id in media_ids:
+        try:
+            response = await analyze_audio_single(media_id, db)
+            results["results"][media_id] = {
+                "success": response.success,
+                "has_music": response.has_background_music,
+                "audio_type": response.audio_type
+            }
+            if response.success:
+                results["success"] += 1
+            else:
+                results["failed"] += 1
+        except Exception as e:
+            results["results"][media_id] = {
+                "success": False,
+                "error": str(e)
+            }
+            results["failed"] += 1
+    
+    return results
+
+
+@router.post("/analyze/{media_id}")
+async def analyze_audio_single(
     media_id: str,
     db: AsyncSession = Depends(get_db)
 ) -> AudioAnalysisResponse:
@@ -65,7 +120,7 @@ async def analyze_audio(
         result = await db.execute(text("""
             SELECT id, source_uri, file_name 
             FROM videos 
-            WHERE id = :media_id::uuid
+            WHERE id = CAST(:media_id AS uuid)
         """), {"media_id": media_id})
         video = result.fetchone()
         
@@ -106,7 +161,7 @@ async def analyze_audio(
                 music_characteristics = :music_chars,
                 copyright_risk = :copyright_risk,
                 audio_analyzed_at = NOW()
-            WHERE video_id = :media_id::uuid
+            WHERE video_id = CAST(:media_id AS uuid)
         """), {
             "media_id": media_id,
             "audio_analysis": analysis_result.to_dict(),
@@ -138,6 +193,74 @@ async def analyze_audio(
     )
 
 
+# NOTE: /list MUST be defined BEFORE /{media_id} for route matching to work correctly
+@router.get("/list")
+async def list_analyzed_media(
+    limit: int = 50,
+    offset: int = 0,
+    has_music: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    List media that have been analyzed for audio.
+    Optionally filter by has_background_music status.
+    """
+    try:
+        # Build query
+        query = """
+            SELECT 
+                va.video_id,
+                v.file_name,
+                va.has_background_music,
+                va.audio_type,
+                va.music_confidence,
+                va.copyright_risk,
+                va.audio_analyzed_at
+            FROM video_analysis va
+            JOIN videos v ON v.id = va.video_id
+            WHERE va.audio_analyzed_at IS NOT NULL
+        """
+        params = {"limit": limit, "offset": offset}
+        
+        if has_music is not None:
+            query += " AND va.has_background_music = :has_music"
+            params["has_music"] = has_music
+        
+        query += " ORDER BY va.audio_analyzed_at DESC LIMIT :limit OFFSET :offset"
+        
+        result = await db.execute(text(query), params)
+        rows = result.fetchall()
+        
+        items = []
+        for row in rows:
+            items.append({
+                "media_id": str(row[0]),
+                "file_name": row[1],
+                "has_background_music": row[2],
+                "audio_type": row[3],
+                "music_confidence": float(row[4]) if row[4] else None,
+                "copyright_risk": row[5],
+                "analyzed_at": row[6].isoformat() if row[6] else None
+            })
+        
+        return {
+            "items": items,
+            "total": len(items),
+            "limit": limit,
+            "offset": offset
+        }
+        
+    except Exception as e:
+        logger.error(f"[AudioAnalysis] Failed to list analyzed media: {e}")
+        return {
+            "items": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "error": str(e)
+        }
+
+
 @router.get("/{media_id}")
 async def get_audio_analysis(
     media_id: str,
@@ -159,7 +282,7 @@ async def get_audio_analysis(
                 copyright_risk,
                 audio_analyzed_at
             FROM video_analysis 
-            WHERE video_id = :media_id::uuid
+            WHERE video_id = CAST(:media_id AS uuid)
         """), {"media_id": media_id})
         row = result.fetchone()
         
@@ -187,42 +310,10 @@ async def get_audio_analysis(
         
     except Exception as e:
         logger.error(f"[AudioAnalysis] Failed to get analysis: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return AudioAnalysisResponse(
+            success=False,
+            media_id=media_id,
+            error=f"Failed to retrieve analysis: {str(e)}"
+        )
 
 
-@router.post("/batch")
-async def analyze_audio_batch(
-    media_ids: List[str],
-    db: AsyncSession = Depends(get_db)
-) -> Dict[str, Any]:
-    """
-    Analyze audio for multiple videos.
-    Returns summary of results.
-    """
-    results = {
-        "total": len(media_ids),
-        "success": 0,
-        "failed": 0,
-        "results": {}
-    }
-    
-    for media_id in media_ids:
-        try:
-            response = await analyze_audio(media_id, db)
-            results["results"][media_id] = {
-                "success": response.success,
-                "has_music": response.has_background_music,
-                "audio_type": response.audio_type
-            }
-            if response.success:
-                results["success"] += 1
-            else:
-                results["failed"] += 1
-        except Exception as e:
-            results["results"][media_id] = {
-                "success": False,
-                "error": str(e)
-            }
-            results["failed"] += 1
-    
-    return results

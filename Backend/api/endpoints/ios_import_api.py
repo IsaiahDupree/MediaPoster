@@ -19,9 +19,10 @@ from services.event_bus import EventBus, Topics
 router = APIRouter(prefix="/api/import/ios", tags=["iOS Import"])
 
 # Storage paths
+from config.paths import get_iphone_import_dir
 IMPORT_HISTORY_FILE = Path("/tmp/mediaposter/ios_import_history.json")
 IMPORT_JOBS_FILE = Path("/tmp/mediaposter/ios_import_jobs.json")
-DEFAULT_IMPORT_PATH = Path.home() / "Documents" / "IphoneImport"
+DEFAULT_IMPORT_PATH = get_iphone_import_dir()
 
 # Ensure directories exist
 IMPORT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)

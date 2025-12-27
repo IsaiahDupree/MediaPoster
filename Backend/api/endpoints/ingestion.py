@@ -183,9 +183,10 @@ async def start_ingestion(config: IngestionConfig, background_tasks: BackgroundT
             except Exception:
                 pass
     
-    # Create service - default to iPhone import directory
+    # Create service - default to iPhone import directory (My Passport or local fallback)
+    from config.paths import get_iphone_import_dir
     watch_dirs = config.watch_directories or [
-        str(Path.home() / "Documents" / "IphoneImport")
+        str(get_iphone_import_dir())
     ]
     
     ingestion_service = VideoIngestionService(
@@ -278,12 +279,13 @@ async def auto_sync_iphone_import(background_tasks: BackgroundTasks, limit: int 
     This runs on startup or can be triggered manually.
     """
     from sqlalchemy import create_engine, text
+    from config.paths import get_iphone_import_dir
     import os
     
-    iphone_import_dir = Path.home() / "Documents" / "IphoneImport"
+    iphone_import_dir = get_iphone_import_dir()
     
     if not iphone_import_dir.exists():
-        return {"error": "IphoneImport directory not found", "path": str(iphone_import_dir)}
+        return {"error": "Media import directory not found", "path": str(iphone_import_dir)}
     
     # Get all video files
     video_extensions = {'.mp4', '.mov', '.m4v', '.avi', '.mkv'}
@@ -388,8 +390,9 @@ async def auto_sync_iphone_import(background_tasks: BackgroundTasks, limit: int 
 
 @router.get("/iphone-import-stats")
 async def get_iphone_import_stats():
-    """Get stats about the IphoneImport directory"""
-    iphone_import_dir = Path.home() / "Documents" / "IphoneImport"
+    """Get stats about the media import directory (My Passport or local fallback)"""
+    from config.paths import get_iphone_import_dir
+    iphone_import_dir = get_iphone_import_dir()
     
     if not iphone_import_dir.exists():
         return {

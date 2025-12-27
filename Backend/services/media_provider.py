@@ -263,12 +263,21 @@ class MediaProviderService:
     def _map_to_container_path(self, host_path: str) -> str:
         """Map host filesystem paths to Docker container paths.
         
-        Maps ~/Documents/IphoneImport to /media/IphoneImport (Docker volume mount)
+        Maps various host paths to Docker volume mounts:
+        - ~/Documents/IphoneImport -> /media/IphoneImport
+        - /Volumes/My Passport/MediaPoster/workspace1/iphone_import -> /media/IphoneImport
         """
         if not host_path:
             return host_path
         import re
-        # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/IphoneImport
+        
+        # Map My Passport path to container path
+        passport_pattern = r'^/Volumes/My Passport/MediaPoster/workspace1/iphone_import/(.*)$'
+        match = re.match(passport_pattern, host_path)
+        if match:
+            return f"/media/IphoneImport/{match.group(1)}"
+        
+        # Map old ~/Documents/IphoneImport path (legacy)
         pattern = r'^/Users/[^/]+/Documents/IphoneImport/(.*)$'
         match = re.match(pattern, host_path)
         if match:

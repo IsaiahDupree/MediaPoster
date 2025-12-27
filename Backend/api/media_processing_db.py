@@ -609,10 +609,11 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             analyzing_count += job.get("total", 0) - job.get("completed", 0) - job.get("failed", 0)
     
     # =====================================================================
-    # FOLDER STATS (Actual IphoneImport folder)
+    # FOLDER STATS (Media Import folder - My Passport or local fallback)
     # =====================================================================
+    from config.paths import get_iphone_import_dir
     folder_stats = None
-    iphone_import_dir = Path.home() / "Documents" / "IphoneImport"
+    iphone_import_dir = get_iphone_import_dir()
     if iphone_import_dir.exists():
         try:
             video_extensions = {'.mp4', '.mov', '.MOV', '.MP4', '.avi', '.mkv', '.m4v', '.webm'}

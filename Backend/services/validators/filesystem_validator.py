@@ -9,8 +9,9 @@ async def validate_file_system() -> ValidationResult:
     """Validate file system paths and permissions"""
     result = ValidationResult(component="file_system")
     
-    # Check iPhone import directory
-    iphone_import = Path.home() / "Documents" / "IphoneImport"
+    # Check iPhone import directory (My Passport or local fallback)
+    from config.paths import get_iphone_import_dir
+    iphone_import = get_iphone_import_dir()
     if not iphone_import.exists():
         result.add_issue(
             ValidationSeverity.WARNING,

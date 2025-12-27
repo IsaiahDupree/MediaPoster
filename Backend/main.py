@@ -750,6 +750,10 @@ app.include_router(post_social_score.router, tags=["Post-Social Score"])
 from api.endpoints import audio_analysis
 app.include_router(audio_analysis.router, tags=["Audio Analysis"])
 
+# Music Matching (Auto Background Music Suggestion)
+from api.endpoints import music_matching
+app.include_router(music_matching.router, tags=["Music Matching"])
+
 # Goal Recommendations (Phase 3)
 from api.endpoints import goal_recommendations
 app.include_router(goal_recommendations.router, tags=["Goal Recommendations"])

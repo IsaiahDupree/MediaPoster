@@ -1328,6 +1328,13 @@ class VideoAnalysis(Base):
     copyright_risk = Column(Text, default='unknown')  # 'low', 'medium', 'high', 'unknown'
     audio_analyzed_at = Column(TIMESTAMP(timezone=True))  # When audio was analyzed
     
+    # Music matching fields (Auto Background Music Suggestion)
+    suggested_music_id = Column(Text)  # ID of auto-suggested music track
+    music_match_score = Column(Numeric(4, 3))  # Compatibility score 0.0-1.0
+    music_match_reasoning = Column(Text)  # Explanation of why music was matched
+    music_alternatives = Column(JSONB)  # Array of alternative music options
+    music_matched_at = Column(TIMESTAMP(timezone=True))  # When music matching was performed
+    
     # Sentiment analysis fields
     sentiment_score = Column(Numeric(4, 3))  # -1.0 to 1.0
     sentiment_label = Column(Text)  # 'very_negative', 'negative', 'neutral', 'positive', 'very_positive'

@@ -746,6 +746,10 @@ app.include_router(venv_status.router, tags=["Virtual Environments"])
 from api.endpoints import post_social_score
 app.include_router(post_social_score.router, tags=["Post-Social Score"])
 
+# Audio Analysis (Background Music Detection)
+from api.endpoints import audio_analysis
+app.include_router(audio_analysis.router, tags=["Audio Analysis"])
+
 # Goal Recommendations (Phase 3)
 from api.endpoints import goal_recommendations
 app.include_router(goal_recommendations.router, tags=["Goal Recommendations"])

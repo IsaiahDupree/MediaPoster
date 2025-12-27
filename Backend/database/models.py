@@ -1318,6 +1318,16 @@ class VideoAnalysis(Base):
     pillar_tags = Column(ARRAY(Text))  # Content pillar categorization
     format_tags = Column(ARRAY(Text))  # Format tags
     
+    # Audio analysis fields (Background Music Detection)
+    audio_analysis = Column(JSONB)  # Full audio analysis result
+    has_background_music = Column(Boolean)  # Quick boolean for filtering
+    audio_type = Column(Text)  # 'speech_only', 'music_only', 'mixed', 'silence', 'ambient'
+    music_confidence = Column(Numeric(4, 3))  # 0.0-1.0 confidence
+    speech_ratio = Column(Numeric(4, 3))  # Speech ratio 0.0-1.0
+    music_characteristics = Column(JSONB)  # {tempo_bpm, energy, genre_hints, mood}
+    copyright_risk = Column(Text, default='unknown')  # 'low', 'medium', 'high', 'unknown'
+    audio_analyzed_at = Column(TIMESTAMP(timezone=True))  # When audio was analyzed
+    
     # Sentiment analysis fields
     sentiment_score = Column(Numeric(4, 3))  # -1.0 to 1.0
     sentiment_label = Column(Text)  # 'very_negative', 'negative', 'neutral', 'positive', 'very_positive'

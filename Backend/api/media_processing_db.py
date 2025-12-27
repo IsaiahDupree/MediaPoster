@@ -217,7 +217,8 @@ async def list_media(
     offset: int = Query(default=0, ge=0),
     analyzed_only: bool = Query(default=False),
     media_type: Optional[str] = Query(default=None, description="Filter by media type: 'video' or 'image'"),
-    curation_status: Optional[str] = Query(default=None, description="Filter by curation status: 'uncurated', 'pending', 'approved', 'rejected'")
+    curation_status: Optional[str] = Query(default=None, description="Filter by curation status: 'uncurated', 'pending', 'approved', 'rejected'"),
+    has_music: Optional[bool] = Query(default=None, description="Filter by background music: true=has music, false=no music, null=any")
 ):
     """
     List all media from database.
@@ -250,11 +251,13 @@ async def list_media(
     # Note: curation_status is stored in video_analysis table, not videos table
     # We'll filter after fetching analysis data for each video
     
-    # Store curation_status_filter for use in the loop
+    # Store filters for use in the loop
     curation_status_filter = curation_status if curation_status else None
+    has_music_filter = has_music  # Can be True, False, or None
     
     # Increase limit to account for filtering (fetch more, filter, then return requested amount)
-    fetch_limit = limit * 3 if curation_status_filter else limit
+    needs_extra_fetch = curation_status_filter or has_music_filter is not None
+    fetch_limit = limit * 3 if needs_extra_fetch else limit
     query = query.offset(offset).limit(fetch_limit)
     
     result = await db.execute(query)
@@ -267,12 +270,13 @@ async def list_media(
         analysis = None
         curation_status = None
         try:
-            # Fetch analysis with all searchable fields
+            # Fetch analysis with all searchable fields including audio analysis
             try:
                 analysis_result = await db.execute(
                     text("""SELECT video_id, transcript, topics, pre_social_score, curation_status,
                             hooks, tone, detected_hook, 
-                            visual_analysis->>'visual_summary' as visual_summary
+                            visual_analysis->>'visual_summary' as visual_summary,
+                            has_background_music, audio_type, music_confidence
                         FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"""),
                     {"vid": str(video.id)}
                 )
@@ -297,6 +301,14 @@ async def list_media(
                     elif curation_status_filter == 'rejected':
                         if curation_status != 'rejected':
                             continue
+                
+                # Apply has_music filter (index 9 = has_background_music)
+                if has_music_filter is not None and row and len(row) > 9:
+                    video_has_music = row[9]  # has_background_music column
+                    if has_music_filter is True and video_has_music is not True:
+                        continue  # Skip videos without music
+                    elif has_music_filter is False and video_has_music is not False:
+                        continue  # Skip videos with music
             except Exception as curation_error:
                 # If query fails, try simpler query
                 logger.warning(f"Full analysis query failed for video {video.id}: {curation_error}")

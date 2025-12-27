@@ -344,14 +344,19 @@ async def generate_captions(
     platform_limits = get_platform_limits(request.platform)
     title_target = platform_limits.title_target  # 20% buffer already applied (80% of max)
     
-    # Always use AI to generate title if we have enough context
-    if transcript or topics or hooks:
+    # ALWAYS generate a new AI title when regenerate is called
+    # This is a regeneration endpoint - user expects new content each time
+    logger.info(f"[GenerateCaptions] 🔄 REGENERATION requested - will always generate new AI title")
+    logger.info(f"[GenerateCaptions] 📊 Context available: transcript={len(transcript) if transcript else 0} chars, topics={len(topics) if topics else 0}, hooks={len(hooks) if hooks else 0}")
+    
+    # Always try to generate with AI, even with minimal context
+    if True:  # Always attempt AI generation for regeneration
         try:
             from openai import OpenAI
             import os
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             
-            # Build rich context for AI
+            # Build rich context for AI - use whatever is available
             context_parts = []
             if topics:
                 context_parts.append(f"Main Topics: {', '.join(topics[:5])}")
@@ -360,51 +365,67 @@ async def generate_captions(
             if transcript:
                 context_parts.append(f"Content Summary: {transcript[:500]}")
             
-            context = "\n".join(context_parts)
+            # If no context available, use filename as hint
+            if not context_parts and original_filename:
+                context_parts.append(f"Original filename hint: {original_filename}")
+            
+            context = "\n".join(context_parts) if context_parts else "General engaging content"
             
             # Generate creative title using AI with platform-specific limit (20% of max)
-            title_prompt = f"""Based on this video analysis, create a SHORT, catchy, viral-worthy title for {request.platform}.
+            # Use higher temperature (0.95) to ensure variety on each regeneration
+            title_prompt = f"""Based on this video analysis, create a FRESH, NEW, catchy, viral-worthy title for {request.platform}.
 REQUIREMENTS:
-- Maximum {title_target} characters (strict limit - this is 20% of {request.platform}'s max title length)
+- Maximum {title_target} characters (strict limit)
 - Punchy and attention-grabbing
 - NO quotes, NO hashtags, NO emojis
 - Make people want to click and watch
 - Optimized for {request.platform} audience
+- BE CREATIVE - this is a REGENERATION request, generate something DIFFERENT each time
 
 Analysis Context:
 {context}
 
-Generate ONLY the title, no quotes, no explanation."""
+Generate ONLY the title, no quotes, no explanation. Make it unique and fresh!"""
 
-            logger.info(f"[GenerateCaptions] 🤖 Calling OpenAI to generate platform-specific title (target: {title_target} chars for {request.platform})...")
+            logger.info(f"[GenerateCaptions] 🤖 Calling OpenAI to generate NEW title (target: {title_target} chars for {request.platform})...")
             
             title_response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": f"You are a viral content title expert for {request.platform}. Create short, punchy titles under {title_target} characters."},
+                    {"role": "system", "content": f"You are a viral content title expert for {request.platform}. Create short, punchy, UNIQUE titles under {title_target} characters. Each regeneration should produce a DIFFERENT title."},
                     {"role": "user", "content": title_prompt}
                 ],
                 max_tokens=60,
-                temperature=0.8
+                temperature=0.95  # Higher temperature for more variety on regeneration
             )
             
             ai_title = title_response.choices[0].message.content.strip().strip('"').strip("'")
-            # Enforce platform-specific limit
-            if ai_title and len(ai_title) > 5:
+            logger.info(f"[GenerateCaptions] 🎯 Raw AI title response: '{ai_title}'")
+            
+            # Enforce platform-specific limit - accept any non-empty title
+            if ai_title and len(ai_title) > 3:
                 if len(ai_title) > title_target:
                     ai_title = ai_title[:title_target - 3] + "..."
                 title = ai_title
-                logger.info(f"[GenerateCaptions] ✨ AI Generated title ({len(title)}/{title_target} chars): {title}")
+                logger.info(f"[GenerateCaptions] ✨ NEW AI Generated title ({len(title)}/{title_target} chars): {title}")
+            else:
+                logger.warning(f"[GenerateCaptions] ⚠️ AI returned short/empty title: '{ai_title}'")
             
         except Exception as e:
-            logger.error(f"[GenerateCaptions] ❌ AI title generation failed: {e}")
-            # Fallback to topics-based title (still within limit)
+            logger.error(f"[GenerateCaptions] ❌ AI title generation failed: {e}", exc_info=True)
+            # Fallback: generate a creative title from available data
+            import random
+            prefixes = ["The Truth About", "Why You Need", "How I", "What Happens When", "The Secret to", "You Won't Believe"]
             if topics and len(topics) > 0:
-                fallback_title = f"The Truth About {topics[0]}"
-                if len(fallback_title) > title_target:
-                    fallback_title = fallback_title[:title_target - 3] + "..."
-                title = fallback_title
-                logger.info(f"[GenerateCaptions] 🏷️ Fallback title from topics: {title}")
+                fallback_title = f"{random.choice(prefixes)} {topics[0]}"
+            elif hooks and len(hooks) > 0:
+                fallback_title = hooks[0][:title_target]
+            else:
+                fallback_title = f"{random.choice(prefixes)} This"
+            if len(fallback_title) > title_target:
+                fallback_title = fallback_title[:title_target - 3] + "..."
+            title = fallback_title
+            logger.info(f"[GenerateCaptions] 🏷️ Fallback title: {title}")
     
     # Generate captions using AI or templates (will generate platform-specific titles/descriptions)
     generated = await _generate_platform_captions(

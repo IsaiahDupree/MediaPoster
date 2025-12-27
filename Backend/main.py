@@ -790,6 +790,14 @@ app.include_router(formats.router, prefix="/api/formats", tags=["Formats"])
 from api.endpoints import content_pipeline
 app.include_router(content_pipeline.router, prefix="/api/content-pipeline", tags=["Content Pipeline"])
 
+# Influencer Analysis
+from api.endpoints import influencer_analysis
+app.include_router(influencer_analysis.router, prefix="/api/influencer", tags=["Influencer Analysis"])
+
+# Music Crawler
+from api.endpoints import music_crawler
+app.include_router(music_crawler.router, prefix="/api/music-crawler", tags=["Music Crawler"])
+
 # Publishing endpoints
 from api.endpoints import publishing
 app.include_router(publishing.router, prefix="/api/publishing", tags=["Publishing"])

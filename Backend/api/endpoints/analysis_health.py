@@ -220,3 +220,128 @@ def _get_resilience_recommendations(job: dict, error_types: dict) -> List[str]:
     
     return recommendations
 
+
+# ============================================================================
+# NEW: Incomplete/Failed Analysis Detection & Re-analysis
+# ============================================================================
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from database.connection import get_db
+from services.analysis_health import AnalysisHealthService
+
+
+@router.get("/scan-incomplete")
+async def scan_incomplete_analysis(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=1000, le=5000, description="Max videos to scan"),
+):
+    """
+    Scan all videos and identify those with incomplete or failed analysis.
+    Categorizes by: complete, incomplete, not_started, images (skipped).
+    """
+    service = AnalysisHealthService(db)
+    result = await service.scan_all_health(limit=limit)
+    return result
+
+
+@router.post("/mark-for-reanalysis")
+async def mark_videos_for_reanalysis(
+    video_ids: List[str],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Mark specific videos for re-analysis.
+    Sets their status to 'needs_reanalysis' so they can be picked up by batch analysis.
+    """
+    service = AnalysisHealthService(db)
+    result = await service.mark_for_reanalysis(video_ids)
+    return result
+
+
+@router.post("/mark-incomplete-for-reanalysis")
+async def mark_all_incomplete_for_reanalysis(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=500, description="Max videos to mark"),
+):
+    """
+    Find all videos with incomplete analysis and mark them for re-analysis.
+    """
+    service = AnalysisHealthService(db)
+    
+    # First scan for incomplete
+    scan_result = await service.scan_all_health(limit=limit)
+    
+    # Get IDs of incomplete videos
+    incomplete_ids = [v["video_id"] for v in scan_result.get("incomplete_videos", [])]
+    not_started_ids = [v["video_id"] for v in scan_result.get("not_started_videos", [])]
+    
+    all_ids = incomplete_ids + not_started_ids
+    
+    if not all_ids:
+        return {
+            "marked_count": 0,
+            "message": "No incomplete or unstarted videos found"
+        }
+    
+    # Mark them for reanalysis
+    mark_result = await service.mark_for_reanalysis(all_ids[:limit])
+    
+    return {
+        "incomplete_found": len(incomplete_ids),
+        "not_started_found": len(not_started_ids),
+        "marked_count": mark_result["marked_count"],
+        "message": f"Marked {mark_result['marked_count']} videos for re-analysis"
+    }
+
+
+@router.post("/skip-images")
+async def skip_image_files(
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Mark all image files (PNG, JPG, HEIC, etc.) as 'image_skipped'.
+    This prevents them from being queued for video analysis.
+    """
+    service = AnalysisHealthService(db)
+    result = await service.mark_images_as_skipped()
+    return result
+
+
+@router.post("/clear-and-retry/{video_id}")
+async def clear_and_retry_analysis(
+    video_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Clear all analysis data for a video and mark it for fresh re-analysis.
+    Use this for videos that have corrupted or incorrect analysis.
+    """
+    service = AnalysisHealthService(db)
+    success = await service.clear_analysis_for_retry(video_id)
+    
+    if success:
+        return {
+            "status": "success",
+            "video_id": video_id,
+            "message": "Analysis cleared. Video will be re-analyzed in next batch."
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to clear analysis")
+
+
+@router.get("/videos-needing-reanalysis")
+async def get_videos_needing_reanalysis(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=100, le=500),
+):
+    """
+    Get list of videos currently marked as needing re-analysis.
+    """
+    service = AnalysisHealthService(db)
+    videos = await service.get_videos_needing_reanalysis(limit=limit)
+    return {
+        "count": len(videos),
+        "videos": videos
+    }
+

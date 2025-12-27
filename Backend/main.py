@@ -774,6 +774,10 @@ app.include_router(format_discovery.router, tags=["Format Discovery"])
 from api.endpoints import formats_api
 app.include_router(formats_api.router, tags=["Formats"])
 
+# Duplicate Detection (Find similar transcripts)
+from api.endpoints import duplicate_detection
+app.include_router(duplicate_detection.router, tags=["Duplicate Detection"])
+
 # Prompt Generation Settings (Voice, Tone, Style, Limits)
 from api.endpoints import prompt_settings
 app.include_router(prompt_settings.router, prefix="/api", tags=["Prompt Settings"])

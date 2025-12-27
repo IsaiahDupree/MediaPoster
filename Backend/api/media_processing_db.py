@@ -216,7 +216,8 @@ async def list_media(
     limit: int = Query(default=50, le=500),
     offset: int = Query(default=0, ge=0),
     analyzed_only: bool = Query(default=False),
-    media_type: Optional[str] = Query(default=None, description="Filter by media type: 'video' or 'image'")
+    media_type: Optional[str] = Query(default=None, description="Filter by media type: 'video' or 'image'"),
+    curation_status: Optional[str] = Query(default=None, description="Filter by curation status: 'uncurated', 'pending', 'approved', 'rejected'")
 ):
     """
     List all media from database.
@@ -245,7 +246,16 @@ async def list_media(
             Video.source_uri.ilike('%.webp')
         ))
     
-    query = query.offset(offset).limit(limit)
+    # Filter by curation_status if specified
+    # Note: curation_status is stored in video_analysis table, not videos table
+    # We'll filter after fetching analysis data for each video
+    
+    # Store curation_status_filter for use in the loop
+    curation_status_filter = curation_status if curation_status else None
+    
+    # Increase limit to account for filtering (fetch more, filter, then return requested amount)
+    fetch_limit = limit * 3 if curation_status_filter else limit
+    query = query.offset(offset).limit(fetch_limit)
     
     result = await db.execute(query)
     videos = result.scalars().all()
@@ -271,6 +281,22 @@ async def list_media(
                     curation_status = row[4] if row[4] is not None else None
                 elif row:
                     curation_status = None
+                
+                # Apply curation_status filter server-side
+                if curation_status_filter:
+                    if curation_status_filter == 'uncurated':
+                        # Uncurated = NULL or 'pending'
+                        if curation_status not in [None, 'pending']:
+                            continue  # Skip this video
+                    elif curation_status_filter == 'pending':
+                        if curation_status != 'pending':
+                            continue
+                    elif curation_status_filter == 'approved':
+                        if curation_status != 'approved':
+                            continue
+                    elif curation_status_filter == 'rejected':
+                        if curation_status != 'rejected':
+                            continue
             except Exception as curation_error:
                 # If query fails, try simpler query
                 logger.warning(f"Full analysis query failed for video {video.id}: {curation_error}")
@@ -284,6 +310,17 @@ async def list_media(
                 except Exception as e2:
                     logger.error(f"Failed to fetch analysis (fallback) for video {video.id}: {e2}")
                     row = None
+                    curation_status = None
+            
+            # Apply curation_status filter for videos without analysis (curation_status = None)
+            # Videos without analysis records are considered "uncurated"
+            if curation_status_filter and curation_status is None:
+                if curation_status_filter == 'uncurated':
+                    # Uncurated includes NULL (no analysis record yet) - include this video
+                    pass
+                elif curation_status_filter in ['pending', 'approved', 'rejected']:
+                    # Skip videos without analysis if filtering for specific status
+                    continue
             
             if row:
                 # Ensure topics is a list
@@ -395,6 +432,10 @@ async def list_media(
             # Skip this video if we can't serialize it, but log it as an error
             # This should be investigated - it means we have data integrity issues
             continue
+        
+        # Stop if we've reached the requested limit (after filtering)
+        if len(response) >= limit:
+            break
     
     return response
 
@@ -609,6 +650,31 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             analyzing_count += job.get("total", 0) - job.get("completed", 0) - job.get("failed", 0)
     
     # =====================================================================
+    # CURATION STATS
+    # =====================================================================
+    curation_stats = {"approved": 0, "rejected": 0, "uncurated": 0}
+    try:
+        from sqlalchemy import text
+        # Count approved
+        approved_result = await db.execute(
+            text("SELECT COUNT(*) FROM video_analysis WHERE curation_status = 'approved'")
+        )
+        curation_stats["approved"] = approved_result.scalar() or 0
+        
+        # Count rejected
+        rejected_result = await db.execute(
+            text("SELECT COUNT(*) FROM video_analysis WHERE curation_status = 'rejected'")
+        )
+        curation_stats["rejected"] = rejected_result.scalar() or 0
+        
+        # Uncurated = total videos - approved - rejected
+        # This includes videos with no analysis record, pending, or NULL curation_status
+        curation_stats["uncurated"] = total_videos - curation_stats["approved"] - curation_stats["rejected"]
+    except Exception as e:
+        logger.warning(f"Could not get curation stats: {e}")
+        await db.rollback()
+    
+    # =====================================================================
     # FOLDER STATS (Media Import folder - My Passport or local fallback)
     # =====================================================================
     from config.paths import get_iphone_import_dir
@@ -651,7 +717,8 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
         "pending_analysis": total_videos - analyzed_count,
         "total_size_bytes": total_size,
         "avg_duration_sec": float(avg_duration) if avg_duration else None,
-        "folder_stats": folder_stats  # Add folder stats for comparison
+        "folder_stats": folder_stats,
+        "curation_stats": curation_stats  # Curation counts for Quick Curate page
     }
     
     return result
@@ -2801,4 +2868,166 @@ async def get_social_scores(
         "post_social_updated_at": analysis.post_social_updated_at.isoformat() if analysis.post_social_updated_at else None,
         "has_analysis": True,
         "score_delta": (analysis.post_social_score - analysis.pre_social_score) if (analysis.post_social_score and analysis.pre_social_score) else None
+    }
+
+
+# =============================================================================
+# ENDPOINTS - METADATA BACKFILL
+# =============================================================================
+
+@router.post("/backfill-metadata")
+async def backfill_metadata(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=100, le=500, description="Max videos to process"),
+    force: bool = Query(default=False, description="Re-extract even if metadata exists")
+):
+    """
+    Backfill missing metadata (duration, resolution, aspect_ratio) for existing videos.
+    Uses ffprobe to extract metadata from source files.
+    """
+    import subprocess
+    import json
+    
+    # Find videos with missing metadata
+    if force:
+        query = select(Video).limit(limit)
+    else:
+        query = select(Video).where(
+            (Video.duration_sec == None) | 
+            (Video.duration_sec == 0) |
+            (Video.resolution == None)
+        ).limit(limit)
+    
+    result = await db.execute(query)
+    videos = result.scalars().all()
+    
+    updated = 0
+    failed = 0
+    skipped = 0
+    
+    for video in videos:
+        source_path = video.source_uri
+        if not source_path or not Path(source_path).exists():
+            skipped += 1
+            continue
+        
+        try:
+            # Extract metadata using ffprobe
+            cmd = [
+                'ffprobe', '-v', 'quiet', '-print_format', 'json',
+                '-show_format', '-show_streams', source_path
+            ]
+            proc = subprocess.run(cmd, capture_output=True, timeout=30)
+            
+            if proc.returncode != 0:
+                failed += 1
+                continue
+            
+            data = json.loads(proc.stdout)
+            
+            # Extract duration
+            duration = None
+            if 'format' in data:
+                duration = int(float(data['format'].get('duration', 0)))
+            
+            # Extract resolution and aspect ratio from video stream
+            width = None
+            height = None
+            for stream in data.get('streams', []):
+                if stream.get('codec_type') == 'video':
+                    width = stream.get('width')
+                    height = stream.get('height')
+                    break
+            
+            resolution = f"{width}x{height}" if width and height else None
+            aspect_ratio = f"{width}:{height}" if width and height else None
+            
+            # Also get file size if missing
+            file_size = video.file_size
+            if not file_size:
+                file_size = Path(source_path).stat().st_size
+            
+            # Update video record
+            update_values = {}
+            if duration and (not video.duration_sec or video.duration_sec == 0 or force):
+                update_values['duration_sec'] = duration
+            if resolution and (not video.resolution or force):
+                update_values['resolution'] = resolution
+            if aspect_ratio and (not video.aspect_ratio or force):
+                update_values['aspect_ratio'] = aspect_ratio
+            if file_size and (not video.file_size or force):
+                update_values['file_size'] = file_size
+            
+            if update_values:
+                await db.execute(
+                    update(Video).where(Video.id == video.id).values(**update_values)
+                )
+                updated += 1
+                logger.info(f"Updated metadata for {video.file_name}: {update_values}")
+            else:
+                skipped += 1
+                
+        except Exception as e:
+            logger.error(f"Failed to extract metadata for {video.file_name}: {e}")
+            failed += 1
+    
+    await db.commit()
+    
+    return {
+        "status": "completed",
+        "updated": updated,
+        "failed": failed,
+        "skipped": skipped,
+        "total_processed": len(videos)
+    }
+
+
+@router.post("/generate-thumbnails")
+async def generate_thumbnails_batch(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=50, le=200, description="Max videos to process")
+):
+    """
+    Generate thumbnails for videos that are missing them.
+    """
+    from services.thumbnail_service import generate_thumbnail
+    
+    # Find videos without thumbnails
+    query = select(Video).where(
+        (Video.thumbnail_path == None) | (Video.thumbnail_path == '')
+    ).limit(limit)
+    
+    result = await db.execute(query)
+    videos = result.scalars().all()
+    
+    generated = 0
+    failed = 0
+    skipped = 0
+    
+    for video in videos:
+        source_path = video.source_uri
+        if not source_path or not Path(source_path).exists():
+            skipped += 1
+            continue
+        
+        try:
+            thumb_path = generate_thumbnail(source_path, "medium")
+            if thumb_path:
+                video.thumbnail_path = thumb_path
+                generated += 1
+                logger.info(f"Generated thumbnail for {video.file_name}")
+            else:
+                failed += 1
+        except Exception as e:
+            logger.error(f"Failed to generate thumbnail for {video.file_name}: {e}")
+            failed += 1
+    
+    await db.commit()
+    
+    return {
+        "status": "completed",
+        "generated": generated,
+        "failed": failed,
+        "skipped": skipped,
+        "total_processed": len(videos)
     }

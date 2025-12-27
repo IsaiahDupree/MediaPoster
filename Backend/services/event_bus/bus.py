@@ -122,7 +122,7 @@ class EventBus:
         await self._dispatch(event)
         return event.id
     
-    def subscribe(self, topic_pattern: str, handler: EventHandler) -> None:
+    def subscribe(self, topic_pattern: str, handler: EventHandler) -> str:
         """
         Subscribe a handler to a topic pattern.
         
@@ -134,9 +134,14 @@ class EventBus:
         Args:
             topic_pattern: Topic or pattern to subscribe to
             handler: Async function that receives Event
+            
+        Returns:
+            Subscription ID for tracking/unsubscribing
         """
         self._subscribers[topic_pattern].append(handler)
+        subscription_id = f"{topic_pattern}:{id(handler)}"
         logger.debug(f"📫 Subscribed to '{topic_pattern}': {handler.__name__}")
+        return subscription_id
     
     def unsubscribe(self, topic_pattern: str, handler: EventHandler) -> bool:
         """

@@ -339,6 +339,11 @@ async def generate_captions(
     import re
     is_filename = re.match(r'^(IMG_|VID_|MOV_|\d+\.)', title, re.IGNORECASE) or title.endswith('.MOV') or title.endswith('.mp4')
     
+    # Get platform limits for title generation (20% of max)
+    from config.platform_limits import get_platform_limits
+    platform_limits = get_platform_limits(request.platform)
+    title_target = platform_limits.title_target  # 20% buffer already applied (80% of max)
+    
     # Always use AI to generate title if we have enough context
     if transcript or topics or hooks:
         try:
@@ -357,38 +362,51 @@ async def generate_captions(
             
             context = "\n".join(context_parts)
             
-            # Generate creative title using AI
-            title_prompt = f"""Based on this video analysis, create a SHORT, catchy, viral-worthy title (max 50 chars).
-DO NOT copy the transcript directly. Create something creative and attention-grabbing.
-The title should make people want to click and watch.
+            # Generate creative title using AI with platform-specific limit (20% of max)
+            title_prompt = f"""Based on this video analysis, create a SHORT, catchy, viral-worthy title for {request.platform}.
+REQUIREMENTS:
+- Maximum {title_target} characters (strict limit - this is 20% of {request.platform}'s max title length)
+- Punchy and attention-grabbing
+- NO quotes, NO hashtags, NO emojis
+- Make people want to click and watch
+- Optimized for {request.platform} audience
 
 Analysis Context:
 {context}
 
-Generate ONLY the title, no quotes, no explanation. Make it punchy and engaging for {request.platform}."""
+Generate ONLY the title, no quotes, no explanation."""
 
-            logger.info(f"[GenerateCaptions] 🤖 Calling OpenAI to generate creative title...")
+            logger.info(f"[GenerateCaptions] 🤖 Calling OpenAI to generate platform-specific title (target: {title_target} chars for {request.platform})...")
             
             title_response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": title_prompt}],
+                messages=[
+                    {"role": "system", "content": f"You are a viral content title expert for {request.platform}. Create short, punchy titles under {title_target} characters."},
+                    {"role": "user", "content": title_prompt}
+                ],
                 max_tokens=60,
                 temperature=0.8
             )
             
             ai_title = title_response.choices[0].message.content.strip().strip('"').strip("'")
+            # Enforce platform-specific limit
             if ai_title and len(ai_title) > 5:
+                if len(ai_title) > title_target:
+                    ai_title = ai_title[:title_target - 3] + "..."
                 title = ai_title
-                logger.info(f"[GenerateCaptions] ✨ AI Generated title: {title}")
+                logger.info(f"[GenerateCaptions] ✨ AI Generated title ({len(title)}/{title_target} chars): {title}")
             
         except Exception as e:
             logger.error(f"[GenerateCaptions] ❌ AI title generation failed: {e}")
-            # Fallback to topics-based title
+            # Fallback to topics-based title (still within limit)
             if topics and len(topics) > 0:
-                title = f"The Truth About {topics[0]}"
+                fallback_title = f"The Truth About {topics[0]}"
+                if len(fallback_title) > title_target:
+                    fallback_title = fallback_title[:title_target - 3] + "..."
+                title = fallback_title
                 logger.info(f"[GenerateCaptions] 🏷️ Fallback title from topics: {title}")
     
-    # Generate captions using AI or templates
+    # Generate captions using AI or templates (will generate platform-specific titles/descriptions)
     generated = await _generate_platform_captions(
         title=title,
         transcript=transcript,
@@ -405,10 +423,27 @@ Generate ONLY the title, no quotes, no explanation. Make it punchy and engaging 
     logger.info(f"[GenerateCaptions] ✅ Generated captions successfully")
     logger.info(f"[GenerateCaptions] 📤 TikTok caption: {generated['tiktok'][:100]}...")
     
+    # Extract platform-specific titles and descriptions from generated captions
+    # Note: Currently generates one title, but captions are platform-specific
+    platform_titles = {}
+    platform_descriptions = {}
+    
+    # For now, use the generated title for all platforms
+    # TODO: Generate platform-specific titles in _generate_platform_captions
+    for platform_key in generated.keys():
+        platform_titles[platform_key] = title
+        # Extract description from caption (remove hashtags for description)
+        caption = generated[platform_key]
+        # Description is the caption without hashtags (rough extraction)
+        desc = caption.split('#')[0].strip() if '#' in caption else caption
+        platform_descriptions[platform_key] = desc
+    
     return {
         "success": True,
         "media_id": media_id,
-        "title": title,
+        "title": title,  # Generic title (for backward compatibility)
+        "platform_titles": platform_titles,  # Platform-specific titles
+        "platform_descriptions": platform_descriptions,  # Platform-specific descriptions
         "transcript_available": len(transcript) > 0,
         "captions": generated
     }
@@ -468,25 +503,42 @@ Tone: {tone}
 Platform: {platform}
 """
         
-        desc_prompt = f"""Based on this video analysis, write a compelling 2-3 sentence description for {platform}.
-DO NOT copy the transcript word-for-word. Summarize the VALUE and INSIGHT the viewer will get.
-Make it engaging and encourage interaction. Match the {tone} tone.
+        # Get platform-specific description target (20% of max = 80% of max limit)
+        platform_limit = platform_limits.get(platform, platform_limits.get('tiktok'))
+        desc_target = platform_limit.description_target  # Already 80% of max (20% buffer)
+        
+        desc_prompt = f"""Based on this video analysis, write a compelling description for {platform}.
+REQUIREMENTS:
+- Maximum {desc_target} characters (strict limit - this is 20% of {platform}'s max description length)
+- 2-3 sentences that summarize the VALUE and INSIGHT the viewer will get
+- DO NOT copy the transcript word-for-word
+- Make it engaging and encourage interaction
+- Match the {tone} tone
+- Optimized for {platform} audience
 
 {context}
 
 Write ONLY the description (2-3 sentences), no hashtags, no title. Be creative and compelling."""
 
-        logger.info(f"[_generate_platform_captions] 🤖 Calling OpenAI to generate creative description...")
+        logger.info(f"[_generate_platform_captions] 🤖 Calling OpenAI to generate platform-specific description (target: {desc_target} chars for {platform})...")
+        
+        # Adjust max_tokens based on target length (roughly 1 token = 4 chars)
+        max_tokens_for_desc = min(200, int(desc_target / 3))
         
         desc_response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": desc_prompt}],
-            max_tokens=150,
+            max_tokens=max_tokens_for_desc,
             temperature=0.7
         )
         
         description_text = desc_response.choices[0].message.content.strip()
-        logger.info(f"[_generate_platform_captions] ✨ AI Generated description: {description_text[:80]}...")
+        
+        # Enforce platform-specific limit
+        if len(description_text) > desc_target:
+            description_text = truncate_to_limit(description_text, desc_target)
+        
+        logger.info(f"[_generate_platform_captions] ✨ AI Generated description ({len(description_text)}/{desc_target} chars): {description_text[:80]}...")
         
     except Exception as e:
         logger.error(f"[_generate_platform_captions] ❌ AI description generation failed: {e}")

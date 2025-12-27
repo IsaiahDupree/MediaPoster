@@ -116,9 +116,69 @@ def get_media_type(file_path: Path) -> Optional[str]:
 
 @router.get("/device")
 async def check_device():
-    """Check if an iOS device is connected (USB or WiFi sync)"""
+    """
+    Check if an iOS device is connected (USB or WiFi sync).
     
-    # Method 1: Check via Finder/AFC (works for WiFi sync too)
+    This endpoint performs a fresh check each time it's called - no caching.
+    It checks USB first (more reliable for physical disconnection), then Finder.
+    """
+    logger.debug("🔍 Checking iOS device connection...")
+    
+    # Method 1: Check via system_profiler for USB connection FIRST
+    # This is more reliable for USB connections and updates immediately on disconnection
+    # USB check takes priority because it's more accurate for physical disconnection
+    try:
+        result = subprocess.run(
+            ["system_profiler", "SPUSBDataType", "-json"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            try:
+                data = json.loads(result.stdout)
+                usb_data = data.get("SPUSBDataType", [])
+                
+                # Search through USB tree for iOS devices
+                for controller in usb_data:
+                    items = controller.get("_items", [])
+                    for item in items:
+                        name = item.get("_name", "").lower()
+                        if "iphone" in name or "ipad" in name or "apple mobile" in name:
+                            logger.info(f"✅ Device found via USB: {item.get('_name')}")
+                            return {
+                                "connected": True,
+                                "name": item.get("_name", "iOS Device"),
+                                "serial": item.get("serial_num", ""),
+                                "product_id": item.get("product_id", ""),
+                                "connection_type": "usb"
+                            }
+                        # Check nested items (devices connected through hubs)
+                        nested = item.get("_items", [])
+                        for nested_item in nested:
+                            nested_name = nested_item.get("_name", "").lower()
+                            if "iphone" in nested_name or "ipad" in nested_name or "apple mobile" in nested_name:
+                                logger.info(f"✅ Device found via USB (nested): {nested_item.get('_name')}")
+                                return {
+                                    "connected": True,
+                                    "name": nested_item.get("_name", "iOS Device"),
+                                    "serial": nested_item.get("serial_num", ""),
+                                    "product_id": nested_item.get("product_id", ""),
+                                    "connection_type": "usb"
+                                }
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse USB data as JSON: {e}")
+        else:
+            logger.debug("system_profiler returned non-zero exit code")
+    except subprocess.TimeoutExpired:
+        logger.warning("USB check timed out")
+    except Exception as e:
+        logger.warning(f"USB check failed: {e}")
+    
+    # Method 2: Check via Finder/AFC (works for WiFi sync too)
+    # Only check Finder if USB check found nothing
+    # Note: Finder may show stale mounts after disconnection, so we validate accessibility
     try:
         result = subprocess.run(
             ["osascript", "-e", '''
@@ -127,7 +187,11 @@ async def check_device():
                 repeat with d in (get every disk)
                     set diskName to name of d as string
                     if diskName contains "iPhone" or diskName contains "iPad" or diskName contains "iOS" then
-                        set end of deviceList to diskName
+                        -- Verify the disk is actually accessible (not stale mount)
+                        try
+                            set diskPath to POSIX path of d
+                            set end of deviceList to diskName
+                        end try
                     end if
                 end repeat
                 return deviceList
@@ -141,53 +205,41 @@ async def check_device():
         if result.returncode == 0 and result.stdout.strip():
             device_name = result.stdout.strip()
             if device_name:
-                return {
-                    "connected": True,
-                    "name": "Isaiah's iPhone" if "iOS" in device_name else device_name,
-                    "serial": device_name,
-                    "connection_type": "finder"
-                }
+                # Additional validation: Check if we can actually access the mount point
+                # This helps filter out stale mounts that macOS hasn't cleaned up yet
+                try:
+                    # Try to list contents of the mount (quick check)
+                    mount_path = f"/Volumes/{device_name}"
+                    if os.path.exists(mount_path):
+                        # Try to access the mount point
+                        test_result = subprocess.run(
+                            ["test", "-d", mount_path],
+                            capture_output=True,
+                            timeout=2
+                        )
+                        if test_result.returncode == 0:
+                            logger.info(f"✅ Device found via Finder (accessible): {device_name}")
+                            return {
+                                "connected": True,
+                                "name": "Isaiah's iPhone" if "iOS" in device_name else device_name,
+                                "serial": device_name,
+                                "connection_type": "finder"
+                            }
+                        else:
+                            logger.debug(f"Finder mount exists but is not accessible: {device_name}")
+                    else:
+                        logger.debug(f"Finder mount path does not exist: {mount_path}")
+                except Exception as e:
+                    logger.debug(f"Could not validate Finder mount: {e}")
+        else:
+            logger.debug("No device found via Finder")
+    except subprocess.TimeoutExpired:
+        logger.warning("Finder check timed out")
     except Exception as e:
         logger.warning(f"Finder check failed: {e}")
     
-    # Method 2: Check via system_profiler for USB connection
-    try:
-        result = subprocess.run(
-            ["system_profiler", "SPUSBDataType", "-json"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            usb_data = data.get("SPUSBDataType", [])
-            for controller in usb_data:
-                items = controller.get("_items", [])
-                for item in items:
-                    name = item.get("_name", "").lower()
-                    if "iphone" in name or "ipad" in name or "apple mobile" in name:
-                        return {
-                            "connected": True,
-                            "name": item.get("_name", "iOS Device"),
-                            "serial": item.get("serial_num", ""),
-                            "product_id": item.get("product_id", ""),
-                            "connection_type": "usb"
-                        }
-                    nested = item.get("_items", [])
-                    for nested_item in nested:
-                        nested_name = nested_item.get("_name", "").lower()
-                        if "iphone" in nested_name or "ipad" in nested_name:
-                            return {
-                                "connected": True,
-                                "name": nested_item.get("_name", "iOS Device"),
-                                "serial": nested_item.get("serial_num", ""),
-                                "product_id": nested_item.get("product_id", ""),
-                                "connection_type": "usb"
-                            }
-    except Exception as e:
-        logger.warning(f"USB check failed: {e}")
-    
+    # No device found
+    logger.debug("❌ No iOS device connected")
     return {"connected": False}
 
 
@@ -505,6 +557,255 @@ async def open_image_capture():
     except Exception as e:
         logger.error(f"Failed to open Image Capture: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/transfer-files-direct")
+async def transfer_files_direct(
+    background_tasks: BackgroundTasks,
+    media_types: Optional[List[str]] = None,
+    max_files: Optional[int] = None
+):
+    """
+    Direct file transfer from iPhone using pymobiledevice3.
+    
+    Uses AFC (Apple File Conduit) to access files directly without Image Capture.
+    Includes duplicate detection via fingerprinting.
+    
+    Args:
+        media_types: List of media types to transfer (default: ["video", "image"])
+        max_files: Maximum number of files to transfer (None = all)
+    
+    Returns:
+        Transfer result with imported/skipped counts
+    """
+    try:
+        from services.iphone_direct_import import iPhoneDirectImporter, PYMOBILEDEVICE3_AVAILABLE
+        
+        if not PYMOBILEDEVICE3_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="pymobiledevice3 not available. Install with: pip install pymobiledevice3"
+            )
+        
+        if media_types is None:
+            media_types = ["video", "image"]
+        
+        import_dir = DEFAULT_IMPORT_PATH
+        importer = iPhoneDirectImporter(import_dir)
+        
+        # Connect to device
+        if not importer.connect():
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to connect to iPhone. Make sure it's unlocked and 'Trust This Computer' is accepted."
+            )
+        
+        try:
+            # Import files
+            result = importer.import_files(
+                media_types=media_types,
+                max_files=max_files
+            )
+            
+            return {
+                "status": "success",
+                "imported": result["imported"],
+                "skipped": result["skipped"],
+                "errors": result.get("errors", 0),
+                "total_found": result.get("total_found", 0),
+                "destination": str(import_dir)
+            }
+        finally:
+            importer.disconnect()
+            
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="pymobiledevice3 not available. Install with: pip install pymobiledevice3"
+        )
+    except Exception as e:
+        logger.error(f"Direct transfer error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Transfer error: {str(e)}")
+
+
+@router.post("/transfer-files")
+async def transfer_files_from_device(
+    background_tasks: BackgroundTasks,
+    media_types: Optional[List[str]] = None,
+    delete_after_transfer: bool = False
+):
+    """
+    Automatically transfer files from connected iPhone to import folder.
+    
+    Uses AppleScript to control Image Capture for automated file transfer.
+    After transfer, applies fingerprinting to detect and skip duplicates.
+    
+    Args:
+        media_types: List of media types to transfer (default: ["video", "image"])
+        delete_after_transfer: Whether to delete files from iPhone after successful transfer
+    
+    Returns:
+        Transfer job information with duplicate detection results
+    """
+    if media_types is None:
+        media_types = ["video", "image"]
+    
+    # Check if device is connected
+    device_check = await check_device()
+    if not device_check.get("connected"):
+        raise HTTPException(
+            status_code=400,
+            detail="No iOS device connected. Please connect your iPhone via USB."
+        )
+    
+    import_dir = DEFAULT_IMPORT_PATH
+    import_dir.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"📱 Starting automated file transfer from iPhone to {import_dir}")
+    logger.info(f"   Media types: {media_types}")
+    logger.info(f"   Delete after transfer: {delete_after_transfer}")
+    
+    # Use AppleScript to automate Image Capture
+    # Build media type checks for AppleScript
+    include_video = "video" in media_types
+    include_image = "image" in media_types
+    
+    script = f'''
+    tell application "Image Capture"
+        activate
+        
+        set deviceList to devices
+        if (count of deviceList) is 0 then
+            return "ERROR: No devices connected"
+        end if
+        
+        set targetDevice to item 1 of deviceList
+        set allItems to items of targetDevice
+        set itemsToTransfer to {{}}
+        
+        repeat with anItem in allItems
+            set itemType to type of anItem
+            if itemType is "video" and {str(include_video).lower()} then
+                set end of itemsToTransfer to anItem
+            else if itemType is "image" and {str(include_image).lower()} then
+                set end of itemsToTransfer to anItem
+            end if
+        end repeat
+        
+        if (count of itemsToTransfer) is 0 then
+            return "ERROR: No matching files found"
+        end if
+        
+        -- Download files
+        download itemsToTransfer to POSIX file "{import_dir}"
+        
+        -- Delete from device if requested
+        if {str(delete_after_transfer).lower()} then
+            repeat with anItem in itemsToTransfer
+                delete anItem
+            end repeat
+        end if
+        
+        return "SUCCESS: Transferred " & (count of itemsToTransfer) & " files"
+    end tell
+    '''
+    
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minutes timeout for large transfers
+        )
+        
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            if "ERROR" in output:
+                logger.error(f"Transfer failed: {output}")
+                raise HTTPException(status_code=500, detail=output)
+            
+            # After transfer, apply duplicate detection via fingerprinting
+            from services.iphone_direct_import import iPhoneDirectImporter
+            import time
+            
+            # Get list of files before transfer (for comparison)
+            files_before = set(import_dir.rglob("*"))
+            files_before = {f for f in files_before if f.is_file()}
+            
+            # Wait a moment for Image Capture to finish writing
+            time.sleep(2)
+            
+            # Build index of existing files (for duplicate detection)
+            importer = iPhoneDirectImporter(import_dir)
+            existing_index = importer.load_index()
+            if not existing_index:
+                existing_index = importer.build_index_from_destination()
+            
+            # Find newly transferred files and check for duplicates
+            files_after = set(import_dir.rglob("*"))
+            files_after = {f for f in files_after if f.is_file()}
+            newly_transferred_files = files_after - files_before
+            
+            newly_transferred = []
+            duplicates_removed = 0
+            
+            for file_path in newly_transferred_files:
+                if file_path.suffix.lower() in {".mov", ".mp4", ".m4v", ".jpg", ".jpeg", ".png", ".heic"}:
+                    try:
+                        fp = importer.fingerprint(file_path)
+                        if fp in existing_index:
+                            # Duplicate found - remove it
+                            logger.info(f"Removing duplicate: {file_path.name}")
+                            file_path.unlink()
+                            duplicates_removed += 1
+                        else:
+                            # New file - add to index and manifest
+                            existing_index[fp] = str(file_path)
+                            newly_transferred.append(file_path)
+                            
+                            # Log to manifest
+                            manifest_entry = {
+                                "src": f"iPhone/{file_path.name}",
+                                "dst": str(file_path),
+                                "fp": fp,
+                                "size": file_path.stat().st_size,
+                                "imported_at": datetime.now().isoformat()
+                            }
+                            manifest_file = import_dir / ".import_manifest.jsonl"
+                            manifest_file.parent.mkdir(parents=True, exist_ok=True)
+                            with open(manifest_file, 'a', encoding='utf-8') as f:
+                                f.write(json.dumps(manifest_entry) + '\n')
+                    except Exception as e:
+                        logger.warning(f"Error processing {file_path}: {e}")
+            
+            # Save updated index
+            importer.save_index(existing_index)
+            
+            transferred_count = len(newly_transferred)
+            
+            logger.info(f"✅ Transfer complete: {transferred_count} new files, {duplicates_removed} duplicates removed")
+            
+            return {
+                "status": "success",
+                "message": output,
+                "destination": str(import_dir),
+                "transferred_count": transferred_count,
+                "duplicates_removed": duplicates_removed,
+                "delete_after_transfer": delete_after_transfer
+            }
+        else:
+            error_msg = result.stderr.strip() or result.stdout.strip()
+            logger.error(f"Transfer failed: {error_msg}")
+            raise HTTPException(status_code=500, detail=f"Transfer failed: {error_msg}")
+            
+    except subprocess.TimeoutExpired:
+        logger.error("Transfer timed out")
+        raise HTTPException(status_code=500, detail="Transfer timed out (max 10 minutes)")
+    except Exception as e:
+        logger.error(f"Transfer error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Transfer error: {str(e)}")
 
 
 @router.get("/history")

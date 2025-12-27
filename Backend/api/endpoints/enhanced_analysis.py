@@ -268,3 +268,346 @@ def predict_performance(
     """Predict performance for a potential segment"""
     correlator = PerformanceCorrelator(db)
     return correlator.predict_segment_performance(segment_data)
+
+
+# ==================== Enhanced Vision Analysis Endpoints ====================
+
+class StructuredAnalysisRequest(BaseModel):
+    """Request for structured frame analysis"""
+    frame_paths: List[str]
+    timestamps: List[float]
+    analyze_every_nth: int = 3
+    include_motion_detection: bool = True
+    include_scene_detection: bool = True
+
+
+class TemplateMatchRequest(BaseModel):
+    """Request to match content to templates"""
+    content_type: str
+    tone: str
+    topics: List[str] = []
+    duration_sec: float = 30
+
+
+@router.post("/vision/analyze-structured")
+async def analyze_frames_structured(
+    request: StructuredAnalysisRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Perform structured visual analysis on video frames.
+    
+    Extracts:
+    - Color palette (primary, secondary, accent, mood)
+    - Lighting (type, direction, quality, exposure)
+    - Camera info (shot_type, angle, depth_of_field)
+    - Scene elements (setting, subjects, objects, text)
+    - Viral indicators (hook_potential, pattern_interrupts)
+    - Camera motion sequences
+    - Scene boundaries
+    """
+    try:
+        from services.enhanced_vision_analyzer import EnhancedVisionAnalyzer
+        from pathlib import Path
+        
+        analyzer = EnhancedVisionAnalyzer()
+        
+        frame_paths = [Path(p) for p in request.frame_paths]
+        
+        # Run full analysis
+        results = await analyzer.full_video_analysis(
+            frame_paths=frame_paths,
+            timestamps=request.timestamps,
+            analyze_every_nth=request.analyze_every_nth
+        )
+        
+        return {
+            "success": True,
+            "frame_analyses_count": len(results.get("frame_analyses", [])),
+            "scene_boundaries_count": len(results.get("scene_boundaries", [])),
+            "camera_motions_count": len(results.get("camera_motions", [])),
+            "overall_style": results.get("overall_style", {}),
+            "dominant_colors": results.get("dominant_colors", []),
+            "summary": results.get("analysis_summary", ""),
+            "full_results": results
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/vision/detect-scenes")
+async def detect_scene_boundaries(
+    frame_paths: List[str],
+    timestamps: List[float],
+    threshold: float = 30.0
+):
+    """
+    Detect scene boundaries/cuts in a video.
+    
+    Uses OpenCV for fast detection, AI for boundary classification.
+    Returns timestamps where scene changes occur.
+    """
+    try:
+        from services.enhanced_vision_analyzer import EnhancedVisionAnalyzer
+        from pathlib import Path
+        
+        analyzer = EnhancedVisionAnalyzer()
+        
+        boundaries = await analyzer.detect_scene_boundaries(
+            frame_paths=[Path(p) for p in frame_paths],
+            timestamps=timestamps,
+            threshold=threshold
+        )
+        
+        return {
+            "success": True,
+            "scene_count": len(boundaries) + 1,
+            "boundaries": [
+                {
+                    "timestamp": b.timestamp,
+                    "frame_index": b.frame_index,
+                    "boundary_type": b.boundary_type,
+                    "confidence": b.confidence,
+                    "visual_change_score": b.visual_change_score
+                }
+                for b in boundaries
+            ]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/vision/detect-motion")
+async def detect_camera_motion(
+    frame_paths: List[str],
+    timestamps: List[float]
+):
+    """
+    Detect camera motion sequences (pan, tilt, zoom, etc).
+    
+    Uses OpenCV optical flow for motion detection.
+    Returns motion sequences with type, direction, and timing.
+    """
+    try:
+        from services.enhanced_vision_analyzer import EnhancedVisionAnalyzer
+        from pathlib import Path
+        
+        analyzer = EnhancedVisionAnalyzer()
+        
+        motions = await analyzer.detect_camera_motion_sequence(
+            frame_paths=[Path(p) for p in frame_paths],
+            timestamps=timestamps
+        )
+        
+        return {
+            "success": True,
+            "motion_sequences": [
+                {
+                    "start_time": m.start_time,
+                    "end_time": m.end_time,
+                    "motion_type": m.motion_type,
+                    "direction": m.direction,
+                    "confidence": m.confidence,
+                    "speed": m.speed
+                }
+                for m in motions
+            ]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Template Library Endpoints ====================
+
+@router.get("/templates")
+async def list_templates(
+    category: Optional[str] = None,
+    limit: int = 20
+):
+    """
+    List available video templates.
+    
+    Templates are reusable formats extracted from high-performing videos.
+    """
+    try:
+        from services.template_library import TemplateLibrary
+        
+        library = TemplateLibrary()
+        templates = await library.list_templates(category=category, limit=limit)
+        
+        return {
+            "success": True,
+            "templates": templates,
+            "count": len(templates)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/templates/{template_id}")
+async def get_template(template_id: str):
+    """Get a specific template with full beat sheet"""
+    try:
+        from services.template_library import TemplateLibrary
+        
+        library = TemplateLibrary()
+        template = await library.get_template(template_id)
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        return {
+            "success": True,
+            "template": template
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/templates/match")
+async def match_content_to_templates(request: TemplateMatchRequest):
+    """
+    Find best matching templates for given content.
+    
+    Analyzes content characteristics and suggests templates
+    that would work well for the content type.
+    """
+    try:
+        from services.template_library import TemplateLibrary
+        
+        library = TemplateLibrary()
+        
+        content_analysis = {
+            "content_type": request.content_type,
+            "tone": request.tone,
+            "topics": request.topics,
+            "transcription_duration_sec": request.duration_sec
+        }
+        
+        matches = await library.match_content_to_template(content_analysis)
+        
+        return {
+            "success": True,
+            "matches": [
+                {
+                    "template_id": m.template_id,
+                    "template_name": m.template_name,
+                    "match_score": m.match_score,
+                    "reasons": m.match_reasons,
+                    "suggested_modifications": m.suggested_modifications
+                }
+                for m in matches
+            ]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/templates/auto-populate")
+async def auto_populate_templates(
+    min_engagement_rate: float = 0.05,
+    limit: int = 10,
+    background_tasks: BackgroundTasks = None
+):
+    """
+    Auto-generate templates from top-performing analyzed videos.
+    
+    Scans video_analysis table for high-performing content
+    and creates reusable templates from their patterns.
+    """
+    try:
+        from services.template_library import TemplateLibrary
+        
+        library = TemplateLibrary()
+        created = await library.auto_populate_from_top_videos(
+            min_engagement_rate=min_engagement_rate,
+            limit=limit
+        )
+        
+        return {
+            "success": True,
+            "templates_created": created,
+            "message": f"Created {created} templates from high-performing videos"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/templates/create-from-video")
+async def create_template_from_video(
+    video_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a template from a specific video's analysis.
+    
+    Extracts the video's beat sheet, style, and patterns
+    into a reusable template.
+    """
+    try:
+        from services.template_library import TemplateLibrary
+        from sqlalchemy import text
+        
+        library = TemplateLibrary()
+        
+        # Fetch video analysis
+        result = db.execute(text("""
+            SELECT id, beat_sheet, visual_analysis, hooks, tone, pacing,
+                   music_suggestion, transcription_duration_sec, pillar_tags,
+                   format_tags, content_type, call_to_action, pre_social_score
+            FROM video_analysis
+            WHERE id = :video_id
+        """), {"video_id": video_id})
+        
+        row = result.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Video analysis not found")
+        
+        analysis_data = {
+            "beat_sheet": row[1] or [],
+            "visual_analysis": row[2] or {},
+            "hooks": row[3] or [],
+            "tone": row[4] or "",
+            "pacing": row[5] or "",
+            "music_suggestion": row[6] or {},
+            "transcription_duration_sec": row[7] or 30,
+            "pillar_tags": row[8] or [],
+            "format_tags": row[9] or [],
+            "content_type": row[10] or "",
+            "call_to_action": row[11] or {}
+        }
+        
+        performance = {
+            "engagement_rate": (row[12] or 0) / 100,
+            "views": 0,
+            "completion_rate": 0
+        }
+        
+        template = await library.create_template_from_video(
+            video_id=str(row[0]),
+            analysis_data=analysis_data,
+            performance_metrics=performance
+        )
+        
+        template_id = await library.save_template(template)
+        
+        return {
+            "success": True,
+            "template_id": template_id,
+            "template_name": template.name,
+            "category": template.category
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

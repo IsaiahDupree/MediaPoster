@@ -83,7 +83,7 @@ class AnalysisHealthService:
                 va.transcript,
                 va.visual_analysis,
                 va.audio_analysis,
-                va.ai_virality_score,
+                va.pre_social_score,
                 va.curation_status
             FROM videos v
             LEFT JOIN video_analysis va ON v.id = va.video_id
@@ -172,7 +172,7 @@ class AnalysisHealthService:
                 va.transcript,
                 va.visual_analysis,
                 va.audio_analysis,
-                va.ai_virality_score,
+                va.pre_social_score,
                 va.curation_status
             FROM videos v
             LEFT JOIN video_analysis va ON v.id = va.video_id

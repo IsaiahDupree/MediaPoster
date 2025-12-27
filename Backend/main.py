@@ -778,6 +778,10 @@ app.include_router(formats_api.router, tags=["Formats"])
 from api.endpoints import duplicate_detection
 app.include_router(duplicate_detection.router, tags=["Duplicate Detection"])
 
+# Posted Content Matcher (Cross-reference posted vs local library)
+from api.endpoints import posted_content_matcher
+app.include_router(posted_content_matcher.router, tags=["Posted Content Matcher"])
+
 # Prompt Generation Settings (Voice, Tone, Style, Limits)
 from api.endpoints import prompt_settings
 app.include_router(prompt_settings.router, prefix="/api", tags=["Prompt Settings"])

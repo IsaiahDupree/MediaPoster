@@ -119,7 +119,7 @@ class TestCompetitorAuditSchema:
         assert "funnel_id" in columns
         assert "entry_points" in columns
         assert "lead_magnets" in columns
-        assert "offer_ladder" in columns
+        assert "offer_stack" in columns  # Note: column is offer_stack, not offer_ladder
     
     def test_competitor_template_pack_table_exists(self, db_engine):
         """Verify competitor_template_pack table exists"""
@@ -360,9 +360,9 @@ class TestServiceDatabaseIntegration:
         with db_engine.connect() as conn:
             result = conn.execute(text("""
                 INSERT INTO competitor_deep_audit (
-                    account_id, beat_sheet, hook_archetype
+                    account_id, audit_type, beat_sheet, hook_archetype
                 ) VALUES (
-                    :account_id, CAST(:beat_sheet AS jsonb), 'Stop doing X'
+                    :account_id, 'account', CAST(:beat_sheet AS jsonb), 'Stop doing X'
                 )
                 RETURNING audit_id
             """), {

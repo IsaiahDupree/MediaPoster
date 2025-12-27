@@ -152,23 +152,23 @@ class TestFullAIAgentWorkflow:
             async with httpx.AsyncClient() as client:
                 for attempt in range(max_attempts):
                     await asyncio.sleep(POLL_INTERVAL)
-                
+                    
                     detail_response = await client.get(
                         f"{DB_API_URL}/detail/{self.ingested_video_id}",
                         timeout=30
                     )
-                
-                if detail_response.status_code == 200:
-                    detail_data = detail_response.json()
-                    if detail_data.get("transcript") or detail_data.get("topics"):
-                        self.analyzed_video_id = self.ingested_video_id
-                        print(f"   ✓ Analysis complete (attempt {attempt + 1})")
-                        print(f"   ✓ Transcript: {bool(detail_data.get('transcript'))}")
-                        print(f"   ✓ Topics: {len(detail_data.get('topics', []))}")
-                        print(f"   ✓ Deep Analysis: {bool(detail_data.get('deep_analysis'))}")
-                        break
-                
-                print(f"   Waiting for analysis... ({attempt + 1}/{max_attempts})")
+                    
+                    if detail_response.status_code == 200:
+                        detail_data = detail_response.json()
+                        if detail_data.get("transcript") or detail_data.get("topics"):
+                            self.analyzed_video_id = self.ingested_video_id
+                            print(f"   ✓ Analysis complete (attempt {attempt + 1})")
+                            print(f"   ✓ Transcript: {bool(detail_data.get('transcript'))}")
+                            print(f"   ✓ Topics: {len(detail_data.get('topics', []))}")
+                            print(f"   ✓ Deep Analysis: {bool(detail_data.get('deep_analysis'))}")
+                            break
+                    
+                    print(f"   Waiting for analysis... ({attempt + 1}/{max_attempts})")
             
             assert self.analyzed_video_id, "Analysis did not complete in time"
         elif self.analyzed_video_id:
@@ -232,21 +232,21 @@ class TestFullAIAgentWorkflow:
         hashtags = " ".join([f"#{t.replace(' ', '')}" for t in topics[:5]])
         caption = f"{transcript}\n\n{hashtags}"
         
-            # Schedule post for 1 hour from now
-            scheduled_time = (datetime.now() + timedelta(hours=1)).isoformat()
-            
-            # Use full-publish-tracked endpoint to get URL
-            publish_response = await client.post(
-                f"{BLOTATO_API_URL}/posts/full-publish-tracked",
-                json={
-                    "media_id": self.analyzed_video_id,
-                    "account_id": self.blotato_account_id,
-                    "platform": self.blotato_platform,
-                    "text": caption,
-                    "scheduled_time": scheduled_time,
-                },
-                timeout=60
-            )
+        # Schedule post for 1 hour from now
+        scheduled_time = (datetime.now() + timedelta(hours=1)).isoformat()
+        
+        # Use full-publish-tracked endpoint to get URL
+        publish_response = await client.post(
+            f"{BLOTATO_API_URL}/posts/full-publish-tracked",
+            json={
+                "media_id": self.analyzed_video_id,
+                "account_id": self.blotato_account_id,
+                "platform": self.blotato_platform,
+                "text": caption,
+                "scheduled_time": scheduled_time,
+            },
+            timeout=60
+        )
         
         assert publish_response.status_code == 200, f"Publish failed: {publish_response.text}"
         publish_data = publish_response.json()
@@ -260,17 +260,17 @@ class TestFullAIAgentWorkflow:
         print(f"   ✓ Post Submission ID: {self.post_submission_id}")
         print(f"   ✓ Platform URL: {self.posted_url}")
         
-            # Also schedule via scheduler endpoint for tracking
-            schedule_response = await client.post(
-                f"{SCHEDULE_API_URL}/create",
-                json={
-                    "media_id": self.analyzed_video_id,
-                    "platform": self.blotato_platform,
-                    "scheduled_time": scheduled_time,
-                    "caption": caption,
-                },
-                timeout=30
-            )
+        # Also schedule via scheduler endpoint for tracking
+        schedule_response = await client.post(
+            f"{SCHEDULE_API_URL}/create",
+            json={
+                "media_id": self.analyzed_video_id,
+                "platform": self.blotato_platform,
+                "scheduled_time": scheduled_time,
+                "caption": caption,
+            },
+            timeout=30
+        )
         
         if schedule_response.status_code == 200:
             schedule_data = schedule_response.json()
@@ -356,36 +356,37 @@ class TestFullAIAgentWorkflow:
         print(f"   ✓ Creative Fatigue: {signals_data.get('creative_fatigue', 0)}%")
         print(f"   ✓ Topic Momentum: {len(signals_data.get('topic_momentum', []))} topics")
         
-            # Get candidate pool
-            candidates_response = await client.get(
-                f"{API_BASE}/api/narrative-builder/candidates",
-                params={"limit": 20},
-                timeout=30
-            )
+        # Get candidate pool
+        candidates_response = await client.get(
+            f"{API_BASE}/api/narrative-builder/candidates",
+            params={"limit": 20},
+            timeout=30
+        )
+        
+        assert candidates_response.status_code == 200
+        candidates_data = candidates_response.json()
+        candidates = candidates_data.get("candidates", [])
+        
+        print(f"   ✓ Found {len(candidates)} content candidates")
+        
+        # Get narrative goals
+        goals_response = await client.get(
+            f"{NARRATIVE_API_URL}/goals",
+            timeout=30
+        )
+        
+        if goals_response.status_code == 200:
+            goals_data = goals_response.json()
+            goals = goals_data.get("goals", [])
+            print(f"   ✓ Found {len(goals)} narrative goals")
             
-            assert candidates_response.status_code == 200
-            candidates_data = candidates_response.json()
-            candidates = candidates_data.get("candidates", [])
-            
-            print(f"   ✓ Found {len(candidates)} content candidates")
-            
-            # Get narrative goals
-            goals_response = await client.get(
-                f"{NARRATIVE_API_URL}/goals",
-                timeout=30
-            )
-            
-            if goals_response.status_code == 200:
-                goals_data = goals_response.json()
-                goals = goals_data.get("goals", [])
-                print(f"   ✓ Found {len(goals)} narrative goals")
-                
-                if goals:
-                    self.narrative_goal_id = goals[0]["id"]
-                    print(f"   ✓ Using goal: {goals[0].get('goal_statement', 'N/A')}")
-                else:
-                    # Create a default goal
-                    create_goal_response = await client.post(
+            if goals:
+                self.narrative_goal_id = goals[0]["id"]
+                print(f"   ✓ Using goal: {goals[0].get('goal_statement', 'N/A')}")
+            else:
+                # Create a default goal
+                async with httpx.AsyncClient() as client2:
+                    create_goal_response = await client2.post(
                         f"{NARRATIVE_API_URL}/goals",
                         json={
                             "goal_statement": "Grow engagement and build audience",
@@ -395,10 +396,10 @@ class TestFullAIAgentWorkflow:
                         },
                         timeout=30
                     )
-                if create_goal_response.status_code == 200:
-                    goal_data = create_goal_response.json()
-                    self.narrative_goal_id = goal_data.get("id")
-                    print(f"   ✓ Created new goal: {self.narrative_goal_id}")
+                    if create_goal_response.status_code == 200:
+                        goal_data = create_goal_response.json()
+                        self.narrative_goal_id = goal_data.get("id")
+                        print(f"   ✓ Created new goal: {self.narrative_goal_id}")
     
     @pytest.mark.asyncio
     async def test_09_narrative_builder_generate_7_day_plan(self):

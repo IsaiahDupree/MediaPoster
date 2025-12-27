@@ -192,9 +192,9 @@ CREATE TABLE IF NOT EXISTS competitor_deep_audit (
     positioning_statement TEXT,  -- "They help X achieve Y using Z"
     differentiators TEXT[],
     
-    -- Embeddings for clustering (requires pgvector extension)
-    -- topic_embedding VECTOR(1536),  -- OpenAI ada-002 embedding
-    -- style_embedding VECTOR(1536),
+    -- Embeddings for clustering (pgvector extension required - enabled)
+    topic_embedding VECTOR(1536),  -- OpenAI ada-002 embedding
+    style_embedding VECTOR(1536),
     
     -- Scores
     hook_score FLOAT,  -- 0-100

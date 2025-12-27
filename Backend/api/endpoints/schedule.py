@@ -162,19 +162,19 @@ async def list_scheduled_posts(
     params = {"limit": limit}
     
     if start_date:
-        where_clauses.append("scheduled_time >= :start_date")
+        where_clauses.append("sp.scheduled_time >= :start_date")
         params["start_date"] = start_date
     
     if end_date:
-        where_clauses.append("scheduled_time <= :end_date")
+        where_clauses.append("sp.scheduled_time <= :end_date")
         params["end_date"] = end_date
     
     if platform:
-        where_clauses.append("platform = :platform")
+        where_clauses.append("sp.platform = :platform")
         params["platform"] = platform
     
     if status:
-        where_clauses.append("status = :status")
+        where_clauses.append("sp.status = :status")
         params["status"] = status
     
     # Use actual column names from scheduled_posts table
@@ -694,15 +694,16 @@ async def record_posted_content(request: RecordPostedRequest):
     
     try:
         with engine.connect() as conn:
+            # Use CAST instead of :: for parameter binding compatibility
             result = conn.execute(text("""
                 INSERT INTO scheduled_posts 
                 (clip_id, content_variant_id, platform, platform_account_id, 
                  scheduled_time, status, platform_post_id, platform_url, 
-                 published_at, source, created_at, updated_at)
+                 published_at, source, created_at, updated_at, title, caption)
                 VALUES 
-                (:media_id::uuid, :media_id::uuid, :platform, :account_id,
+                (CAST(:media_id AS uuid), CAST(:media_id AS uuid), :platform, :account_id,
                  NOW(), :status, :platform_post_id, :platform_url,
-                 NOW(), 'manual', NOW(), NOW())
+                 NOW(), 'manual', NOW(), NOW(), :title, :caption)
                 RETURNING id
             """), {
                 "media_id": request.media_id,
@@ -711,6 +712,8 @@ async def record_posted_content(request: RecordPostedRequest):
                 "status": request.status,
                 "platform_post_id": request.platform_post_id,
                 "platform_url": request.platform_url,
+                "title": request.title,
+                "caption": request.caption,
             })
             conn.commit()
             new_id = result.fetchone()[0]

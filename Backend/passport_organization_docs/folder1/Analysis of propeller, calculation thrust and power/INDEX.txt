@@ -1,0 +1,63 @@
+================================================================================
+DIRECTORY INDEX: Analysis of propeller, calculation thrust and power
+================================================================================
+Generated: 2025-12-26 18:15:09
+Path: /Volumes/My Passport/folder1/Analysis of propeller, calculation thrust and power
+
+SUMMARY
+--------------------------------------------------------------------------------
+Directories: 4
+Files: 12
+Total Size: 205.72 MB
+Total Subdirectories (recursive): 4
+
+FILE TYPES
+--------------------------------------------------------------------------------
+  .zip                     4 files     152.74 MB
+  .mp4                     2 files      48.44 MB
+  .stp                     1 files       4.03 MB
+  .wbpj                    2 files     512.66 KB
+  .bat                     2 files      982.00 B
+  .docx                    1 files        0.00 B
+
+DIRECTORIES
+--------------------------------------------------------------------------------
+  📁 8x3-8-propeller-1.snapshot.6/
+     Files: 0 | Size: 0.00 B
+  📁 simple propellor cfd 2_files/
+     Files: 0 | Size: 0.00 B
+  📁 simple propellor cfd_files/
+     Files: 0 | Size: 0.00 B
+  📁 x-uav-clouds-vtol-retrofit-1.snapshot.1/
+     Files: 0 | Size: 0.00 B
+
+FILES
+--------------------------------------------------------------------------------
+
+  .bat (2 files):
+    • cleanup-fluent-LAPTOP-NHFAG42P-19316.bat               492.00 B  2021-05-27 16:34:56
+    • cleanup-fluent-LAPTOP-NHFAG42P-3652.bat                490.00 B  2021-05-26 20:42:22
+
+  .docx (1 files):
+    • Analysis of propeller, calculation thrust and power.docx       0.00 B  2021-05-24 16:12:58
+
+  .mp4 (2 files):
+    • Tutorial ANSYS CFX Part - 12 Analysis of propeller, calculation thrust and power.mp4     27.98 MB  2021-05-24 16:19:24
+    • Tutorial ANSYS CFX Part - 22 Analysis of propeller, calculation thrust and power.mp4     20.45 MB  2021-05-24 16:19:38
+
+  .stp (1 files):
+    • Variable pitch prop.stp                                 4.03 MB  2021-05-24 17:08:32
+
+  .wbpj (2 files):
+    • simple propellor cfd 2.wbpj                           469.36 KB  2021-05-27 15:54:18
+    • simple propellor cfd.wbpj                              43.29 KB  2021-05-25 23:57:52
+
+  .zip (4 files):
+    • 8x3-8-propeller-1.snapshot.6.zip                        4.18 MB  2021-05-25 21:13:12
+    • propeller-airplane-2.snapshot.2.zip                     2.26 MB  2021-05-26 17:49:50
+    • variable-pitch-propeller-2.snapshot.2.zip               4.08 MB  2021-05-24 17:07:58
+    • x-uav-clouds-vtol-retrofit-1.snapshot.1.zip           142.24 MB  2021-05-26 17:53:34
+
+================================================================================
+End of Index
+================================================================================

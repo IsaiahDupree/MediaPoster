@@ -1,0 +1,92 @@
+================================================================================
+DIRECTORY INDEX: Atmosphere Model
+================================================================================
+Generated: 2025-12-26 18:15:09
+Path: /Volumes/My Passport/folder1/Atmosphere Model
+
+SUMMARY
+--------------------------------------------------------------------------------
+Directories: 6
+Files: 31
+Total Size: 232.37 MB
+Total Subdirectories (recursive): 6
+
+FILE TYPES
+--------------------------------------------------------------------------------
+  .mp4                     7 files     231.64 MB
+  .png                    14 files     346.43 KB
+  .prproj                  1 files     129.25 KB
+  .pptx                    2 files     101.18 KB
+  .docx                    2 files      97.21 KB
+  .pdf                     1 files      34.35 KB
+  .webp                    1 files      25.43 KB
+  .m                       3 files      15.61 KB
+
+DIRECTORIES
+--------------------------------------------------------------------------------
+  📁 Adobe Premiere Pro Auto-Save/
+     Files: 0 | Size: 0.00 B
+  📁 Adobe Premiere Pro Captured Audio/
+     Files: 0 | Size: 0.00 B
+  📁 Layers/
+     Files: 0 | Size: 0.00 B
+  📁 Parameters/
+     Files: 0 | Size: 0.00 B
+  📁 derivation/
+     Files: 0 | Size: 0.00 B
+  📁 talking/
+     Files: 0 | Size: 0.00 B
+
+FILES
+--------------------------------------------------------------------------------
+
+  .docx (2 files):
+    • Atmosphere Model.docx                                  97.05 KB  2021-07-06 00:33:28
+    • ~$mosphere Model.docx                                  162.00 B  2021-07-05 01:32:04
+
+  .m (3 files):
+    • SA_at_altitude_2.m                                     11.16 KB  2021-07-05 20:22:52
+    • S_A_1976_Finish_Up.m                                    4.23 KB  2021-07-05 01:47:38
+    • Untitled.m                                             222.00 B  2021-07-06 02:10:42
+
+  .mp4 (7 files):
+    • AeroPlane - Cinematic Videos 4K Free Plane Footage Stock.mp4     12.88 MB  2021-07-05 02:00:20
+    • Airplane stock footage Free HD Videos - No Copyright.mp4     43.76 MB  2021-07-05 01:58:36
+    • Clouds Stock Footage Royalty Free Free HD Videos - no copyright.mp4    133.61 MB  2021-07-05 01:53:56
+    • FREEDIO Rocket launch, space journey royalty free HD stock video footage.mp4      5.93 MB  2021-07-05 02:00:52
+    • Rocket Launch - Royalty Free Stock Footage.mp4          3.52 MB  2021-07-05 01:59:56
+    • Stock Footage - Clouds.mp4                             22.28 MB  2021-07-05 01:53:08
+    • a plane taking off from the airport ( 4K royalty free stock video ).mp4      9.67 MB  2021-07-05 01:58:42
+
+  .pdf (1 files):
+    • ASE 4153-6153 Homework 1 2021.pdf                      34.35 KB  2021-01-25 11:02:06
+
+  .png (14 files):
+    • Format LOng.PNG                                         9.39 KB  2021-07-05 02:24:50
+    • Gravity.PNG                                            13.11 KB  2021-07-05 02:35:38
+    • Ideal gas constant.PNG                                 15.68 KB  2021-07-05 02:40:14
+    • Temperature in kelvin.PNG                              18.48 KB  2021-07-05 03:26:24
+    • avogadro's number.PNG                                  13.79 KB  2021-07-05 02:43:26
+    • function parameters.PNG                                28.35 KB  2021-07-05 20:23:42
+    • gamma.PNG                                              12.84 KB  2021-07-05 02:27:14
+    • gravity in ft.PNG                                      12.01 KB  2021-07-05 02:36:42
+    • lapse rate.PNG                                         21.12 KB  2021-07-05 03:27:36
+    • radius of earth.PNG                                    14.84 KB  2021-07-05 02:37:44
+    • results.PNG                                           133.56 KB  2021-07-06 02:31:24
+    • slutherland's constant.PNG                             12.80 KB  2021-07-05 02:41:22
+    • sutherland's constant.PNG                              14.49 KB  2021-07-06 01:47:06
+    • zero out vectors.PNG                                   25.96 KB  2021-07-05 18:27:08
+
+  .pptx (2 files):
+    • Atmosphere Model.pptx                                 101.01 KB  2021-07-05 18:25:02
+    • ~$Atmosphere Model.pptx                                165.00 B  2021-07-05 01:34:52
+
+  .prproj (1 files):
+    • Atmosphere Model.prproj                               129.25 KB  2021-07-06 11:38:58
+
+  .webp (1 files):
+    • 9.webp                                                 25.43 KB  2021-07-05 03:34:42
+
+================================================================================
+End of Index
+================================================================================

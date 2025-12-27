@@ -22,14 +22,15 @@ from openai import AsyncOpenAI
 from database.connection import get_db
 from database.models import Video, VideoAnalysis
 from loguru import logger
+from config.paths import get_iphone_import_dir
 
 router = APIRouter(prefix="/api/curation", tags=["AI Curation"])
 
 # OpenAI client
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# iPhone Import folder path
-IPHONE_IMPORT_DIR = "/Users/isaiahdupree/Documents/IphoneImport"
+# iPhone Import folder path - now uses centralized config
+IPHONE_IMPORT_DIR = str(get_iphone_import_dir())
 
 # =============================================================================
 # MODELS

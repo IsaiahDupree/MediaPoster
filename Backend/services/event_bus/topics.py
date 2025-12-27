@@ -247,6 +247,81 @@ class Topics:
     IMPORT_JOB_CANCELLED = "import.job.cancelled"         # Import cancelled
     
     # =========================================================================
+    # TTS (Text-to-Speech) SERVICE
+    # =========================================================================
+    TTS_REQUESTED = "tts.requested"                       # New TTS job
+    TTS_STARTED = "tts.started"                          # Job picked up
+    TTS_PROGRESS = "tts.progress"                        # Progress update
+    TTS_COMPLETED = "tts.completed"                      # Audio generated
+    TTS_FAILED = "tts.failed"                            # Generation error
+    TTS_MODEL_LOADED = "tts.model.loaded"                # Model ready
+    TTS_MODEL_UNLOADED = "tts.model.unloaded"            # Model freed
+    
+    # =========================================================================
+    # REMOTION (Video Editing) SERVICE
+    # =========================================================================
+    REMOTION_REQUESTED = "remotion.requested"            # New render job
+    REMOTION_STARTED = "remotion.started"               # Job picked up
+    REMOTION_COMPOSING = "remotion.composing"           # Building composition
+    REMOTION_RENDERING = "remotion.rendering"            # Rendering video
+    REMOTION_PROGRESS = "remotion.progress"              # Progress update
+    REMOTION_COMPLETED = "remotion.completed"          # Video rendered
+    REMOTION_FAILED = "remotion.failed"                  # Render error
+    
+    # =========================================================================
+    # VIDEO MATTING SERVICE
+    # =========================================================================
+    MATTING_REQUESTED = "matting.requested"              # New matting job
+    MATTING_STARTED = "matting.started"                  # Job picked up
+    MATTING_SEGMENTING = "matting.segmenting"           # Segmenting objects
+    MATTING_EXTRACTING = "matting.extracting"           # Extracting foreground
+    MATTING_COMPOSITING = "matting.compositing"          # Compositing into target
+    MATTING_PROGRESS = "matting.progress"                # Progress update
+    MATTING_COMPLETED = "matting.completed"             # Video processed
+    MATTING_FAILED = "matting.failed"                    # Processing error
+    
+    # =========================================================================
+    # CONTENT BRIEF ENHANCED
+    # =========================================================================
+    CONTENT_BRIEF_GENERATED = "content.brief.generated"  # New brief generated
+    CONTENT_BRIEF_SCORED = "content.brief.scored"        # Brief scored
+    CONTENT_BRIEF_APPROVED = "content.brief.approved"   # Brief approved for production
+    CONTENT_BRIEF_SCRIPT_GENERATED = "content.brief.script.generated"  # Script.json generated
+    
+    # =========================================================================
+    # PIPELINE ORCHESTRATION
+    # =========================================================================
+    PIPELINE_REQUESTED = "pipeline.requested"            # New pipeline job
+    PIPELINE_STARTED = "pipeline.started"                # Pipeline started
+    PIPELINE_STAGE_STARTED = "pipeline.stage.started"     # Stage started
+    PIPELINE_STAGE_COMPLETED = "pipeline.stage.completed" # Stage completed
+    PIPELINE_PROGRESS = "pipeline.progress"               # Progress update
+    PIPELINE_COMPLETED = "pipeline.completed"            # Pipeline finished
+    PIPELINE_FAILED = "pipeline.failed"                   # Pipeline error
+    
+    # =========================================================================
+    # MUSIC SERVICE
+    # =========================================================================
+    MUSIC_REQUESTED = "music.requested"                  # New music request
+    MUSIC_STARTED = "music.started"                      # Music job started
+    MUSIC_SEARCHING = "music.searching"                  # Searching for music
+    MUSIC_DOWNLOADING = "music.downloading"              # Downloading music
+    MUSIC_PROGRESS = "music.progress"                    # Progress update
+    MUSIC_COMPLETED = "music.completed"                  # Music ready
+    MUSIC_FAILED = "music.failed"                        # Music error
+    
+    # =========================================================================
+    # VISUALS SERVICE
+    # =========================================================================
+    VISUALS_REQUESTED = "visuals.requested"              # New visuals request
+    VISUALS_STARTED = "visuals.started"                  # Visuals job started
+    VISUALS_FETCHING = "visuals.fetching"                # Fetching visuals
+    VISUALS_PROCESSING = "visuals.processing"            # Processing visuals
+    VISUALS_PROGRESS = "visuals.progress"                # Progress update
+    VISUALS_COMPLETED = "visuals.completed"              # Visuals ready
+    VISUALS_FAILED = "visuals.failed"                    # Visuals error
+    
+    # =========================================================================
     # SYSTEM
     # =========================================================================
     SYSTEM_STARTUP = "system.startup"                     # Backend started

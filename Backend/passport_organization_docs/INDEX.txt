@@ -1,0 +1,89 @@
+================================================================================
+DIRECTORY INDEX: My Passport
+================================================================================
+Generated: 2025-12-26 18:15:08
+Path: /Volumes/My Passport
+
+SUMMARY
+--------------------------------------------------------------------------------
+Directories: 16
+Files: 13
+Total Size: 288.56 GB
+Total Subdirectories (recursive): 609
+
+FILE TYPES
+--------------------------------------------------------------------------------
+  .mp4                     9 files       2.90 GB
+  .mov                     2 files     518.99 MB
+  .mp3                     2 files      43.35 KB
+
+DIRECTORIES
+--------------------------------------------------------------------------------
+  📁 33/
+     Files: 2 | Size: 43.35 KB
+  📁 Camera_5_10_2024/
+     Files: 0 | Size: 0.00 B
+     Subdirectories: 4
+  📁 Coding_backup/
+     Files: 1 | Size: 14.24 KB
+     Subdirectories: 57
+  📁 Copy of Beachbody.com - Shaun T - Insanity Deluxe/
+     Files: 15 | Size: 7.94 GB
+  📁 Downloads/
+     Files: 2 | Size: 57.97 MB
+     Subdirectories: 3
+  📁 FLSUN v400 Configuration (Camera Working!)/
+     Files: 0 | Size: 0.00 B
+     Subdirectories: 330
+  📁 Sarah_backup/
+     Files: 113 | Size: 5.32 GB
+  📁 SolidWorks 2017 SP5 Full Premium + Activator - [CrackzSoft]/
+     Files: 5 | Size: 12.92 GB
+     Subdirectories: 2
+  📁 System Volume Information/
+     Files: 5 | Size: 25.38 MB
+     Subdirectories: 1
+  📁 announcements/
+     Files: 2 | Size: 43.35 KB
+  📁 audio/
+     Files: 2 | Size: 43.35 KB
+     Subdirectories: 46
+  📁 backup videos/
+     Files: 39 | Size: 1.66 GB
+     Subdirectories: 9
+  📁 backup_2/
+     Files: 2006 | Size: 191.16 GB
+     Subdirectories: 10
+  📁 config/
+     Files: 1 | Size: 798.00 B
+  📁 folder1/
+     Files: 1208 | Size: 66.07 GB
+     Subdirectories: 131
+  📁 mappings/
+     Files: 1 | Size: 940.00 B
+
+FILES
+--------------------------------------------------------------------------------
+
+  .mov (2 files):
+    • IMG_6267.MOV                                            12.00 B  2024-09-19 19:05:45
+    • IMG_6762.MOV                                          518.99 MB  2024-10-22 01:53:38
+
+  .mp3 (2 files):
+    • 001.mp3                                                20.04 KB  2025-08-17 03:12:21
+    • 002.mp3                                                23.31 KB  2025-08-17 03:12:22
+
+  .mp4 (9 files):
+    • 2024-06-13 19-00-18.mp4                                 2.04 GB  2024-06-13 20:00:03
+    • 2024-06-24 11-22-39.mp4                                15.79 MB  2024-06-24 11:23:02
+    • 2024-06-24 11-33-09.mp4                                 1.35 MB  2024-06-24 11:33:12
+    • 2024-06-24 11-33-40.mp4                                81.16 MB  2024-06-24 11:34:53
+    • 2024-06-24 11-35-52.mp4                               224.11 MB  2024-06-24 11:39:12
+    • 2024-06-24 11-43-23.mp4                               111.82 MB  2024-06-24 11:50:44
+    • 2024-06-24 11-51-20.mp4                               102.29 MB  2024-06-24 12:01:16
+    • 2024-06-24 12-10-26.mp4                               199.28 MB  2024-06-24 12:37:34
+    • 2024-06-24 12-55-51.mp4                               142.95 MB  2024-06-24 13:14:26
+
+================================================================================
+End of Index
+================================================================================

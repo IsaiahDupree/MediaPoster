@@ -1,0 +1,25 @@
+================================================================================
+DIRECTORY INDEX: Courses
+================================================================================
+Generated: 2025-12-26 18:15:09
+Path: /Volumes/My Passport/backup videos/Courses
+
+SUMMARY
+--------------------------------------------------------------------------------
+Directories: 3
+Files: 0
+Total Size: 0.00 B
+Total Subdirectories (recursive): 3
+
+DIRECTORIES
+--------------------------------------------------------------------------------
+  📁 Alexunder Hess - The Landing Page Mastery/
+     Files: 0 | Size: 0.00 B
+  📁 Nathan Aston - 2023 Integromat Automation Course/
+     Files: 0 | Size: 0.00 B
+  📁 Ole Lehmann  - AI Audience Accelerator/
+     Files: 0 | Size: 0.00 B
+
+================================================================================
+End of Index
+================================================================================

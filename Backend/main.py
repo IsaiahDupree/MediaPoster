@@ -18,6 +18,7 @@ import sys
 from config import settings
 from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces, trends
 from api.endpoints import event_history, video_routing_api
+from api.endpoints import tts, matting, remotion, pipeline
 from database.connection import init_db, close_db
 
 # Event Bus imports
@@ -176,6 +177,36 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Narrative Builder Worker failed to start: {e}")
     
+    # Start the TTS Worker (text-to-speech generation service)
+    tts_worker = None
+    try:
+        from services.tts.worker import TTSWorker
+        tts_worker = TTSWorker(event_bus)
+        await tts_worker.start()
+        logger.success("✓ TTS Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  TTS Worker failed to start: {e}")
+    
+    # Start the Matting Worker (video matting/segmentation service)
+    matting_worker = None
+    try:
+        from services.matting.worker import MattingWorker
+        matting_worker = MattingWorker(event_bus)
+        await matting_worker.start()
+        logger.success("✓ Matting Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Matting Worker failed to start: {e}")
+    
+    # Start the Remotion Worker (video composition and rendering service)
+    remotion_worker = None
+    try:
+        from services.remotion.worker import RemotionWorker
+        remotion_worker = RemotionWorker(event_bus)
+        await remotion_worker.start()
+        logger.success("✓ Remotion Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Remotion Worker failed to start: {e}")
+    
     yield
     
     # Stop the Notification Worker on shutdown
@@ -217,6 +248,30 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Post Scheduler stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Post Scheduler: {e}")
+    
+    # Stop the TTS Worker on shutdown
+    if tts_worker:
+        try:
+            await tts_worker.stop()
+            logger.success("✓ TTS Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping TTS Worker: {e}")
+    
+    # Stop the Matting Worker on shutdown
+    if matting_worker:
+        try:
+            await matting_worker.stop()
+            logger.success("✓ Matting Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Matting Worker: {e}")
+    
+    # Stop the Remotion Worker on shutdown
+    if remotion_worker:
+        try:
+            await remotion_worker.stop()
+            logger.success("✓ Remotion Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Remotion Worker: {e}")
     
     # Shutdown Event Bus
     if event_bus:
@@ -640,6 +695,10 @@ app.include_router(app_settings.router, tags=["Settings"])
 # Health Checks
 from api.endpoints import health
 app.include_router(health.router, tags=["Health"])
+app.include_router(tts.router, tags=["TTS Service"])
+app.include_router(matting.router, tags=["Video Matting Service"])
+app.include_router(remotion.router, tags=["Remotion Service"])
+app.include_router(pipeline.router, tags=["Pipeline Service"])
 
 # Virtual Environment Manager (Python 3.11 for AI/ML tasks)
 from api.endpoints import venv_status

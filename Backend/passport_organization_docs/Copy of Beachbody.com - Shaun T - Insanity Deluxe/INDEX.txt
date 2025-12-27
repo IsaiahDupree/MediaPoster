@@ -1,0 +1,39 @@
+================================================================================
+DIRECTORY INDEX: Copy of Beachbody.com - Shaun T - Insanity Deluxe
+================================================================================
+Generated: 2025-12-26 18:15:08
+Path: /Volumes/My Passport/Copy of Beachbody.com - Shaun T - Insanity Deluxe
+
+SUMMARY
+--------------------------------------------------------------------------------
+Directories: 0
+Files: 15
+Total Size: 7.94 GB
+
+FILE TYPES
+--------------------------------------------------------------------------------
+  .m4v                    15 files       7.94 GB
+
+FILES
+--------------------------------------------------------------------------------
+
+  .m4v (15 files):
+    • 00 - Dig Deeper.m4v                                    56.50 MB  2025-02-21 21:23:25
+    • 01 - Fit Test.m4v                                     403.43 MB  2025-02-21 21:37:31
+    • 02 - Plyometric Cardio Circuit.m4v                    571.35 MB  2025-02-21 21:31:58
+    • 03 - Cardio Power & Resistance.m4v                    551.98 MB  2025-02-21 21:48:30
+    • 04 - Cardio Recovery.m4v                              440.59 MB  2025-02-21 21:48:09
+    • 05 - Pure Cardio.m4v                                  525.96 MB  2025-02-21 21:35:14
+    • 06 - Cardio Abs.m4v                                   297.16 MB  2025-02-21 21:26:42
+    • 07 - Core Cardio & Balance.m4v                        542.42 MB  2025-02-21 21:32:39
+    • 08 - Max Interval Circuit.m4v                         797.03 MB  2025-02-21 21:37:43
+    • 09 - Max Interval Plyo.m4v                            739.63 MB  2025-02-21 21:28:14
+    • 10 - Max Cardio Conditioning.m4v                      703.60 MB  2025-02-21 21:44:51
+    • 11 - Max Recovery.m4v                                 614.21 MB  2025-02-21 21:32:19
+    • 12 - Insane Abs.m4v                                   515.16 MB  2025-02-21 21:49:00
+    • 13 - Max Interval Sports Training.m4v                 721.92 MB  2025-02-21 21:47:49
+    • 14 - Upper Body Weight Training.m4v                   654.26 MB  2025-02-21 21:39:53
+
+================================================================================
+End of Index
+================================================================================

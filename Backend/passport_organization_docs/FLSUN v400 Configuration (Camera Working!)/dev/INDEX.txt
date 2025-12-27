@@ -1,0 +1,41 @@
+================================================================================
+DIRECTORY INDEX: dev
+================================================================================
+Generated: 2025-12-26 18:15:08
+Path: /Volumes/My Passport/FLSUN v400 Configuration (Camera Working!)/dev
+
+SUMMARY
+--------------------------------------------------------------------------------
+Directories: 11
+Files: 0
+Total Size: 0.00 B
+Total Subdirectories (recursive): 11
+
+DIRECTORIES
+--------------------------------------------------------------------------------
+  📁 block/
+     Files: 0 | Size: 0.00 B
+  📁 bus/
+     Files: 0 | Size: 0.00 B
+  📁 char/
+     Files: 0 | Size: 0.00 B
+  📁 disk/
+     Files: 0 | Size: 0.00 B
+  📁 input/
+     Files: 0 | Size: 0.00 B
+  📁 net/
+     Files: 0 | Size: 0.00 B
+  📁 pts/
+     Files: 0 | Size: 0.00 B
+  📁 serial/
+     Files: 0 | Size: 0.00 B
+  📁 shm/
+     Files: 0 | Size: 0.00 B
+  📁 snd/
+     Files: 0 | Size: 0.00 B
+  📁 v4l/
+     Files: 0 | Size: 0.00 B
+
+================================================================================
+End of Index
+================================================================================

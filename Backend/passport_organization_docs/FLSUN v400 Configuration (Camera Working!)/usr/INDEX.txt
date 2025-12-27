@@ -1,0 +1,37 @@
+================================================================================
+DIRECTORY INDEX: usr
+================================================================================
+Generated: 2025-12-26 18:15:08
+Path: /Volumes/My Passport/FLSUN v400 Configuration (Camera Working!)/usr
+
+SUMMARY
+--------------------------------------------------------------------------------
+Directories: 9
+Files: 0
+Total Size: 0.00 B
+Total Subdirectories (recursive): 9
+
+DIRECTORIES
+--------------------------------------------------------------------------------
+  📁 bin/
+     Files: 0 | Size: 0.00 B
+  📁 games/
+     Files: 0 | Size: 0.00 B
+  📁 include/
+     Files: 0 | Size: 0.00 B
+  📁 lib/
+     Files: 0 | Size: 0.00 B
+  📁 libexec/
+     Files: 0 | Size: 0.00 B
+  📁 local/
+     Files: 0 | Size: 0.00 B
+  📁 sbin/
+     Files: 0 | Size: 0.00 B
+  📁 share/
+     Files: 0 | Size: 0.00 B
+  📁 src/
+     Files: 0 | Size: 0.00 B
+
+================================================================================
+End of Index
+================================================================================

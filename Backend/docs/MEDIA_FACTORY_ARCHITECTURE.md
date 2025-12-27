@@ -473,5 +473,255 @@ graph TB
 
 ---
 
-*These diagrams show the complete Media Factory system architecture, data flow, and component interactions.*
+---
+
+## Production Improvements Architecture
+
+### Data Contracts Flow
+
+```mermaid
+graph LR
+    subgraph "Input Contracts"
+        TrendCard[TrendCard Schema]
+        Cluster[Cluster Schema]
+    end
+    
+    subgraph "Processing Contracts"
+        Brief[Content Brief Schema]
+        Script[Script Schema]
+    end
+    
+    subgraph "Output Contracts"
+        Timeline[Timeline Schema]
+        RenderJob[Render Job Schema]
+        PublishJob[Publish Job Schema]
+    end
+    
+    TrendCard --> Cluster
+    Cluster --> Brief
+    Brief --> Script
+    Script --> Timeline
+    Timeline --> RenderJob
+    RenderJob --> PublishJob
+    
+    style TrendCard fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style Brief fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style Script fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Timeline fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style RenderJob fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style PublishJob fill:#ffebee,stroke:#c62828,stroke-width:2px
+```
+
+---
+
+### Idempotency & Retry Flow
+
+```mermaid
+sequenceDiagram
+    participant Stage
+    participant Idempotency
+    participant Retry
+    participant Operation
+    participant DLQ
+    
+    Stage->>Idempotency: Generate key (job_id:stage:hash)
+    Idempotency->>Idempotency: Check if exists
+    alt Already executed
+        Idempotency->>Stage: Return cached result
+    else Not executed
+        Stage->>Retry: Execute with retry
+        Retry->>Operation: Attempt 1
+        alt Success
+            Operation->>Retry: Success
+            Retry->>Idempotency: Store result
+            Retry->>Stage: Return result
+        else Failure
+            Operation->>Retry: Failure
+            Retry->>Retry: Wait (exponential backoff)
+            Retry->>Operation: Attempt 2
+            alt Success
+                Operation->>Retry: Success
+                Retry->>Idempotency: Store result
+                Retry->>Stage: Return result
+            else Failure
+                Operation->>Retry: Failure
+                Retry->>DLQ: Add to DLQ
+                DLQ->>Stage: Failure
+            end
+        end
+    end
+```
+
+---
+
+### Persistent Orchestration
+
+```mermaid
+erDiagram
+    MediaFactoryJob ||--o{ MediaFactoryJobStage : has
+    MediaFactoryJob ||--o{ MediaFactoryArtifact : generates
+    MediaFactoryJob ||--o{ MediaFactoryEvent : emits
+    MediaFactoryJobStage ||--o| MediaFactoryDLQ : may_fail_to
+    
+    MediaFactoryJob {
+        uuid job_id PK
+        string correlation_id
+        string status
+        float progress
+        string brief_id
+        json brief_data
+        datetime started_at
+        datetime completed_at
+        text error
+        json final_output
+    }
+    
+    MediaFactoryJobStage {
+        uuid id PK
+        uuid job_id FK
+        string stage_name
+        int stage_order
+        string status
+        float progress
+        json input_data
+        json output_data
+        string idempotency_key UK
+        int retry_count
+        datetime started_at
+        datetime completed_at
+    }
+    
+    MediaFactoryArtifact {
+        uuid id PK
+        uuid job_id FK
+        string stage_name
+        string artifact_type
+        string file_path
+        int file_size_bytes
+        string file_hash
+        json metadata
+        datetime expires_at
+    }
+    
+    MediaFactoryEvent {
+        uuid id PK
+        uuid job_id FK
+        string correlation_id
+        string event_type
+        string event_topic
+        json event_payload
+        datetime occurred_at
+    }
+    
+    MediaFactoryDLQ {
+        uuid id PK
+        string job_id
+        string stage_name
+        text error
+        json payload
+        int retry_count
+        string idempotency_key
+        boolean resolved
+        datetime failed_at
+    }
+```
+
+---
+
+### Quality Gates Flow
+
+```mermaid
+flowchart TD
+    Start([Pipeline Stage Complete]) --> Gate{Quality Gate}
+    
+    Gate --> AudioGate[Audio Quality Gate]
+    Gate --> CaptionGate[Caption Quality Gate]
+    Gate --> VisualGate[Visual Quality Gate]
+    Gate --> PublishGate[Publish Quality Gate]
+    
+    AudioGate --> AudioCheck{Loudness, Clipping,<br/>Silence, SNR}
+    CaptionGate --> CaptionCheck{Word Errors,<br/>Line Length,<br/>Timing}
+    VisualGate --> VisualCheck{Text Density,<br/>Pattern Interrupt,<br/>Resolution}
+    PublishGate --> PublishCheck{File Size,<br/>Codec,<br/>Duration}
+    
+    AudioCheck -->|Pass| Continue1[Continue Pipeline]
+    AudioCheck -->|Fail| Fail1[Fail Pipeline]
+    
+    CaptionCheck -->|Pass| Continue2[Continue Pipeline]
+    CaptionCheck -->|Fail| Fail2[Fail Pipeline]
+    
+    VisualCheck -->|Pass| Continue3[Continue Pipeline]
+    VisualCheck -->|Fail| Fail3[Fail Pipeline]
+    
+    PublishCheck -->|Pass| Continue4[Continue Pipeline]
+    PublishCheck -->|Fail| Fail4[Fail Pipeline]
+    
+    style Gate fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style Continue1 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Continue2 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Continue3 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Continue4 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Fail1 fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style Fail2 fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style Fail3 fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style Fail4 fill:#ffebee,stroke:#c62828,stroke-width:2px
+```
+
+---
+
+### Event Bus Architecture
+
+```mermaid
+graph TB
+    subgraph "Event Bus Backends"
+        InMemory[In-Memory Event Bus<br/>Python Dictionary]
+        Redis[Redis Streams Event Bus<br/>Redis Streams]
+    end
+    
+    subgraph "Services"
+        TTS[TTS Service]
+        Matting[Matting Service]
+        Music[Music Service]
+        Visuals[Visuals Service]
+        Remotion[Remotion Service]
+        Pipeline[Pipeline Orchestrator]
+    end
+    
+    subgraph "Event Bus Features"
+        Delivery[At-Least-Once Delivery]
+        Ordering[Per-Topic/Stream Ordering]
+        Backpressure[Backpressure Strategy]
+        DLQ[Dead Letter Queue]
+    end
+    
+    TTS <--> InMemory
+    Matting <--> InMemory
+    Music <--> InMemory
+    Visuals <--> InMemory
+    Remotion <--> InMemory
+    Pipeline <--> InMemory
+    
+    TTS <--> Redis
+    Matting <--> Redis
+    Music <--> Redis
+    Visuals <--> Redis
+    Remotion <--> Redis
+    Pipeline <--> Redis
+    
+    InMemory --> Delivery
+    Redis --> Delivery
+    InMemory --> Ordering
+    Redis --> Ordering
+    Redis --> Backpressure
+    InMemory --> DLQ
+    Redis --> DLQ
+    
+    style InMemory fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style Redis fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Delivery fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+```
+
+---
+
+*These diagrams show the complete Media Factory system architecture, data flow, component interactions, and production improvements.*
 

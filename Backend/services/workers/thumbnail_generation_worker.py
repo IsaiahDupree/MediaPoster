@@ -12,8 +12,8 @@ Emits:
 """
 
 import asyncio
-import logging
 import uuid
+from loguru import logger
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -23,8 +23,6 @@ from services.thumbnail_service import generate_thumbnail
 from database.connection import async_session_maker
 from database.models import Video
 from sqlalchemy import select, update
-
-logger = logging.getLogger(__name__)
 
 
 class ThumbnailGenerationWorker(BaseWorker):

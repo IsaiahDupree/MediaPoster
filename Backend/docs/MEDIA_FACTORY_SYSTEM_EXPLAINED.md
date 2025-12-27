@@ -430,6 +430,104 @@ This allows **provider swapping** without code changes.
 
 ---
 
+## 🏭 Production Improvements
+
+### 1. Data Contracts ✅
+
+**Stable interfaces for all data structures:**
+- `TrendCardSchema` - Raw trend input
+- `ClusterSchema` - Clustered trends
+- `ContentBriefSchema` - Production-ready briefs
+- `ScriptSchema` - script.json format
+- `TimelineSchema` - timeline.json format
+- `RenderJobSchema` - Remotion render jobs
+- `PublishJobSchema` - Multi-platform publishing
+
+**Benefits:**
+- Provider swapping without breaking changes
+- Multi-server rendering compatibility
+- Schema validation
+- Version compatibility
+
+**See:** `Backend/docs/MEDIA_FACTORY_PRODUCTION_IMPROVEMENTS.md`
+
+---
+
+### 2. Idempotency + Retries + DLQ ✅
+
+**Idempotency:**
+- Key format: `{job_id}:{stage_name}:{input_hash}`
+- Prevents duplicate operations
+- Cached results with TTL
+
+**Retry Policies:**
+- Exponential backoff (default: 3 retries)
+- Linear backoff
+- Fixed delay
+- No retry
+
+**Dead Letter Queue:**
+- Stores failed operations
+- Payload snapshots for debugging
+- Retry count tracking
+- Query by job_id, stage_name
+
+**See:** `Backend/services/media_factory/idempotency.py`
+
+---
+
+### 3. Persistent Orchestration ✅
+
+**Database Tables:**
+- `media_factory_jobs` - Pipeline jobs
+- `media_factory_job_stages` - Stage execution state
+- `media_factory_artifacts` - Generated files
+- `media_factory_events` - Event audit log (optional)
+- `media_factory_dlq` - Dead letter queue
+
+**Benefits:**
+- Survives process restarts
+- Multi-server compatible
+- Full audit trail
+- Artifact tracking
+
+**See:** `Backend/database/models_media_factory.py`
+
+---
+
+### 4. Event Bus Documentation ✅
+
+**Two Backends:**
+1. **In-Memory** (default) - Python dictionary, single-process
+2. **Redis Streams** (production) - Redis Streams, multi-server
+
+**Guarantees:**
+- **Delivery**: At-least-once (not exactly-once)
+- **Ordering**: Per-topic/stream ordering
+- **Backpressure**: Stream length limits (Redis) or none (in-memory)
+- **Persistence**: Durable (Redis) or none (in-memory)
+
+**See:** `Backend/docs/MEDIA_FACTORY_EVENT_BUS.md`
+
+---
+
+### 5. Quality Gates ✅
+
+**Automated Quality Checks:**
+- **Audio Gate**: Loudness, clipping, silence, SNR
+- **Caption Gate**: Word errors, line length, timing
+- **Visual Gate**: Text density, pattern interrupt, resolution
+- **Publish Gate**: File size, codec, duration, platform constraints
+
+**Integration:**
+- Called between pipeline stages
+- Fail pipeline if quality check fails
+- Detailed error messages
+
+**See:** `Backend/services/media_factory/quality_gates.py`
+
+---
+
 ## 📚 Technology Stack
 
 ### Backend

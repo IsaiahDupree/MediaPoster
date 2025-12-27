@@ -633,3 +633,98 @@ async def run_full_audit(
     except Exception as e:
         logger.error(f"Audit failed: {e}")
         update_progress("failed", 0, f"Error: {str(e)[:100]}", error=str(e))
+
+
+# =============================================================================
+# NEW ENDPOINTS: Posting Time Analysis & Hook Generation
+# =============================================================================
+
+@router.get("/accounts/{account_id}/posting-times")
+async def get_posting_time_analysis(
+    account_id: str,
+    days_back: int = 90
+):
+    """
+    Analyze optimal posting times for a competitor account.
+    Returns best hours, days, and hour+day combinations based on engagement.
+    """
+    from services.competitor_audit.posting_time_analyzer import PostingTimeAnalyzer
+    
+    analyzer = PostingTimeAnalyzer()
+    recommendation = await analyzer.analyze_account(account_id, days_back=days_back)
+    
+    return {
+        "account_id": account_id,
+        "best_hours": recommendation.best_hours,
+        "best_days": recommendation.best_days,
+        "best_combinations": recommendation.best_combinations,
+        "worst_hours": recommendation.worst_hours,
+        "insights": recommendation.insights,
+        "timezone": recommendation.timezone
+    }
+
+
+@router.post("/hooks/generate")
+async def generate_hook_ideas(
+    competitor_account_ids: List[str],
+    user_account_id: Optional[str] = None,
+    num_hooks: int = 10,
+    min_confidence: float = 70.0
+):
+    """
+    Generate hook ideas by combining competitor patterns with user content.
+    Uses GPT-4 to create variations based on successful patterns.
+    """
+    from services.competitor_audit.hook_generator import HookGenerator
+    
+    generator = HookGenerator()
+    result = await generator.generate_hooks(
+        competitor_account_ids=competitor_account_ids,
+        user_account_id=user_account_id,
+        num_hooks=num_hooks,
+        min_confidence=min_confidence
+    )
+    
+    return {
+        "hooks": [
+            {
+                "hook_text": h.hook_text,
+                "archetype": h.archetype,
+                "confidence_score": h.confidence_score,
+                "source_patterns": h.source_patterns,
+                "variation_type": h.variation_type,
+                "reasoning": h.reasoning
+            }
+            for h in result.hooks_generated
+        ],
+        "top_archetypes": result.top_archetypes,
+        "recommendations": result.recommendations,
+        "competitor_patterns_analyzed": result.competitor_patterns_analyzed,
+        "user_content_analyzed": result.user_content_analyzed
+    }
+
+
+@router.get("/cross-competitor/posting-times")
+async def get_cross_competitor_posting_times(
+    account_ids: List[str],
+    days_back: int = 90
+):
+    """
+    Analyze posting times across multiple competitor accounts.
+    Aggregates data to find patterns across the niche.
+    """
+    from services.competitor_audit.posting_time_analyzer import PostingTimeAnalyzer
+    
+    analyzer = PostingTimeAnalyzer()
+    recommendation = await analyzer.analyze_multiple_accounts(
+        account_ids=account_ids,
+        days_back=days_back
+    )
+    
+    return {
+        "account_ids": account_ids,
+        "best_hours": recommendation.best_hours,
+        "best_days": recommendation.best_days,
+        "worst_hours": recommendation.worst_hours,
+        "insights": recommendation.insights
+    }

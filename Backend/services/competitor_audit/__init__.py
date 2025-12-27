@@ -23,6 +23,8 @@ from .funnel_mapper import FunnelMapper
 from .post_ranker import PostRanker
 from .report_generator import CompetitorReportGenerator
 from .template_exporter import TemplateExporter
+from .posting_time_analyzer import PostingTimeAnalyzer, PostingTimeRecommendation
+from .hook_generator import HookGenerator, HookGenerationResult, HookIdea
 
 __all__ = [
     "CompetitorCollector",
@@ -31,4 +33,9 @@ __all__ = [
     "PostRanker",
     "CompetitorReportGenerator",
     "TemplateExporter",
+    "PostingTimeAnalyzer",
+    "PostingTimeRecommendation",
+    "HookGenerator",
+    "HookGenerationResult",
+    "HookIdea",
 ]

@@ -46,6 +46,7 @@ celery_app.conf.update(
         'tasks.scheduled_publishing.*': {'queue': 'publishing'},
         'tasks.metrics.*': {'queue': 'metrics'},
         'tasks.monitoring.*': {'queue': 'monitoring'},
+        'tasks.competitor_weekly_reports.*': {'queue': 'default'},
     },
     
     # Queues
@@ -84,6 +85,18 @@ celery_app.conf.update(
             'task': 'tasks.monitoring.cleanup_old_results',
             'schedule': crontab(hour=2, minute=0),
             'options': {'queue': 'monitoring', 'priority': 1}
+        },
+        # Generate weekly competitor reports (every Sunday at 3 AM)
+        'generate-weekly-competitor-reports': {
+            'task': 'tasks.competitor_weekly_reports.generate_weekly_reports',
+            'schedule': crontab(hour=3, minute=0, day_of_week=0),  # Sunday at 3 AM
+            'options': {'queue': 'default', 'priority': 5}
+        },
+        # Generate cross-competitor insights (every Sunday at 4 AM)
+        'generate-cross-competitor-insights': {
+            'task': 'tasks.competitor_weekly_reports.generate_cross_competitor_insights',
+            'schedule': crontab(hour=4, minute=0, day_of_week=0),  # Sunday at 4 AM
+            'options': {'queue': 'default', 'priority': 5}
         },
     },
     

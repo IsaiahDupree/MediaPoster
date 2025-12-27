@@ -180,7 +180,7 @@ async def get_marked_for_deletion(
     try:
         result = await db.execute(
             text("""
-                SELECT v.id, v.file_name, v.source_uri, v.duration_sec, v.file_size_bytes
+                SELECT v.id, v.file_name, v.source_uri, v.duration_sec
                 FROM videos v
                 JOIN video_analysis va ON v.id = va.video_id
                 WHERE va.curation_status = 'duplicate_to_delete'
@@ -194,18 +194,19 @@ async def get_marked_for_deletion(
                 "filename": row[1],
                 "source_uri": row[2],
                 "duration_sec": row[3],
-                "file_size_bytes": row[4],
             }
             for row in rows
         ]
         
-        total_size_mb = sum(v.get("file_size_bytes", 0) or 0 for v in videos) / (1024 * 1024)
+        # Estimate size based on duration (rough: 5MB per 10 seconds)
+        total_duration = sum(v.get("duration_sec", 0) or 0 for v in videos)
+        estimated_size_mb = total_duration * 0.5  # ~0.5 MB per second estimate
         
         return {
             "count": len(videos),
             "videos": videos,
-            "total_size_mb": round(total_size_mb, 2),
-            "message": f"{len(videos)} videos marked for deletion ({total_size_mb:.1f} MB)"
+            "total_size_mb": round(estimated_size_mb, 2),
+            "message": f"{len(videos)} videos marked for deletion (~{estimated_size_mb:.1f} MB estimated)"
         }
     except Exception as e:
         logger.error(f"Error getting marked videos: {e}")

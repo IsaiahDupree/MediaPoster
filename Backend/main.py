@@ -18,7 +18,7 @@ import sys
 from config import settings
 from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces, trends
 from api.endpoints import event_history, video_routing_api
-from api.endpoints import tts, matting, remotion, pipeline
+from api.endpoints import tts, matting, remotion, pipeline, music, visuals
 from database.connection import init_db, close_db
 
 # Event Bus imports
@@ -207,6 +207,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Remotion Worker failed to start: {e}")
     
+    # Start the Music Worker (music generation and selection service)
+    music_worker = None
+    try:
+        from services.music.worker import MusicWorker
+        music_worker = MusicWorker(event_bus)
+        await music_worker.start()
+        logger.success("✓ Music Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Music Worker failed to start: {e}")
+    
+    # Start the Visuals Worker (visual assets service)
+    visuals_worker = None
+    try:
+        from services.visuals.worker import VisualsWorker
+        visuals_worker = VisualsWorker(event_bus)
+        await visuals_worker.start()
+        logger.success("✓ Visuals Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Visuals Worker failed to start: {e}")
+    
     yield
     
     # Stop the Notification Worker on shutdown
@@ -272,6 +292,22 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Remotion Worker stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Remotion Worker: {e}")
+    
+    # Stop the Music Worker on shutdown
+    if music_worker:
+        try:
+            await music_worker.stop()
+            logger.success("✓ Music Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Music Worker: {e}")
+    
+    # Stop the Visuals Worker on shutdown
+    if visuals_worker:
+        try:
+            await visuals_worker.stop()
+            logger.success("✓ Visuals Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Visuals Worker: {e}")
     
     # Shutdown Event Bus
     if event_bus:
@@ -699,6 +735,8 @@ app.include_router(tts.router, tags=["TTS Service"])
 app.include_router(matting.router, tags=["Video Matting Service"])
 app.include_router(remotion.router, tags=["Remotion Service"])
 app.include_router(pipeline.router, tags=["Pipeline Service"])
+app.include_router(music.router, tags=["Music Service"])
+app.include_router(visuals.router, tags=["Visuals Service"])
 
 # Virtual Environment Manager (Python 3.11 for AI/ML tasks)
 from api.endpoints import venv_status

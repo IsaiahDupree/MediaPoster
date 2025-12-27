@@ -182,63 +182,64 @@ async def schedule_post(
                     )
             
             if clip.video_id:
-                # Get video title
-                video_result = await db.execute(
-                    select(Video).filter(Video.id == clip.video_id)
-                )
-                video = video_result.scalar_one_or_none()
-                if video and video.title and not proper_title:
-                    proper_title = video.title
-                
-                # Get caption from analysis (platform_content preferred)
-                analysis_result = await db.execute(
-                    select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
-                )
-                analysis = analysis_result.scalar_one_or_none()
-                
-                # BUG FIX: Check analysis completeness
-                if not analysis:
-                    logger.warning(
-                        f"⚠️ Scheduling post for clip {clip_id} without analysis. "
-                        f"Post will use generic caption. Consider running analysis first."
+                try:
+                    # Get video title
+                    video_result = await db.execute(
+                        select(Video).filter(Video.id == clip.video_id)
                     )
-                else:
-                    # Check analysis completeness
-                    analysis_warnings = []
-                    if not analysis.transcript:
-                        analysis_warnings.append("missing transcript")
-                    if not analysis.topics or len(analysis.topics) == 0:
-                        analysis_warnings.append("missing topics")
-                    if not analysis.platform_content:
-                        analysis_warnings.append("missing platform_content")
+                    video = video_result.scalar_one_or_none()
+                    if video and video.title and not proper_title:
+                        proper_title = video.title
                     
-                    if analysis_warnings:
+                    # Get caption from analysis (platform_content preferred)
+                    analysis_result = await db.execute(
+                        select(VideoAnalysis).filter(VideoAnalysis.video_id == clip.video_id)
+                    )
+                    analysis = analysis_result.scalar_one_or_none()
+                    
+                    # BUG FIX: Check analysis completeness
+                    if not analysis:
                         logger.warning(
-                            f"⚠️ Analysis for clip {clip_id} is incomplete: {', '.join(analysis_warnings)}. "
-                            f"Post may use fallback captions."
+                            f"⚠️ Scheduling post for clip {clip_id} without analysis. "
+                            f"Post will use generic caption. Consider running analysis first."
                         )
-                
-                if analysis and not proper_caption:
-                    # Try platform_content first, then hooks, then topics
-                    if analysis.platform_content:
-                        import json
-                        try:
-                            pc_list = analysis.platform_content if isinstance(analysis.platform_content, list) else json.loads(analysis.platform_content) if isinstance(analysis.platform_content, str) else []
-                            for pc in pc_list:
-                                if pc.get('platform') == request.platforms[0] if request.platforms else 'tiktok':
-                                    proper_caption = pc.get('description') or pc.get('caption')
-                                    break
-                        except (json.JSONDecodeError, Exception):
-                            pass
+                    else:
+                        # Check analysis completeness
+                        analysis_warnings = []
+                        if not analysis.transcript:
+                            analysis_warnings.append("missing transcript")
+                        if not analysis.topics or len(analysis.topics) == 0:
+                            analysis_warnings.append("missing topics")
+                        if not analysis.platform_content:
+                            analysis_warnings.append("missing platform_content")
                         
-                        # Fallback to hooks or topics, NOT transcript
-                        if not proper_caption:
-                            if analysis.hooks and len(analysis.hooks) > 0:
-                                proper_caption = analysis.hooks[0]
-                            elif analysis.topics and len(analysis.topics) > 0:
-                                proper_caption = f"Discover: {', '.join(analysis.topics[:2])}"
-            except Exception as e:
-                logger.warning(f"Could not fetch title/caption from analysis: {e}")
+                        if analysis_warnings:
+                            logger.warning(
+                                f"⚠️ Analysis for clip {clip_id} is incomplete: {', '.join(analysis_warnings)}. "
+                                f"Post may use fallback captions."
+                            )
+                    
+                    if analysis and not proper_caption:
+                        # Try platform_content first, then hooks, then topics
+                        if analysis.platform_content:
+                            import json
+                            try:
+                                pc_list = analysis.platform_content if isinstance(analysis.platform_content, list) else json.loads(analysis.platform_content) if isinstance(analysis.platform_content, str) else []
+                                for pc in pc_list:
+                                    if pc.get('platform') == (request.platforms[0] if request.platforms else 'tiktok'):
+                                        proper_caption = pc.get('description') or pc.get('caption')
+                                        break
+                            except (json.JSONDecodeError, Exception):
+                                pass
+                            
+                            # Fallback to hooks or topics, NOT transcript
+                            if not proper_caption:
+                                if analysis.hooks and len(analysis.hooks) > 0:
+                                    proper_caption = analysis.hooks[0]
+                                elif analysis.topics and len(analysis.topics) > 0:
+                                    proper_caption = f"Discover: {', '.join(analysis.topics[:2])}"
+                except Exception as e:
+                    logger.warning(f"Could not fetch title/caption from analysis: {e}")
         
         # Fallback to generic values if still missing
         if not proper_title or proper_title.startswith(('IMG_', 'VID_', 'MOV_')) or len(proper_title) < 5:

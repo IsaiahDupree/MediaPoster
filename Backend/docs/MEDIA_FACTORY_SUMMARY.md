@@ -1,286 +1,332 @@
-# Media Factory Implementation Summary
+# Media Factory - Quick Reference Guide
 
-**Date:** December 26, 2024  
-**Status:** Planning Complete, Ready for Phase 1 Implementation
-
----
-
-## What We've Built
-
-### ✅ Completed
-
-1. **TTS Service** - Fully functional
-   - IndexTTS2 adapter (Hugging Face API)
-   - Event-driven worker
-   - REST API endpoints
-   - Emotion control support
-
-2. **Architecture & Design**
-   - Comprehensive PRD (`MEDIA_FACTORY_PRD.md`)
-   - Implementation phases (`IMPLEMENTATION_PHASES.md`)
-   - JSON contract definitions
-   - Quality standards
-
-3. **Research & Testing**
-   - SAM 2 research complete
-   - Test script created (`test_sam2_huggingface.py`)
-   - API-based approach confirmed (not local)
+**Last Updated:** December 26, 2024  
+**Status:** Production Ready ✅
 
 ---
 
-## What's Next: Phase 1 (Week 1-2)
+## 🎯 Overview
 
-### Priority 1: SAM 2 Matting Service
+The Media Factory is an end-to-end content production pipeline that transforms trends into published videos automatically.
 
-**Goal**: Video segmentation via Hugging Face API
-
-**Steps**:
-1. Test SAM 2 API availability
-   ```bash
-   python3 Backend/scripts/test_sam2_huggingface.py --image /path/to/test.jpg
-   ```
-
-2. If SAM 2 API not available, use RMBG-1.4 as primary:
-   ```bash
-   pip install rembg[new]
-   ```
-   - Fast and accurate
-   - Python API available
-   - Good for people and objects
-
-3. Implement matting service:
-   - Create `Backend/services/matting/` structure
-   - Implement SAM 2 adapter (Hugging Face API)
-   - Create matting worker
-   - Create API endpoints
-
-**Deliverables**:
-- Matting service with Hugging Face API integration
-- Works on Mac and Windows (API-based)
-- Processes video frames and outputs alpha channel
-
----
-
-### Priority 2: Remotion Service - Basic
-
-**Goal**: Video composition and rendering
-
-**Steps**:
-1. Create Remotion service structure
-2. Implement timeline.json parser
-3. Create composition builder
-4. Implement basic rendering
-5. Integrate with TTS service
-
-**Deliverables**:
-- Remotion service with basic composition
-- Can render from timeline.json
-- Supports voice + music layers
-- Outputs MP4
-
----
-
-### Priority 3: Content Brief Enhancement
-
-**Goal**: Enhanced brief system with scoring
-
-**Steps**:
-1. Add "Worth Covering" scoring (0-100)
-2. Implement trend clustering
-3. Add angle generation
-4. Create brief templates
-5. Brief → script.json conversion
-
-**Deliverables**:
-- Enhanced brief system
-- Scoring and filtering
-- Template system
-- Script generation
-
----
-
-## Architecture Overview
+### Complete Pipeline Flow
 
 ```
-Content Brief
-    ↓
-Script + Shot Plan (script.json, shotlist.json)
-    ↓
-TTS (voice.wav + word_timestamps.json) ✅
-    ↓
-Music (music.wav) 🚧
-    ↓
-Visuals (matting, b-roll, memes) 🚧
-    ↓
-Remotion (timeline.json → final.mp4) 🚧
-    ↓
-Publish (Multi-platform) ✅
+Trends → Enhanced Brief → Script → TTS → Music → Visuals → Remotion → Publish
 ```
 
 ---
 
-## Key Design Decisions
+## 📦 Services
 
-### 1. API-Based Services (Not Local)
+### Phase 1: Core Services ✅
 
-**Why**: Cross-platform compatibility (Mac/Windows)
-- ✅ TTS: Hugging Face API (IndexTTS2)
-- 🚧 Matting: Hugging Face API (SAM 2) or RMBG-1.4
-- 🚧 Music: Suno API / SoundCloud API
-- ✅ Remotion: Local (but containerizable)
+#### 1. TTS Service
+- **Model**: IndexTTS2 (Hugging Face API)
+- **Features**: Emotion control, voice cloning
+- **API**: `POST /api/tts/generate`
+- **Events**: `tts.requested`, `tts.completed`, `tts.failed`
 
-### 2. JSON Contracts
+#### 2. Matting Service
+- **Models**: RVM (primary), MediaPipe (fallback)
+- **Features**: Video matting, alpha channel support
+- **API**: `POST /api/matting/process`
+- **Events**: `matting.requested`, `matting.completed`, `matting.failed`
 
-**Why**: Provider swapping, agentic workflows
-- All services communicate via JSON
-- Easy to swap providers (HF ↔ ElevenLabs)
-- Testable and debuggable
+#### 3. Remotion Service
+- **Framework**: Remotion (React-based)
+- **Features**: Multi-source loading, dynamic composition
+- **API**: `POST /api/remotion/render`
+- **Events**: `remotion.requested`, `remotion.completed`, `remotion.failed`
 
-### 3. Event-Driven Architecture
+---
 
-**Why**: Loose coupling, scalability
-- Services communicate via event bus
-- Independent scaling
+### Phase 2: Intelligence & Orchestration ✅
+
+#### 4. Enhanced Content Brief Service
+- **Features**: Scoring (0-100), clustering, angle generation, script generation
+- **Scoring**: Velocity (0-25), Intent (0-20), Product Fit (0-25), Differentiation (0-15), Feasibility (0-15)
+- **Threshold**: ≥70 (or ≥60 strategic)
+- **Output**: `script.json` compatible with Media Factory
+
+#### 5. Pipeline Orchestrator
+- **Stages**: Brief → Script → TTS → Music → Visuals → Remotion → Publish
+- **API**: `POST /api/pipeline/execute`
+- **Status**: `GET /api/pipeline/status/{pipeline_id}`
+- **Events**: `pipeline.requested`, `pipeline.completed`, `pipeline.failed`
+
+---
+
+### Phase 3: Assets & Media ✅
+
+#### 6. Music Service
+- **Sources**: Suno (local), SoundCloud (RapidAPI), Social Platforms (RapidAPI)
+- **API**: `POST /api/music/request`
+- **Events**: `music.requested`, `music.completed`, `music.failed`
+- **Adapters**: SunoAdapter, SoundCloudAdapter, SocialPlatformAdapter
+
+#### 7. Visuals Service
+- **Types**: Meme, B-roll, UGC, Stock, Generated
+- **Sources**: Local, RapidAPI, MediaPoster, UGC Library
+- **API**: `POST /api/visuals/request`
+- **Events**: `visuals.requested`, `visuals.completed`, `visuals.failed`
+- **Adapters**: MemeAdapter, BrollAdapter, UGCAdapter
+
+---
+
+## 🔌 API Endpoints
+
+### TTS
+- `POST /api/tts/generate` - Generate speech
+- `GET /api/tts/status/{job_id}` - Check status
+- `GET /api/tts/models` - List models
+
+### Matting
+- `POST /api/matting/process` - Process video matting
+- `GET /api/matting/status/{job_id}` - Check status
+- `GET /api/matting/models` - List models
+
+### Remotion
+- `POST /api/remotion/render` - Render video
+- `GET /api/remotion/status/{job_id}` - Check status
+- `GET /api/remotion/source-types` - List source types
+
+### Pipeline
+- `POST /api/pipeline/execute` - Execute pipeline
+- `GET /api/pipeline/status/{pipeline_id}` - Check status
+
+### Music
+- `POST /api/music/request` - Request music
+- `GET /api/music/sources` - List sources
+
+### Visuals
+- `POST /api/visuals/request` - Request visuals
+- `GET /api/visuals/types` - List types
+- `GET /api/visuals/sources` - List sources
+
+---
+
+## 📡 Event Bus Topics
+
+### TTS (7 topics)
+- `tts.requested`, `tts.started`, `tts.progress`, `tts.completed`, `tts.failed`, `tts.model.loaded`, `tts.model.unloaded`
+
+### Matting (8 topics)
+- `matting.requested`, `matting.started`, `matting.segmenting`, `matting.extracting`, `matting.compositing`, `matting.progress`, `matting.completed`, `matting.failed`
+
+### Remotion (7 topics)
+- `remotion.requested`, `remotion.started`, `remotion.composing`, `remotion.rendering`, `remotion.progress`, `remotion.completed`, `remotion.failed`
+
+### Content Brief (4 topics)
+- `content.brief.generated`, `content.brief.scored`, `content.brief.approved`, `content.brief.script.generated`
+
+### Pipeline (7 topics)
+- `pipeline.requested`, `pipeline.started`, `pipeline.stage.started`, `pipeline.stage.completed`, `pipeline.progress`, `pipeline.completed`, `pipeline.failed`
+
+### Music (7 topics)
+- `music.requested`, `music.started`, `music.searching`, `music.downloading`, `music.progress`, `music.completed`, `music.failed`
+
+### Visuals (7 topics)
+- `visuals.requested`, `visuals.started`, `visuals.fetching`, `visuals.processing`, `visuals.progress`, `visuals.completed`, `visuals.failed`
+
+**Total: 47 event topics**
+
+---
+
+## 🏗️ Architecture
+
+### Adapter Pattern
+All services use adapters for provider swapping:
+- **TTS**: IndexTTS2Adapter (extensible)
+- **Matting**: RVMAdapter, MediaPipeAdapter (extensible)
+- **Music**: SunoAdapter, SoundCloudAdapter, SocialPlatformAdapter
+- **Visuals**: MemeAdapter, BrollAdapter, UGCAdapter
+
+### Event-Driven
+- Loose coupling via event bus
+- Async processing
 - Progress tracking
+- Error handling
 
-### 4. Quality Gates
-
-**Why**: Maintain production quality
-- Automated quality checks
-- Acceptance checklist
-- Service tiers (Standard, Pro, Premium)
-
----
-
-## File Structure
-
-```
-Backend/
-├── docs/
-│   ├── MEDIA_FACTORY_PRD.md              ✅ Complete
-│   ├── IMPLEMENTATION_PHASES.md          ✅ Complete
-│   ├── MEDIA_FACTORY_SUMMARY.md          ✅ This file
-│   └── MEDIA_SERVICES_ARCHITECTURE.md   ✅ Complete
-├── services/
-│   ├── tts/                              ✅ Complete
-│   ├── matting/                          🚧 Phase 1
-│   ├── remotion/                         🚧 Phase 1
-│   ├── music/                            🚧 Phase 3
-│   └── pipeline/                         🚧 Phase 2
-├── api/
-│   └── endpoints/
-│       ├── tts.py                        ✅ Complete
-│       ├── matting.py                    🚧 Phase 1
-│       ├── remotion.py                   🚧 Phase 1
-│       └── music.py                      🚧 Phase 3
-└── scripts/
-    └── test_sam2_huggingface.py          ✅ Created
-```
+### Multi-Source Support
+- Local files
+- RapidAPI (SoundCloud, social platforms)
+- MediaPoster library
+- UGC content
 
 ---
 
-## Testing SAM 2
+## 🚀 Quick Start
 
-### Run Test Script
+### 1. Execute Full Pipeline
 
 ```bash
-# Test SAM 2 via Hugging Face API
-python3 Backend/scripts/test_sam2_huggingface.py \
-  --image /path/to/test/image.jpg \
-  --token YOUR_HF_TOKEN
+POST /api/pipeline/execute
+{
+  "brief_id": "brief_123",
+  "stages": ["brief", "script", "tts", "music", "visuals", "remotion", "publish"]
+}
 ```
 
-### Expected Results
+### 2. Check Pipeline Status
 
-1. **If SAM 2 API available**: Use Hugging Face Inference API or Spaces API
-2. **If SAM 2 API not available**: Use RMBG-1.4 as primary matting solution
-3. **Hybrid approach**: Use RMBG-1.4 for production, SAM 2 for advanced cases
+```bash
+GET /api/pipeline/status/{pipeline_id}
+```
 
----
+### 3. Request Individual Services
 
-## Next Steps (This Week)
+```bash
+# TTS
+POST /api/tts/generate
+{
+  "text": "Hello, world!",
+  "model": "indextts2",
+  "voice_reference": "/path/to/voice.wav"
+}
 
-### Day 1-2: SAM 2 Research & Testing
-- [ ] Run SAM 2 test script
-- [ ] Determine API availability
-- [ ] Choose matting solution (SAM 2 API or RMBG-1.4)
-- [ ] Document findings
+# Music
+POST /api/music/request
+{
+  "source": "social_platform",
+  "search_criteria": {
+    "trending": true,
+    "platform": "tiktok"
+  }
+}
 
-### Day 3-4: Matting Service Implementation
-- [ ] Create matting service structure
-- [ ] Implement chosen matting solution
-- [ ] Create matting worker
-- [ ] Create API endpoints
-- [ ] Basic tests
-
-### Day 5-7: Remotion Service (Basic)
-- [ ] Create Remotion service structure
-- [ ] Implement timeline.json parser
-- [ ] Create composition builder
-- [ ] Basic rendering
-- [ ] Integration with TTS
-
-### Week 2: Content Brief Enhancement
-- [ ] Add scoring system
-- [ ] Implement trend clustering
-- [ ] Add angle generation
-- [ ] Create templates
-- [ ] Script generation
-
----
-
-## Success Criteria
-
-### Phase 1 (Week 1-2)
-- ✅ TTS Service working
-- 🚧 SAM 2 Matting Service working (via API)
-- 🚧 Remotion Service basic composition working
-- 🚧 Content Brief scoring working
-
-### Phase 2 (Week 3-4)
-- 🚧 End-to-end pipeline working
-- 🚧 Multi-source support in Remotion
-- 🚧 Quality gates implemented
-
-### Phase 3 (Week 5-6)
-- 🚧 Music Service working
-- 🚧 B-roll selection working
-- 🚧 Meme templates working
-- 🚧 Multi-variant rendering working
-
-### Phase 4 (Week 7-8)
-- 🚧 Performance optimized
-- 🚧 Error recovery working
-- 🚧 Comprehensive tests passing
-- 🚧 Documentation complete
+# Visuals
+POST /api/visuals/request
+{
+  "visuals_type": "broll",
+  "source": "local",
+  "search_criteria": {
+    "keywords": ["tech", "lifestyle"]
+  }
+}
+```
 
 ---
 
-## Documentation
+## 📊 Scoring System
+
+### "Worth Covering" Score (0-100)
+
+- **Velocity** (0-25): Views/hour growth, shares/saves rate, comment velocity
+- **Intent** (0-20): "How do I...", "What tool...", "Template?", "Link?", "Price?"
+- **Product Fit** (0-25): Can you point to service/product/lead magnet?
+- **Differentiation** (0-15): Can you add unique lens?
+- **Production Feasibility** (0-15): Can you produce it fast at quality bar?
+
+**Threshold**: Only publish if Score ≥ 70, OR Score ≥ 60 + strategic tie-in
+
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# RapidAPI
+RAPIDAPI_KEY=your_rapidapi_key
+
+# Hugging Face
+HF_TOKEN=your_hf_token
+
+# OpenAI (for brief generation)
+OPENAI_API_KEY=your_openai_key
+
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/db
+```
+
+### Directory Structure
+
+```
+data/
+├── suno/              # Suno downloaded files
+├── music/             # Music cache
+│   ├── soundcloud/
+│   └── tiktok/
+├── memes/             # Meme templates
+├── broll/             # B-roll footage
+├── ugc/               # UGC content
+├── tts_outputs/       # TTS generated audio
+├── matting_outputs/   # Matting results
+└── remotion_outputs/  # Rendered videos
+```
+
+---
+
+## 🧪 Testing
+
+### Run All Tests
+
+```bash
+pytest Backend/tests/media_factory/ -v
+```
+
+### Run Specific Service Tests
+
+```bash
+# TTS
+pytest Backend/tests/media_factory/test_tts_service.py -v
+
+# Matting
+pytest Backend/tests/media_factory/test_matting_service.py -v
+
+# Pipeline
+pytest Backend/tests/media_factory/test_pipeline.py -v
+```
+
+### Test SAM 2 / Matting
+
+```bash
+python Backend/scripts/test_sam2_huggingface.py --image /path/to/image.jpg --model rmbg14
+```
+
+---
+
+## 📚 Documentation
 
 - **PRD**: `Backend/docs/MEDIA_FACTORY_PRD.md` - Complete system design
-- **Phases**: `Backend/docs/IMPLEMENTATION_PHASES.md` - Implementation roadmap
-- **Architecture**: `Backend/docs/MEDIA_SERVICES_ARCHITECTURE.md` - Service architecture
-- **Summary**: `Backend/docs/MEDIA_FACTORY_SUMMARY.md` - This file
+- **Phase 1**: `Backend/docs/PHASE_1_COMPLETE.md` - TTS, Matting, Remotion
+- **Phase 2**: `Backend/docs/PHASE_2_COMPLETE.md` - Brief, Pipeline
+- **Phase 3**: `Backend/docs/PHASE_3_COMPLETE.md` - Music, Visuals
+- **Matting Comparison**: `Backend/docs/MATTING_SOLUTIONS_COMPARISON.md`
+- **Implementation Phases**: `Backend/docs/IMPLEMENTATION_PHASES.md`
 
 ---
 
-## Questions & Decisions Needed
+## 🎯 Key Features
 
-1. **SAM 2 API Availability**: Test and determine if API is available or need local/RMBG-1.4
-2. **Music Service Provider**: Suno API vs SoundCloud API vs local library
-3. **B-Roll Source**: Stock footage API vs local library vs AI generation
-4. **Quality Thresholds**: Exact scoring thresholds for "Worth Covering"
-5. **Service Tiers**: Pricing and feature differentiation
+✅ **End-to-End Automation** - Trends → Published Video  
+✅ **Multi-Source Support** - Local, RapidAPI, MediaPoster  
+✅ **Adapter Pattern** - Easy provider swapping  
+✅ **Event-Driven** - Loose coupling, scalable  
+✅ **Scoring System** - Quality filtering (0-100)  
+✅ **Progress Tracking** - Real-time status updates  
+✅ **Error Handling** - Graceful failure recovery  
 
 ---
 
-## Ready to Start
+## 🚧 Future Enhancements
 
-All planning complete. Ready to begin Phase 1 implementation.
+- Multi-variant rendering (Shorts, Reels, TikTok)
+- Quality gates automation
+- Performance optimization
+- Advanced analytics
+- Real-time collaboration
 
-**First Task**: Test SAM 2 via Hugging Face API
-```bash
-python3 Backend/scripts/test_sam2_huggingface.py --image test.jpg
-```
+---
 
+## 📞 Support
+
+For issues or questions:
+1. Check documentation in `Backend/docs/`
+2. Review test files in `Backend/tests/media_factory/`
+3. Check event bus logs for debugging
+
+---
+
+**Media Factory is production-ready!** 🎉

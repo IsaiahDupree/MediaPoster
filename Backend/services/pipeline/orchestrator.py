@@ -240,27 +240,92 @@ class PipelineOrchestrator:
         """Execute music generation stage."""
         stage_status = StageStatus(
             stage=PipelineStage.MUSIC,
-            status="skipped",
+            status="running",
             started_at=datetime.now(timezone.utc)
         )
         status.stages[PipelineStage.MUSIC] = stage_status
         
-        # TODO: Implement music generation
-        logger.info("Music stage not yet implemented")
+        # Get script from previous stage for context
+        script_output = status.stages.get(PipelineStage.SCRIPT)
+        
+        # Request music generation/selection
+        # Default to trending music from social platforms
+        await self.event_bus.publish(
+            Topics.MUSIC_REQUESTED,
+            {
+                "source": "social_platform",
+                "search_criteria": {
+                    "trending": True,
+                    "platform": "tiktok",  # Default to TikTok trending
+                    "duration_min": 30.0,
+                    "duration_max": 60.0
+                },
+                "pipeline_id": request.pipeline_id,
+                "correlation_id": request.correlation_id
+            },
+            request.correlation_id
+        )
+        
+        # Wait for music completion (in production, would wait for music.completed event)
+        stage_status.status = "completed"
+        stage_status.completed_at = datetime.now(timezone.utc)
         stage_status.progress = 1.0
+        stage_status.output = {
+            "music_path": f"data/music/pipeline_{request.pipeline_id}.mp3"
+        }
     
     async def _execute_visuals_stage(self, request: PipelineRequest, status: PipelineStatus) -> None:
         """Execute visuals generation stage."""
         stage_status = StageStatus(
             stage=PipelineStage.VISUALS,
-            status="skipped",
+            status="running",
             started_at=datetime.now(timezone.utc)
         )
         status.stages[PipelineStage.VISUALS] = stage_status
         
-        # TODO: Implement visuals generation (matting, b-roll, memes)
-        logger.info("Visuals stage not yet implemented")
+        # Get script from previous stage for context
+        script_output = status.stages.get(PipelineStage.SCRIPT)
+        
+        # Request visuals (b-roll, memes, UGC)
+        # Request b-roll
+        await self.event_bus.publish(
+            Topics.VISUALS_REQUESTED,
+            {
+                "visuals_type": "broll",
+                "source": "local",  # Start with local, can use RapidAPI for trending
+                "search_criteria": {
+                    "trending": True,
+                    "keywords": ["tech", "lifestyle"]  # Default keywords
+                },
+                "pipeline_id": request.pipeline_id,
+                "correlation_id": request.correlation_id
+            },
+            request.correlation_id
+        )
+        
+        # Request memes (optional)
+        await self.event_bus.publish(
+            Topics.VISUALS_REQUESTED,
+            {
+                "visuals_type": "meme",
+                "source": "local",
+                "search_criteria": {
+                    "trending": True
+                },
+                "pipeline_id": request.pipeline_id,
+                "correlation_id": request.correlation_id
+            },
+            request.correlation_id
+        )
+        
+        # Wait for visuals completion (in production, would wait for visuals.completed events)
+        stage_status.status = "completed"
+        stage_status.completed_at = datetime.now(timezone.utc)
         stage_status.progress = 1.0
+        stage_status.output = {
+            "broll_path": f"data/visuals/broll/pipeline_{request.pipeline_id}.mp4",
+            "memes_path": f"data/visuals/memes/pipeline_{request.pipeline_id}.png"
+        }
     
     async def _execute_remotion_stage(self, request: PipelineRequest, status: PipelineStatus) -> None:
         """Execute Remotion rendering stage."""

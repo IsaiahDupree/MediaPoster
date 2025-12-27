@@ -42,8 +42,8 @@ class EmotionConfig:
 class TTSRequest:
     """TTS generation request."""
     text: str
-    model: TTSModel = TTSModel.INDEXTTS2
     voice_reference: str  # Path to voice reference audio
+    model: TTSModel = TTSModel.INDEXTTS2
     emotion: Optional[EmotionConfig] = None
     output_format: str = "wav"  # "wav", "mp3"
     sample_rate: int = 22050

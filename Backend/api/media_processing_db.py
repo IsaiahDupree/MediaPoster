@@ -1885,20 +1885,48 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                 }
             }
             
-            analysis = VideoAnalysis(
-                video_id=video_uuid,
-                transcript="" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
-                topics=["content", "media"],  # Minimal fallback topics
-                hooks=["Visual content"],
-                tone="informative" if is_image else "conversational",
-                pacing="static" if is_image else "moderate",
-                pre_social_score=random.randint(50, 80),
-                deep_analysis=fallback_deep  # ALWAYS include deep_analysis
+            # Check if analysis record already exists (UPSERT logic)
+            existing_analysis = await db.execute(
+                select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
             )
+            existing = existing_analysis.scalar_one_or_none()
             
-            db.add(analysis)
-            await db.commit()
-            logger.warning(f"[Analysis] Fallback analysis saved for {video_id} - includes deep_analysis fallback")
+            if existing:
+                # UPDATE existing record
+                await db.execute(
+                    update(VideoAnalysis)
+                    .where(VideoAnalysis.video_id == video_uuid)
+                    .values(
+                        transcript="" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
+                        topics=["content", "media"],
+                        hooks=["Visual content"],
+                        tone="informative" if is_image else "conversational",
+                        pacing="static" if is_image else "moderate",
+                        pre_social_score=random.randint(50, 80),
+                        deep_analysis=fallback_deep
+                    )
+                )
+                await db.commit()
+                logger.warning(f"[Analysis] Fallback analysis UPDATED for {video_id} (record existed)")
+                # Use existing score for job tracking
+                analysis = existing
+                analysis.pre_social_score = random.randint(50, 80)
+            else:
+                # INSERT new record
+                analysis = VideoAnalysis(
+                    video_id=video_uuid,
+                    transcript="" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
+                    topics=["content", "media"],  # Minimal fallback topics
+                    hooks=["Visual content"],
+                    tone="informative" if is_image else "conversational",
+                    pacing="static" if is_image else "moderate",
+                    pre_social_score=random.randint(50, 80),
+                    deep_analysis=fallback_deep  # ALWAYS include deep_analysis
+                )
+                
+                db.add(analysis)
+                await db.commit()
+                logger.warning(f"[Analysis] Fallback analysis INSERTED for {video_id}")
             print(f"⚠️  [FALLBACK ANALYSIS] Video: {video_id} - Saved fallback analysis WITH deep_analysis")
             
             # Emit analysis completed event (fallback)

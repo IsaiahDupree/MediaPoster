@@ -11,11 +11,18 @@ from config.model_registry import ModelConfig, ModelRegistry
 
 
 # Fallback model chain for rate limit handling
+# Priority order: Groq (fast/free) -> Google Gemini (free tier) -> OpenAI (paid)
 GROQ_FALLBACK_MODELS = [
     "llama-3.3-70b-versatile",  # Primary
     "llama-3.1-70b-versatile",  # Fallback 1
     "llama-3.1-8b-instant",     # Fallback 2 (smaller, faster)
     "mixtral-8x7b-32768",       # Fallback 3
+]
+
+GOOGLE_FALLBACK_MODELS = [
+    "gemini-2.5-flash",         # Fast, free tier friendly
+    "gemini-2.0-flash",         # Alternative
+    "gemini-1.5-flash",         # Stable fallback
 ]
 
 OPENAI_FALLBACK_MODELS = [
@@ -131,7 +138,14 @@ class AIClient:
         raise last_error
     
     def _build_fallback_chain(self) -> List[tuple]:
-        """Build ordered list of (provider, model, client) to try"""
+        """
+        Build ordered list of (provider, model, client) to try.
+        
+        Fallback priority:
+        1. Primary provider models
+        2. Google Gemini (free tier)
+        3. OpenAI (paid, reliable)
+        """
         chain = []
         
         # Start with primary model
@@ -143,7 +157,17 @@ class AIClient:
                 if fallback_model != self.config.model:
                     chain.append(("groq", fallback_model, self.client))
             
-            # Add OpenAI as final fallback
+            # Add Google Gemini as intermediate fallback (free tier)
+            google_key = os.getenv("GOOGLE_API_KEY")
+            if google_key:
+                try:
+                    for google_model in GOOGLE_FALLBACK_MODELS:
+                        chain.append(("google", google_model, google_key))
+                    logger.debug("[AIClient] Google Gemini fallback chain added")
+                except Exception as e:
+                    logger.warning(f"[AIClient] Could not add Google fallback: {e}")
+            
+            # Add OpenAI as final fallback (paid, most reliable)
             openai_key = os.getenv("OPENAI_API_KEY")
             if openai_key:
                 try:
@@ -155,12 +179,30 @@ class AIClient:
                 except Exception as e:
                     logger.warning(f"[AIClient] Could not initialize OpenAI fallback: {e}")
         
+        elif self.config.provider == "google":
+            # Add other Google models as fallbacks
+            for fallback_model in GOOGLE_FALLBACK_MODELS:
+                if fallback_model != self.config.model:
+                    chain.append(("google", fallback_model, self.client))
+            
+            # Add OpenAI as final fallback
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if openai_key:
+                try:
+                    from openai import OpenAI
+                    openai_client = OpenAI(api_key=openai_key)
+                    for openai_model in OPENAI_FALLBACK_MODELS:
+                        chain.append(("openai", openai_model, openai_client))
+                except Exception as e:
+                    logger.warning(f"[AIClient] Could not initialize OpenAI fallback: {e}")
+        
         elif self.config.provider == "openai":
             # Add other OpenAI models as fallbacks
             for fallback_model in OPENAI_FALLBACK_MODELS:
                 if fallback_model != self.config.model:
                     chain.append(("openai", fallback_model, self.client))
         
+        logger.info(f"[AIClient] Fallback chain: {[(p, m) for p, m, _ in chain]}")
         return chain
     
     def _execute_chat_completion(
@@ -174,6 +216,8 @@ class AIClient:
         **kwargs
     ) -> str:
         """Execute a single chat completion call"""
+        content = None
+        
         if provider in ["openai", "groq"]:
             response = client.chat.completions.create(
                 model=model,
@@ -183,28 +227,68 @@ class AIClient:
                 **kwargs
             )
             content = response.choices[0].message.content
-            
-            # Handle empty or None responses
-            if not content or content.strip() == "":
-                logger.warning(f"[AIClient] Empty response from {provider}/{model}")
-                raise ValueError(f"Empty response from {provider}")
-            
-            # Log successful fallback
-            if model != self.config.model or provider != self.config.provider:
-                logger.success(f"[AIClient] Fallback successful: {provider}/{model}")
-            
-            # Strip markdown code blocks if present (common with JSON responses)
-            content = content.strip()
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            
-            return content.strip()
         
-        raise NotImplementedError(f"Provider {provider} not supported in fallback chain")
+        elif provider == "google":
+            # Google Gemini uses REST API directly via httpx
+            import httpx
+            
+            # client is the API key for Google
+            api_key = client
+            
+            # Convert messages to Gemini format
+            gemini_contents = []
+            for msg in messages:
+                role = "user" if msg["role"] == "user" else "model"
+                gemini_contents.append({
+                    "role": role,
+                    "parts": [{"text": msg["content"]}]
+                })
+            
+            # Make sync request (using httpx sync client)
+            with httpx.Client(timeout=60.0) as http_client:
+                response = http_client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+                    json={
+                        "contents": gemini_contents,
+                        "generationConfig": {
+                            "temperature": temperature,
+                            "maxOutputTokens": max_tokens,
+                        }
+                    }
+                )
+                
+                if response.status_code == 429:
+                    raise Exception("429 rate_limit_exceeded")
+                elif response.status_code != 200:
+                    raise Exception(f"Google API error: {response.status_code} - {response.text[:200]}")
+                
+                data = response.json()
+                candidates = data.get("candidates", [])
+                if candidates:
+                    content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        
+        else:
+            raise NotImplementedError(f"Provider {provider} not supported in fallback chain")
+        
+        # Handle empty or None responses
+        if not content or content.strip() == "":
+            logger.warning(f"[AIClient] Empty response from {provider}/{model}")
+            raise ValueError(f"Empty response from {provider}")
+        
+        # Log successful fallback
+        if model != self.config.model or provider != self.config.provider:
+            logger.success(f"[AIClient] Fallback successful: {provider}/{model}")
+        
+        # Strip markdown code blocks if present (common with JSON responses)
+        content = content.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        
+        return content.strip()
     
     def transcribe(self, audio_path: str, language: str = "en") -> Dict[str, Any]:
         """

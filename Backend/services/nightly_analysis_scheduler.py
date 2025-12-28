@@ -263,8 +263,9 @@ class NightlyAnalysisScheduler:
             from sqlalchemy import text
             
             async for db in get_db():
-                # Get videos without complete analysis
+                # Get videos without COMPLETE analysis
                 # Filter by video file extensions since media_type column doesn't exist
+                # A complete analysis must have: transcript AND pre_social_score
                 query = text("""
                     SELECT v.id, v.file_name, v.source_uri, v.source_type
                     FROM videos v
@@ -277,6 +278,7 @@ class NightlyAnalysisScheduler:
                            OR LOWER(v.file_name) LIKE '%.webm')
                       AND (va.video_id IS NULL 
                            OR va.transcript IS NULL 
+                           OR TRIM(va.transcript) = ''
                            OR va.pre_social_score IS NULL)
                     ORDER BY v.created_at DESC
                     LIMIT :limit

@@ -201,17 +201,25 @@ class FormatClassifier:
         analysis_result = await self.db.execute(analysis_query)
         analysis = analysis_result.scalar_one_or_none()
         
-        # Extract relevant fields
-        has_transcript = bool(video.transcript and len(video.transcript) > 10)
-        transcript_length = len(video.transcript) if video.transcript else 0
+        # Extract relevant fields from analysis (transcript is in video_analysis, not video)
+        transcript = ""
+        visual_analysis = {}
+        audio_analysis_data = {}
         
-        # Get audio analysis from visual_analysis JSON
-        visual_analysis = video.visual_analysis or {}
-        audio_analysis = visual_analysis.get('audio_analysis', {})
+        if analysis:
+            transcript = analysis.transcript or ""
+            visual_analysis = analysis.visual_analysis or {}
+            audio_analysis_data = analysis.audio_analysis or {}
         
-        has_speech = audio_analysis.get('has_speech', False)
-        has_music = audio_analysis.get('has_music', False)
-        speech_ratio = audio_analysis.get('speech_ratio', 0.0)
+        has_transcript = bool(transcript and len(transcript) > 10)
+        transcript_length = len(transcript) if transcript else 0
+        
+        # Get audio analysis from analysis record or visual_analysis JSON
+        audio_analysis = audio_analysis_data or visual_analysis.get('audio_analysis', {})
+        
+        has_speech = audio_analysis.get('has_speech', False) if isinstance(audio_analysis, dict) else False
+        has_music = audio_analysis.get('has_music', False) if isinstance(audio_analysis, dict) else False
+        speech_ratio = audio_analysis.get('speech_ratio', 0.0) if isinstance(audio_analysis, dict) else 0.0
         
         # Get face detection from analysis or visual_analysis
         has_face = False

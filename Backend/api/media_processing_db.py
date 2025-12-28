@@ -1171,9 +1171,9 @@ async def analyze_media(
     except Exception as e:
         logger.debug(f"Failed to emit analysis requested event: {e}")
     
-    # Start analysis as background task using FastAPI BackgroundTasks
-    # This runs in the same process, avoiding ThreadPoolExecutor import issues
-    background_tasks.add_task(run_analysis_sync, str(video_uuid), file_path, None)
+    # Start analysis as async task in current event loop
+    import asyncio
+    asyncio.create_task(_run_analysis_async(str(video_uuid), file_path, None))
     
     return {"status": "analyzing", "media_id": media_id}
 

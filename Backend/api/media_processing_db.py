@@ -2,6 +2,10 @@
 Database-backed Media Processing API
 Persists media to Supabase PostgreSQL using Video and VideoAnalysis models.
 """
+# Load environment variables at the top of the module
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import uuid
 import asyncio
@@ -1199,6 +1203,10 @@ def run_analysis_sync(video_id: str, file_path: str, job_id: str = None):
 
 async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None):
     """Run comprehensive AI analysis on a video using VideoAnalyzer + image analysis."""
+    # Ensure environment variables are loaded in thread worker
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     from database.connection import create_thread_local_session_maker
     from config import settings
     import traceback
@@ -1336,13 +1344,15 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                 update_video_step(job_id, video_id, "image_fallback", filename)
                 logger.info(f"[Analysis] Skipping video analysis for image: {video_id} ({ext})")
                 # Go straight to basic analysis for images
-            elif settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
+            else:
+                # Use ModelRegistry-based VideoAnalyzer (no API key needed)
                 try:
                     from services.video_analyzer import VideoAnalyzer
                     
                     update_video_step(job_id, video_id, "1/4 Transcribing", filename)
                     
-                    analyzer = VideoAnalyzer(api_key=settings.openai_api_key)
+                    # VideoAnalyzer now uses ModelRegistry internally
+                    analyzer = VideoAnalyzer()
                     
                     # Custom callback to update step progress and emit events
                     step_progress_map = {

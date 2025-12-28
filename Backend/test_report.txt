@@ -1,0 +1,123 @@
+
+================================================================================
+BACKEND TEST SUITE REPORT
+================================================================================
+Generated: 2025-12-27 22:55:31
+Total Duration: 120.89s
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Tests:    420
+Passed:         396 (94.3%)
+Failed:         22
+Skipped:        2
+Errors:         62
+
+CATEGORY BREAKDOWN
+--------------------------------------------------------------------------------
+
+API
+  Files:    1
+  Passed:   3
+  Failed:   0
+  Errors:   0
+  Pass Rate: 100.0%
+  Duration: 0.23s
+
+COMPREHENSIVE
+  Files:    5
+  Passed:   0
+  Failed:   0
+  Errors:   5
+  Pass Rate: 0.0%
+  Duration: 0.40s
+
+CONTRACT
+  Files:    1
+  Passed:   0
+  Failed:   0
+  Errors:   1
+  Pass Rate: 0.0%
+  Duration: 0.08s
+
+DATABASE
+  Files:    2
+  Passed:   0
+  Failed:   17
+  Errors:   0
+  Pass Rate: 0.0%
+  Duration: 0.18s
+
+E2E
+  Files:    2
+  Passed:   0
+  Failed:   0
+  Errors:   2
+  Pass Rate: 0.0%
+  Duration: 0.19s
+
+INTEGRATION
+  Files:    31
+  Passed:   87
+  Failed:   4
+  Errors:   32
+  Pass Rate: 93.5%
+  Duration: 63.14s
+
+PERFORMANCE
+  Files:    4
+  Passed:   7
+  Failed:   0
+  Errors:   3
+  Pass Rate: 100.0%
+  Duration: 3.54s
+
+PHASE0
+  Files:    1
+  Passed:   29
+  Failed:   1
+  Errors:   0
+  Pass Rate: 96.7%
+  Duration: 0.05s
+
+PHASE1
+  Files:    6
+  Passed:   80
+  Failed:   0
+  Errors:   3
+  Pass Rate: 100.0%
+  Duration: 0.37s
+
+PRD2
+  Files:    8
+  Passed:   0
+  Failed:   0
+  Errors:   8
+  Pass Rate: 0.0%
+  Duration: 0.67s
+
+PUBSUB
+  Files:    18
+  Passed:   190
+  Failed:   0
+  Errors:   5
+  Pass Rate: 100.0%
+  Duration: 12.62s
+
+REGRESSION
+  Files:    1
+  Passed:   0
+  Failed:   0
+  Errors:   1
+  Pass Rate: 0.0%
+  Duration: 0.08s
+
+USABILITY
+  Files:    2
+  Passed:   0
+  Failed:   0
+  Errors:   2
+  Pass Rate: 0.0%
+  Duration: 0.18s
+
+================================================================================

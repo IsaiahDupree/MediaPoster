@@ -147,13 +147,50 @@ Import, extraction, and render endpoints will now return persistent job IDs that
 
 ## Files Changed
 
-### New Files
-- `supabase/migrations/20251227_create_background_jobs.sql`
-- `Backend/services/background_jobs_service.py`
-- `Backend/api/endpoints/jobs.py`
+### New Files ✅
+- `supabase/migrations/20251227_create_background_jobs.sql` ✅
+- `Backend/services/background_jobs_service.py` ✅
+- `Backend/api/endpoints/jobs.py` (extended with background job endpoints) ✅
 
-### Modified Files
+### Modified Files (Phase 2 - Pending)
 - `Backend/api/endpoints/android_import_api.py`
 - `Backend/api/endpoints/ios_import_api.py`
 - `Backend/api/endpoints/clip_extraction.py`
 - `Backend/api/endpoints/video_render.py`
+
+---
+
+## Current State (After Phase 1)
+
+### API Endpoints Available
+
+```
+GET  /api/jobs/background/list?type=import&status=running
+GET  /api/jobs/background/{job_id}
+POST /api/jobs/background/{job_id}/cancel
+GET  /api/jobs/background/active
+```
+
+### Service Methods Available
+
+```python
+from services.background_jobs_service import BackgroundJobsService
+
+service = BackgroundJobsService(db)
+job_id = await service.create_job("extraction", input_data)
+await service.start_job(job_id)
+await service.update_progress(job_id, 50.0)
+await service.complete_job(job_id, output_data)
+await service.fail_job(job_id, "Error message")
+await service.cancel_job(job_id)
+job = await service.get_job(job_id)
+jobs = await service.list_jobs(job_type="extraction", status="running")
+```
+
+### Database Table
+
+```sql
+SELECT * FROM background_jobs;
+-- id, job_type, status, progress, input_json, output_json,
+-- error_message, started_at, completed_at, created_at, updated_at
+```

@@ -12,16 +12,16 @@ from config.model_registry import ModelConfig, ModelRegistry
 
 # Fallback model chain for rate limit handling
 # Priority order: Groq (fast/free) -> Google Gemini (free tier) -> OpenAI (paid)
+# Updated 2025-12-28: Removed decommissioned models (llama-3.1-70b-versatile, mixtral-8x7b-32768)
+# Note: Many Groq models have been decommissioned. Only these are confirmed working as of 2025-12-28
 GROQ_FALLBACK_MODELS = [
-    "llama-3.3-70b-versatile",  # Primary
-    "llama-3.1-70b-versatile",  # Fallback 1
-    "llama-3.1-8b-instant",     # Fallback 2 (smaller, faster)
-    "mixtral-8x7b-32768",       # Fallback 3
+    "llama-3.3-70b-versatile",  # Primary - best quality (confirmed working)
+    "llama-3.1-8b-instant",     # Fallback - smaller, faster (confirmed working)
 ]
 
 GOOGLE_FALLBACK_MODELS = [
     "gemini-2.5-flash",         # Fast, free tier friendly
-    "gemini-2.0-flash",         # Alternative
+    "gemini-2.0-flash-exp",     # Experimental but capable
     "gemini-1.5-flash",         # Stable fallback
 ]
 

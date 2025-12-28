@@ -117,6 +117,7 @@ class MediaDetailResponse(BaseModel):
     tone: Optional[str] = None
     pacing: Optional[str] = None
     visual_analysis: Optional[dict] = None
+    visual_summary: Optional[str] = None  # Extracted from visual_analysis for convenience
     analyzed_at: Optional[str] = None
     # Deep analysis fields
     deep_analysis: Optional[dict] = None
@@ -677,6 +678,13 @@ async def get_media_detail(
             logger.error(f"Error parsing JSONB fields for video {video.id}: {e}", exc_info=True)
     
     try:
+        # Extract visual_summary from visual_analysis if available
+        visual_summary = None
+        if analysis and analysis.get("visual_analysis"):
+            va = analysis["visual_analysis"]
+            if isinstance(va, dict):
+                visual_summary = va.get("visual_summary") or va.get("detailed_description")
+        
         return MediaDetailResponse(
         media_id=str(video.id),
         filename=video.file_name or "",
@@ -695,6 +703,7 @@ async def get_media_detail(
         tone=analysis["tone"] if analysis else None,
         pacing=analysis["pacing"] if analysis else None,
         visual_analysis=analysis["visual_analysis"] if analysis else None,
+        visual_summary=visual_summary,
         deep_analysis=analysis["deep_analysis"] if analysis else None,  # Always include deep analysis
         frame_analyses=analysis["frame_analyses"] if analysis else None,
         platform_content=analysis["platform_content"] if analysis else None,

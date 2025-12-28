@@ -124,6 +124,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path in ["/api/health", "/health", "/"]:
             return await call_next(request)
         
+        # Skip rate limiting for scheduler (internal service)
+        # Scheduler is identified by X-Internal-Service header
+        internal_service = request.headers.get("X-Internal-Service")
+        if internal_service == "nightly-analysis-scheduler":
+            return await call_next(request)
+        
         # Get rate limit for this endpoint
         max_requests, window_seconds = self._get_limit(request.url.path)
         

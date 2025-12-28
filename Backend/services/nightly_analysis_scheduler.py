@@ -307,7 +307,8 @@ class NightlyAnalysisScheduler:
             async with httpx.AsyncClient(timeout=120) as client:
                 response = await client.post(
                     "http://localhost:5555/api/media-db/analyze",
-                    json={"video_id": video["id"]}
+                    json={"video_id": video["id"]},
+                    headers={"X-Internal-Service": "nightly-analysis-scheduler"}
                 )
                 
                 if response.status_code == 200:

@@ -264,12 +264,18 @@ class NightlyAnalysisScheduler:
             
             async for db in get_db():
                 # Get videos without complete analysis
+                # Filter by video file extensions since media_type column doesn't exist
                 query = text("""
-                    SELECT v.id, v.file_name, v.source_uri, v.media_type
+                    SELECT v.id, v.file_name, v.source_uri, v.source_type
                     FROM videos v
                     LEFT JOIN video_analysis va ON v.id = va.video_id
-                    WHERE v.media_type = 'video'
-                      AND (va.id IS NULL 
+                    WHERE (LOWER(v.file_name) LIKE '%.mp4'
+                           OR LOWER(v.file_name) LIKE '%.mov'
+                           OR LOWER(v.file_name) LIKE '%.m4v'
+                           OR LOWER(v.file_name) LIKE '%.avi'
+                           OR LOWER(v.file_name) LIKE '%.mkv'
+                           OR LOWER(v.file_name) LIKE '%.webm')
+                      AND (va.video_id IS NULL 
                            OR va.transcript IS NULL 
                            OR va.pre_social_score IS NULL)
                     ORDER BY v.created_at DESC
@@ -283,7 +289,7 @@ class NightlyAnalysisScheduler:
                         "id": str(row[0]),
                         "filename": row[1],
                         "source_uri": row[2],
-                        "media_type": row[3]
+                        "source_type": row[3]
                     }
                     for row in rows
                 ]

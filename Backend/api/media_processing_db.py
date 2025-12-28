@@ -225,7 +225,7 @@ async def get_video_metadata(file_path: str) -> dict:
 @router.get("/list", response_model=List[MediaStatusResponse])
 async def list_media(
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=50, le=500),
+    limit: int = Query(default=500, le=5000),
     offset: int = Query(default=0, ge=0),
     analyzed_only: bool = Query(default=False),
     media_type: Optional[str] = Query(default=None, description="Filter by media type: 'video' or 'image'"),
@@ -1962,7 +1962,7 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
 async def batch_analyze(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=500, le=5000),
     include_incomplete: bool = Query(default=True, description="Include videos with incomplete analysis"),
     force: bool = Query(default=False, description="Force re-analyze ALL videos including already analyzed ones")
 ):
@@ -3074,7 +3074,7 @@ async def get_social_scores(
 @router.post("/backfill-metadata")
 async def backfill_metadata(
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=100, le=500, description="Max videos to process"),
+    limit: int = Query(default=500, le=5000, description="Max videos to process"),
     force: bool = Query(default=False, description="Re-extract even if metadata exists")
 ):
     """
@@ -3181,7 +3181,7 @@ async def backfill_metadata(
 @router.post("/generate-thumbnails")
 async def generate_thumbnails_batch(
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=50, le=200, description="Max videos to process")
+    limit: int = Query(default=500, le=5000, description="Max videos to process")
 ):
     """
     Generate thumbnails for videos that are missing them.

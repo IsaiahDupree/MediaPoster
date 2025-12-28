@@ -11,6 +11,8 @@ from loguru import logger
 
 from services.whisper_transcriber import WhisperTranscriber
 from services.content_analyzer import ContentAnalyzer
+from config.model_registry import TaskType, ModelRegistry
+from services.ai_client import AIClient
 
 
 class VideoAnalyzer:
@@ -18,33 +20,45 @@ class VideoAnalyzer:
     
     def __init__(self, api_key: str = None):
         """
-        Initialize video analyzer
+        Initialize video analyzer using ModelRegistry
         
         Args:
-            api_key: API key (uses Groq by default, falls back to OpenAI)
+            api_key: Optional API key (deprecated, use ModelRegistry instead)
         """
-        # Use Groq by default for cost savings
-        groq_key = os.getenv("GROQ_API_KEY")
-        openai_key = api_key or os.getenv("OPENAI_API_KEY")
+        # Get model configurations from registry
+        transcription_config = ModelRegistry.get_model_config(TaskType.TRANSCRIPTION)
+        analysis_config = ModelRegistry.get_model_config(TaskType.CONTENT_ANALYSIS)
+        frame_config = ModelRegistry.get_model_config(TaskType.FRAME_ANALYSIS)
         
-        # Initialize services with Groq for transcription (FREE)
-        if groq_key:
-            self.transcriber = WhisperTranscriber(api_key=groq_key, provider="groq")
-            logger.info("VideoAnalyzer using Groq for transcription (FREE)")
-        else:
-            self.transcriber = WhisperTranscriber(api_key=openai_key, provider="openai")
-            logger.warning("VideoAnalyzer using OpenAI for transcription (Groq not available)")
+        # Initialize AI clients
+        self.transcription_client = AIClient(transcription_config)
+        self.analysis_client = AIClient(analysis_config)
+        self.frame_client = AIClient(frame_config)
         
-        # Use Groq for analysis if available, otherwise OpenAI
-        self.api_key = groq_key or openai_key
-        self.content_analyzer = ContentAnalyzer(api_key=self.api_key)
+        # Initialize services with new clients
+        # Note: WhisperTranscriber still used for audio extraction, but uses AIClient for transcription
+        transcription_api_key = os.getenv(transcription_config.api_key_env)
+        self.transcriber = WhisperTranscriber(
+            api_key=transcription_api_key,
+            provider=transcription_config.provider
+        )
         
-        # Lazy import to avoid circular deps if any
+        # ContentAnalyzer will be updated to use AIClient
+        analysis_api_key = os.getenv(analysis_config.api_key_env)
+        self.content_analyzer = ContentAnalyzer(api_key=analysis_api_key)
+        
+        # Lazy import to avoid circular deps
         from services.frame_analyzer import FrameAnalyzer
         from services.thumbnail_generator import ThumbnailGenerator
         
-        self.frame_analyzer = FrameAnalyzer(api_key=self.api_key)
-        self.thumbnail_generator = ThumbnailGenerator(openai_api_key=self.api_key)
+        frame_api_key = os.getenv(frame_config.api_key_env)
+        self.frame_analyzer = FrameAnalyzer(api_key=frame_api_key)
+        self.thumbnail_generator = ThumbnailGenerator(openai_api_key=frame_api_key)
+        
+        logger.info(f"VideoAnalyzer initialized with ModelRegistry:")
+        logger.info(f"  Transcription: {transcription_config.provider}/{transcription_config.model}")
+        logger.info(f"  Analysis: {analysis_config.provider}/{analysis_config.model}")
+        logger.info(f"  Frames: {frame_config.provider}/{frame_config.model}")
     
     async def analyze_video(
         self,

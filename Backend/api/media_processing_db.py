@@ -126,6 +126,14 @@ class MediaDetailResponse(BaseModel):
     music_suggestion: Optional[dict] = None
     pillar_tags: Optional[List[str]] = None
     format_tags: Optional[List[str]] = None
+    # New 100% analysis fields
+    pain_points: Optional[List[str]] = None
+    emotional_drivers: Optional[List[str]] = None
+    emotional_journey: Optional[dict] = None
+    call_to_action: Optional[dict] = None
+    scene_structure: Optional[list] = None
+    content_type: Optional[str] = None
+    target_audience: Optional[dict] = None
 
 
 class BatchIngestRequest(BaseModel):
@@ -553,7 +561,9 @@ async def get_media_detail(
         analysis_result = await db.execute(
             text("""SELECT video_id, transcript, topics, hooks, tone, pacing, pre_social_score, 
                     key_moments, analyzed_at, visual_analysis, deep_analysis, frame_analyses,
-                    platform_content, detected_hook, music_suggestion, pillar_tags, format_tags
+                    platform_content, detected_hook, music_suggestion, pillar_tags, format_tags,
+                    pain_points, emotional_drivers, emotional_journey, call_to_action,
+                    scene_structure, content_type, target_audience
                     FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"""),
             {"vid": str(video.id)}
         )
@@ -602,9 +612,17 @@ async def get_media_detail(
                 "frame_analyses": parse_jsonb(row[11]),
                 "platform_content": parse_jsonb(row[12]),
                 "detected_hook": row[13],
-                "music_suggestion": parse_jsonb(row[14]),  # This was causing the error
+                "music_suggestion": parse_jsonb(row[14]),
                 "pillar_tags": parse_array(row[15]),
                 "format_tags": parse_array(row[16]),
+                # New 100% analysis fields
+                "pain_points": parse_array(row[17]),
+                "emotional_drivers": parse_array(row[18]),
+                "emotional_journey": parse_jsonb(row[19]),
+                "call_to_action": parse_jsonb(row[20]),
+                "scene_structure": parse_jsonb(row[21]),
+                "content_type": row[22],
+                "target_audience": parse_jsonb(row[23]),
             }
     except Exception as e:
         logger.error(f"Failed to fetch analysis for {video.id}: {e}", exc_info=True)
@@ -614,7 +632,7 @@ async def get_media_detail(
         import json
         try:
             # Parse any remaining string JSONB fields
-            for key in ['music_suggestion', 'deep_analysis', 'visual_analysis', 'key_moments', 'frame_analyses', 'platform_content']:
+            for key in ['music_suggestion', 'deep_analysis', 'visual_analysis', 'key_moments', 'frame_analyses', 'platform_content', 'emotional_journey', 'call_to_action', 'scene_structure', 'target_audience']:
                 if key in analysis and analysis[key] is not None:
                     if isinstance(analysis[key], str):
                         try:
@@ -652,6 +670,14 @@ async def get_media_detail(
         pillar_tags=analysis["pillar_tags"] if analysis else None,
         format_tags=analysis["format_tags"] if analysis else None,
         analyzed_at=analysis["analyzed_at"].isoformat() if analysis and analysis["analyzed_at"] else None,
+        # New 100% analysis fields
+        pain_points=analysis["pain_points"] if analysis else None,
+        emotional_drivers=analysis["emotional_drivers"] if analysis else None,
+        emotional_journey=analysis["emotional_journey"] if analysis else None,
+        call_to_action=analysis["call_to_action"] if analysis else None,
+        scene_structure=analysis["scene_structure"] if analysis else None,
+        content_type=analysis["content_type"] if analysis else None,
+        target_audience=analysis["target_audience"] if analysis else None,
         )
     except Exception as e:
         logger.error(f"Failed to create MediaDetailResponse for video {video.id}: {e}", exc_info=True)

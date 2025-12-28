@@ -83,7 +83,8 @@ class BackgroundJobsService:
 ### Phase 1: Create Infrastructure ✅
 - [x] Create `background_jobs` table migration
 - [x] Apply migration to database
-- [ ] Create `BackgroundJobsService` class
+- [x] Create `BackgroundJobsService` class
+- [x] Add background jobs API endpoints
 
 ### Phase 2: Migrate Import APIs
 - [ ] Update `android_import_api.py` to use service

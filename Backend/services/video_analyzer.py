@@ -21,12 +21,22 @@ class VideoAnalyzer:
         Initialize video analyzer
         
         Args:
-            api_key: OpenAI API key for both Whisper and GPT-4
+            api_key: API key (uses Groq by default, falls back to OpenAI)
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        # Use Groq by default for cost savings
+        groq_key = os.getenv("GROQ_API_KEY")
+        openai_key = api_key or os.getenv("OPENAI_API_KEY")
         
-        # Initialize services
-        self.transcriber = WhisperTranscriber(api_key=self.api_key)
+        # Initialize services with Groq for transcription (FREE)
+        if groq_key:
+            self.transcriber = WhisperTranscriber(api_key=groq_key, provider="groq")
+            logger.info("VideoAnalyzer using Groq for transcription (FREE)")
+        else:
+            self.transcriber = WhisperTranscriber(api_key=openai_key, provider="openai")
+            logger.warning("VideoAnalyzer using OpenAI for transcription (Groq not available)")
+        
+        # Use Groq for analysis if available, otherwise OpenAI
+        self.api_key = groq_key or openai_key
         self.content_analyzer = ContentAnalyzer(api_key=self.api_key)
         
         # Lazy import to avoid circular deps if any

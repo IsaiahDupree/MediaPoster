@@ -1,33 +1,52 @@
 """
 Whisper Transcription Service
-Extracts audio from video and transcribes using OpenAI's Whisper API
+Extracts audio from video and transcribes using Groq's Whisper API (or OpenAI fallback)
 """
 import os
 import subprocess
 import tempfile
 from pathlib import Path
-from openai import OpenAI
 from loguru import logger
 
 
 class WhisperTranscriber:
-    """Handle video transcription using Whisper API"""
+    """Handle video transcription using Whisper API (Groq primary, OpenAI fallback)"""
     
     # Image extensions that should never be processed for audio
     IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic', '.heif', '.tiff', '.svg'}
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, provider: str = None):
         """
         Initialize transcriber
         
         Args:
-            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
+            api_key: API key (defaults to GROQ_API_KEY, falls back to OPENAI_API_KEY)
+            provider: Provider to use ('groq' or 'openai', defaults to GROQ if available)
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment")
+        # Determine provider and API key
+        self.provider = provider or os.getenv("TRANSCRIPTION_PROVIDER", "groq")
         
-        self.client = OpenAI(api_key=self.api_key)
+        if self.provider == "groq":
+            self.api_key = api_key or os.getenv("GROQ_API_KEY")
+            if self.api_key:
+                from groq import Groq
+                self.client = Groq(api_key=self.api_key)
+                logger.info("Using Groq for transcription (FREE, 32x faster)")
+            else:
+                # Fallback to OpenAI
+                logger.warning("GROQ_API_KEY not found, falling back to OpenAI")
+                self.provider = "openai"
+                self.api_key = os.getenv("OPENAI_API_KEY")
+                if not self.api_key:
+                    raise ValueError("Neither GROQ_API_KEY nor OPENAI_API_KEY found")
+                from openai import OpenAI
+                self.client = OpenAI(api_key=self.api_key)
+        else:
+            self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not self.api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment")
+            from openai import OpenAI
+            self.client = OpenAI(api_key=self.api_key)
     
     def has_audio_stream(self, file_path: str) -> bool:
         """

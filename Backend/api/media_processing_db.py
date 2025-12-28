@@ -1171,10 +1171,9 @@ async def analyze_media(
     except Exception as e:
         logger.debug(f"Failed to emit analysis requested event: {e}")
     
-    # Start analysis in thread pool (non-blocking)
-    import concurrent.futures
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="single_analysis")
-    executor.submit(run_analysis_sync, str(video_uuid), file_path)
+    # Start analysis as background task using FastAPI BackgroundTasks
+    # This runs in the same process, avoiding ThreadPoolExecutor import issues
+    background_tasks.add_task(run_analysis_sync, str(video_uuid), file_path, None)
     
     return {"status": "analyzing", "media_id": media_id}
 
@@ -1970,23 +1969,26 @@ async def batch_analyze(
     from loguru import logger
     logger.info(f"[Batch Analysis] Job {job_id}: Starting analysis of {len(valid_videos)} videos")
     
-    # Start analysis in thread pool (non-blocking)
-    import concurrent.futures
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
+    # Start batch analysis as async tasks (non-blocking, same process)
+    # Using asyncio.create_task instead of ThreadPoolExecutor to avoid import issues
+    async def run_batch():
+        for video in valid_videos:
+            # Check if job was cancelled before starting
+            if _analysis_jobs[job_id].get("status") == "cancelled":
+                logger.info(f"[Batch Analysis] Job {job_id} cancelled, stopping")
+                break
+            
+            _analysis_jobs[job_id]["videos"][str(video.id)] = "processing"
+            try:
+                await _run_analysis_async(str(video.id), video.source_uri, job_id)
+            except Exception as e:
+                logger.error(f"[Batch Analysis] Error analyzing {video.id}: {e}")
+                _analysis_jobs[job_id]["videos"][str(video.id)] = f"failed:{str(e)[:50]}"
+                _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
     
-    # Store executor in job for potential cancellation
-    _analysis_jobs[job_id]["executor"] = executor
+    asyncio.create_task(run_batch())
     
-    for video in valid_videos:
-        # Check if job was cancelled before queuing
-        if _analysis_jobs[job_id].get("status") == "cancelled":
-            logger.info(f"[Batch Analysis] Job {job_id} cancelled, stopping queue")
-            break
-        
-        _analysis_jobs[job_id]["videos"][str(video.id)] = "queued"
-        executor.submit(run_analysis_sync, str(video.id), video.source_uri, job_id)
-    
-    logger.info(f"[Batch Analysis] Job {job_id}: Queued {len(valid_videos)} videos in thread pool")
+    logger.info(f"[Batch Analysis] Job {job_id}: Started async analysis of {len(valid_videos)} videos")
     
     return {"status": "started", "count": len(valid_videos), "job_id": job_id}
 

@@ -464,13 +464,8 @@ class VideoAnalyzer:
         - Instagram: 2200 chars → target ~30 chars (keep consistent)
         - YouTube: 100 chars → target ~20 chars
         """
-        if not self.api_key:
-            return None
-        
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=self.api_key)
-            
+            # Use ContentAnalyzer's client for title generation (uses ModelRegistry)
             # Build context for title generation
             context_parts = []
             if transcript and len(transcript) > 20:
@@ -502,17 +497,15 @@ VIDEO CONTEXT:
 
 Return ONLY the title text, nothing else."""
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
+            # Use ContentAnalyzer's client (which uses ModelRegistry)
+            title = self.content_analyzer.client.chat_completion(
                 messages=[
                     {"role": "system", "content": "You are a viral content title expert. Create short, punchy titles under 30 characters."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.8,
                 max_tokens=50
-            )
-            
-            title = response.choices[0].message.content.strip()
+            ).strip()
             # Clean up title
             title = title.strip('"\'')
             # Enforce 30 char limit

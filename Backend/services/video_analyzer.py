@@ -25,40 +25,24 @@ class VideoAnalyzer:
         Args:
             api_key: Optional API key (deprecated, use ModelRegistry instead)
         """
-        # Get model configurations from registry
-        transcription_config = ModelRegistry.get_model_config(TaskType.TRANSCRIPTION)
-        analysis_config = ModelRegistry.get_model_config(TaskType.CONTENT_ANALYSIS)
-        frame_config = ModelRegistry.get_model_config(TaskType.FRAME_ANALYSIS)
+        # All services now use ModelRegistry internally - no need to pass API keys
+        # Each service reads its config from ModelRegistry.get_model_config()
         
-        # Initialize AI clients
-        self.transcription_client = AIClient(transcription_config)
-        self.analysis_client = AIClient(analysis_config)
-        self.frame_client = AIClient(frame_config)
+        # Initialize transcription service (uses ModelRegistry for Groq Whisper)
+        self.transcriber = WhisperTranscriber()
         
-        # Initialize services with new clients
-        # Note: WhisperTranscriber still used for audio extraction, but uses AIClient for transcription
-        transcription_api_key = os.getenv(transcription_config.api_key_env)
-        self.transcriber = WhisperTranscriber(
-            api_key=transcription_api_key,
-            provider=transcription_config.provider
-        )
-        
-        # ContentAnalyzer will be updated to use AIClient
-        analysis_api_key = os.getenv(analysis_config.api_key_env)
-        self.content_analyzer = ContentAnalyzer(api_key=analysis_api_key)
+        # Initialize content analysis service (uses ModelRegistry for Groq Llama)
+        self.content_analyzer = ContentAnalyzer()
         
         # Lazy import to avoid circular deps
         from services.frame_analyzer import FrameAnalyzer
         from services.thumbnail_generator import ThumbnailGenerator
         
-        frame_api_key = os.getenv(frame_config.api_key_env)
-        self.frame_analyzer = FrameAnalyzer(api_key=frame_api_key)
-        self.thumbnail_generator = ThumbnailGenerator(openai_api_key=frame_api_key)
+        # Initialize frame analyzer (uses ModelRegistry for GPT-4o Mini)
+        self.frame_analyzer = FrameAnalyzer()
+        self.thumbnail_generator = ThumbnailGenerator()
         
-        logger.info(f"VideoAnalyzer initialized with ModelRegistry:")
-        logger.info(f"  Transcription: {transcription_config.provider}/{transcription_config.model}")
-        logger.info(f"  Analysis: {analysis_config.provider}/{analysis_config.model}")
-        logger.info(f"  Frames: {frame_config.provider}/{frame_config.model}")
+        logger.info("VideoAnalyzer initialized - all services using ModelRegistry")
     
     async def analyze_video(
         self,

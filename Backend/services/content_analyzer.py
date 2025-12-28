@@ -1,29 +1,32 @@
 """
 Content Analysis Service
-Analyzes transcripts using GPT-4 to identify viral patterns, hooks, tone, and key moments
+Analyzes transcripts using AI to identify viral patterns, hooks, tone, and key moments
+Uses ModelRegistry for configurable model selection (Groq by default, 100% cost savings)
 """
 import os
 import json
 from typing import Dict, List, Optional
-from openai import OpenAI
 from loguru import logger
+
+from config.model_registry import TaskType, ModelRegistry
+from services.ai_client import AIClient
 
 
 class ContentAnalyzer:
-    """Analyze video content using GPT-4"""
+    """Analyze video content using AI (Groq Llama 3.3 70B by default)"""
     
     def __init__(self, api_key: str = None):
         """
-        Initialize analyzer
+        Initialize analyzer using ModelRegistry
         
         Args:
-            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
+            api_key: Optional API key (deprecated, use ModelRegistry instead)
         """
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment")
+        # Get model configuration from registry
+        self.config = ModelRegistry.get_model_config(TaskType.CONTENT_ANALYSIS)
+        self.client = AIClient(self.config)
         
-        self.client = OpenAI(api_key=self.api_key)
+        logger.info(f"ContentAnalyzer using {self.config.provider}/{self.config.model}")
     
     def analyze_transcript(self, transcript: str, video_metadata: dict = None) -> dict:
         """
@@ -36,37 +39,36 @@ class ContentAnalyzer:
         Returns:
             Analysis results with hooks, tone, topics, key moments, and viral score
         """
-        logger.info(f"Analyzing transcript ({len(transcript)} chars) with GPT-4")
+        logger.info(f"Analyzing transcript ({len(transcript)} chars) with {self.config.provider}/{self.config.model}")
         
         # Build analysis prompt
         prompt = self._build_analysis_prompt(transcript, video_metadata)
         
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+            # Use AIClient unified interface
+            response_text = self.client.chat_completion(
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert content analyst specializing in viral video patterns and social media engagement. Analyze content for hooks, emotional triggers, pacing, and viral potential."
+                        "content": "You are an expert content analyst specializing in viral video patterns and social media engagement. Analyze content for hooks, emotional triggers, pacing, and viral potential. Always respond with valid JSON."
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                response_format={"type": "json_object"},
                 temperature=0.3  # Lower for more consistent analysis
             )
             
             # Parse JSON response
-            analysis = json.loads(response.choices[0].message.content)
+            analysis = json.loads(response_text)
             
             logger.success(f"Content analysis complete. Viral score: {analysis.get('viral_score', 'N/A')}")
             
             return self._normalize_analysis(analysis)
             
         except Exception as e:
-            logger.error(f"GPT-4 analysis error: {e}")
+            logger.error(f"Content analysis error ({self.config.provider}): {e}")
             raise RuntimeError(f"Content analysis failed: {e}")
     
     def _build_analysis_prompt(self, transcript: str, metadata: dict = None) -> str:
@@ -300,23 +302,22 @@ Focus on:
             prompt += f"\nVIDEO METADATA: {json.dumps(video_metadata)}"
         
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+            # Use AIClient unified interface
+            response_text = self.client.chat_completion(
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert visual content analyst. Analyze video content based on visual elements when audio is unavailable."
+                        "content": "You are an expert visual content analyst. Analyze video content based on visual elements when audio is unavailable. Always respond with valid JSON."
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                response_format={"type": "json_object"},
                 temperature=0.3
             )
             
-            analysis = json.loads(response.choices[0].message.content)
+            analysis = json.loads(response_text)
             logger.success(f"[ContentAnalyzer] Visual analysis complete. Score: {analysis.get('viral_score', 'N/A')}")
             
             # Normalize and ensure pre_social_score is on 0-100 scale

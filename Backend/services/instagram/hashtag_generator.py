@@ -1,20 +1,23 @@
 """
 Hashtag Generator Service
 AI-powered hashtag recommendations based on content and trending data
+Uses ModelRegistry for configurable model selection (Groq by default, 100% cost savings)
 """
 import os
 from typing import List, Dict, Optional
 from loguru import logger
 from sqlalchemy import create_engine, text
-import openai
+
+from config.model_registry import TaskType, ModelRegistry
+from services.ai_client import AIClient
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 class HashtagGenerator:
     """
     Generates optimized hashtag sets for Instagram content.
+    Uses ModelRegistry for AI model selection (Groq Llama 3.1 8B by default - FREE)
     
     Strategy:
     - 10 trending hashtags (high velocity, high competition)
@@ -26,7 +29,15 @@ class HashtagGenerator:
     
     def __init__(self):
         self.engine = create_engine(DATABASE_URL)
-        logger.info("Hashtag Generator initialized")
+        
+        # Get model configuration from registry
+        self.config = ModelRegistry.get_model_config(TaskType.HASHTAG_GENERATION)
+        try:
+            self.client = AIClient(self.config)
+            logger.info(f"HashtagGenerator using {self.config.provider}/{self.config.model}")
+        except Exception as e:
+            logger.warning(f"HashtagGenerator AI disabled: {e}")
+            self.client = None
     
     async def generate_hashtags(
         self,
@@ -93,8 +104,11 @@ Common niches:
 Return ONLY the niche name, nothing else."""
 
         try:
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-4",
+            if not self.client:
+                return "lifestyle"
+            
+            # Use AIClient unified interface (sync call)
+            response = self.client.chat_completion(
                 messages=[
                     {"role": "system", "content": "You are a social media niche detection expert."},
                     {"role": "user", "content": prompt}
@@ -103,7 +117,7 @@ Return ONLY the niche name, nothing else."""
                 max_tokens=20
             )
             
-            niche = response.choices[0].message.content.strip().lower()
+            niche = response.strip().lower()
             return niche
             
         except Exception as e:
@@ -194,17 +208,18 @@ Return ONLY a comma-separated list of hashtags without # symbols.
 Example: morningworkoutroutine, homefitnesstips, quickhealthybreakfast"""
 
         try:
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-4",
+            if not self.client:
+                return []
+            
+            # Use AIClient unified interface (sync call)
+            hashtags_text = self.client.chat_completion(
                 messages=[
                     {"role": "system", "content": "You are a hashtag strategy expert."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
                 max_tokens=200
-            )
-            
-            hashtags_text = response.choices[0].message.content.strip()
+            ).strip()
             tags = [tag.strip().lstrip('#') for tag in hashtags_text.split(',')]
             
             # Format as list of dicts

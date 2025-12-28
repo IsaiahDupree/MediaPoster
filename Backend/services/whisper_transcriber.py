@@ -1,6 +1,7 @@
 """
 Whisper Transcription Service
-Extracts audio from video and transcribes using Groq's Whisper API (or OpenAI fallback)
+Extracts audio from video and transcribes using AI (Groq by default, 100% cost savings)
+Uses ModelRegistry for configurable model selection
 """
 import os
 import subprocess
@@ -8,45 +9,35 @@ import tempfile
 from pathlib import Path
 from loguru import logger
 
+from config.model_registry import TaskType, ModelRegistry
+from services.ai_client import AIClient
+
 
 class WhisperTranscriber:
-    """Handle video transcription using Whisper API (Groq primary, OpenAI fallback)"""
+    """Handle video transcription using Whisper API (Groq by default via ModelRegistry)"""
     
     # Image extensions that should never be processed for audio
     IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic', '.heif', '.tiff', '.svg'}
     
     def __init__(self, api_key: str = None, provider: str = None):
         """
-        Initialize transcriber
+        Initialize transcriber using ModelRegistry
         
         Args:
-            api_key: API key (defaults to GROQ_API_KEY, falls back to OPENAI_API_KEY)
-            provider: Provider to use ('groq' or 'openai', defaults to GROQ if available)
+            api_key: Optional API key (deprecated, use ModelRegistry instead)
+            provider: Optional provider override (deprecated, use ModelRegistry instead)
         """
-        # Determine provider and API key
-        self.provider = provider or os.getenv("TRANSCRIPTION_PROVIDER", "groq")
+        # Get model configuration from registry
+        self.config = ModelRegistry.get_model_config(TaskType.TRANSCRIPTION)
+        self.provider = self.config.provider
         
-        if self.provider == "groq":
-            self.api_key = api_key or os.getenv("GROQ_API_KEY")
-            if self.api_key:
-                from groq import Groq
-                self.client = Groq(api_key=self.api_key)
-                logger.info("Using Groq for transcription (FREE, 32x faster)")
-            else:
-                # Fallback to OpenAI
-                logger.warning("GROQ_API_KEY not found, falling back to OpenAI")
-                self.provider = "openai"
-                self.api_key = os.getenv("OPENAI_API_KEY")
-                if not self.api_key:
-                    raise ValueError("Neither GROQ_API_KEY nor OPENAI_API_KEY found")
-                from openai import OpenAI
-                self.client = OpenAI(api_key=self.api_key)
-        else:
-            self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-            if not self.api_key:
-                raise ValueError("OPENAI_API_KEY not found in environment")
-            from openai import OpenAI
-            self.client = OpenAI(api_key=self.api_key)
+        try:
+            self.client = AIClient(self.config)
+            logger.info(f"WhisperTranscriber using {self.config.provider}/{self.config.model}"
+                       f" (cost: ${self.config.cost_input}/MTok)")
+        except Exception as e:
+            logger.error(f"Failed to initialize WhisperTranscriber: {e}")
+            raise ValueError(f"Transcription initialization failed: {e}")
     
     def has_audio_stream(self, file_path: str) -> bool:
         """
@@ -135,30 +126,18 @@ class WhisperTranscriber:
         if not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
         
-        # Use correct model name based on provider
-        model_name = "whisper-large-v3" if self.provider == "groq" else "whisper-1"
-        logger.info(f"Transcribing audio with {self.provider} Whisper API (model: {model_name})")
+        logger.info(f"Transcribing audio with {self.config.provider}/{self.config.model}")
         
         try:
-            with open(audio_path, "rb") as audio_file:
-                transcript = self.client.audio.transcriptions.create(
-                    model=model_name,
-                    file=audio_file,
-                    response_format="verbose_json",  # Get timestamps
-                    language="en"  # Can be made configurable
-                )
+            # Use AIClient unified transcription interface
+            result = self.client.transcribe(audio_path, language="en")
             
-            logger.success(f"Transcription complete: {len(transcript.text)} characters")
+            logger.success(f"Transcription complete: {len(result.get('text', ''))} characters")
             
-            return {
-                "text": transcript.text,
-                "language": transcript.language,
-                "duration": transcript.duration,
-                "segments": transcript.segments if hasattr(transcript, 'segments') else []
-            }
+            return result
             
         except Exception as e:
-            logger.error(f"Whisper API error: {e}")
+            logger.error(f"Transcription error ({self.config.provider}): {e}")
             raise RuntimeError(f"Transcription failed: {e}")
     
     def transcribe_video(self, video_path: str, cleanup: bool = True) -> dict:

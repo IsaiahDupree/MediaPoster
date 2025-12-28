@@ -1,6 +1,7 @@
 """
 Intelligent Thumbnail Generator
 Selects best frames and generates platform-specific thumbnails with AI enhancements
+Uses ModelRegistry for configurable model selection (Groq by default, 100% cost savings)
 """
 import logging
 import os
@@ -9,10 +10,12 @@ from pathlib import Path
 import subprocess
 import json
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
-import openai
 from dataclasses import dataclass
 import base64
 from io import BytesIO
+
+from config.model_registry import TaskType, ModelRegistry
+from services.ai_client import AIClient
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +55,21 @@ class ThumbnailGenerator:
     
     def __init__(self, openai_api_key: Optional[str] = None):
         """
-        Initialize thumbnail generator
+        Initialize thumbnail generator using ModelRegistry
         
         Args:
-            openai_api_key: OpenAI API key for AI enhancements
+            openai_api_key: Optional API key (deprecated, use ModelRegistry instead)
         """
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if self.openai_api_key:
-            openai.api_key = self.openai_api_key
+        # Get model configuration from registry
+        self.config = ModelRegistry.get_model_config(TaskType.THUMBNAIL_GENERATION)
+        try:
+            self.client = AIClient(self.config)
+            self.ai_enabled = True
+            logger.info(f"ThumbnailGenerator using {self.config.provider}/{self.config.model}")
+        except Exception as e:
+            logger.warning(f"ThumbnailGenerator AI disabled: {e}")
+            self.client = None
+            self.ai_enabled = False
     
     def extract_frames(
         self,
@@ -502,15 +512,15 @@ class ThumbnailGenerator:
         Returns:
             Path to enhanced thumbnail
         """
-        if not self.openai_api_key:
-            logger.warning("OpenAI API key not set - skipping AI enhancement")
+        if not self.ai_enabled or not self.client:
+            logger.warning("AI not enabled - skipping AI enhancement")
             # Just copy the file
             import shutil
             shutil.copy(image_path, output_path)
             return output_path
         
         try:
-            # Generate catchy thumbnail text using GPT
+            # Generate catchy thumbnail text using AI
             prompt = f"""Create a short, catchy text overlay for a YouTube thumbnail.
 
 Video title: "{title}"
@@ -523,17 +533,15 @@ Generate ONLY the text that should appear on the thumbnail. Make it:
 
 Return only the text, nothing else."""
             
-            response = openai.chat.completions.create(
-                model="gpt-4o-mini",
+            # Use AIClient unified interface
+            overlay_text = self.client.chat_completion(
                 messages=[
                     {"role": "system", "content": "You are an expert at creating viral YouTube thumbnails."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.8,
                 max_tokens=20
-            )
-            
-            overlay_text = response.choices[0].message.content.strip().strip('"')
+            ).strip().strip('"')
             
             # Add text overlay to image
             img = Image.open(image_path)

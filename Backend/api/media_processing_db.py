@@ -1418,14 +1418,195 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             error_occurred = False
             error_traceback = None
             
-            # Determine if this is an image file (skip video analysis for images)
+            # Determine if this is an image file (requires different analysis flow)
             ext = Path(file_path).suffix.lower()
             is_image = ext in {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp', '.gif', '.bmp', '.tiff'}
             
             if is_image:
-                update_video_step(job_id, video_id, "image_fallback", filename)
-                logger.info(f"[Analysis] Skipping video analysis for image: {video_id} ({ext})")
-                # Go straight to basic analysis for images
+                # Full image analysis - NO SKIPPING
+                update_video_step(job_id, video_id, "1/3 Image Analysis", filename)
+                logger.info(f"[Analysis] Running image analysis for: {video_id} ({ext})")
+                
+                try:
+                    import base64
+                    import subprocess
+                    from openai import OpenAI
+                    
+                    openai_key = os.getenv("OPENAI_API_KEY")
+                    if not openai_key:
+                        raise ValueError("OPENAI_API_KEY not configured for image analysis")
+                    
+                    # Convert HEIC to JPEG if needed
+                    image_to_analyze = file_path
+                    if ext in {'.heic', '.heif'}:
+                        update_video_step(job_id, video_id, "1/3 Converting HEIC", filename)
+                        temp_jpeg = f"/tmp/mediaposter/heic_convert/{video_id}.jpg"
+                        os.makedirs(os.path.dirname(temp_jpeg), exist_ok=True)
+                        
+                        result = subprocess.run(
+                            ["sips", "-s", "format", "jpeg", file_path, "--out", temp_jpeg],
+                            capture_output=True, timeout=30
+                        )
+                        if result.returncode == 0 and Path(temp_jpeg).exists():
+                            image_to_analyze = temp_jpeg
+                            logger.info(f"[Analysis] Converted HEIC to JPEG: {temp_jpeg}")
+                        else:
+                            # Try ffmpeg as fallback
+                            result = subprocess.run(
+                                ["ffmpeg", "-y", "-i", file_path, "-vframes", "1", temp_jpeg],
+                                capture_output=True, timeout=30
+                            )
+                            if result.returncode == 0 and Path(temp_jpeg).exists():
+                                image_to_analyze = temp_jpeg
+                    
+                    # Run vision analysis
+                    update_video_step(job_id, video_id, "2/3 Vision Analysis", filename)
+                    logger.info(f"[Analysis] Running OpenAI vision analysis for: {filename}")
+                    
+                    with open(image_to_analyze, "rb") as img_file:
+                        image_data = base64.b64encode(img_file.read()).decode('utf-8')
+                    
+                    client = OpenAI(api_key=openai_key)
+                    
+                    # Comprehensive image analysis prompt
+                    vision_response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": """Analyze this image comprehensively and provide:
+1. Detailed description of what's visible
+2. Main subjects/objects
+3. Setting/environment
+4. Mood/atmosphere
+5. Any text visible
+6. Potential social media topics (3-5)
+7. Suggested hooks for captions (2-3)
+8. Overall tone (entertaining, educational, inspirational, etc.)
+9. Social media score (0-100) based on visual appeal and engagement potential
+
+Format as JSON:
+{
+    "visual_summary": "detailed description",
+    "subjects": ["list", "of", "subjects"],
+    "setting": "where this is",
+    "mood": "atmosphere description",
+    "visible_text": "any text in image",
+    "topics": ["topic1", "topic2", "topic3"],
+    "hooks": ["hook1", "hook2"],
+    "tone": "tone description",
+    "social_score": 75
+}"""},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
+                            ]
+                        }],
+                        max_tokens=1000
+                    )
+                    
+                    vision_text = vision_response.choices[0].message.content
+                    
+                    # Parse the JSON response
+                    import json
+                    try:
+                        # Clean up markdown if present
+                        if "```json" in vision_text:
+                            vision_text = vision_text.split("```json")[1].split("```")[0]
+                        elif "```" in vision_text:
+                            vision_text = vision_text.split("```")[1].split("```")[0]
+                        
+                        vision_data = json.loads(vision_text.strip())
+                    except json.JSONDecodeError:
+                        # Fallback parsing
+                        vision_data = {
+                            "visual_summary": vision_text,
+                            "topics": ["visual content", "image"],
+                            "hooks": ["Check this out"],
+                            "tone": "informative",
+                            "social_score": 60
+                        }
+                    
+                    # Save image analysis to database
+                    update_video_step(job_id, video_id, "3/3 Saving Results", filename)
+                    
+                    video_uuid = uuid.UUID(video_id)
+                    existing_analysis = await db.execute(
+                        select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+                    )
+                    existing = existing_analysis.scalar_one_or_none()
+                    
+                    analysis_data = {
+                        "transcript": "",  # Images don't have transcripts
+                        "topics": vision_data.get("topics", ["visual content"]),
+                        "hooks": vision_data.get("hooks", ["Visual content"]),
+                        "tone": vision_data.get("tone", "informative"),
+                        "pacing": "static",
+                        "pre_social_score": vision_data.get("social_score", 65),
+                        "visual_analysis": {
+                            "visual_summary": vision_data.get("visual_summary"),
+                            "subjects": vision_data.get("subjects"),
+                            "setting": vision_data.get("setting"),
+                            "mood": vision_data.get("mood"),
+                            "visible_text": vision_data.get("visible_text")
+                        },
+                        "deep_analysis": {
+                            "status": "complete",
+                            "type": "image_analysis",
+                            "timestamp": datetime.now().isoformat(),
+                            "video_id": video_id
+                        }
+                    }
+                    
+                    if existing:
+                        await db.execute(
+                            update(VideoAnalysis)
+                            .where(VideoAnalysis.video_id == video_uuid)
+                            .values(**analysis_data)
+                        )
+                    else:
+                        analysis = VideoAnalysis(video_id=video_uuid, **analysis_data)
+                        db.add(analysis)
+                    
+                    await db.commit()
+                    
+                    logger.success(f"[Analysis] Image analysis complete for {video_id}: score={vision_data.get('social_score', 65)}")
+                    print(f"✅ [IMAGE ANALYSIS COMPLETE] {filename}")
+                    print(f"   Score: {vision_data.get('social_score', 65)}")
+                    print(f"   Topics: {vision_data.get('topics', [])}")
+                    
+                    # Emit completion event
+                    try:
+                        from services.event_bus import EventBus, Topics
+                        event_bus = EventBus.get_instance()
+                        await event_bus.publish(
+                            Topics.ANALYSIS_COMPLETED,
+                            {
+                                "media_id": video_id,
+                                "job_id": job_id,
+                                "filename": filename,
+                                "pre_social_score": vision_data.get("social_score", 65),
+                                "type": "image"
+                            },
+                            correlation_id=video_id
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to emit completion event: {e}")
+                    
+                    # Update job tracker
+                    if job_id and job_id in _analysis_jobs:
+                        _analysis_jobs[job_id]["videos"][video_id] = {
+                            "status": "completed",
+                            "filename": filename,
+                            "score": vision_data.get("social_score", 65),
+                            "completed_at": datetime.now().isoformat()
+                        }
+                        _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                    
+                    return  # Image analysis complete
+                    
+                except Exception as img_err:
+                    logger.error(f"[Analysis] Image analysis failed for {video_id}: {img_err}")
+                    # Fall through to fallback analysis below
+                    
             else:
                 # Use ModelRegistry-based VideoAnalyzer (no API key needed)
                 try:

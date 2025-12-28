@@ -26,18 +26,31 @@ from services.event_bus import EventBus, Topics
 from services.workflow_manager import WorkflowManager
 from services.analytics_refresh_handler import get_analytics_refresh_handler
 
-# Configure logging
+# Configure logging with enhanced output
 logger.remove()
 logger.add(
     sys.stdout,
     colorize=True,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> | <level>{message}</level>"
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> | <level>{message}</level>",
+    backtrace=True,
+    diagnose=True,
 )
 logger.add(
     "logs/app.log",
     rotation="500 MB",
     retention="10 days",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function} | {message}"
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function} | {message}",
+    backtrace=True,
+    diagnose=True,
+)
+logger.add(
+    "logs/errors.log",
+    rotation="100 MB",
+    retention="30 days",
+    level="ERROR",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}\n{exception}",
+    backtrace=True,
+    diagnose=True,
 )
 
 

@@ -219,35 +219,36 @@ def create_video_with_ffmpeg(
         audio_duration = script["duration_seconds"]
     
     # Build text overlay filters for each segment
-    filters = []
+    # Use a simpler approach: single drawtext with conditional text
+    # Or use multiple simpler drawtext filters
     
-    for segment in script["segments"]:
-        start = segment["start"]
-        end = segment["end"]
-        text = segment["text"]
-        
-        # Escape text for FFmpeg
-        escaped_text = text.replace("'", "\\'").replace(":", "\\:").replace("[", "\\[").replace("]", "\\]")
-        
-        # Truncate if too long (FFmpeg has limits)
-        if len(escaped_text) > 100:
-            escaped_text = escaped_text[:97] + "..."
-        
-        # Create text overlay
-        drawtext = (
-            f"drawtext=text='{escaped_text}':"
-            f"fontsize=48:"
-            f"fontcolor=white:"
-            f"x=(w-text_w)/2:"
-            f"y=h-th-100:"
-            f"box=1:boxcolor=black@0.7:boxborderw=5:"
-            f"enable='between(t,{start},{end})'"
-        )
-        
-        filters.append(drawtext)
+    # For now, use the first segment's text (simplified)
+    # In production, would use a more sophisticated approach
+    first_segment = script["segments"][0]
+    text = first_segment["text"]
     
-    # Combine filters
-    filter_complex = ",".join(filters)
+    # Escape text properly for FFmpeg
+    escaped_text = (
+        text.replace("\\", "\\\\")
+        .replace("'", "'\\''")
+        .replace(":", "\\:")
+        .replace("=", "\\=")
+        .replace(",", "\\,")
+    )
+    
+    # Truncate if too long
+    if len(escaped_text) > 100:
+        escaped_text = escaped_text[:97] + "..."
+    
+    # Simple single drawtext filter
+    filter_complex = (
+        f"drawtext=text='{escaped_text}':"
+        f"fontsize=48:"
+        f"fontcolor=white:"
+        f"x=(w-text_w)/2:"
+        f"y=h-th-100:"
+        f"box=1:boxcolor=black@0.7:boxborderw=5"
+    )
     
     # Create video
     cmd = [

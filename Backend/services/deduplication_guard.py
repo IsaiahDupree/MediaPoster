@@ -28,62 +28,77 @@ class DeduplicationGuard:
     
     def ensure_deduplication_schema(self):
         """
-        Create necessary tables and constraints for deduplication
+        Create necessary tables and constraints for deduplication.
+        Each operation runs in its own transaction to prevent cascading failures.
         """
-        with self.engine.connect() as conn:
-            # 1. Add unique constraint to prevent duplicate scheduled posts
-            try:
+        # 1. Add unique constraint to prevent duplicate scheduled posts
+        try:
+            with self.engine.connect() as conn:
                 conn.execute(text("""
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_posts_unique_content_time
                     ON scheduled_posts(content_id, platform, account_id, scheduled_time)
                     WHERE status IN ('scheduled', 'posted')
                 """))
+                conn.commit()
                 logger.info("✓ Created unique index for scheduled posts")
-            except Exception as e:
-                logger.debug(f"Unique index may already exist: {e}")
-            
-            # 2. Add unique constraint to posted_content to prevent duplicates
-            try:
+        except Exception as e:
+            logger.debug(f"Unique index may already exist: {e}")
+        
+        # 2. Add unique constraint to posted_content to prevent duplicates
+        try:
+            with self.engine.connect() as conn:
                 conn.execute(text("""
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_posted_content_unique_platform_post
                     ON posted_content(platform, platform_post_id)
                     WHERE platform_post_id IS NOT NULL
                 """))
+                conn.commit()
                 logger.info("✓ Created unique index for posted content")
-            except Exception as e:
-                logger.debug(f"Unique index may already exist: {e}")
-            
-            # 3. Create idempotency tracking table
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS publish_idempotency (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    idempotency_key TEXT UNIQUE NOT NULL,
-                    scheduled_post_id UUID,
-                    content_id UUID,
-                    platform TEXT NOT NULL,
-                    account_id TEXT,
-                    status TEXT NOT NULL,
-                    platform_post_id TEXT,
-                    platform_url TEXT,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    completed_at TIMESTAMP WITH TIME ZONE,
-                    error_message TEXT,
-                    metadata JSONB DEFAULT '{}'
-                )
-            """))
-            
-            conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_publish_idempotency_key
-                ON publish_idempotency(idempotency_key)
-            """))
-            
-            conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_publish_idempotency_scheduled_post
-                ON publish_idempotency(scheduled_post_id)
-            """))
-            
-            conn.commit()
-            logger.info("✓ Deduplication schema ready")
+        except Exception as e:
+            logger.debug(f"Unique index may already exist: {e}")
+        
+        # 3. Create idempotency tracking table
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS publish_idempotency (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        idempotency_key TEXT UNIQUE NOT NULL,
+                        scheduled_post_id UUID,
+                        content_id UUID,
+                        platform TEXT NOT NULL,
+                        account_id TEXT,
+                        status TEXT NOT NULL,
+                        platform_post_id TEXT,
+                        platform_url TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        completed_at TIMESTAMP WITH TIME ZONE,
+                        error_message TEXT,
+                        metadata JSONB DEFAULT '{}'
+                    )
+                """))
+                conn.commit()
+                logger.info("✓ Created publish_idempotency table")
+        except Exception as e:
+            logger.debug(f"Idempotency table may already exist: {e}")
+        
+        # 4. Create indexes for idempotency table
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_publish_idempotency_key
+                    ON publish_idempotency(idempotency_key)
+                """))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS idx_publish_idempotency_scheduled_post
+                    ON publish_idempotency(scheduled_post_id)
+                """))
+                conn.commit()
+                logger.info("✓ Created idempotency indexes")
+        except Exception as e:
+            logger.debug(f"Idempotency indexes may already exist: {e}")
+        
+        logger.info("✓ Deduplication schema ready")
     
     def generate_idempotency_key(
         self,

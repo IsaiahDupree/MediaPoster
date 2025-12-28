@@ -94,7 +94,23 @@ class AIClient:
                     max_tokens=max_tokens,
                     **kwargs
                 )
-                return response.choices[0].message.content
+                content = response.choices[0].message.content
+                
+                # Handle empty or None responses
+                if not content or content.strip() == "":
+                    logger.warning(f"[AIClient] Empty response from {self.config.provider}/{self.config.model}")
+                    raise ValueError(f"Empty response from {self.config.provider}")
+                
+                # Strip markdown code blocks if present (common with JSON responses)
+                content = content.strip()
+                if content.startswith("```json"):
+                    content = content[7:]
+                if content.startswith("```"):
+                    content = content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                
+                return content.strip()
             
             elif self.config.provider == "anthropic":
                 # Anthropic uses different message format

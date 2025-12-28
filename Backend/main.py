@@ -782,6 +782,18 @@ app.include_router(duplicate_detection.router, tags=["Duplicate Detection"])
 from api.endpoints import posted_content_matcher
 app.include_router(posted_content_matcher.router, tags=["Posted Content Matcher"])
 
+# Video Render (Creative Brief → Video Pipeline)
+from api.endpoints import video_render
+app.include_router(video_render.router, tags=["Video Render"])
+
+# Backend Health (Detailed monitoring and error tracking)
+from api.endpoints import backend_health
+app.include_router(backend_health.router, tags=["Backend Health"])
+
+# Analysis Scheduler (Nightly batch analysis jobs)
+from api.endpoints import analysis_scheduler
+app.include_router(analysis_scheduler.router, tags=["Analysis Scheduler"])
+
 # Prompt Generation Settings (Voice, Tone, Style, Limits)
 from api.endpoints import prompt_settings
 app.include_router(prompt_settings.router, prefix="/api", tags=["Prompt Settings"])

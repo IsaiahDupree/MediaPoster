@@ -2,6 +2,7 @@
 Error Tracking Middleware
 
 Provides centralized error tracking, logging, and monitoring for the FastAPI application.
+Enhanced with BackendHealthMonitor integration for comprehensive error tracking.
 """
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -12,6 +13,14 @@ import time
 import uuid
 from typing import Callable
 import json
+
+# Import health monitor for error tracking
+try:
+    from services.backend_health_monitor import get_health_monitor
+    HEALTH_MONITOR_AVAILABLE = True
+except ImportError:
+    HEALTH_MONITOR_AVAILABLE = False
+    get_health_monitor = None
 
 
 class ErrorTrackingMiddleware(BaseHTTPMiddleware):
@@ -50,6 +59,18 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
                 f"Client: {request.client.host if request.client else 'unknown'}\n"
                 f"Error: {type(e).__name__}: {str(e)}"
             )
+            
+            # Track error in health monitor
+            if HEALTH_MONITOR_AVAILABLE and get_health_monitor:
+                try:
+                    monitor = get_health_monitor()
+                    monitor.record_error(
+                        e,
+                        endpoint=f"{request.method} {request.url.path}",
+                        context={"request_id": request_id, "duration": duration}
+                    )
+                except Exception:
+                    pass  # Don't fail on monitoring errors
             
             # Return a proper error response
             return JSONResponse(

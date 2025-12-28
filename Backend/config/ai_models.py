@@ -66,9 +66,12 @@ class AIModelConfig:
             base_url="https://api.openai.com/v1",
             models={
                 "transcription": "whisper-1",
-                "analysis": "gpt-4-turbo-preview",
-                "analysis_fast": "gpt-3.5-turbo",
-                "embeddings": "text-embedding-3-small"
+                "analysis": "gpt-4o",  # Best quality/cost ratio
+                "analysis_best": "gpt-4-turbo-preview",  # Highest quality
+                "analysis_fast": "gpt-4o-mini",  # Fast and cheap
+                "analysis_budget": "gpt-3.5-turbo",  # Budget option
+                "embeddings": "text-embedding-3-small",
+                "vision": "gpt-4o"  # Multimodal
             },
             rate_limits={
                 "transcription": 50,  # RPM
@@ -76,8 +79,14 @@ class AIModelConfig:
             },
             cost_per_token={
                 "transcription": 0.006 / 60,  # $0.006 per minute
-                "analysis_input": 0.01 / 1000,  # $0.01 per 1K tokens
-                "analysis_output": 0.03 / 1000
+                "gpt-4o_input": 5.0 / 1_000_000,  # $5 per MTok
+                "gpt-4o_output": 15.0 / 1_000_000,
+                "gpt-4o-mini_input": 0.15 / 1_000_000,  # $0.15 per MTok
+                "gpt-4o-mini_output": 0.60 / 1_000_000,
+                "gpt-4-turbo_input": 10.0 / 1_000_000,  # $10 per MTok
+                "gpt-4-turbo_output": 30.0 / 1_000_000,
+                "gpt-3.5-turbo_input": 0.50 / 1_000_000,  # $0.50 per MTok
+                "gpt-3.5-turbo_output": 1.50 / 1_000_000
             }
         ),
         "groq": ProviderConfig(
@@ -85,8 +94,10 @@ class AIModelConfig:
             base_url="https://api.groq.com/openai/v1",
             models={
                 "transcription": "whisper-large-v3",
-                "analysis": "llama-3.1-70b-versatile",
-                "analysis_fast": "llama-3.1-8b-instant"
+                "analysis": "llama-3.1-70b-versatile",  # Best balance
+                "analysis_best": "llama-3.1-405b-reasoning",  # Highest quality
+                "analysis_fast": "llama-3.1-8b-instant",  # Fastest
+                "analysis_budget": "mixtral-8x7b-32768"  # Good multilingual
             },
             rate_limits={
                 "transcription": 20,  # RPM
@@ -102,44 +113,91 @@ class AIModelConfig:
             api_key_env="ANTHROPIC_API_KEY",
             base_url="https://api.anthropic.com/v1",
             models={
-                "analysis": "claude-3-5-sonnet-20241022",
-                "analysis_fast": "claude-3-haiku-20240307"
+                "analysis": "claude-3-5-sonnet-20241022",  # Best reasoning
+                "analysis_best": "claude-3-opus-20240229",  # Highest quality (expensive)
+                "analysis_fast": "claude-3-haiku-20240307"  # Fast and cheap
             },
             rate_limits={
                 "analysis": 50  # RPM
             },
             cost_per_token={
-                "analysis_input": 3.0 / 1_000_000,  # $3 per MTok
-                "analysis_output": 15.0 / 1_000_000
+                "claude-3-5-sonnet_input": 3.0 / 1_000_000,  # $3 per MTok
+                "claude-3-5-sonnet_output": 15.0 / 1_000_000,
+                "claude-3-opus_input": 15.0 / 1_000_000,  # $15 per MTok
+                "claude-3-opus_output": 75.0 / 1_000_000,
+                "claude-3-haiku_input": 0.25 / 1_000_000,  # $0.25 per MTok
+                "claude-3-haiku_output": 1.25 / 1_000_000
             }
         ),
         "google": ProviderConfig(
             api_key_env="GOOGLE_API_KEY",
             base_url="https://generativelanguage.googleapis.com/v1",
             models={
-                "analysis": "gemini-1.5-flash",
-                "analysis_pro": "gemini-1.5-pro"
+                "analysis": "gemini-1.5-flash",  # Best value, 1M context
+                "analysis_best": "gemini-1.5-pro",  # Highest quality, 2M context
+                "analysis_fast": "gemini-1.5-flash-8b"  # Fastest, cheapest
             },
             rate_limits={
                 "analysis": 1000  # RPM
             },
             cost_per_token={
-                "analysis_input": 0.075 / 1_000_000,  # $0.075 per MTok
-                "analysis_output": 0.30 / 1_000_000
+                "gemini-1.5-flash_input": 0.075 / 1_000_000,  # $0.075 per MTok (≤128K)
+                "gemini-1.5-flash_output": 0.30 / 1_000_000,
+                "gemini-1.5-flash_input_large": 0.15 / 1_000_000,  # >128K
+                "gemini-1.5-flash_output_large": 0.60 / 1_000_000,
+                "gemini-1.5-pro_input": 1.25 / 1_000_000,  # $1.25 per MTok (≤128K)
+                "gemini-1.5-pro_output": 5.0 / 1_000_000,
+                "gemini-1.5-pro_input_large": 2.50 / 1_000_000,  # >128K
+                "gemini-1.5-pro_output_large": 10.0 / 1_000_000,
+                "gemini-1.5-flash-8b_input": 0.0375 / 1_000_000,  # $0.0375 per MTok
+                "gemini-1.5-flash-8b_output": 0.15 / 1_000_000
             }
         ),
         "deepgram": ProviderConfig(
             api_key_env="DEEPGRAM_API_KEY",
             base_url="https://api.deepgram.com/v1",
             models={
-                "transcription": "nova-2",
-                "transcription_whisper": "whisper-cloud"
+                "transcription": "nova-2",  # Best for real-time, streaming
+                "transcription_whisper": "whisper-cloud",  # Hosted Whisper
+                "transcription_base": "base"  # Budget option
             },
             rate_limits={
                 "transcription": 1000  # RPM
             },
             cost_per_token={
-                "transcription": 0.0043 / 60  # $0.0043 per minute
+                "nova-2": 0.0043 / 60,  # $0.0043 per minute
+                "whisper-cloud": 0.0125 / 60,  # $0.0125 per minute
+                "base": 0.0036 / 60  # $0.0036 per minute
+            }
+        ),
+        "assemblyai": ProviderConfig(
+            api_key_env="ASSEMBLYAI_API_KEY",
+            base_url="https://api.assemblyai.com/v2",
+            models={
+                "transcription": "universal-1"  # Feature-rich transcription
+            },
+            rate_limits={
+                "transcription": 100  # Concurrent requests
+            },
+            cost_per_token={
+                "transcription": 0.00025  # $0.00025 per second = $0.015/min
+            }
+        ),
+        "mistral": ProviderConfig(
+            api_key_env="MISTRAL_API_KEY",
+            base_url="https://api.mistral.ai/v1",
+            models={
+                "analysis": "mistral-large-latest",  # Best quality
+                "analysis_fast": "mistral-small-latest"  # Budget option
+            },
+            rate_limits={
+                "analysis": 60  # RPM
+            },
+            cost_per_token={
+                "mistral-large_input": 2.0 / 1_000_000,  # $2 per MTok
+                "mistral-large_output": 6.0 / 1_000_000,
+                "mistral-small_input": 0.20 / 1_000_000,  # $0.20 per MTok
+                "mistral-small_output": 0.60 / 1_000_000
             }
         ),
         "local": ProviderConfig(

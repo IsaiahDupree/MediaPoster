@@ -52,6 +52,7 @@ class AIModelConfig:
     """
     
     # Default providers (can be overridden by environment variables)
+    # Updated to use Llama 3.3 70B (current model, 3.1 70B decommissioned)
     DEFAULT_TRANSCRIPTION_PROVIDER = TranscriptionProvider.GROQ
     DEFAULT_ANALYSIS_PROVIDER = AnalysisProvider.GROQ
     
@@ -94,8 +95,8 @@ class AIModelConfig:
             base_url="https://api.groq.com/openai/v1",
             models={
                 "transcription": "whisper-large-v3",
-                "analysis": "llama-3.1-70b-versatile",  # Best balance
-                "analysis_best": "llama-3.1-405b-reasoning",  # Highest quality
+                "analysis": "llama-3.3-70b-versatile",  # Current model (3.1 decommissioned)
+                "analysis_best": "llama-3.3-70b-versatile",  # Best available
                 "analysis_fast": "llama-3.1-8b-instant",  # Fastest
                 "analysis_budget": "mixtral-8x7b-32768"  # Good multilingual
             },

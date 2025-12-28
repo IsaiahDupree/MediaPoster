@@ -90,6 +90,7 @@ class MediaStatusResponse(BaseModel):
     visual_summary: Optional[str] = None  # Visual analysis summary for search
     detected_hook: Optional[str] = None  # Main detected hook for search
     curation_status: Optional[str] = None  # 'pending', 'approved', 'rejected'
+    media_type: Optional[str] = None  # 'video' or 'image'
     created_at: str
     updated_at: Optional[str] = None
 
@@ -471,11 +472,21 @@ async def list_media(
                 detected_hook = analysis.get("detected_hook") if analysis.get("detected_hook") else None
                 visual_summary = analysis.get("visual_summary") if analysis.get("visual_summary") else None
             
+            # Determine media type from file extension
+            file_ext = (video.file_name or '').lower().split('.')[-1] if video.file_name else ''
+            if file_ext in ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm']:
+                media_type_value = 'video'
+            elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'heic', 'webp', 'heif']:
+                media_type_value = 'image'
+            else:
+                media_type_value = 'video'  # Default to video
+            
             response.append(MediaStatusResponse(
                 media_id=str(video.id),  # This is the video_id, which media-provider needs
                 filename=video.file_name or "",
                 status=status,
                 file_path=video.source_uri if hasattr(video, 'source_uri') else None,
+                media_type=media_type_value,
                 file_size=video.file_size if hasattr(video, 'file_size') else None,
                 duration_sec=video.duration_sec if hasattr(video, 'duration_sec') else None,
                 resolution=video.resolution if hasattr(video, 'resolution') else None,

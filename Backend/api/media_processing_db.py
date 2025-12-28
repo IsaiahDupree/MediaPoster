@@ -1894,6 +1894,60 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                 }
             }
             
+            # Try to get vision analysis for images even in fallback mode
+            # Use thumbnail if available (JPEG format) since HEIC isn't supported by OpenAI
+            visual_analysis_data = None
+            if is_image:
+                try:
+                    import base64
+                    from openai import OpenAI
+                    
+                    # Get thumbnail_path from video record
+                    video_record = await db.execute(
+                        select(Video).where(Video.id == video_uuid)
+                    )
+                    video_obj = video_record.scalar_one_or_none()
+                    thumbnail_path = video_obj.thumbnail_path if video_obj else None
+                    
+                    openai_key = os.getenv("OPENAI_API_KEY")
+                    if openai_key:
+                        # Try to find a usable image file (prefer thumbnail for format compatibility)
+                        image_to_analyze = None
+                        
+                        # Check for existing thumbnail
+                        if thumbnail_path and Path(thumbnail_path).exists():
+                            image_to_analyze = thumbnail_path
+                            logger.info(f"[Fallback] Using thumbnail for vision: {thumbnail_path}")
+                        # For JPEG/PNG, use original file
+                        elif ext in {'.jpg', '.jpeg', '.png', '.webp'} and Path(file_path).exists():
+                            image_to_analyze = file_path
+                            logger.info(f"[Fallback] Using original file for vision: {filename}")
+                        
+                        if image_to_analyze:
+                            logger.info(f"[Fallback] Running vision analysis for image: {filename}")
+                            with open(image_to_analyze, "rb") as img_file:
+                                image_data = base64.b64encode(img_file.read()).decode('utf-8')
+                            
+                            client = OpenAI(api_key=openai_key)
+                            response = client.chat.completions.create(
+                                model="gpt-4o-mini",
+                                messages=[{
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": "Describe this image in detail. What's happening? Who/what is visible? What's the mood/atmosphere?"},
+                                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
+                                    ]
+                                }],
+                                max_tokens=500
+                            )
+                            visual_summary = response.choices[0].message.content
+                            visual_analysis_data = {"visual_summary": visual_summary}
+                            logger.info(f"[Fallback] Vision analysis complete: {len(visual_summary)} chars")
+                        else:
+                            logger.warning(f"[Fallback] No compatible image found for vision analysis")
+                except Exception as ve:
+                    logger.warning(f"[Fallback] Vision analysis failed: {ve}")
+            
             # Check if analysis record already exists (UPSERT logic)
             existing_analysis = await db.execute(
                 select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
@@ -1902,18 +1956,22 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             
             if existing:
                 # UPDATE existing record
+                update_values = {
+                    "transcript": "" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
+                    "topics": ["content", "media"],
+                    "hooks": ["Visual content"],
+                    "tone": "informative" if is_image else "conversational",
+                    "pacing": "static" if is_image else "moderate",
+                    "pre_social_score": random.randint(50, 80),
+                    "deep_analysis": fallback_deep
+                }
+                if visual_analysis_data:
+                    update_values["visual_analysis"] = visual_analysis_data
+                
                 await db.execute(
                     update(VideoAnalysis)
                     .where(VideoAnalysis.video_id == video_uuid)
-                    .values(
-                        transcript="" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
-                        topics=["content", "media"],
-                        hooks=["Visual content"],
-                        tone="informative" if is_image else "conversational",
-                        pacing="static" if is_image else "moderate",
-                        pre_social_score=random.randint(50, 80),
-                        deep_analysis=fallback_deep
-                    )
+                    .values(**update_values)
                 )
                 await db.commit()
                 logger.warning(f"[Analysis] Fallback analysis UPDATED for {video_id} (record existed)")
@@ -1930,7 +1988,8 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                     tone="informative" if is_image else "conversational",
                     pacing="static" if is_image else "moderate",
                     pre_social_score=random.randint(50, 80),
-                    deep_analysis=fallback_deep  # ALWAYS include deep_analysis
+                    deep_analysis=fallback_deep,  # ALWAYS include deep_analysis
+                    visual_analysis=visual_analysis_data  # Include vision analysis if available
                 )
                 
                 db.add(analysis)

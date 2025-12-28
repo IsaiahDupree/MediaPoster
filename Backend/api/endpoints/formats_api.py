@@ -13,6 +13,7 @@ import uuid
 
 from database.connection import get_db
 from services.formats.sample_formats import SAMPLE_FORMATS, get_sample_format
+import json
 
 router = APIRouter(prefix="/api/formats", tags=["Formats"])
 
@@ -49,10 +50,6 @@ class RunResponse(BaseModel):
     message: str
 
 
-# In-memory storage for seeded formats (would be DB in production)
-_seeded_formats: Dict[str, Dict[str, Any]] = {}
-
-
 def _sample_to_format_response(sample: Dict[str, Any]) -> FormatResponse:
     """Convert a sample format dict to FormatResponse"""
     composition = sample.get("composition", {})
@@ -74,20 +71,49 @@ def _sample_to_format_response(sample: Dict[str, Any]) -> FormatResponse:
 @router.get("/list", response_model=FormatListResponse)
 async def list_formats(
     status: Optional[str] = Query(default=None, description="Filter by status: active, draft, archived"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    List all available formats.
-    Returns both seeded sample formats and any custom formats.
+    List all available formats from the database.
     """
+    logger.info(f"📋 [Formats] Listing formats, status filter: {status}")
+    
+    where_clause = ""
+    if status:
+        where_clause = f"WHERE status = '{status}'"
+    
+    query = f"""
+        SELECT id, name, description, status, version, definition_json,
+               quality_profile_id, remotion_composition_id, created_at, updated_at
+        FROM formats
+        {where_clause}
+        ORDER BY updated_at DESC
+    """
+    
+    result = await db.execute(text(query))
+    rows = result.fetchall()
+    
     formats = []
+    for row in rows:
+        def_json = row[5]
+        if isinstance(def_json, str):
+            def_json = json.loads(def_json)
+        
+        formats.append(FormatResponse(
+            id=row[0],
+            name=row[1],
+            description=row[2],
+            status=row[3],
+            version=row[4],
+            definition_json=def_json or {},
+            quality_profile_id=row[6],
+            remotion_composition_id=row[7],
+            created_at=str(row[8]) if row[8] else None,
+            updated_at=str(row[9]) if row[9] else None,
+            last_run=None
+        ))
     
-    # Add seeded formats
-    for format_id, format_data in _seeded_formats.items():
-        fmt = _sample_to_format_response(format_data)
-        if status is None or fmt.status == status:
-            formats.append(fmt)
-    
-    # If no formats seeded yet, return empty list (user can click "Seed Samples")
+    logger.info(f"✅ [Formats] Found {len(formats)} formats")
     return FormatListResponse(
         formats=formats,
         total=len(formats)
@@ -95,37 +121,88 @@ async def list_formats(
 
 
 @router.post("/seed-samples")
-async def seed_sample_formats():
+async def seed_sample_formats(db: AsyncSession = Depends(get_db)):
     """
     Seed the database with sample format templates.
     """
-    global _seeded_formats
+    logger.info(f"🌱 [Formats] Seeding {len(SAMPLE_FORMATS)} sample formats...")
     
     seeded = []
+    skipped = []
+    
     for sample in SAMPLE_FORMATS:
         format_id = sample["id"]
-        _seeded_formats[format_id] = sample
+        
+        # Check if already exists
+        check = await db.execute(text("SELECT id FROM formats WHERE id = :id"), {"id": format_id})
+        if check.fetchone():
+            skipped.append(format_id)
+            continue
+        
+        composition = sample.get("composition", {})
+        remotion_id = composition.get("remotionCompositionId")
+        quality_profile_id = sample.get("defaults", {}).get("qualityProfileId", "qp_shortform_v1")
+        
+        await db.execute(text("""
+            INSERT INTO formats (id, name, description, status, version, definition_json,
+                                quality_profile_id, remotion_composition_id)
+            VALUES (:id, :name, :description, :status, :version, :definition_json,
+                    :quality_profile_id, :remotion_composition_id)
+        """), {
+            "id": format_id,
+            "name": sample["name"],
+            "description": sample.get("description"),
+            "status": sample.get("status", "active"),
+            "version": sample.get("version", "1.0.0"),
+            "definition_json": json.dumps(sample),
+            "quality_profile_id": quality_profile_id,
+            "remotion_composition_id": remotion_id
+        })
         seeded.append(format_id)
     
-    logger.info(f"Seeded {len(seeded)} sample formats: {seeded}")
+    await db.commit()
+    
+    logger.info(f"✅ [Formats] Seeded {len(seeded)}, skipped {len(skipped)} existing")
     
     return {
         "status": "success",
         "message": f"Seeded {len(seeded)} sample formats",
-        "format_ids": seeded
+        "format_ids": seeded,
+        "skipped": skipped
     }
 
 
 @router.get("/{format_id}")
-async def get_format(format_id: str):
+async def get_format(format_id: str, db: AsyncSession = Depends(get_db)):
     """
     Get a single format by ID.
     """
-    # Check seeded formats first
-    if format_id in _seeded_formats:
-        return _sample_to_format_response(_seeded_formats[format_id])
+    result = await db.execute(text("""
+        SELECT id, name, description, status, version, definition_json,
+               quality_profile_id, remotion_composition_id, created_at, updated_at
+        FROM formats WHERE id = :id
+    """), {"id": format_id})
+    row = result.fetchone()
     
-    # Check sample formats (even if not seeded)
+    if row:
+        def_json = row[5]
+        if isinstance(def_json, str):
+            def_json = json.loads(def_json)
+        return FormatResponse(
+            id=row[0],
+            name=row[1],
+            description=row[2],
+            status=row[3],
+            version=row[4],
+            definition_json=def_json or {},
+            quality_profile_id=row[6],
+            remotion_composition_id=row[7],
+            created_at=str(row[8]) if row[8] else None,
+            updated_at=str(row[9]) if row[9] else None,
+            last_run=None
+        )
+    
+    # Fallback to sample formats
     sample = get_sample_format(format_id)
     if sample:
         return _sample_to_format_response(sample)
@@ -137,14 +214,22 @@ async def get_format(format_id: str):
 async def run_format(
     format_id: str,
     request: RunRequest,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Trigger a new run for a format.
     This queues the format for processing with Remotion.
     """
     # Validate format exists
-    format_data = _seeded_formats.get(format_id) or get_sample_format(format_id)
-    if not format_data:
+    result = await db.execute(text("SELECT name FROM formats WHERE id = :id"), {"id": format_id})
+    row = result.fetchone()
+    format_name = row[0] if row else None
+    
+    if not format_name:
+        sample = get_sample_format(format_id)
+        format_name = sample["name"] if sample else None
+    
+    if not format_name:
         raise HTTPException(status_code=404, detail=f"Format '{format_id}' not found")
     
     # Generate run ID
@@ -156,7 +241,7 @@ async def run_format(
         run_id=run_id,
         format_id=format_id,
         status="queued",
-        message=f"Run queued for format '{format_data['name']}'"
+        message=f"Run queued for format '{format_name}'"
     )
 
 
@@ -164,13 +249,14 @@ async def run_format(
 async def list_format_runs(
     format_id: str,
     limit: int = Query(default=20, le=100),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List recent runs for a format.
     """
     # Validate format exists
-    format_data = _seeded_formats.get(format_id) or get_sample_format(format_id)
-    if not format_data:
+    result = await db.execute(text("SELECT id FROM formats WHERE id = :id"), {"id": format_id})
+    if not result.fetchone() and not get_sample_format(format_id):
         raise HTTPException(status_code=404, detail=f"Format '{format_id}' not found")
     
     # Return empty runs for now (would be from DB in production)

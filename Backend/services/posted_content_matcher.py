@@ -18,6 +18,9 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Import the existing Safari controller from TikTok automation
+from automation.safari_app_controller import SafariAppController
+
 # RapidAPI configuration
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
 
@@ -46,7 +49,10 @@ class MatchResult:
 
 
 class SafariPostedContentScraper:
-    """Scrapes posted content URLs from social platforms using Safari"""
+    """
+    Scrapes posted content URLs from social platforms using Safari.
+    Uses the existing SafariAppController from TikTok automation for consistency.
+    """
     
     def __init__(self):
         self.collected_urls: Dict[str, List[str]] = {
@@ -54,23 +60,12 @@ class SafariPostedContentScraper:
             'instagram': [],
             'youtube': []
         }
+        # Use existing Safari controller from TikTok automation
+        self.safari = SafariAppController()
     
     def _run_applescript(self, script: str, timeout: int = 30) -> str:
-        """Execute AppleScript and return output."""
-        try:
-            result = subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True,
-                text=True,
-                timeout=timeout
-            )
-            if result.returncode != 0:
-                logger.error(f"AppleScript error: {result.stderr}")
-                return ""
-            return result.stdout.strip()
-        except Exception as e:
-            logger.error(f"AppleScript error: {e}")
-            return ""
+        """Execute AppleScript using the shared Safari controller."""
+        return self.safari._run_applescript(script, timeout)
     
     def open_safari(self) -> bool:
         """Open Safari browser."""

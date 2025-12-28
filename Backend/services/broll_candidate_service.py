@@ -210,11 +210,12 @@ class BrollCandidateService:
         Used for the "All Candidates" view.
         """
         logger.info(f"🎬 [B-Roll] Finding all candidates for format {format_id}")
+        logger.info(f"   Limit: {limit}, Offset: {offset}")
         
         from database.models import Video, VideoAnalysis
         
-        # Build query for B-roll eligible videos
-        query = select(Video).outerjoin(
+        # Build query for all videos with analysis
+        query = select(Video, VideoAnalysis).outerjoin(
             VideoAnalysis, Video.id == VideoAnalysis.video_id
         )
         
@@ -223,34 +224,46 @@ class BrollCandidateService:
         conditions = [Video.file_name.ilike(f'%{ext}') for ext in video_extensions]
         query = query.filter(or_(*conditions))
         
-        # Filter for B-roll eligible (no talking, or no person)
-        # Check visual_analysis for format_type
-        query = query.filter(
-            or_(
-                VideoAnalysis.visual_analysis['format_type'].astext == 'broll_text',
-                VideoAnalysis.visual_analysis['format_type'].astext == 'pure_broll',
-                VideoAnalysis.visual_analysis['has_person'].astext == 'false',
-                VideoAnalysis.visual_analysis['person_talking'].astext == 'false',
-            )
-        )
+        # Only require that video has some analysis (less strict filter)
+        # All analyzed videos are potential B-roll candidates
+        query = query.filter(VideoAnalysis.video_id.isnot(None))
         
-        # Get total count
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
+        # Get total count first
+        count_query = select(func.count(Video.id)).outerjoin(
+            VideoAnalysis, Video.id == VideoAnalysis.video_id
+        ).filter(or_(*conditions)).filter(VideoAnalysis.video_id.isnot(None))
+        
+        try:
+            total_result = await self.db.execute(count_query)
+            total = total_result.scalar() or 0
+            logger.info(f"   Total eligible videos: {total}")
+        except Exception as e:
+            logger.error(f"   Count query error: {e}")
+            total = 0
         
         # Apply pagination
-        query = query.offset(offset).limit(limit)
+        query = query.order_by(Video.created_at.desc()).offset(offset).limit(limit)
         
-        result = await self.db.execute(query)
-        videos = result.scalars().all()
+        try:
+            result = await self.db.execute(query)
+            rows = result.all()
+            logger.info(f"   Query returned {len(rows)} rows")
+        except Exception as e:
+            logger.error(f"   Query error: {e}")
+            rows = []
         
         # Convert to candidates
         candidates = []
-        for video in videos:
-            candidate = await self._video_to_candidate(video, "all", "all")
-            if candidate and candidate.overall_score >= min_score:
-                candidates.append(candidate)
+        for row in rows:
+            video, analysis = row
+            candidate = await self._video_to_candidate(video, "all", "all", analysis)
+            if candidate:
+                # Score the candidate
+                self._score_candidate_simple(candidate)
+                if candidate.overall_score >= min_score:
+                    candidates.append(candidate)
+        
+        logger.info(f"   Converted {len(candidates)} candidates")
         
         # Sort by score
         candidates.sort(key=lambda c: c.overall_score, reverse=True)
@@ -373,6 +386,17 @@ class BrollCandidateService:
                 if analysis.hooks:
                     tags.extend(analysis.hooks if isinstance(analysis.hooks, list) else [])
             
+            # Parse resolution (e.g., "1080x1920" or "1920x1080")
+            width, height = 1080, 1920
+            if video.resolution:
+                try:
+                    parts = video.resolution.lower().replace('x', ' ').split()
+                    if len(parts) >= 2:
+                        width = int(parts[0])
+                        height = int(parts[1])
+                except (ValueError, IndexError):
+                    pass
+            
             candidate = BrollCandidate(
                 candidate_id=str(uuid.uuid4()),
                 slot_id=slot_id,
@@ -384,9 +408,9 @@ class BrollCandidateService:
                 url=video_url,
                 thumbnail_url=thumbnail_url,
                 duration_sec=video.duration_sec or 0,
-                width=video.width or 1080,
-                height=video.height or 1920,
-                scene_description=visual_data.get("scene_description", analysis.visual_summary if analysis else "") or "",
+                width=width,
+                height=height,
+                scene_description=visual_data.get("scene_description", "") or video.title or video.file_name or "",
                 tags=tags,
                 detected_objects=visual_data.get("detected_objects", []),
                 people_present=visual_data.get("has_person", False),
@@ -400,6 +424,43 @@ class BrollCandidateService:
         except Exception as e:
             logger.error(f"Error converting video to candidate: {e}")
             return None
+    
+    def _score_candidate_simple(self, candidate: BrollCandidate):
+        """Score a candidate without specific slot requirements (for browsing)"""
+        
+        # Base scores for general B-roll suitability
+        candidate.relevance_score = 0.7  # Default relevance
+        candidate.format_fit_score = 0.8  # Default format fit
+        candidate.novelty_score = 0.8  # Default novelty
+        candidate.brand_fit_score = 0.9  # Default brand fit
+        
+        # Boost score if no person (pure B-roll)
+        if not candidate.people_present:
+            candidate.format_fit_score = 0.95
+        
+        # Boost if has good duration (3-15 seconds)
+        if 3 <= candidate.duration_sec <= 15:
+            candidate.relevance_score += 0.1
+        
+        # Calculate overall
+        overall = (
+            candidate.relevance_score * 0.35 +
+            candidate.format_fit_score * 0.30 +
+            candidate.novelty_score * 0.15 +
+            candidate.brand_fit_score * 0.20
+        )
+        candidate.overall_score = max(0, min(1, overall))
+        
+        # Generate explanation
+        reasons = []
+        if not candidate.people_present:
+            reasons.append("clean B-roll")
+        if 3 <= candidate.duration_sec <= 15:
+            reasons.append(f"{candidate.duration_sec:.1f}s ideal length")
+        if candidate.tags:
+            reasons.append(f"tags: {', '.join(candidate.tags[:2])}")
+        
+        candidate.explanation = "; ".join(reasons) if reasons else "Video from library"
     
     def _score_candidate(self, candidate: BrollCandidate, slot: BrollSlotQuery):
         """Score a candidate based on slot requirements"""

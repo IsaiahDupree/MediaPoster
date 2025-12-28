@@ -406,7 +406,7 @@ FORMAT YOUR RESPONSE AS VALID JSON matching this structure:
 
 async def fetch_and_encode_local_image(url: str) -> str:
     """Fetch image from local URL and convert to base64"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:  # 60s for local image fetch
         response = await client.get(url)
         if response.status_code != 200:
             raise HTTPException(status_code=400, detail=f"Failed to fetch image from {url}")
@@ -487,7 +487,7 @@ async def _call_openai_vision(api_key: str, config, prompt: str, image_base64: s
     else:
         image_content = {"type": "image_url", "image_url": {"url": image_url}}
     
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout for long content
         response = await client.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -519,7 +519,7 @@ async def _call_gemini_vision(api_key: str, config, prompt: str, image_base64: s
     # Gemini requires base64 image data
     if not image_base64 and image_url:
         # Fetch image from URL and convert to base64
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:  # Image fetch timeout
             img_response = await client.get(image_url)
             if img_response.status_code == 200:
                 import base64
@@ -527,7 +527,7 @@ async def _call_gemini_vision(api_key: str, config, prompt: str, image_base64: s
             else:
                 raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL")
     
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout for long content
         response = await client.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{config.model}:generateContent?key={api_key}",
             headers={"Content-Type": "application/json"},
@@ -562,7 +562,7 @@ async def _call_anthropic_vision(api_key: str, config, prompt: str, image_base64
     logger.info(f"[Anthropic Vision] Starting analysis with {config.model}")
     
     if not image_base64 and image_url:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:  # Image fetch timeout
             img_response = await client.get(image_url)
             if img_response.status_code == 200:
                 import base64
@@ -570,7 +570,7 @@ async def _call_anthropic_vision(api_key: str, config, prompt: str, image_base64
             else:
                 raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL")
     
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout for long content
         response = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={

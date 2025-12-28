@@ -177,6 +177,29 @@ def compute_file_hash(data: bytes) -> str:
     return hashlib.md5(data).hexdigest()
 
 
+def calculate_timeout_for_duration(duration_sec: int, base_timeout: float = 60.0, per_minute_timeout: float = 30.0) -> float:
+    """
+    Calculate appropriate timeout based on video duration.
+    
+    Args:
+        duration_sec: Video duration in seconds
+        base_timeout: Base timeout for short videos (default 60s)
+        per_minute_timeout: Additional timeout per minute of video (default 30s)
+    
+    Returns:
+        Calculated timeout in seconds, minimum 60s, maximum 600s (10 min)
+    """
+    if not duration_sec or duration_sec <= 0:
+        return base_timeout
+    
+    # Calculate: base + (duration_minutes * per_minute_timeout)
+    duration_minutes = duration_sec / 60.0
+    calculated_timeout = base_timeout + (duration_minutes * per_minute_timeout)
+    
+    # Clamp between 60s and 600s (10 minutes max)
+    return max(60.0, min(600.0, calculated_timeout))
+
+
 async def get_video_metadata(file_path: str) -> dict:
     """Extract video metadata using ffprobe."""
     import subprocess
@@ -1359,6 +1382,20 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
     file_path = actual_path
     filename = Path(file_path).name
     
+    # Get video duration for dynamic timeout calculation
+    video_duration_sec = 0
+    try:
+        metadata = await get_video_metadata(file_path)
+        video_duration_sec = metadata.get('duration_sec', 0) or 0
+        logger.info(f"[Analysis] Video duration: {video_duration_sec}s for {video_id}")
+    except Exception as e:
+        logger.warning(f"[Analysis] Could not get video duration: {e}")
+    
+    # Calculate dynamic timeout based on video duration
+    # For a 7 minute video (420s), this gives: 60 + (7 * 30) = 270s timeout
+    analysis_timeout = calculate_timeout_for_duration(video_duration_sec, base_timeout=60.0, per_minute_timeout=30.0)
+    logger.info(f"[Analysis] Using timeout: {analysis_timeout}s for {video_id}")
+    
     # Update job tracker with initial status
     if job_id and job_id in _analysis_jobs:
         _analysis_jobs[job_id]["videos"][video_id] = {"status": "processing", "filename": filename}
@@ -1560,7 +1597,8 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                     print(f"   Starting comprehensive deep analysis...")
                     
                     try:
-                        async with httpx.AsyncClient(timeout=120.0) as client:
+                        # Use dynamic timeout based on video duration
+                        async with httpx.AsyncClient(timeout=analysis_timeout) as client:
                             thumb_url = f"http://localhost:5555/api/media-db/thumbnail/{video_id}?size=large"
                             
                             # Try to get thumbnail, generate if needed
@@ -1602,7 +1640,7 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                                     print(f"{'='*80}\n")
                             
                             # Run comprehensive image analysis (MANDATORY for complete analysis)
-                            print(f"   🎯 Calling deep analysis API...")
+                            print(f"   🎯 Calling deep analysis API (timeout: {analysis_timeout}s)...")
                             deep_res = await client.post(
                                 "http://localhost:5555/api/image-analysis/analyze",
                                 json={
@@ -1621,7 +1659,7 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                                     ],
                                     "depth": "comprehensive"
                                 },
-                                timeout=90.0
+                                timeout=analysis_timeout  # Dynamic timeout based on video duration
                             )
                             print(f"   📊 Deep analysis API response: {deep_res.status_code}")
                             if deep_res.status_code == 200:

@@ -1,6 +1,8 @@
 """
 Video Render API Endpoints
 Render videos from creative briefs with quality validation
+
+Enhanced with comprehensive logging for debugging and monitoring.
 """
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 from datetime import datetime
 import uuid
+import time
 
 from database.connection import get_db
 from services.video_renderer.creative_brief_renderer import (
@@ -92,6 +95,14 @@ async def create_render_job(
     Returns a job_id to track progress.
     """
     job_id = str(uuid.uuid4())
+    
+    logger.info("=" * 60)
+    logger.info(f"📥 [API] POST /api/render/create")
+    logger.info(f"   Job ID: {job_id}")
+    logger.info(f"   Content Type: {request.content_type}")
+    logger.info(f"   Duration: {request.duration_seconds}s")
+    logger.info(f"   Text: {request.primary_text[:50]}...")
+    logger.info("=" * 60)
     
     # Map string to enum
     try:
@@ -259,6 +270,12 @@ async def test_render():
     """
     job_id = str(uuid.uuid4())
     
+    logger.info("=" * 60)
+    logger.info(f"🧪 [API] POST /api/render/test")
+    logger.info(f"   Job ID: {job_id}")
+    logger.info(f"   Type: Test render (motivational quote)")
+    logger.info("=" * 60)
+    
     brief = CreativeBrief(
         brief_id=job_id,
         content_type=ContentType.MOTIVATIONAL_QUOTE,
@@ -272,9 +289,16 @@ async def test_render():
     renderer = CreativeBriefRenderer()
     
     def progress_callback(progress: float, message: str):
-        logger.info(f"[Test Render] {progress:.0%} - {message}")
+        logger.info(f"   📊 Progress: {progress:.0%} - {message}")
     
+    start_time = time.time()
     result = await renderer.render(brief, on_progress=progress_callback)
+    total_time = time.time() - start_time
+    
+    if result.success:
+        logger.success(f"✅ [API] Test render completed in {total_time:.2f}s")
+    else:
+        logger.error(f"❌ [API] Test render failed: {result.error_message}")
     
     return {
         "success": result.success,

@@ -16,7 +16,6 @@ Output:
 
 import asyncio
 import json
-import logging
 import os
 import subprocess
 import uuid
@@ -25,8 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class ContentType(Enum):
@@ -540,17 +538,24 @@ export default makeScene2D(function* (view) {{
         """
         start_time = datetime.now()
         
-        logger.info(f"[Render] Starting render for brief {brief.brief_id}")
-        logger.info(f"  Type: {brief.content_type.value}")
-        logger.info(f"  Duration: {brief.duration_seconds}s")
-        logger.info(f"  Resolution: {brief.output_width}x{brief.output_height}")
+        logger.info("=" * 60)
+        logger.info(f"🎬 [VIDEO RENDER] Starting render job")
+        logger.info(f"   Brief ID: {brief.brief_id}")
+        logger.info(f"   Content Type: {brief.content_type.value}")
+        logger.info(f"   Duration: {brief.duration_seconds}s")
+        logger.info(f"   Resolution: {brief.output_width}x{brief.output_height}")
+        logger.info(f"   Text: {brief.primary_text[:80]}...")
+        logger.info(f"   Animation: {brief.animation_style} ({brief.animation_duration}s)")
+        logger.info("=" * 60)
         
         if on_progress:
             on_progress(0.1, "Validating brief...")
         
         # Validate brief
+        logger.info("📋 [STEP 1/5] Validating creative brief...")
         validation_issues = self.validate_brief(brief)
         if validation_issues:
+            logger.error(f"❌ [VALIDATION FAILED] {validation_issues}")
             return RenderResult(
                 success=False,
                 brief_id=brief.brief_id,
@@ -559,11 +564,13 @@ export default makeScene2D(function* (view) {{
                 render_time_seconds=0,
                 error_message=f"Validation failed: {', '.join(validation_issues)}",
             )
+        logger.success("✅ [STEP 1/5] Brief validated successfully")
         
         if on_progress:
             on_progress(0.2, "Generating scene...")
         
         # Generate scene code
+        logger.info("🎨 [STEP 2/5] Generating Motion Canvas scene code...")
         scene_code = self._generate_scene_code(brief)
         
         # Write scene file
@@ -572,13 +579,18 @@ export default makeScene2D(function* (view) {{
         scene_file = scene_dir / f"brief_{brief.brief_id}.tsx"
         scene_file.write_text(scene_code)
         
-        logger.info(f"[Render] Generated scene: {scene_file}")
+        logger.success(f"✅ [STEP 2/5] Scene generated: {scene_file}")
         
         if on_progress:
             on_progress(0.4, "Rendering video...")
         
         # Output path
         output_path = self.output_dir / f"{brief.brief_id}.mp4"
+        
+        logger.info("🎥 [STEP 3/5] Rendering video with FFmpeg...")
+        logger.info(f"   Output: {output_path}")
+        logger.info(f"   Resolution: {brief.output_width}x{brief.output_height}")
+        logger.info(f"   Duration: {brief.duration_seconds}s")
         
         # For now, we'll use FFmpeg to create a simple test video
         # In production, this would invoke Motion Canvas CLI
@@ -596,6 +608,9 @@ export default makeScene2D(function* (view) {{
                 str(output_path)
             ]
             
+            logger.debug(f"   FFmpeg command: {' '.join(cmd[:5])}...")
+            
+            render_start = datetime.now()
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -603,14 +618,17 @@ export default makeScene2D(function* (view) {{
             )
             
             stdout, stderr = await process.communicate()
+            render_duration = (datetime.now() - render_start).total_seconds()
             
             if process.returncode != 0:
                 error_msg = stderr.decode() if stderr else "Unknown render error"
-                logger.error(f"[Render] FFmpeg error: {error_msg}")
+                logger.error(f"❌ [RENDER FAILED] FFmpeg error: {error_msg}")
                 raise RuntimeError(f"Render failed: {error_msg}")
             
+            logger.success(f"✅ [STEP 3/5] Video rendered in {render_duration:.2f}s")
+            
         except Exception as e:
-            logger.error(f"[Render] Error: {e}")
+            logger.error(f"❌ [RENDER ERROR] {type(e).__name__}: {e}")
             return RenderResult(
                 success=False,
                 brief_id=brief.brief_id,
@@ -624,16 +642,30 @@ export default makeScene2D(function* (view) {{
             on_progress(0.8, "Validating output...")
         
         # Validate output
+        logger.info("🔍 [STEP 4/5] Validating output quality...")
         quality_report = await self._validate_output(output_path, brief)
+        
+        if quality_report.passed:
+            logger.success(f"✅ [STEP 4/5] Quality check passed")
+        else:
+            logger.warning(f"⚠️ [STEP 4/5] Quality check issues: {quality_report.issues}")
+        
+        logger.info(f"   File size: {quality_report.file_size_bytes / 1024:.1f} KB")
+        logger.info(f"   Duration: {quality_report.duration_actual}s (expected {quality_report.duration_expected}s)")
+        logger.info(f"   Resolution: {quality_report.resolution}")
+        logger.info(f"   FPS: {quality_report.fps_actual}")
         
         if on_progress:
             on_progress(1.0, "Complete!")
         
         render_time = (datetime.now() - start_time).total_seconds()
         
-        logger.info(f"[Render] Complete: {output_path}")
-        logger.info(f"  Render time: {render_time:.2f}s")
-        logger.info(f"  Quality: {'PASSED' if quality_report.passed else 'FAILED'}")
+        logger.info("=" * 60)
+        logger.success(f"🎬 [STEP 5/5] RENDER COMPLETE")
+        logger.info(f"   Output: {output_path}")
+        logger.info(f"   Total time: {render_time:.2f}s")
+        logger.info(f"   Quality: {'✅ PASSED' if quality_report.passed else '❌ FAILED'}")
+        logger.info("=" * 60)
         
         return RenderResult(
             success=quality_report.passed,

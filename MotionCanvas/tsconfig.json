@@ -4,6 +4,8 @@
     "module": "ESNext",
     "lib": ["ES2020", "DOM"],
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@motion-canvas/2d",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

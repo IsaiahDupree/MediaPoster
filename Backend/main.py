@@ -762,6 +762,14 @@ app.include_router(app_settings.router, tags=["Settings"])
 # Health Checks
 from api.endpoints import health
 app.include_router(health.router, tags=["Health"])
+
+# Explainer Video Engine (Motion Canvas)
+try:
+    from api import explainer_video
+    app.include_router(explainer_video.router, tags=["Explainer Video"])
+    logger.success("✓ Explainer Video API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Explainer Video API registration failed: {e}")
 app.include_router(tts.router, tags=["TTS Service"])
 app.include_router(matting.router, tags=["Video Matting Service"])
 app.include_router(remotion.router, tags=["Remotion Service"])

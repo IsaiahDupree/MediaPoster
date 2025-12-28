@@ -1,12 +1,27 @@
 """
 AI Client - Unified interface for all AI providers
 Abstracts provider-specific APIs into a common interface
+With automatic fallback on rate limits (429 errors)
 """
 import os
 from typing import List, Dict, Any, Optional
 from loguru import logger
 
 from config.model_registry import ModelConfig, ModelRegistry
+
+
+# Fallback model chain for rate limit handling
+GROQ_FALLBACK_MODELS = [
+    "llama-3.3-70b-versatile",  # Primary
+    "llama-3.1-70b-versatile",  # Fallback 1
+    "llama-3.1-8b-instant",     # Fallback 2 (smaller, faster)
+    "mixtral-8x7b-32768",       # Fallback 3
+]
+
+OPENAI_FALLBACK_MODELS = [
+    "gpt-4o-mini",              # Primary OpenAI fallback
+    "gpt-3.5-turbo",            # Final fallback
+]
 
 
 class AIClient:
@@ -71,7 +86,7 @@ class AIClient:
         **kwargs
     ) -> str:
         """
-        Unified chat completion interface
+        Unified chat completion interface with automatic fallback on rate limits
         
         Args:
             messages: List of message dicts with 'role' and 'content'
@@ -85,74 +100,111 @@ class AIClient:
         temperature = temperature if temperature is not None else self.config.temperature
         max_tokens = max_tokens if max_tokens is not None else self.config.max_tokens
         
-        try:
-            if self.config.provider in ["openai", "groq"]:
-                response = self.client.chat.completions.create(
-                    model=self.config.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    **kwargs
+        # Build fallback chain based on primary provider
+        models_to_try = self._build_fallback_chain()
+        last_error = None
+        
+        for provider, model, client in models_to_try:
+            try:
+                content = self._execute_chat_completion(
+                    client, provider, model, messages, temperature, max_tokens, **kwargs
                 )
-                content = response.choices[0].message.content
+                return content
                 
-                # Handle empty or None responses
-                if not content or content.strip() == "":
-                    logger.warning(f"[AIClient] Empty response from {self.config.provider}/{self.config.model}")
-                    raise ValueError(f"Empty response from {self.config.provider}")
+            except Exception as e:
+                error_str = str(e)
+                last_error = e
                 
-                # Strip markdown code blocks if present (common with JSON responses)
-                content = content.strip()
-                if content.startswith("```json"):
-                    content = content[7:]
-                if content.startswith("```"):
-                    content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
+                # Check if rate limited (429)
+                is_rate_limited = "429" in error_str or "rate_limit" in error_str.lower()
                 
-                return content.strip()
+                if is_rate_limited:
+                    logger.warning(f"[AIClient] Rate limited on {provider}/{model}, trying fallback...")
+                    continue
+                else:
+                    # Non-rate-limit error, re-raise immediately
+                    logger.error(f"Chat completion failed ({provider}/{model}): {e}")
+                    raise
+        
+        # All fallbacks exhausted
+        logger.error(f"[AIClient] All fallback models exhausted. Last error: {last_error}")
+        raise last_error
+    
+    def _build_fallback_chain(self) -> List[tuple]:
+        """Build ordered list of (provider, model, client) to try"""
+        chain = []
+        
+        # Start with primary model
+        chain.append((self.config.provider, self.config.model, self.client))
+        
+        if self.config.provider == "groq":
+            # Add other Groq models as fallbacks
+            for fallback_model in GROQ_FALLBACK_MODELS:
+                if fallback_model != self.config.model:
+                    chain.append(("groq", fallback_model, self.client))
             
-            elif self.config.provider == "anthropic":
-                # Anthropic uses different message format
-                system_messages = [m for m in messages if m["role"] == "system"]
-                user_messages = [m for m in messages if m["role"] != "system"]
-                
-                system_prompt = system_messages[0]["content"] if system_messages else None
-                
-                response = self.client.messages.create(
-                    model=self.config.model,
-                    messages=user_messages,
-                    system=system_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    **kwargs
-                )
-                return response.content[0].text
+            # Add OpenAI as final fallback
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if openai_key:
+                try:
+                    from openai import OpenAI
+                    openai_client = OpenAI(api_key=openai_key)
+                    for openai_model in OPENAI_FALLBACK_MODELS:
+                        chain.append(("openai", openai_model, openai_client))
+                    logger.debug("[AIClient] OpenAI fallback chain added")
+                except Exception as e:
+                    logger.warning(f"[AIClient] Could not initialize OpenAI fallback: {e}")
+        
+        elif self.config.provider == "openai":
+            # Add other OpenAI models as fallbacks
+            for fallback_model in OPENAI_FALLBACK_MODELS:
+                if fallback_model != self.config.model:
+                    chain.append(("openai", fallback_model, self.client))
+        
+        return chain
+    
+    def _execute_chat_completion(
+        self,
+        client,
+        provider: str,
+        model: str,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        **kwargs
+    ) -> str:
+        """Execute a single chat completion call"""
+        if provider in ["openai", "groq"]:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs
+            )
+            content = response.choices[0].message.content
             
-            elif self.config.provider == "google":
-                # Google Gemini format
-                model = self.client.GenerativeModel(self.config.model)
-                
-                # Convert messages to Gemini format
-                prompt_parts = []
-                for msg in messages:
-                    role = "user" if msg["role"] in ["user", "system"] else "model"
-                    prompt_parts.append({"role": role, "parts": [msg["content"]]})
-                
-                response = model.generate_content(
-                    prompt_parts,
-                    generation_config={
-                        "temperature": temperature,
-                        "max_output_tokens": max_tokens
-                    }
-                )
-                return response.text
+            # Handle empty or None responses
+            if not content or content.strip() == "":
+                logger.warning(f"[AIClient] Empty response from {provider}/{model}")
+                raise ValueError(f"Empty response from {provider}")
             
-            raise NotImplementedError(f"Chat completion not implemented for {self.config.provider}")
+            # Log successful fallback
+            if model != self.config.model or provider != self.config.provider:
+                logger.success(f"[AIClient] Fallback successful: {provider}/{model}")
             
-        except Exception as e:
-            logger.error(f"Chat completion failed ({self.config.provider}/{self.config.model}): {e}")
-            raise
+            # Strip markdown code blocks if present (common with JSON responses)
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            
+            return content.strip()
+        
+        raise NotImplementedError(f"Provider {provider} not supported in fallback chain")
     
     def transcribe(self, audio_path: str, language: str = "en") -> Dict[str, Any]:
         """

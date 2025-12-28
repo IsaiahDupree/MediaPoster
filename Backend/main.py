@@ -783,6 +783,10 @@ app.include_router(narrative_builder.router, tags=["Narrative Builder"])
 from api.endpoints import format_discovery
 app.include_router(format_discovery.router, tags=["Format Discovery"])
 
+# B-Roll Candidates (Story-Driven B-Roll Selection)
+from api.endpoints import broll_candidates
+app.include_router(broll_candidates.router, tags=["B-Roll Candidates"])
+
 # Formats API (Video Format Templates)
 from api.endpoints import formats_api
 app.include_router(formats_api.router, tags=["Formats"])

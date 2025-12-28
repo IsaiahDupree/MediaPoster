@@ -269,6 +269,23 @@ class Topics:
     REMOTION_FAILED = "remotion.failed"                  # Render error
     
     # =========================================================================
+    # VIDEO RENDERING (Format-Agnostic) SERVICE
+    # =========================================================================
+    VIDEO_RENDER_REQUESTED = "video.render.requested"           # New format-based render job
+    VIDEO_RENDER_STARTED = "video.render.started"               # Job picked up by worker
+    VIDEO_RENDER_SCENE_GRAPH_BUILT = "video.render.scene_graph.built"  # Scene graph created
+    VIDEO_RENDER_SCENE_STARTED = "video.render.scene.started"   # Individual scene rendering started
+    VIDEO_RENDER_SCENE_COMPLETED = "video.render.scene.completed"  # Individual scene completed
+    VIDEO_RENDER_PROGRESS = "video.render.progress"              # Progress update (%)
+    VIDEO_RENDER_COMPOSING = "video.render.composing"            # Composing final video
+    VIDEO_RENDER_COMPLETED = "video.render.completed"            # Video rendered successfully
+    VIDEO_RENDER_FAILED = "video.render.failed"                  # Render error
+    
+    # Format-specific events
+    VIDEO_FORMAT_SELECTED = "video.format.selected"             # Format selected for content
+    VIDEO_FORMAT_VALIDATED = "video.format.validated"           # Format validation passed
+    
+    # =========================================================================
     # VIDEO MATTING SERVICE
     # =========================================================================
     MATTING_REQUESTED = "matting.requested"              # New matting job

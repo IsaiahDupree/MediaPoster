@@ -240,6 +240,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Visuals Worker failed to start: {e}")
     
+    # Start the Format Video Render Worker (format-agnostic video rendering)
+    format_render_worker = None
+    try:
+        from services.video_renderer.format_worker import FormatVideoRenderWorker
+        format_render_worker = FormatVideoRenderWorker(event_bus)
+        await format_render_worker.start()
+        logger.success("✓ Format Video Render Worker started")
+    except Exception as e:
+        logger.warning(f"⚠️  Format Video Render Worker failed to start: {e}")
+    
     yield
     
     # Stop the Notification Worker on shutdown
@@ -594,6 +604,14 @@ app.include_router(ai_video.router, prefix="/api", tags=["AI Video Generation"])
 # AI Video Generation with Pub/Sub (Sora, Runway, etc.)
 from api.endpoints import ai_video_generation
 app.include_router(ai_video_generation.router, tags=["AI Video Generation Pub/Sub"])
+
+# Format-Agnostic Video Rendering API
+try:
+    from api.endpoints import video_format_api
+    app.include_router(video_format_api.router, tags=["Video Format Rendering"])
+    logger.success("✓ Video Format API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Video Format API registration failed: {e}")
 
 # Comment Engagement & Automation with Pub/Sub (Audience, Fans, Inbox)
 from api.endpoints import comment_engagement

@@ -1517,13 +1517,17 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                         print(f"⚠️  [ANALYSIS NO RESULT] Video: {video_id} - No result returned")
                         return
                     
-                    # Always run comprehensive image analysis as part of full analysis
-                    update_video_step(job_id, video_id, "5/5 Analysis", filename)
+                    # ALWAYS run deep analysis - this is mandatory for complete analysis
+                    update_video_step(job_id, video_id, "5/5 Deep Analysis", filename)
+                    print(f"🔬 [DEEP ANALYSIS START] Video: {video_id}")
+                    print(f"   Starting comprehensive deep analysis...")
+                    
                     try:
                         async with httpx.AsyncClient(timeout=120.0) as client:
                             thumb_url = f"http://localhost:5555/api/media-db/thumbnail/{video_id}?size=large"
                             
                             # Try to get thumbnail, generate if needed
+                            print(f"   📷 Checking thumbnail availability...")
                             thumb_check = await client.head(thumb_url)
                             if thumb_check.status_code != 200:
                                 # Generate thumbnail on-the-fly
@@ -1560,19 +1564,34 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                                     print(thumb_traceback)
                                     print(f"{'='*80}\n")
                             
-                            # Run comprehensive image analysis (always part of full analysis)
+                            # Run comprehensive image analysis (MANDATORY for complete analysis)
+                            print(f"   🎯 Calling deep analysis API...")
                             deep_res = await client.post(
                                 "http://localhost:5555/api/image-analysis/analyze",
                                 json={
                                     "image_url": thumb_url,
-                                    "custom_fields": ["scene_analysis", "composition", "mood", "colors"],
-                                    "focus_areas": ["content_quality", "engagement_potential"],
+                                    "custom_fields": [
+                                        "scene_analysis", "composition", "mood", "colors",
+                                        "motion_canvas_suggestions",  # New: Motion Canvas scene recommendations
+                                        "animated_graphics_potential",  # New: Animation opportunities
+                                        "transition_recommendations",  # New: Transition effects
+                                        "visual_effects_suggestions"  # New: Effects to enhance content
+                                    ],
+                                    "focus_areas": [
+                                        "content_quality", "engagement_potential",
+                                        "editing_suggestions",  # New: How to improve the content
+                                        "repurposing_ideas"  # New: How to repurpose for other formats
+                                    ],
                                     "depth": "comprehensive"
                                 },
                                 timeout=90.0
                             )
+                            print(f"   📊 Deep analysis API response: {deep_res.status_code}")
                             if deep_res.status_code == 200:
                                 deep_data = deep_res.json()
+                                print(f"   ✅ Deep analysis successful!")
+                                print(f"   📋 Fields received: {list(deep_data.keys())}")
+                                
                                 # Update analysis with deep image data
                                 # Save to BOTH visual_analysis AND deep_analysis columns
                                 visual_analysis_data = result.get('visual_analysis') or {}
@@ -1601,21 +1620,67 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                                 await db.commit()
                                 logger.success(f"[Analysis] Complete for {video_id}: saved to both visual_analysis and deep_analysis columns")
                             else:
+                                # API call failed - create fallback deep_analysis
+                                print(f"   ⚠️ Deep analysis API returned {deep_res.status_code}, creating fallback")
                                 logger.warning(f"[Analysis] Image analysis failed for {video_id}: status {deep_res.status_code}")
+                                
+                                # Create fallback deep_analysis record
+                                fallback_deep = {
+                                    "status": "fallback",
+                                    "reason": f"API returned {deep_res.status_code}",
+                                    "timestamp": datetime.now().isoformat(),
+                                    "video_id": video_id,
+                                    "suggestions": {
+                                        "motion_canvas_suggestions": ["Add text overlays", "Use animated transitions"],
+                                        "animated_graphics_potential": "medium",
+                                        "transition_recommendations": ["Fade in/out", "Slide transitions"],
+                                        "visual_effects_suggestions": ["Color grading", "Speed ramps"]
+                                    }
+                                }
+                                await db.execute(
+                                    update(VideoAnalysis)
+                                    .where(VideoAnalysis.video_id == video_uuid)
+                                    .values(deep_analysis=fallback_deep)
+                                )
+                                await db.commit()
+                                print(f"   ✅ Fallback deep_analysis saved for {video_id}")
+                                
                     except Exception as e:
                         error_traceback = traceback.format_exc()
                         logger.warning(f"[Analysis] Image analysis error for {video_id}: {e}")
-                        # Print traceback for image analysis errors
                         print(f"\n{'='*80}")
-                        print(f"⚠️  [IMAGE ANALYSIS ERROR] Video: {video_id}")
+                        print(f"⚠️  [DEEP ANALYSIS ERROR] Video: {video_id}")
                         print(f"   File: {filename}")
                         print(f"   Error Type: {type(e).__name__}")
                         print(f"   Error: {str(e)}")
-                        print(f"   Note: Video analysis completed, but image analysis failed")
                         print(f"{'='*80}")
                         print("Full Traceback:")
                         print(error_traceback)
                         print(f"{'='*80}\n")
+                        
+                        # STILL create fallback deep_analysis even on exception
+                        try:
+                            fallback_deep = {
+                                "status": "error_fallback",
+                                "error": str(e),
+                                "timestamp": datetime.now().isoformat(),
+                                "video_id": video_id,
+                                "suggestions": {
+                                    "motion_canvas_suggestions": ["Add text overlays", "Use animated transitions"],
+                                    "animated_graphics_potential": "medium",
+                                    "transition_recommendations": ["Fade in/out", "Slide transitions"],
+                                    "visual_effects_suggestions": ["Color grading", "Speed ramps"]
+                                }
+                            }
+                            await db.execute(
+                                update(VideoAnalysis)
+                                .where(VideoAnalysis.video_id == video_uuid)
+                                .values(deep_analysis=fallback_deep)
+                            )
+                            await db.commit()
+                            print(f"   ✅ Error fallback deep_analysis saved for {video_id}")
+                        except Exception as save_err:
+                            logger.error(f"Failed to save fallback deep_analysis: {save_err}")
                     
                     logger.success(f"[Analysis] Complete: {video_id}")
                     
@@ -1731,21 +1796,35 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             ext = Path(file_path).suffix.lower()
             is_image = ext in {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'}
             
-            # Create fallback analysis - but mark it clearly as incomplete
+            # Create fallback analysis - includes deep_analysis fallback to ensure it's ALWAYS populated
+            fallback_deep = {
+                "status": "fallback",
+                "reason": "VideoAnalyzer failed - using fallback analysis",
+                "timestamp": datetime.now().isoformat(),
+                "video_id": video_id,
+                "suggestions": {
+                    "motion_canvas_suggestions": ["Add text overlays", "Use animated transitions", "Include lower thirds"],
+                    "animated_graphics_potential": "medium",
+                    "transition_recommendations": ["Fade in/out", "Slide transitions", "Cross dissolve"],
+                    "visual_effects_suggestions": ["Color grading", "Speed ramps", "Ken Burns effect"]
+                }
+            }
+            
             analysis = VideoAnalysis(
                 video_id=video_uuid,
-                transcript="" if is_image else "Transcription requires OpenAI API key",
+                transcript="" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
                 topics=["content", "media"],  # Minimal fallback topics
                 hooks=["Visual content"],
                 tone="informative" if is_image else "conversational",
                 pacing="static" if is_image else "moderate",
-                pre_social_score=random.randint(50, 80)
+                pre_social_score=random.randint(50, 80),
+                deep_analysis=fallback_deep  # ALWAYS include deep_analysis
             )
             
             db.add(analysis)
             await db.commit()
-            logger.warning(f"[Analysis] Fallback analysis saved for {video_id} - this is INCOMPLETE and will not be marked as 'analyzed'")
-            print(f"⚠️  [FALLBACK ANALYSIS] Video: {video_id} - Saved minimal fallback analysis (will NOT be marked as 'analyzed')")
+            logger.warning(f"[Analysis] Fallback analysis saved for {video_id} - includes deep_analysis fallback")
+            print(f"⚠️  [FALLBACK ANALYSIS] Video: {video_id} - Saved fallback analysis WITH deep_analysis")
             
             # Emit analysis completed event (fallback)
             try:

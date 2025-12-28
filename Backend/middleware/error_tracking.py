@@ -91,8 +91,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Skip logging for health checks and static files
-        skip_paths = ["/health", "/favicon.ico", "/static", "/api/health"]
+        # Skip logging for health checks and static files (reduced noise)
+        skip_paths = ["/health", "/favicon.ico", "/static", "/api/health", "/api/db-health"]
         if any(request.url.path.startswith(p) for p in skip_paths):
             return await call_next(request)
         

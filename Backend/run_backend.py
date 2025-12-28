@@ -169,23 +169,23 @@ def main():
             time.sleep(3)  # Wait for startup
             consecutive_failures = 0
         
-        # Periodic health check
+        # Periodic health check (DISABLED RESTART - only logs status)
+        # Health check restarts are disabled to prevent interrupting long-running analysis
         if time.time() - last_health_check >= HEALTH_CHECK_INTERVAL:
             if health_check():
                 consecutive_failures = 0
-                log("INFO", f"Health check passed (uptime since last restart: {datetime.now() - last_restart_time})")
+                # Silent on success - reduce log noise
             else:
                 consecutive_failures += 1
-                log("WARN", f"Health check failed ({consecutive_failures} consecutive)")
+                # Only log every 5 failures to reduce noise
+                if consecutive_failures % 5 == 0:
+                    log("WARN", f"Health check failed ({consecutive_failures} consecutive) - NOT restarting")
                 
-                if consecutive_failures >= 3:
-                    log("ERROR", "Too many health check failures, restarting backend...")
-                    if process and process.poll() is None:
-                        process.terminate()
-                        try:
-                            process.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            process.kill()
+                # DISABLED: Do NOT restart backend on health check failures
+                # Long-running analysis can cause health checks to fail temporarily
+                # if consecutive_failures >= 10:
+                #     log("ERROR", "Too many health check failures, restarting backend...")
+                #     ...
             
             last_health_check = time.time()
         

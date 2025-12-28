@@ -61,6 +61,7 @@ class SceneType(str, Enum):
     RESTAURANT = "restaurant"
     EVENT = "event"
     STREET = "street"
+    VEHICLE = "vehicle"
     OTHER = "other"
 
 
@@ -112,59 +113,59 @@ class ImageAnalysisResult(BaseModel):
     analyzed_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Overall description
-    title: str = Field(description="Short title for the image (5-10 words)")
-    short_description: str = Field(description="Brief description (1-2 sentences)")
-    detailed_description: str = Field(description="Comprehensive description (100-500 words)")
+    title: str = Field(default="Untitled", description="Short title for the image (5-10 words)")
+    short_description: str = Field(default="", description="Brief description (1-2 sentences)")
+    detailed_description: str = Field(default="", description="Comprehensive description (100-500 words)")
     
     # Scene Analysis
-    scene_type: SceneType
-    scene_setting: str = Field(description="Specific setting description")
-    indoor_outdoor: str = Field(description="indoor, outdoor, or mixed")
+    scene_type: SceneType = Field(default=SceneType.OTHER, description="Type of scene")
+    scene_setting: str = Field(default="unknown", description="Specific setting description")
+    indoor_outdoor: str = Field(default="unknown", description="indoor, outdoor, or mixed")
     
     # Location & Environment
-    location_type: str = Field(description="Type of location")
+    location_type: str = Field(default="unknown", description="Type of location")
     location_guess: Optional[str] = Field(default=None, description="Guessed specific location if identifiable")
-    environment_description: str = Field(description="Description of environment/surroundings")
+    environment_description: str = Field(default="", description="Description of environment/surroundings")
     weather_conditions: Optional[str] = Field(default=None, description="Weather if visible")
     
     # Time Analysis
-    time_of_day: TimeOfDay
-    time_indicators: List[str] = Field(description="What indicates the time of day")
+    time_of_day: TimeOfDay = Field(default=TimeOfDay.UNKNOWN)
+    time_indicators: List[str] = Field(default=[], description="What indicates the time of day")
     season_guess: Optional[str] = Field(default=None, description="Estimated season if detectable")
     
     # People Analysis
-    people_count: int = Field(description="Number of people visible")
+    people_count: int = Field(default=0, description="Number of people visible")
     people: List[PersonAnalysis] = Field(default=[], description="Detailed analysis of each person")
     group_dynamics: Optional[str] = Field(default=None, description="Interaction between people")
     
     # Objects & Elements
-    main_subjects: List[str] = Field(description="Main subjects of the image")
+    main_subjects: List[str] = Field(default=[], description="Main subjects of the image")
     objects_detected: List[ObjectDetection] = Field(default=[])
     background_elements: List[str] = Field(default=[])
     foreground_elements: List[str] = Field(default=[])
     
     # Colors & Aesthetics
-    dominant_colors: List[str] = Field(description="Main colors in the image")
-    color_palette: str = Field(description="Description of color scheme")
-    lighting_type: str = Field(description="Type of lighting")
-    lighting_quality: str = Field(description="Quality/mood of lighting")
-    contrast_level: str = Field(description="Low, medium, high contrast")
+    dominant_colors: List[str] = Field(default=[], description="Main colors in the image")
+    color_palette: str = Field(default="unknown", description="Description of color scheme")
+    lighting_type: str = Field(default="unknown", description="Type of lighting")
+    lighting_quality: str = Field(default="unknown", description="Quality/mood of lighting")
+    contrast_level: str = Field(default="medium", description="Low, medium, high contrast")
     
     # Composition
-    composition_style: str = Field(description="Composition technique used")
-    focal_point: str = Field(description="Main focal point of image")
-    depth_of_field: str = Field(description="Shallow, medium, deep")
-    perspective: str = Field(description="Camera perspective/angle")
+    composition_style: str = Field(default="standard", description="Composition technique used")
+    focal_point: str = Field(default="center", description="Main focal point of image")
+    depth_of_field: str = Field(default="medium", description="Shallow, medium, deep")
+    perspective: str = Field(default="eye level", description="Camera perspective/angle")
     
     # Mood & Style
-    overall_mood: str = Field(description="Overall mood/atmosphere")
-    visual_style: str = Field(description="Visual/artistic style")
+    overall_mood: str = Field(default="neutral", description="Overall mood/atmosphere")
+    visual_style: str = Field(default="standard", description="Visual/artistic style")
     aesthetic_tags: List[str] = Field(default=[], description="Aesthetic descriptors")
     
     # Content Classification
-    content_type: str = Field(description="Type of content: portrait, landscape, product, etc.")
-    content_category: str = Field(description="Category for social media")
-    suitable_platforms: List[str] = Field(description="Best platforms for this image")
+    content_type: str = Field(default="general", description="Type of content: portrait, landscape, product, etc.")
+    content_category: str = Field(default="general", description="Category for social media")
+    suitable_platforms: List[str] = Field(default=["general"], description="Best platforms for this image")
     
     # Text & Branding
     visible_text: List[str] = Field(default=[], description="Any visible text in image")
@@ -172,23 +173,31 @@ class ImageAnalysisResult(BaseModel):
     
     # Social Media Optimization
     suggested_hashtags: List[str] = Field(default=[])
-    suggested_caption: str = Field(description="AI-generated caption suggestion")
-    engagement_prediction: str = Field(description="Predicted engagement level")
+    suggested_caption: str = Field(default="", description="AI-generated caption suggestion")
+    engagement_prediction: str = Field(default="medium", description="Predicted engagement level")
     
     # Technical Quality
-    image_quality: str = Field(description="Overall quality assessment")
-    sharpness: str = Field(description="Sharpness level")
-    exposure: str = Field(description="Exposure assessment")
+    image_quality: str = Field(default="unknown", description="Overall quality assessment")
+    sharpness: str = Field(default="unknown", description="Sharpness level")
+    exposure: str = Field(default="unknown", description="Exposure assessment")
     
     # Custom Fields
     custom_fields: Dict[str, Any] = Field(default={}, description="User-defined custom analysis fields")
+    
+    # Motion Canvas & Animation Suggestions (NEW)
+    motion_canvas_suggestions: List[str] = Field(default=[], description="Suggestions for Motion Canvas scenes")
+    animated_graphics_potential: str = Field(default="medium", description="Potential for animated graphics: low, medium, high")
+    transition_recommendations: List[str] = Field(default=[], description="Recommended transitions and effects")
+    visual_effects_suggestions: List[str] = Field(default=[], description="Visual effects to enhance content")
+    editing_suggestions: List[str] = Field(default=[], description="Editing improvements for the content")
+    repurposing_ideas: List[str] = Field(default=[], description="Ideas to repurpose for other formats")
     
     # Raw AI response
     raw_analysis: Optional[str] = Field(default=None, description="Raw AI analysis text")
     
     # Confidence & Meta
-    overall_confidence: float = Field(description="Overall confidence 0-1")
-    processing_time_ms: int = Field(description="Processing time in milliseconds")
+    overall_confidence: float = Field(default=0.5, description="Overall confidence 0-1")
+    processing_time_ms: int = Field(default=0, description="Processing time in milliseconds")
 
 
 class AnalysisRequest(BaseModel):
@@ -286,10 +295,18 @@ def get_analysis_prompt(custom_fields: List[str], focus_areas: List[str], depth:
 ### 11. SOCIAL MEDIA OPTIMIZATION
 - **Hashtags**: 10-15 relevant hashtags
 - **Caption Suggestion**: Engaging caption for social media
-- **Engagement Prediction**: Low/medium/high expected engagement"""
+- **Engagement Prediction**: Low/medium/high expected engagement
+
+### 12. MOTION CANVAS & ANIMATION SUGGESTIONS
+- **Motion Canvas Suggestions**: Ideas for animated scenes (text overlays, lower thirds, animated transitions, kinetic typography, etc.)
+- **Animated Graphics Potential**: low/medium/high - how suitable is this content for animated graphics
+- **Transition Recommendations**: Best transitions for this content (fade, slide, zoom, wipe, morph, etc.)
+- **Visual Effects Suggestions**: Effects to enhance (color grading, speed ramps, Ken Burns, parallax, etc.)
+- **Editing Suggestions**: How to improve the content in post-production
+- **Repurposing Ideas**: How to repurpose for different formats (TikTok, Reels, YouTube Shorts, etc.)"""
 
     if custom_fields:
-        base_prompt += "\n\n### 12. CUSTOM FIELDS\n"
+        base_prompt += "\n\n### 13. CUSTOM FIELDS\n"
         for field in custom_fields:
             base_prompt += f"- **{field}**: Analyze this specific aspect\n"
     
@@ -312,7 +329,10 @@ FORMAT YOUR RESPONSE AS VALID JSON matching this structure:
     "title": "string",
     "short_description": "string",
     "detailed_description": "string (100-500 words)",
-    "scene_type": "indoor|outdoor|urban|nature|beach|mountain|studio|home|office|restaurant|event|street|other",
+    "SceneType": {
+      "type": "string",
+      "enum": ["indoor", "outdoor", "urban", "nature", "beach", "mountain", "studio", "home", "office", "restaurant", "event", "street", "vehicle", "other"]
+    },
     "scene_setting": "string",
     "indoor_outdoor": "indoor|outdoor|mixed",
     "location_type": "string",
@@ -372,6 +392,12 @@ FORMAT YOUR RESPONSE AS VALID JSON matching this structure:
     "sharpness": "string",
     "exposure": "string",
     "custom_fields": {},
+    "motion_canvas_suggestions": ["string - list of animation ideas like text overlays, lower thirds, kinetic typography"],
+    "animated_graphics_potential": "low|medium|high",
+    "transition_recommendations": ["string - list of transitions like fade, slide, zoom, wipe, morph"],
+    "visual_effects_suggestions": ["string - effects like color grading, speed ramps, Ken Burns, parallax"],
+    "editing_suggestions": ["string - post-production improvements"],
+    "repurposing_ideas": ["string - how to repurpose for TikTok, Reels, Shorts, etc."],
     "overall_confidence": number 0-1
 }"""
     
@@ -402,93 +428,212 @@ async def fetch_and_encode_local_image(url: str) -> str:
         return f"data:{mime};base64,{image_base64}"
 
 
-async def analyze_with_openai(image_data: str, is_url: bool, custom_fields: List[str], focus_areas: List[str], depth: str) -> Dict[str, Any]:
-    """Analyze image using OpenAI Vision API"""
+async def analyze_with_vision_model(image_data: str, is_url: bool, custom_fields: List[str], focus_areas: List[str], depth: str) -> Dict[str, Any]:
+    """Analyze image using configurable Vision API (OpenAI, Gemini, Anthropic)"""
+    from config.model_registry import ModelRegistry, TaskType
     
-    api_key = os.getenv("OPENAI_API_KEY")
+    # Get vision model configuration from registry
+    config = ModelRegistry.get_model_config(TaskType.VISION_ANALYSIS)
+    logger.info(f"[Vision Analysis] Using {config.provider}/{config.model}")
+    
+    api_key = os.getenv(config.api_key_env)
     if not api_key:
-        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+        raise HTTPException(status_code=500, detail=f"{config.provider} API key not configured ({config.api_key_env})")
     
     prompt = get_analysis_prompt(custom_fields, focus_areas, depth)
     
-    # Handle different image sources
+    # Prepare image data - convert localhost URLs to base64
+    image_base64 = None
+    image_url = None
+    
     if is_url:
-        # Check if it's a localhost URL - OpenAI can't access these
         if "localhost" in image_data or "127.0.0.1" in image_data:
-            # Fetch the image locally and convert to base64
             try:
                 data_url = await fetch_and_encode_local_image(image_data)
-                image_content = {"type": "image_url", "image_url": {"url": data_url}}
+                # Extract base64 from data URL
+                if "base64," in data_url:
+                    image_base64 = data_url.split("base64,")[1]
+                else:
+                    image_base64 = data_url
             except Exception as e:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Cannot analyze localhost URL. Either upload the image directly or use a publicly accessible URL. Error: {str(e)}"
-                )
+                raise HTTPException(status_code=400, detail=f"Cannot fetch localhost URL: {str(e)}")
         else:
-            # Public URL - OpenAI can access directly
-            image_content = {"type": "image_url", "image_url": {"url": image_data}}
+            image_url = image_data
     else:
-        # Already base64 encoded
-        image_content = {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
+        image_base64 = image_data
+    
+    # Route to provider-specific implementation
+    if config.provider == "openai":
+        content = await _call_openai_vision(api_key, config, prompt, image_base64, image_url)
+    elif config.provider == "google":
+        content = await _call_gemini_vision(api_key, config, prompt, image_base64, image_url)
+    elif config.provider == "anthropic":
+        content = await _call_anthropic_vision(api_key, config, prompt, image_base64, image_url)
+    else:
+        raise HTTPException(status_code=500, detail=f"Unsupported vision provider: {config.provider}")
+    
+    # Parse JSON from response (common for all providers)
+    return _parse_vision_response(content, config)
+
+
+async def _call_openai_vision(api_key: str, config, prompt: str, image_base64: str = None, image_url: str = None) -> str:
+    """Call OpenAI Vision API"""
+    import time
+    start_time = time.time()
+    logger.info(f"[OpenAI Vision] Starting analysis with {config.model}")
+    
+    if image_base64:
+        image_content = {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+    else:
+        image_content = {"type": "image_url", "image_url": {"url": image_url}}
     
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "model": "gpt-4o",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            image_content,
-                        ],
-                    }
-                ],
-                "max_tokens": 4096,
+                "model": config.model,
+                "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, image_content]}],
+                "max_tokens": config.max_tokens,
+                "temperature": config.temperature,
             },
         )
-        
+        elapsed = time.time() - start_time
         if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=f"OpenAI API error: {response.text}")
+            logger.error(f"[OpenAI Vision] Failed after {elapsed:.2f}s: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=f"OpenAI Vision error: {response.text}")
         
         result = response.json()
         content = result["choices"][0]["message"]["content"]
+        tokens_used = result.get("usage", {}).get("total_tokens", 0)
+        logger.success(f"[OpenAI Vision] Completed in {elapsed:.2f}s | Tokens: {tokens_used} | Model: {config.model}")
+        return content
+
+
+async def _call_gemini_vision(api_key: str, config, prompt: str, image_base64: str = None, image_url: str = None) -> str:
+    """Call Google Gemini Vision API"""
+    import time
+    start_time = time.time()
+    logger.info(f"[Gemini Vision] Starting analysis with {config.model}")
+    
+    # Gemini requires base64 image data
+    if not image_base64 and image_url:
+        # Fetch image from URL and convert to base64
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            img_response = await client.get(image_url)
+            if img_response.status_code == 200:
+                import base64
+                image_base64 = base64.b64encode(img_response.content).decode("utf-8")
+            else:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL")
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{config.model}:generateContent?key={api_key}",
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}}
+                    ]
+                }],
+                "generationConfig": {
+                    "temperature": config.temperature,
+                    "maxOutputTokens": config.max_tokens,
+                }
+            },
+        )
+        elapsed = time.time() - start_time
+        if response.status_code != 200:
+            logger.error(f"[Gemini Vision] Failed after {elapsed:.2f}s: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=f"Gemini Vision error: {response.text}")
         
-        # Try to parse JSON from response
+        result = response.json()
+        content = result["candidates"][0]["content"]["parts"][0]["text"]
+        logger.success(f"[Gemini Vision] Completed in {elapsed:.2f}s | Model: {config.model}")
+        return content
+
+
+async def _call_anthropic_vision(api_key: str, config, prompt: str, image_base64: str = None, image_url: str = None) -> str:
+    """Call Anthropic Claude Vision API"""
+    import time
+    start_time = time.time()
+    logger.info(f"[Anthropic Vision] Starting analysis with {config.model}")
+    
+    if not image_base64 and image_url:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            img_response = await client.get(image_url)
+            if img_response.status_code == 200:
+                import base64
+                image_base64 = base64.b64encode(img_response.content).decode("utf-8")
+            else:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL")
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            },
+            json={
+                "model": config.model,
+                "max_tokens": config.max_tokens,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_base64}},
+                        {"type": "text", "text": prompt}
+                    ]
+                }]
+            },
+        )
+        elapsed = time.time() - start_time
+        if response.status_code != 200:
+            logger.error(f"[Anthropic Vision] Failed after {elapsed:.2f}s: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=f"Anthropic Vision error: {response.text}")
+        
+        result = response.json()
+        content = result["content"][0]["text"]
+        tokens_used = result.get("usage", {}).get("input_tokens", 0) + result.get("usage", {}).get("output_tokens", 0)
+        logger.success(f"[Anthropic Vision] Completed in {elapsed:.2f}s | Tokens: {tokens_used} | Model: {config.model}")
+        return content
+
+
+def _parse_vision_response(content: str, config) -> Dict[str, Any]:
+    """Parse JSON from vision API response"""
+    # Try to parse JSON from response
+    try:
+        # Find JSON in response
+        json_start = content.find("{")
+        json_end = content.rfind("}") + 1
+        if json_start != -1 and json_end > json_start:
+            json_str = content[json_start:json_end]
+            # Try to fix common JSON issues
+            json_str = json_str.replace('\n', ' ').replace('\r', '')
+            return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON parsing failed: {e}. Attempting fix...")
         try:
-            # Find JSON in response
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
-            if json_start != -1 and json_end > json_start:
-                json_str = content[json_start:json_end]
-                # Try to fix common JSON issues
-                json_str = json_str.replace('\n', ' ').replace('\r', '')
-                return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parsing failed: {e}. Attempting fix...")
-            try:
-                # Try to fix trailing commas and other common issues
-                import re
-                json_str = re.sub(r',\s*}', '}', json_str)
-                json_str = re.sub(r',\s*]', ']', json_str)
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                logger.warning(f"JSON fix failed, extracting data from raw response")
-        
-        # Extract key information from raw content if JSON parsing fails
-        return {
-            "title": "Analysis Complete",
-            "detailed_description": content[:500] if content else "Analysis complete",
-            "scene_setting": "Unknown",
-            "overall_mood": "neutral",
-            "dominant_colors": ["unknown"],
-            "raw_analysis": content
-        }
+            # Try to fix trailing commas and other common issues
+            import re
+            json_str = re.sub(r',\s*}', '}', json_str)
+            json_str = re.sub(r',\s*]', ']', json_str)
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            logger.warning(f"JSON fix failed, extracting data from raw response")
+    
+    # Extract key information from raw content if JSON parsing fails
+    return {
+        "title": "Analysis Complete",
+        "detailed_description": content[:500] if content else "Analysis complete",
+        "scene_setting": "Unknown",
+        "overall_mood": "neutral",
+        "dominant_colors": ["unknown"],
+        "raw_analysis": content
+    }
 
 
 async def analyze_with_mock(custom_fields: List[str]) -> Dict[str, Any]:
@@ -598,16 +743,18 @@ async def analyze_image(request: AnalysisRequest):
         raise HTTPException(status_code=400, detail="Either image_url or image_base64 is required")
     
     try:
-        # Check if OpenAI key exists - NO MOCK FALLBACK
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
+        # Check if vision model API key exists - NO MOCK FALLBACK
+        from config.model_registry import ModelRegistry, TaskType
+        vision_config = ModelRegistry.get_model_config(TaskType.VISION_ANALYSIS)
+        api_key = os.getenv(vision_config.api_key_env)
+        if not api_key:
             raise HTTPException(
                 status_code=503, 
-                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable to enable AI image analysis."
+                detail=f"Vision API key not configured. Please set {vision_config.api_key_env} environment variable to enable AI image analysis."
             )
         
         if request.image_url:
-            analysis_data = await analyze_with_openai(
+            analysis_data = await analyze_with_vision_model(
                 request.image_url, 
                 is_url=True,
                 custom_fields=request.custom_fields,
@@ -615,7 +762,7 @@ async def analyze_image(request: AnalysisRequest):
                 depth=request.analysis_depth,
             )
         else:
-            analysis_data = await analyze_with_openai(
+            analysis_data = await analyze_with_vision_model(
                 request.image_base64,
                 is_url=False,
                 custom_fields=request.custom_fields,
@@ -670,6 +817,39 @@ async def analyze_image(request: AnalysisRequest):
                 overall_confidence=0.0,
             )
         else:
+            # Map scene_type to valid enum value
+            valid_scene_types = [e.value for e in SceneType]
+            raw_scene_type = analysis_data.get("scene_type", "other")
+            if raw_scene_type not in valid_scene_types:
+                # Map common AI responses to valid enum values
+                scene_type_mapping = {
+                    "vehicle": "street",
+                    "car": "street",
+                    "transportation": "street",
+                    "interior": "indoor",
+                    "exterior": "outdoor",
+                    "city": "urban",
+                    "forest": "nature",
+                    "park": "nature",
+                    "garden": "nature",
+                    "sea": "beach",
+                    "ocean": "beach",
+                    "workplace": "office",
+                    "kitchen": "home",
+                    "bedroom": "home",
+                    "living room": "home",
+                    "party": "event",
+                    "concert": "event",
+                    "wedding": "event",
+                }
+                analysis_data["scene_type"] = scene_type_mapping.get(raw_scene_type.lower(), "other")
+            
+            # Ensure time_of_day is valid
+            valid_times = [e.value for e in TimeOfDay]
+            raw_time = analysis_data.get("time_of_day", "unknown")
+            if raw_time not in valid_times:
+                analysis_data["time_of_day"] = "unknown"
+            
             # Map the valid data to our model
             result = ImageAnalysisResult(
                 analysis_id=analysis_id,
@@ -713,15 +893,17 @@ async def analyze_uploaded_image(
     focus_areas_list = [f.strip() for f in focus_areas.split(",") if f.strip()]
     
     try:
-        # Check if OpenAI key exists - NO MOCK FALLBACK
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
+        # Check if vision model API key exists - NO MOCK FALLBACK
+        from config.model_registry import ModelRegistry, TaskType
+        vision_config = ModelRegistry.get_model_config(TaskType.VISION_ANALYSIS)
+        api_key = os.getenv(vision_config.api_key_env)
+        if not api_key:
             raise HTTPException(
                 status_code=503, 
-                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable to enable AI image analysis."
+                detail=f"Vision API key not configured. Please set {vision_config.api_key_env} environment variable to enable AI image analysis."
             )
         
-        analysis_data = await analyze_with_openai(
+        analysis_data = await analyze_with_vision_model(
             image_base64,
             is_url=False,
             custom_fields=custom_fields_list,

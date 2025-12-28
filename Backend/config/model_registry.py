@@ -14,6 +14,7 @@ class TaskType(str, Enum):
     TRANSCRIPTION = "transcription"
     CONTENT_ANALYSIS = "content_analysis"
     FRAME_ANALYSIS = "frame_analysis"
+    VISION_ANALYSIS = "vision_analysis"  # Deep image analysis (GPT-4o, Gemini, etc.)
     THUMBNAIL_GENERATION = "thumbnail_generation"
     HASHTAG_GENERATION = "hashtag_generation"
     COMMENT_GENERATION = "comment_generation"
@@ -160,6 +161,18 @@ class ModelRegistry:
             cost_input=0.0,
             cost_output=0.0,
             max_tokens=512,
+            temperature=0.5
+        ),
+        
+        # Vision Analysis - Deep image analysis for thumbnails and frames
+        # Options: openai:gpt-4o, openai:gpt-4o-mini, google:gemini-2.0-flash, anthropic:claude-3-5-sonnet
+        TaskType.VISION_ANALYSIS: ModelConfig(
+            provider="openai",
+            model="gpt-4o-mini",  # Cheaper than gpt-4o, good quality
+            api_key_env="OPENAI_API_KEY",
+            cost_input=0.15,  # $0.15 per MTok
+            cost_output=0.60,  # $0.60 per MTok
+            max_tokens=4096,
             temperature=0.5
         )
     }

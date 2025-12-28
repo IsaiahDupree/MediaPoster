@@ -135,12 +135,14 @@ class WhisperTranscriber:
         if not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
         
-        logger.info(f"Transcribing audio with Whisper API")
+        # Use correct model name based on provider
+        model_name = "whisper-large-v3" if self.provider == "groq" else "whisper-1"
+        logger.info(f"Transcribing audio with {self.provider} Whisper API (model: {model_name})")
         
         try:
             with open(audio_path, "rb") as audio_file:
                 transcript = self.client.audio.transcriptions.create(
-                    model="whisper-1",
+                    model=model_name,
                     file=audio_file,
                     response_format="verbose_json",  # Get timestamps
                     language="en"  # Can be made configurable

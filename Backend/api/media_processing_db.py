@@ -1895,12 +1895,13 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
             }
             
             # Try to get vision analysis for images even in fallback mode
-            # Use thumbnail if available (JPEG format) since HEIC isn't supported by OpenAI
+            # Convert HEIC to JPEG since OpenAI only supports: png, jpeg, gif, webp
             visual_analysis_data = None
             if is_image:
                 try:
                     import base64
                     from openai import OpenAI
+                    import subprocess
                     
                     # Get thumbnail_path from video record
                     video_record = await db.execute(
@@ -1914,14 +1915,39 @@ async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None)
                         # Try to find a usable image file (prefer thumbnail for format compatibility)
                         image_to_analyze = None
                         
-                        # Check for existing thumbnail
+                        # Check for existing thumbnail (already JPEG)
                         if thumbnail_path and Path(thumbnail_path).exists():
                             image_to_analyze = thumbnail_path
                             logger.info(f"[Fallback] Using thumbnail for vision: {thumbnail_path}")
-                        # For JPEG/PNG, use original file
-                        elif ext in {'.jpg', '.jpeg', '.png', '.webp'} and Path(file_path).exists():
+                        # For JPEG/PNG/GIF/WEBP, use original file
+                        elif ext in {'.jpg', '.jpeg', '.png', '.webp', '.gif'} and Path(file_path).exists():
                             image_to_analyze = file_path
                             logger.info(f"[Fallback] Using original file for vision: {filename}")
+                        # For HEIC, convert to JPEG using sips (macOS) or ffmpeg
+                        elif ext in {'.heic', '.heif'} and Path(file_path).exists():
+                            try:
+                                temp_jpeg = f"/tmp/mediaposter/heic_convert/{video_id}.jpg"
+                                os.makedirs(os.path.dirname(temp_jpeg), exist_ok=True)
+                                
+                                # Try sips first (macOS native, fast)
+                                result = subprocess.run(
+                                    ["sips", "-s", "format", "jpeg", file_path, "--out", temp_jpeg],
+                                    capture_output=True, timeout=30
+                                )
+                                if result.returncode == 0 and Path(temp_jpeg).exists():
+                                    image_to_analyze = temp_jpeg
+                                    logger.info(f"[Fallback] Converted HEIC to JPEG: {temp_jpeg}")
+                                else:
+                                    # Fallback to ffmpeg
+                                    result = subprocess.run(
+                                        ["ffmpeg", "-y", "-i", file_path, "-vframes", "1", temp_jpeg],
+                                        capture_output=True, timeout=30
+                                    )
+                                    if result.returncode == 0 and Path(temp_jpeg).exists():
+                                        image_to_analyze = temp_jpeg
+                                        logger.info(f"[Fallback] Converted HEIC via ffmpeg: {temp_jpeg}")
+                            except Exception as conv_err:
+                                logger.warning(f"[Fallback] HEIC conversion failed: {conv_err}")
                         
                         if image_to_analyze:
                             logger.info(f"[Fallback] Running vision analysis for image: {filename}")

@@ -218,7 +218,7 @@ class PublishService:
                 target.setdefault('disabledStitch', False)
                 target.setdefault('isBrandedContent', False)
                 target.setdefault('isYourBrand', False)
-                target.setdefault('isAiGenerated', True)
+                target.setdefault('isAiGenerated', False)  # Most content is real iPhone videos, not AI-generated
             elif platform == 'youtube':
                 target.setdefault('privacyStatus', 'public')
                 target.setdefault('shouldNotifySubscribers', True)

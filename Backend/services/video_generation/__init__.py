@@ -112,6 +112,37 @@ from .plate_manager import (
     detect_plate_anti_patterns,
     fix_anti_patterns,
 )
+from .media_probe import (
+    MediaTiming,
+    MediaInfo,
+    probe_duration_seconds,
+    probe_duration_seconds_sync,
+    probe_media_info,
+    seconds_to_frames,
+    get_media_timing,
+    attach_timing_to_clips,
+    build_plate_frames_map,
+)
+from .audio_ducking import (
+    DuckingPolicy,
+    NarrationCue,
+    DEFAULT_DUCKING,
+    bg_volume_at_frame,
+    generate_volume_keyframes,
+    beats_to_narration_cues,
+    story_ir_to_narration_cues,
+    calculate_ducking_for_render_plan,
+    apply_ducking_to_layers,
+)
+from .char_variety import (
+    CharPlacement,
+    CharVarietyConfig,
+    assign_char_presets_round_robin,
+    detect_char_boredom,
+    fix_char_placement_boredom,
+    create_dramatic_switch_placements,
+    merge_char_placements_with_budget,
+)
 
 __all__ = [
     # Types
@@ -218,4 +249,32 @@ __all__ = [
     "inject_variety",
     "detect_plate_anti_patterns",
     "fix_anti_patterns",
+    # Media Probe
+    "MediaTiming",
+    "MediaInfo",
+    "probe_duration_seconds",
+    "probe_duration_seconds_sync",
+    "probe_media_info",
+    "seconds_to_frames",
+    "get_media_timing",
+    "attach_timing_to_clips",
+    "build_plate_frames_map",
+    # Audio Ducking
+    "DuckingPolicy",
+    "NarrationCue",
+    "DEFAULT_DUCKING",
+    "bg_volume_at_frame",
+    "generate_volume_keyframes",
+    "beats_to_narration_cues",
+    "story_ir_to_narration_cues",
+    "calculate_ducking_for_render_plan",
+    "apply_ducking_to_layers",
+    # Character Variety
+    "CharPlacement",
+    "CharVarietyConfig",
+    "assign_char_presets_round_robin",
+    "detect_char_boredom",
+    "fix_char_placement_boredom",
+    "create_dramatic_switch_placements",
+    "merge_char_placements_with_budget",
 ]

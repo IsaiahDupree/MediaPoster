@@ -95,6 +95,13 @@ from .full_pipeline import (
     run_full_pipeline_sync,
     preview_pipeline,
 )
+from .shot_budgeter import (
+    ShotBudget,
+    BudgetPlan,
+    apply_shot_budget,
+    make_budgeted_shot_plan,
+    estimate_budget_savings,
+)
 
 __all__ = [
     # Types
@@ -186,4 +193,10 @@ __all__ = [
     "run_full_pipeline",
     "run_full_pipeline_sync",
     "preview_pipeline",
+    # Shot Budgeter
+    "ShotBudget",
+    "BudgetPlan",
+    "apply_shot_budget",
+    "make_budgeted_shot_plan",
+    "estimate_budget_savings",
 ]

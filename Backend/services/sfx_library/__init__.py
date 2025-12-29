@@ -70,6 +70,20 @@ from .audio_mixer import (
     get_audio_duration,
     normalize_audio,
 )
+from .macros import (
+    SfxMacro,
+    SfxMacros,
+    MacroCue,
+    MacroCueSheet,
+    ExpandedCue,
+    DEFAULT_MACROS,
+    expand_macro_cue_sheet,
+    load_macros,
+    save_macros,
+    validate_macro_cue_sheet,
+    get_macro_context_for_ai,
+    beats_to_macro_cues,
+)
 
 __all__ = [
     # Types
@@ -128,4 +142,17 @@ __all__ = [
     "mix_tracks",
     "get_audio_duration",
     "normalize_audio",
+    # Macros
+    "SfxMacro",
+    "SfxMacros",
+    "MacroCue",
+    "MacroCueSheet",
+    "ExpandedCue",
+    "DEFAULT_MACROS",
+    "expand_macro_cue_sheet",
+    "load_macros",
+    "save_macros",
+    "validate_macro_cue_sheet",
+    "get_macro_context_for_ai",
+    "beats_to_macro_cues",
 ]

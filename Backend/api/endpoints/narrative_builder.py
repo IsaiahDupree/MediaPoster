@@ -355,6 +355,13 @@ async def generate_recommendations(goal: NarrativeGoal):
                 GROUP BY COALESCE(clip_id, media_project_id)
             ) sp ON v.id = sp.content_ref
             WHERE va.pre_social_score IS NOT NULL
+            AND va.curation_status = 'approved'
+            AND (
+                LOWER(v.file_name) LIKE '%.mov' OR
+                LOWER(v.file_name) LIKE '%.mp4' OR
+                LOWER(v.file_name) LIKE '%.m4v' OR
+                LOWER(v.file_name) LIKE '%.avi'
+            )
             AND (sp.schedule_count IS NULL OR sp.schedule_count < 5)
             ORDER BY va.pre_social_score DESC
             LIMIT 30

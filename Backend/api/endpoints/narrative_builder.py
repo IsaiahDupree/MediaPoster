@@ -27,13 +27,13 @@ def get_engine():
 
 class NarrativeGoal(BaseModel):
     goal: str
-    cta_type: str
-    pillars: List[str]
-    audience: str
-    time_horizon: str
-    platforms: List[str]
-    max_posts_per_day: int
-    content_mix: Dict[str, int]
+    cta_type: str = "follow"
+    pillars: List[str] = []
+    audience: Optional[str] = "creators and businesses"
+    time_horizon: Optional[str] = "next_7_days"
+    platforms: Optional[List[str]] = ["tiktok", "instagram", "youtube"]
+    max_posts_per_day: Optional[int] = 3
+    content_mix: Optional[Dict[str, int]] = None
 
 
 class SignalMetrics(BaseModel):

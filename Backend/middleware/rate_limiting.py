@@ -85,12 +85,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/api/media-db/batch/analyze": (5, 60),  # 5 per minute
             "/api/media-db/ingest": (20, 60),  # 20 per minute
             "/api/media-db/batch/ingest": (3, 60),  # 3 per minute
-            "/api/schedule": (30, 60),  # 30 per minute
-            "/api/publishing": (20, 60),  # 20 per minute
+            "/api/schedule": (500, 60),  # 500 per minute (increased for batch scheduling)
+            "/api/publishing": (100, 60),  # 100 per minute
+            "/api/narrative-builder": (200, 60),  # 200 per minute
             
             # Default limits for other endpoints
             "*": (self.default_limit, self.default_window)
         }
+        
+        # Endpoints exempt from rate limiting (internal/batch operations)
+        self.exempt_paths = [
+            "/api/schedule/create",
+            "/api/schedule/list",
+            "/api/narrative-builder/",
+        ]
     
     def _get_limit(self, path: str) -> Tuple[int, int]:
         """Get rate limit for a path."""
@@ -123,6 +131,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Skip rate limiting for health checks
         if request.url.path in ["/api/health", "/health", "/"]:
             return await call_next(request)
+        
+        # Skip rate limiting for exempt paths (batch operations)
+        for exempt_path in self.exempt_paths:
+            if request.url.path.startswith(exempt_path):
+                return await call_next(request)
         
         # Skip rate limiting for scheduler (internal service)
         # Scheduler is identified by X-Internal-Service header

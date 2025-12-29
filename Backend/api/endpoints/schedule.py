@@ -73,8 +73,21 @@ class ScheduledPost(BaseModel):
 # DATABASE SETUP
 # =============================================================================
 
+_engine = None
+
 def get_engine():
-    return create_engine(DATABASE_URL)
+    """Get or create SQLAlchemy engine with connection pooling."""
+    global _engine
+    if _engine is None:
+        _engine = create_engine(
+            DATABASE_URL,
+            pool_size=5,           # Max persistent connections
+            max_overflow=10,       # Max additional connections
+            pool_timeout=30,       # Seconds to wait for connection
+            pool_recycle=1800,     # Recycle connections after 30 min
+            pool_pre_ping=True,    # Test connections before use
+        )
+    return _engine
 
 
 def ensure_table_exists():

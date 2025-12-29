@@ -817,6 +817,10 @@ app.include_router(broll_candidates.router, tags=["B-Roll Candidates"])
 from api.endpoints import broll
 app.include_router(broll.router, tags=["B-Roll Detection"])
 
+# Content Format Detection (Talking Head, B-Roll, Animated, etc.)
+from api.endpoints import content_format
+app.include_router(content_format.router, tags=["Content Format"])
+
 # Formats API (Video Format Templates)
 from api.endpoints import formats_api
 app.include_router(formats_api.router, tags=["Formats"])

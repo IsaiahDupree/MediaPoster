@@ -825,6 +825,10 @@ app.include_router(content_format.router, tags=["Content Format"])
 from api.endpoints import video_toolkit
 app.include_router(video_toolkit.router, tags=["Video Toolkit"])
 
+# SFX Library (AI-addressable sound effects)
+from api.endpoints import sfx_library
+app.include_router(sfx_library.router, tags=["SFX Library"])
+
 # Formats API (Video Format Templates)
 from api.endpoints import formats_api
 app.include_router(formats_api.router, tags=["Formats"])

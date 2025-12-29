@@ -1,15 +1,37 @@
 """
 Video Generation API Endpoints
 Provides REST API for AI video generation across multiple providers
+Includes format-agnostic IR pipeline for Sora + Remotion
 """
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from loguru import logger
 
 from modules.ai.video_model_factory import VideoModelFactory, create_video_model
 from modules.ai.video_model_interface import VideoGenerationRequest, VideoGenerationJob, VideoStatus
 from services.event_bus import EventBus, Topics
+
+# Import IR pipeline services
+try:
+    from services.video_generation import (
+        TrendItemV1,
+        ContentBriefV1,
+        StoryIRV1,
+        FormatPackV1,
+        ShotPlanV1,
+        AssetManifestV1,
+        RenderPlanRemotionV1,
+        make_story_ir,
+        make_shot_plan,
+        make_render_plan,
+        select_format,
+        get_available_formats,
+    )
+    IR_PIPELINE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"IR pipeline not available: {e}")
+    IR_PIPELINE_AVAILABLE = False
 
 router = APIRouter(prefix="/video-generation", tags=["AI Video Generation"])
 
@@ -222,3 +244,243 @@ async def get_provider_capabilities(provider_name: str):
     except Exception as e:
         logger.error(f"Error getting provider info: {e}")
         raise HTTPException(status_code=404, detail=f"Provider not found: {provider_name}")
+
+
+# ============================================================================
+# IR PIPELINE ENDPOINTS (Format-Agnostic Video Generation)
+# ============================================================================
+
+class GenerateStoryIRRequest(BaseModel):
+    """Request to generate a Story IR from trend + brief."""
+    trend: Dict[str, Any]
+    brief: Dict[str, Any]
+    fps: int = 30
+    aspect: str = "9:16"
+
+
+class GenerateShotPlanRequest(BaseModel):
+    """Request to generate a shot plan from Story IR."""
+    story_ir: Dict[str, Any] = Field(alias="storyIR")
+    format_pack_id: str = Field(alias="formatPackId")
+    model: str = "sora-2"
+    reference_file_ids: Optional[List[str]] = Field(None, alias="referenceFileIds")
+    
+    class Config:
+        populate_by_name = True
+
+
+class GenerateRenderPlanRequest(BaseModel):
+    """Request to generate a render plan."""
+    story_ir: Dict[str, Any] = Field(alias="storyIR")
+    format_pack_id: str = Field(alias="formatPackId")
+    assets: Dict[str, Any]
+    
+    class Config:
+        populate_by_name = True
+
+
+class SelectFormatRequest(BaseModel):
+    """Request to auto-select a format pack."""
+    trend: Dict[str, Any]
+    brief: Dict[str, Any]
+    prefer_sora: bool = Field(default=True, alias="preferSora")
+    have_screen_record: bool = Field(default=False, alias="haveScreenRecord")
+    
+    class Config:
+        populate_by_name = True
+
+
+@router.get("/ir/formats")
+async def list_format_packs():
+    """
+    List all available format packs for video generation.
+    """
+    if not IR_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="IR pipeline not available")
+    
+    formats = get_available_formats()
+    return {
+        "formats": [
+            {
+                "id": f.id,
+                "label": f.label,
+                "family": f.family,
+                "soraBeatTypes": [bt.value for bt in f.render_strategy.sora_beat_types],
+                "nativeBeatTypes": [bt.value for bt in f.render_strategy.native_beat_types],
+            }
+            for f in formats
+        ]
+    }
+
+
+@router.post("/ir/select-format")
+async def select_format_pack(request: SelectFormatRequest):
+    """
+    Auto-select the best format pack based on trend + brief.
+    
+    Returns ranked list of formats with scores.
+    """
+    if not IR_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="IR pipeline not available")
+    
+    try:
+        trend = TrendItemV1.model_validate(request.trend)
+        brief = ContentBriefV1.model_validate(request.brief)
+        
+        result = select_format(
+            trend=trend,
+            brief=brief,
+            prefer_sora=request.prefer_sora,
+            have_screen_record=request.have_screen_record,
+        )
+        
+        return {
+            "selectedFormatId": result["selectedFormatId"],
+            "format": result["format"].model_dump(by_alias=True),
+            "ranked": result["ranked"],
+        }
+    except Exception as e:
+        logger.error(f"Error selecting format: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/ir/story-ir")
+async def generate_story_ir(request: GenerateStoryIRRequest):
+    """
+    Generate a Story IR (semantic timeline) from trend data and content brief.
+    
+    The Story IR is the format-agnostic intermediate representation.
+    """
+    if not IR_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="IR pipeline not available")
+    
+    try:
+        trend = TrendItemV1.model_validate(request.trend)
+        brief = ContentBriefV1.model_validate(request.brief)
+        
+        ir = make_story_ir(
+            trend=trend,
+            brief=brief,
+            fps=request.fps,
+            aspect=request.aspect,
+        )
+        
+        return {
+            "storyIR": ir.model_dump(by_alias=True),
+            "stats": {
+                "totalBeats": len(ir.beats),
+                "totalDurationS": ir.total_duration_s(),
+                "totalFrames": ir.total_frames(),
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error generating story IR: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/ir/shot-plan")
+async def generate_shot_plan(request: GenerateShotPlanRequest):
+    """
+    Generate a Sora shot plan from Story IR + format pack.
+    
+    Returns the shots that need to be generated by Sora.
+    """
+    if not IR_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="IR pipeline not available")
+    
+    try:
+        ir = StoryIRV1.model_validate(request.story_ir)
+        
+        # Get format pack
+        formats = {f.id: f for f in get_available_formats()}
+        format_pack = formats.get(request.format_pack_id)
+        
+        if not format_pack:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Format pack not found: {request.format_pack_id}"
+            )
+        
+        shot_plan = make_shot_plan(
+            ir=ir,
+            format_pack=format_pack,
+            model=request.model,
+            reference_file_ids=request.reference_file_ids,
+        )
+        
+        return {
+            "shotPlan": shot_plan.model_dump(by_alias=True),
+            "stats": {
+                "totalShots": len(shot_plan.shots),
+                "totalSeconds": sum(s.seconds for s in shot_plan.shots),
+                "cacheKeys": [s.cache_key for s in shot_plan.shots],
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating shot plan: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/ir/render-plan")
+async def generate_render_plan(request: GenerateRenderPlanRequest):
+    """
+    Generate a Remotion render plan from Story IR + assets.
+    
+    This is the final step that creates the timeline for Remotion.
+    """
+    if not IR_PIPELINE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="IR pipeline not available")
+    
+    try:
+        ir = StoryIRV1.model_validate(request.story_ir)
+        assets = AssetManifestV1.model_validate(request.assets)
+        
+        # Get format pack
+        formats = {f.id: f for f in get_available_formats()}
+        format_pack = formats.get(request.format_pack_id)
+        
+        if not format_pack:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Format pack not found: {request.format_pack_id}"
+            )
+        
+        render_plan = make_render_plan(
+            ir=ir,
+            format_pack=format_pack,
+            assets=assets,
+        )
+        
+        return {
+            "renderPlan": render_plan.model_dump(by_alias=True),
+            "stats": {
+                "totalFrames": render_plan.total_frames(),
+                "durationSeconds": render_plan.total_frames() / render_plan.meta.fps,
+                "videoItems": len([i for i in render_plan.timeline if i.kind == "video"]),
+                "nativeItems": len([i for i in render_plan.timeline if i.kind == "native"]),
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating render plan: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/ir/pipeline-status")
+async def get_pipeline_status():
+    """
+    Check if the IR pipeline is available and get configuration.
+    """
+    return {
+        "available": IR_PIPELINE_AVAILABLE,
+        "features": {
+            "storyIR": IR_PIPELINE_AVAILABLE,
+            "shotPlan": IR_PIPELINE_AVAILABLE,
+            "renderPlan": IR_PIPELINE_AVAILABLE,
+            "formatSelection": IR_PIPELINE_AVAILABLE,
+        },
+        "formatsCount": len(get_available_formats()) if IR_PIPELINE_AVAILABLE else 0,
+    }

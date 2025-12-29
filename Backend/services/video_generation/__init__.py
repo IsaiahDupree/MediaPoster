@@ -220,6 +220,39 @@ from .hybrid_format import (
     validate_hybrid_format,
     get_hybrid_format_ai_prompt,
 )
+from .script_classifier import (
+    classify_sentence,
+    classify_script,
+    split_sentences,
+    script_to_outline,
+    outline_to_beats,
+    script_to_story_ir,
+)
+from .voice_strategy import (
+    VoiceStrategy,
+    VoiceMode,
+    NarratorConfig,
+    SoraDialogueConfig,
+    VoiceConstraints,
+    BeatVoiceFlags,
+    DEFAULT_NARRATOR_STRATEGY,
+    DEFAULT_SORA_DIALOGUE_STRATEGY,
+    DEFAULT_HYBRID_STRATEGY,
+    choose_voice_strategy,
+    get_voice_strategy_for_format,
+    get_beat_voice_flags,
+    get_sora_prompt_modifiers,
+    apply_voice_strategy_to_shot_plan,
+)
+from .hf_tts_provider import (
+    HFTTSConfig,
+    HFTTSProvider,
+    TTSRequest,
+    create_hf_tts_provider,
+    create_tts_provider,
+    synthesize_with_provider,
+    HF_TTS_MODELS,
+)
 
 __all__ = [
     # Types
@@ -424,4 +457,34 @@ __all__ = [
     "create_listicle_format",
     "validate_hybrid_format",
     "get_hybrid_format_ai_prompt",
+    # Script Classifier
+    "classify_sentence",
+    "classify_script",
+    "split_sentences",
+    "script_to_outline",
+    "outline_to_beats",
+    "script_to_story_ir",
+    # Voice Strategy
+    "VoiceStrategy",
+    "VoiceMode",
+    "NarratorConfig",
+    "SoraDialogueConfig",
+    "VoiceConstraints",
+    "BeatVoiceFlags",
+    "DEFAULT_NARRATOR_STRATEGY",
+    "DEFAULT_SORA_DIALOGUE_STRATEGY",
+    "DEFAULT_HYBRID_STRATEGY",
+    "choose_voice_strategy",
+    "get_voice_strategy_for_format",
+    "get_beat_voice_flags",
+    "get_sora_prompt_modifiers",
+    "apply_voice_strategy_to_shot_plan",
+    # HF TTS Provider
+    "HFTTSConfig",
+    "HFTTSProvider",
+    "TTSRequest",
+    "create_hf_tts_provider",
+    "create_tts_provider",
+    "synthesize_with_provider",
+    "HF_TTS_MODELS",
 ]

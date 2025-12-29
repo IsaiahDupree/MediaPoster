@@ -263,44 +263,68 @@ async def list_media(
     """
     from sqlalchemy import text, or_
     
-    query = select(Video).order_by(Video.created_at.desc())
-    
-    # Filter by media type if specified
-    if media_type == 'video':
-        query = query.where(or_(
-            Video.source_uri.ilike('%.mov'),
-            Video.source_uri.ilike('%.mp4'),
-            Video.source_uri.ilike('%.avi'),
-            Video.source_uri.ilike('%.mkv'),
-            Video.source_uri.ilike('%.webm'),
-            Video.source_uri.ilike('%.m4v')
-        ))
-    elif media_type == 'image':
-        query = query.where(or_(
-            Video.source_uri.ilike('%.jpg'),
-            Video.source_uri.ilike('%.jpeg'),
-            Video.source_uri.ilike('%.png'),
-            Video.source_uri.ilike('%.gif'),
-            Video.source_uri.ilike('%.heic'),
-            Video.source_uri.ilike('%.webp')
-        ))
-    
-    # Filter by curation_status if specified
-    # Note: curation_status is stored in video_analysis table, not videos table
-    # We'll filter after fetching analysis data for each video
-    
-    # Store filters for use in the loop
+    # Store filters for use later
     curation_status_filter = curation_status if curation_status else None
     has_music_filter = has_music  # Can be True, False, or None
     format_type_filter = format_type  # broll_text, pure_broll, talking_head, voiceover
     
-    # Increase limit to account for filtering (fetch more, filter, then return requested amount)
-    needs_extra_fetch = curation_status_filter or has_music_filter is not None or format_type_filter
-    fetch_limit = limit * 5 if needs_extra_fetch else limit
-    query = query.offset(offset).limit(fetch_limit)
+    # Build media type filter conditions
+    video_extensions = ['%.mov', '%.mp4', '%.avi', '%.mkv', '%.webm', '%.m4v']
+    image_extensions = ['%.jpg', '%.jpeg', '%.png', '%.gif', '%.heic', '%.webp']
     
-    result = await db.execute(query)
-    videos = result.scalars().all()
+    # Use SQL-based curation filtering for efficiency
+    if curation_status_filter == 'uncurated':
+        # Uncurated = no analysis record OR curation_status is NULL or 'pending'
+        # Use raw SQL for this complex join query
+        media_type_clause = ""
+        if media_type == 'video':
+            media_type_clause = " AND (" + " OR ".join([f"v.source_uri ILIKE '{ext}'" for ext in video_extensions]) + ")"
+        elif media_type == 'image':
+            media_type_clause = " AND (" + " OR ".join([f"v.source_uri ILIKE '{ext}'" for ext in image_extensions]) + ")"
+        
+        sql = text(f"""
+            SELECT v.* FROM videos v
+            LEFT JOIN video_analysis va ON v.id = va.video_id
+            WHERE (va.curation_status IS NULL OR va.curation_status = 'pending' OR va.video_id IS NULL)
+            {media_type_clause}
+            ORDER BY v.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        result = await db.execute(sql, {"limit": limit, "offset": offset})
+        videos = result.fetchall()
+        # Convert to Video-like objects for consistent processing
+        videos = [type('Video', (), dict(row._mapping))() for row in videos]
+    else:
+        # Standard query for other filters
+        query = select(Video).order_by(Video.created_at.desc())
+        
+        # Filter by media type if specified
+        if media_type == 'video':
+            query = query.where(or_(
+                Video.source_uri.ilike('%.mov'),
+                Video.source_uri.ilike('%.mp4'),
+                Video.source_uri.ilike('%.avi'),
+                Video.source_uri.ilike('%.mkv'),
+                Video.source_uri.ilike('%.webm'),
+                Video.source_uri.ilike('%.m4v')
+            ))
+        elif media_type == 'image':
+            query = query.where(or_(
+                Video.source_uri.ilike('%.jpg'),
+                Video.source_uri.ilike('%.jpeg'),
+                Video.source_uri.ilike('%.png'),
+                Video.source_uri.ilike('%.gif'),
+                Video.source_uri.ilike('%.heic'),
+                Video.source_uri.ilike('%.webp')
+            ))
+        
+        # Increase limit to account for filtering
+        needs_extra_fetch = curation_status_filter or has_music_filter is not None or format_type_filter
+        fetch_limit = limit * 5 if needs_extra_fetch else limit
+        query = query.offset(offset).limit(fetch_limit)
+        
+        result = await db.execute(query)
+        videos = result.scalars().all()
     
     response = []
     for video in videos:

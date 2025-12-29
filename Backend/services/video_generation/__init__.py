@@ -79,6 +79,15 @@ from .validator import (
     validate_pipeline,
     validate_pre_sora,
 )
+from .auto_shot_planner import (
+    BeatShotPolicy,
+    PlannedShot,
+    ShotPlanEntry,
+    plan_shots_for_beat,
+    make_auto_shot_plan,
+    get_shots_by_beat,
+    estimate_auto_plan_cost,
+)
 
 __all__ = [
     # Types
@@ -156,4 +165,12 @@ __all__ = [
     "validate_assets",
     "validate_pipeline",
     "validate_pre_sora",
+    # Auto Shot Planner
+    "BeatShotPolicy",
+    "PlannedShot",
+    "ShotPlanEntry",
+    "plan_shots_for_beat",
+    "make_auto_shot_plan",
+    "get_shots_by_beat",
+    "estimate_auto_plan_cost",
 ]

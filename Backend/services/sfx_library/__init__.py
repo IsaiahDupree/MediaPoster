@@ -54,6 +54,22 @@ from .audio_utils import (
     finalize_audio_events,
     get_sfx_density_stats,
 )
+from .cue_sheet import (
+    CueSheet,
+    SfxCue,
+    audio_events_to_cue_sheet,
+    beats_to_cue_sheet,
+    save_cue_sheet,
+    load_cue_sheet,
+    validate_cue_sheet,
+)
+from .audio_mixer import (
+    mix_audio_bus,
+    mix_audio_bus_sync,
+    mix_tracks,
+    get_audio_duration,
+    normalize_audio,
+)
 
 __all__ = [
     # Types
@@ -98,4 +114,18 @@ __all__ = [
     "thin_sfx_events",
     "finalize_audio_events",
     "get_sfx_density_stats",
+    # Cue Sheet
+    "CueSheet",
+    "SfxCue",
+    "audio_events_to_cue_sheet",
+    "beats_to_cue_sheet",
+    "save_cue_sheet",
+    "load_cue_sheet",
+    "validate_cue_sheet",
+    # Audio Mixer
+    "mix_audio_bus",
+    "mix_audio_bus_sync",
+    "mix_tracks",
+    "get_audio_duration",
+    "normalize_audio",
 ]

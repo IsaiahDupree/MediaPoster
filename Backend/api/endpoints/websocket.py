@@ -225,7 +225,15 @@ async def websocket_events(
     if topics:
         topic_list = [t.strip() for t in topics.split(",") if t.strip()]
     
-    await manager.connect(websocket, topic_list, correlation_id)
+    try:
+        await manager.connect(websocket, topic_list, correlation_id)
+    except WebSocketDisconnect:
+        # Client disconnected during connection - this is normal during page navigation
+        logger.debug("Client disconnected during WebSocket connection setup")
+        return
+    except Exception as e:
+        logger.debug(f"WebSocket connection failed: {e}")
+        return
     
     try:
         while True:

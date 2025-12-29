@@ -299,14 +299,14 @@ async def list_scheduled_posts(
             "account_id": str(row[4]) if row[4] else None,
             "account_username": row[15] or None,
             "account_avatar": None,
-            "scheduled_at": str(row[5]) if row[5] else None,
+            "scheduled_at": row[5].isoformat() if row[5] else None,  # Use isoformat() for proper ISO8601 with T separator
             "status": row[6],
             "post_type": "reel",
             "media_type": row[21] if len(row) > 21 else None,  # media_type for Story/Reel
-            "created_at": str(row[9]) if row[9] else None,
-            "updated_at": str(row[10]) if row[10] else None,
+            "created_at": row[9].isoformat() if row[9] else None,
+            "updated_at": row[10].isoformat() if row[10] else None,
             "platform_url": row[8],
-            "published_at": str(row[11]) if row[11] else None,
+            "published_at": row[11].isoformat() if row[11] else None,
             "source": row[20] if len(row) > 20 else "manual",
         })
     
@@ -419,7 +419,7 @@ async def get_scheduled_post(post_id: str):
         "accountId": str(row[4]) if row[4] else None,
         "accountUsername": None,
         "accountAvatar": None,
-        "scheduledAt": str(row[5]) if row[5] else None,
+        "scheduledAt": row[5].isoformat() if row[5] else None,
         "status": row[6],
         "postType": "reel",
     }
@@ -512,8 +512,11 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
                     detail="Cannot reschedule a post that is currently being published"
                 )
             
+            # Update both columns for consistency
             updates.append("scheduled_time = :scheduled_time")
+            updates.append("scheduled_at = :scheduled_at")
             params["scheduled_time"] = update.scheduled_at
+            params["scheduled_at"] = update.scheduled_at
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid scheduled_at format: {e}")
     
@@ -839,7 +842,7 @@ async def get_calendar_week(
                 "title": None,
                 "platform": row[1],
                 "accountUsername": None,
-                "scheduledAt": str(row[3]),
+                "scheduledAt": row[3].isoformat() if row[3] else None,
                 "status": row[4],
                 "thumbnailUrl": None,
             })
@@ -890,7 +893,7 @@ async def get_calendar_month(
                 "title": None,
                 "platform": row[1],
                 "accountUsername": None,
-                "scheduledAt": str(row[3]),
+                "scheduledAt": row[3].isoformat() if row[3] else None,
                 "status": row[4],
             })
     

@@ -36,6 +36,49 @@ from .orchestrator import (
     preview_orchestration,
     OrchestrationResult,
 )
+from .voice_engine import (
+    VoiceStrategy,
+    NarratorConfig,
+    BeatSpeechBudget,
+    SpeechBudgetResult,
+    plan_speech_budget,
+    build_voice_policy,
+    generate_tts_audio,
+    enforce_perspective,
+)
+from .shot_types import (
+    ShotType,
+    ShotV2,
+    AssetClipV2,
+    build_sora_prompt,
+    determine_shot_type,
+    get_postprocess_hints,
+)
+from .postprocess import (
+    chroma_key_to_alpha,
+    extract_audio,
+    mute_video,
+    mix_audio_tracks,
+    get_video_duration,
+    get_video_info,
+    postprocess_sora_clip,
+)
+from .render_plan_v2 import (
+    RenderPlanRemotionV2,
+    LayerV2,
+    Transform2D,
+    OverlayRules,
+    make_render_plan_v2,
+    validate_render_plan_v2,
+)
+from .validator import (
+    ValidationResult,
+    validate_story_ir as validate_ir,
+    validate_shot_plan,
+    validate_assets,
+    validate_pipeline,
+    validate_pre_sora,
+)
 
 __all__ = [
     # Types
@@ -75,4 +118,42 @@ __all__ = [
     "orchestrate_from_dicts",
     "preview_orchestration",
     "OrchestrationResult",
+    # Voice Engine
+    "VoiceStrategy",
+    "NarratorConfig",
+    "BeatSpeechBudget",
+    "SpeechBudgetResult",
+    "plan_speech_budget",
+    "build_voice_policy",
+    "generate_tts_audio",
+    "enforce_perspective",
+    # Shot Types
+    "ShotType",
+    "ShotV2",
+    "AssetClipV2",
+    "build_sora_prompt",
+    "determine_shot_type",
+    "get_postprocess_hints",
+    # Postprocess
+    "chroma_key_to_alpha",
+    "extract_audio",
+    "mute_video",
+    "mix_audio_tracks",
+    "get_video_duration",
+    "get_video_info",
+    "postprocess_sora_clip",
+    # Render Plan V2
+    "RenderPlanRemotionV2",
+    "LayerV2",
+    "Transform2D",
+    "OverlayRules",
+    "make_render_plan_v2",
+    "validate_render_plan_v2",
+    # Validator
+    "ValidationResult",
+    "validate_ir",
+    "validate_shot_plan",
+    "validate_assets",
+    "validate_pipeline",
+    "validate_pre_sora",
 ]

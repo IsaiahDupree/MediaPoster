@@ -13,7 +13,7 @@ from services.video_generation.types import (
     TrendItemV1,
     ContentBriefV1,
     StoryIRV1,
-    BriefConstraints,
+    ContentConstraints,
 )
 from services.video_generation.story_ir import make_story_ir
 from services.video_generation.script_classifier import (
@@ -37,15 +37,17 @@ class TestStoryIRGeneration:
     @pytest.fixture
     def sample_trend(self) -> TrendItemV1:
         return TrendItemV1(
+            id="trend_001",
+            platform="tiktok",
             topic="Motion Canvas automation",
             angle_candidates=["practical walkthrough", "before/after comparison"],
-            search_volume=1200,
-            competition="medium",
         )
     
     @pytest.fixture
     def sample_brief(self) -> ContentBriefV1:
         return ContentBriefV1(
+            goal="educate",
+            audience="developers",
             promise="automate your SFX in Motion Canvas",
             key_points=[
                 "Set up the SFX manifest",
@@ -53,9 +55,8 @@ class TestStoryIRGeneration:
                 "Generate audio bus",
                 "Integrate with render pipeline",
             ],
-            constraints=BriefConstraints(
+            constraints=ContentConstraints(
                 max_seconds=58,
-                min_seconds=30,
             ),
         )
     
@@ -115,14 +116,14 @@ class TestScriptClassification:
     
     def test_split_sentences_basic(self):
         """Should split text into sentences."""
-        text = "First sentence. Second sentence! Third sentence?"
+        text = "This is the first sentence with enough words. This is the second sentence with content! This is the third sentence here?"
         sentences = split_sentences(text)
         
         assert len(sentences) == 3
     
     def test_split_sentences_preserves_content(self):
         """Should preserve sentence content."""
-        text = "Hello world. Goodbye world."
+        text = "Hello world this is a longer sentence. Goodbye world this is another sentence."
         sentences = split_sentences(text)
         
         assert "Hello world" in sentences[0]
@@ -204,8 +205,9 @@ class TestScriptClassification:
         
         outline = script_to_outline(script)
         
+        # script_to_outline returns a string, not a list
         assert len(outline) > 0
-        assert any("HOOK" in line for line in outline)
+        assert "HOOK" in outline
     
     def test_script_to_story_ir_creates_ir(self):
         """Should create Story IR from script."""

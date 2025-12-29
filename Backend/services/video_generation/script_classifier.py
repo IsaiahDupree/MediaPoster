@@ -234,7 +234,7 @@ def outline_to_beats(outline: str, fps: int = 30) -> list[dict]:
     Returns:
         List of beat dicts
     """
-    from .hybrid_format import estimate_beat_duration
+    # Use local estimate_beat_duration defined below
     
     beats = []
     t = 0

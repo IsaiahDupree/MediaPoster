@@ -162,7 +162,7 @@ class DeduplicationGuard:
             result = conn.execute(text("""
                 INSERT INTO publish_idempotency 
                 (idempotency_key, scheduled_post_id, content_id, platform, account_id, status, metadata)
-                VALUES (:key, :scheduled_post_id, :content_id, :platform, :account_id, 'in_progress', :metadata::jsonb)
+                VALUES (:key, :scheduled_post_id, :content_id, :platform, :account_id, 'in_progress', CAST(:metadata AS jsonb))
                 ON CONFLICT (idempotency_key) 
                 DO UPDATE SET 
                     status = 'in_progress',

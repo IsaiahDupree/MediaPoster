@@ -176,6 +176,50 @@ from .remotion_time_events import (
     save_time_events,
     load_time_events,
 )
+from .speech_timing import (
+    SpeechTimingConfig,
+    DEFAULT_SPEECH_TIMING,
+    estimate_speech_seconds,
+    estimate_beat_duration,
+    reconcile_beat_durations,
+    reconcile_story_ir_durations,
+    get_speech_stats,
+)
+from .vo_stitcher import (
+    BeatNarrationInput,
+    NarrationAsset,
+    StitchedNarration,
+    synthesize_beat_narrations,
+    stitch_narration,
+    stitch_narration_sync,
+    beats_to_narration_inputs,
+    story_ir_to_narration_inputs,
+    cues_to_ducking_format,
+)
+from .runtime_budget import (
+    RuntimeBudget,
+    DEFAULT_RUNTIME_BUDGET,
+    CompressionPlan,
+    compute_compression_plan,
+    apply_compression_to_beats,
+    apply_compression_to_ir,
+    check_runtime_budget,
+    auto_fit_to_budget,
+    split_long_beats_in_ir,
+)
+from .hybrid_format import (
+    HybridFormat,
+    FormatBlock,
+    FormatStyle,
+    hybrid_format_to_beats,
+    hybrid_format_to_story_ir,
+    hybrid_format_to_reveals,
+    hybrid_format_to_sfx_cues,
+    create_devlog_format,
+    create_listicle_format,
+    validate_hybrid_format,
+    get_hybrid_format_ai_prompt,
+)
 
 __all__ = [
     # Types
@@ -340,4 +384,44 @@ __all__ = [
     "generate_remotion_composition_props",
     "save_time_events",
     "load_time_events",
+    # Speech Timing
+    "SpeechTimingConfig",
+    "DEFAULT_SPEECH_TIMING",
+    "estimate_speech_seconds",
+    "estimate_beat_duration",
+    "reconcile_beat_durations",
+    "reconcile_story_ir_durations",
+    "get_speech_stats",
+    # VO Stitcher
+    "BeatNarrationInput",
+    "NarrationAsset",
+    "StitchedNarration",
+    "synthesize_beat_narrations",
+    "stitch_narration",
+    "stitch_narration_sync",
+    "beats_to_narration_inputs",
+    "story_ir_to_narration_inputs",
+    "cues_to_ducking_format",
+    # Runtime Budget
+    "RuntimeBudget",
+    "DEFAULT_RUNTIME_BUDGET",
+    "CompressionPlan",
+    "compute_compression_plan",
+    "apply_compression_to_beats",
+    "apply_compression_to_ir",
+    "check_runtime_budget",
+    "auto_fit_to_budget",
+    "split_long_beats_in_ir",
+    # Hybrid Format
+    "HybridFormat",
+    "FormatBlock",
+    "FormatStyle",
+    "hybrid_format_to_beats",
+    "hybrid_format_to_story_ir",
+    "hybrid_format_to_reveals",
+    "hybrid_format_to_sfx_cues",
+    "create_devlog_format",
+    "create_listicle_format",
+    "validate_hybrid_format",
+    "get_hybrid_format_ai_prompt",
 ]

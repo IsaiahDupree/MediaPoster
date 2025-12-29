@@ -821,6 +821,10 @@ app.include_router(broll.router, tags=["B-Roll Detection"])
 from api.endpoints import content_format
 app.include_router(content_format.router, tags=["Content Format"])
 
+# Video Toolkit Pub/Sub (Extract & Sync Remotion resources)
+from api.endpoints import video_toolkit
+app.include_router(video_toolkit.router, tags=["Video Toolkit"])
+
 # Formats API (Video Format Templates)
 from api.endpoints import formats_api
 app.include_router(formats_api.router, tags=["Formats"])

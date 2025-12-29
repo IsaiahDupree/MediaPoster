@@ -1,6 +1,29 @@
 """
 Duplicate Video Detector
-Finds videos with similar transcripts for potential cleanup/deletion
+=========================
+
+Finds videos with similar transcripts for potential cleanup/deletion.
+
+Key Features:
+- Transcript-based similarity detection using SequenceMatcher
+- Caption protection: Prioritizes keeping captioned versions
+- Duration-based tiebreaker: Keeps longer video when captions equal
+- Configurable similarity threshold (default 85%)
+
+Protection Rules:
+1. If one video has captions and other doesn't → KEEP captioned version
+2. If both have same caption status → KEEP longer video  
+3. If same duration and caption status → Flag for manual review
+
+Usage:
+    detector = DuplicateDetector(db_session)
+    duplicates = await detector.find_duplicates(similarity_threshold=0.85)
+    
+API Endpoints:
+- GET /api/duplicates/find - Find video duplicates
+- GET /api/duplicates/find-image-duplicates - Find image duplicates
+- POST /api/duplicates/auto-detect-and-recommend - Auto-detect with caption protection
+- DELETE /api/duplicates/execute-deletion - Execute marked deletions
 """
 import logging
 from typing import Dict, List, Any, Optional, Tuple
@@ -137,7 +160,7 @@ class DuplicateDetector:
         result = await self.db.execute(query, {"min_length": min_transcript_length})
         videos = result.fetchall()
         
-        logger.info(f"Checking {len(videos)} videos for duplicates")
+        logger.info(f"[DuplicateDetector] Checking {len(videos)} videos for duplicates (threshold: {similarity_threshold:.0%})")
         
         # Build list of video data
         video_data = []
@@ -213,6 +236,13 @@ class DuplicateDetector:
         
         # Sort by similarity (highest first)
         duplicates.sort(key=lambda x: x.similarity_score, reverse=True)
+        
+        # Log results
+        if duplicates:
+            caption_protected = sum(1 for d in duplicates if 'captions' in d.recommendation)
+            logger.info(f"[DuplicateDetector] Found {len(duplicates)} duplicate pairs ({caption_protected} with caption protection)")
+        else:
+            logger.info(f"[DuplicateDetector] No duplicates found above {similarity_threshold:.0%} threshold")
         
         return duplicates[:limit]
     

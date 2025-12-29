@@ -253,6 +253,33 @@ from .hf_tts_provider import (
     synthesize_with_provider,
     HF_TTS_MODELS,
 )
+from .pipeline_orchestrator import (
+    PipelineConfig,
+    PipelineStep,
+    PipelineResult,
+    PipelineOrchestrator,
+    run_pipeline,
+    run_pipeline_sync,
+)
+from .audio_bus_mixer import (
+    AudioTrack,
+    AudioBusConfig,
+    AudioBusResult,
+    mix_audio_bus,
+    mix_audio_bus_sync,
+    sfx_cues_to_tracks,
+    build_audio_bus_from_pipeline,
+)
+from .render_trigger import (
+    RenderConfig,
+    RenderResult,
+    trigger_render,
+    trigger_render_sync,
+    trigger_remotion_render,
+    trigger_motion_canvas_render,
+    trigger_ffmpeg_render,
+    save_render_plan,
+)
 
 __all__ = [
     # Types
@@ -487,4 +514,28 @@ __all__ = [
     "create_tts_provider",
     "synthesize_with_provider",
     "HF_TTS_MODELS",
+    # Pipeline Orchestrator
+    "PipelineConfig",
+    "PipelineStep",
+    "PipelineResult",
+    "PipelineOrchestrator",
+    "run_pipeline",
+    "run_pipeline_sync",
+    # Audio Bus Mixer
+    "AudioTrack",
+    "AudioBusConfig",
+    "AudioBusResult",
+    "mix_audio_bus",
+    "mix_audio_bus_sync",
+    "sfx_cues_to_tracks",
+    "build_audio_bus_from_pipeline",
+    # Render Trigger
+    "RenderConfig",
+    "RenderResult",
+    "trigger_render",
+    "trigger_render_sync",
+    "trigger_remotion_render",
+    "trigger_motion_canvas_render",
+    "trigger_ffmpeg_render",
+    "save_render_plan",
 ]

@@ -88,6 +88,13 @@ from .auto_shot_planner import (
     get_shots_by_beat,
     estimate_auto_plan_cost,
 )
+from .full_pipeline import (
+    PipelineConfig,
+    PipelineResult,
+    run_full_pipeline,
+    run_full_pipeline_sync,
+    preview_pipeline,
+)
 
 __all__ = [
     # Types
@@ -173,4 +180,10 @@ __all__ = [
     "make_auto_shot_plan",
     "get_shots_by_beat",
     "estimate_auto_plan_cost",
+    # Full Pipeline
+    "PipelineConfig",
+    "PipelineResult",
+    "run_full_pipeline",
+    "run_full_pipeline_sync",
+    "preview_pipeline",
 ]

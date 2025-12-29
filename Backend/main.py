@@ -829,6 +829,10 @@ app.include_router(video_toolkit.router, tags=["Video Toolkit"])
 from api.endpoints import sfx_library
 app.include_router(sfx_library.router, tags=["SFX Library"])
 
+# Video Generation Pipeline (Sora + Render)
+from api.endpoints import video_pipeline
+app.include_router(video_pipeline.router, tags=["Video Pipeline"])
+
 # Formats API (Video Format Templates)
 from api.endpoints import formats_api
 app.include_router(formats_api.router, tags=["Formats"])

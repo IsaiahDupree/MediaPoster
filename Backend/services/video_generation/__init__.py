@@ -102,6 +102,16 @@ from .shot_budgeter import (
     make_budgeted_shot_plan,
     estimate_budget_savings,
 )
+from .plate_manager import (
+    PlateVariantPlan,
+    PlateUsage,
+    RiskReport,
+    match_plate_to_beat,
+    build_beat_bg_bindings,
+    inject_variety,
+    detect_plate_anti_patterns,
+    fix_anti_patterns,
+)
 
 __all__ = [
     # Types
@@ -199,4 +209,13 @@ __all__ = [
     "apply_shot_budget",
     "make_budgeted_shot_plan",
     "estimate_budget_savings",
+    # Plate Manager
+    "PlateVariantPlan",
+    "PlateUsage",
+    "RiskReport",
+    "match_plate_to_beat",
+    "build_beat_bg_bindings",
+    "inject_variety",
+    "detect_plate_anti_patterns",
+    "fix_anti_patterns",
 ]

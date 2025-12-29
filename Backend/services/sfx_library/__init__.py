@@ -84,6 +84,23 @@ from .macros import (
     get_macro_context_for_ai,
     beats_to_macro_cues,
 )
+from .visual_reveals import (
+    VisualReveal,
+    VisualRevealsFile,
+    load_visual_reveals,
+    save_visual_reveals,
+    beats_to_visual_reveals,
+    story_ir_to_visual_reveals,
+    get_reveal_macro_mapping,
+)
+from .macro_policy import (
+    PolicyConfig,
+    BeatSec,
+    plan_macro_cues_hybrid,
+    thin_macro_cues,
+    merge_ai_cues_with_policy,
+    beats_frames_to_seconds,
+)
 
 __all__ = [
     # Types
@@ -155,4 +172,19 @@ __all__ = [
     "validate_macro_cue_sheet",
     "get_macro_context_for_ai",
     "beats_to_macro_cues",
+    # Visual Reveals
+    "VisualReveal",
+    "VisualRevealsFile",
+    "load_visual_reveals",
+    "save_visual_reveals",
+    "beats_to_visual_reveals",
+    "story_ir_to_visual_reveals",
+    "get_reveal_macro_mapping",
+    # Macro Policy
+    "PolicyConfig",
+    "BeatSec",
+    "plan_macro_cues_hybrid",
+    "thin_macro_cues",
+    "merge_ai_cues_with_policy",
+    "beats_frames_to_seconds",
 ]

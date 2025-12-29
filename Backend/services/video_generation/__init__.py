@@ -280,6 +280,35 @@ from .render_trigger import (
     trigger_ffmpeg_render,
     save_render_plan,
 )
+from .domain_dict import (
+    DomainDict,
+    Domain,
+    DomainSignals,
+    DEFAULT_DOMAIN_DICT,
+    load_domain_dict,
+    save_domain_dict,
+    classify_sentence_smart,
+    get_domain_score,
+    extract_domain_keywords,
+)
+from .duration_normalizer import (
+    NormalizeConfig,
+    DEFAULT_NORMALIZE_CONFIG,
+    normalize_outline_to_duration,
+    normalize_story_ir_duration,
+    estimate_outline_seconds,
+    shorten_explain,
+    merge_explains,
+)
+from .perspective_enforcer import (
+    VoiceVars,
+    DEFAULT_VOICE_VARS,
+    enforce_perspective,
+    enforce_perspective_for_beats,
+    enforce_perspective_for_story_ir,
+    resolve_voice_vars,
+    rewrite_to_third_person,
+)
 
 __all__ = [
     # Types
@@ -538,4 +567,30 @@ __all__ = [
     "trigger_motion_canvas_render",
     "trigger_ffmpeg_render",
     "save_render_plan",
+    # Domain Dictionary
+    "DomainDict",
+    "Domain",
+    "DomainSignals",
+    "DEFAULT_DOMAIN_DICT",
+    "load_domain_dict",
+    "save_domain_dict",
+    "classify_sentence_smart",
+    "get_domain_score",
+    "extract_domain_keywords",
+    # Duration Normalizer
+    "NormalizeConfig",
+    "DEFAULT_NORMALIZE_CONFIG",
+    "normalize_outline_to_duration",
+    "normalize_story_ir_duration",
+    "estimate_outline_seconds",
+    "shorten_explain",
+    "merge_explains",
+    # Perspective Enforcer
+    "VoiceVars",
+    "DEFAULT_VOICE_VARS",
+    "enforce_perspective",
+    "enforce_perspective_for_beats",
+    "enforce_perspective_for_story_ir",
+    "resolve_voice_vars",
+    "rewrite_to_third_person",
 ]

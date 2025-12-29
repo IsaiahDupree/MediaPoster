@@ -143,6 +143,39 @@ from .char_variety import (
     create_dramatic_switch_placements,
     merge_char_placements_with_budget,
 )
+from .remotion_sfx import (
+    RemotionSfxMacro,
+    RemotionSfxMacros,
+    RemotionSfxCue,
+    RemotionSfxLayer,
+    DEFAULT_REMOTION_MACROS,
+    expand_remotion_sfx_cues,
+    beats_to_remotion_sfx_cues,
+    story_ir_to_remotion_sfx_cues,
+    add_sfx_layers_to_render_plan,
+    get_remotion_macro_context,
+)
+from .remotion_budgeter import (
+    RemotionBgLayer,
+    RemotionCharLayer,
+    RemotionBudgetedPlan,
+    create_remotion_budgeted_plan,
+    bind_assets_to_remotion_layers,
+    validate_remotion_assets,
+    apply_anti_patterns_fix_to_bindings,
+)
+from .remotion_time_events import (
+    RemotionTimeEvent,
+    RemotionVisualReveal,
+    RemotionBeatMarker,
+    RemotionTimeEventsFile,
+    story_ir_to_time_events,
+    beats_to_time_events,
+    reveals_to_sfx_cues,
+    generate_remotion_composition_props,
+    save_time_events,
+    load_time_events,
+)
 
 __all__ = [
     # Types
@@ -277,4 +310,34 @@ __all__ = [
     "fix_char_placement_boredom",
     "create_dramatic_switch_placements",
     "merge_char_placements_with_budget",
+    # Remotion SFX
+    "RemotionSfxMacro",
+    "RemotionSfxMacros",
+    "RemotionSfxCue",
+    "RemotionSfxLayer",
+    "DEFAULT_REMOTION_MACROS",
+    "expand_remotion_sfx_cues",
+    "beats_to_remotion_sfx_cues",
+    "story_ir_to_remotion_sfx_cues",
+    "add_sfx_layers_to_render_plan",
+    "get_remotion_macro_context",
+    # Remotion Budgeter
+    "RemotionBgLayer",
+    "RemotionCharLayer",
+    "RemotionBudgetedPlan",
+    "create_remotion_budgeted_plan",
+    "bind_assets_to_remotion_layers",
+    "validate_remotion_assets",
+    "apply_anti_patterns_fix_to_bindings",
+    # Remotion Time Events
+    "RemotionTimeEvent",
+    "RemotionVisualReveal",
+    "RemotionBeatMarker",
+    "RemotionTimeEventsFile",
+    "story_ir_to_time_events",
+    "beats_to_time_events",
+    "reveals_to_sfx_cues",
+    "generate_remotion_composition_props",
+    "save_time_events",
+    "load_time_events",
 ]

@@ -813,6 +813,10 @@ app.include_router(format_discovery.router, tags=["Format Discovery"])
 from api.endpoints import broll_candidates
 app.include_router(broll_candidates.router, tags=["B-Roll Candidates"])
 
+# B-Roll Detection (Speech-based B-Roll Classification)
+from api.endpoints import broll
+app.include_router(broll.router, tags=["B-Roll Detection"])
+
 # Formats API (Video Format Templates)
 from api.endpoints import formats_api
 app.include_router(formats_api.router, tags=["Formats"])

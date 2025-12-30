@@ -787,6 +787,22 @@ try:
 except Exception as e:
     logger.warning(f"⚠️  ReelTrends API registration failed: {e}")
 
+# Content Guard (Duplicate Detection)
+try:
+    from api.endpoints import content_guard
+    app.include_router(content_guard.router, tags=["Content Guard"])
+    logger.success("✓ Content Guard API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Content Guard API registration failed: {e}")
+
+# Content Download (Platform Downloader)
+try:
+    from api.endpoints import content_download
+    app.include_router(content_download.router, tags=["Content Download"])
+    logger.success("✓ Content Download API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Content Download API registration failed: {e}")
+
 # Explainer Video Engine (Motion Canvas)
 try:
     from api import explainer_video

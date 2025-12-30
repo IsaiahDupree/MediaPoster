@@ -21,6 +21,8 @@ from services.trend_intelligence.reeltrends_service import (
     HookStyle,
     CarouselStyle,
 )
+from services.trend_intelligence.best_time_service import BestTimeService
+from services.trend_intelligence.post_analyzer_service import PostAnalyzerService
 
 router = APIRouter(prefix="/api/v1/reeltrends", tags=["ReelTrends"])
 
@@ -465,10 +467,180 @@ async def get_reeltrends_info():
                 "description": "Generate script + captions + carousel + hashtags in one call"
             }
         ],
+        "phase_2": [
+            {
+                "name": "Best Time To Post",
+                "endpoint": "/api/v1/reeltrends/best-time",
+                "description": "Analyze posting history to find optimal times"
+            },
+            {
+                "name": "Post Analyzer",
+                "endpoint": "/api/v1/reeltrends/analyze",
+                "description": "Analyze content and get Hook/Body/Visual scores"
+            },
+            {
+                "name": "Viral Forecaster",
+                "endpoint": "/api/v1/reeltrends/forecast",
+                "description": "Predict viral potential for content ideas"
+            }
+        ],
         "coming_soon": [
-            "Best Time To Post",
-            "Post Analyzer",
-            "Viral Forecaster",
-            "Sound Analytics"
+            "Sound Analytics",
+            "Instagram Account Connection"
         ]
     }
+
+
+# =========================================================================
+# Phase 2: Best Time To Post
+# =========================================================================
+
+class BestTimeRequest(BaseModel):
+    platform: str = Field("instagram", description="Platform to analyze")
+    days_to_analyze: int = Field(90, ge=7, le=365, description="Days of history to analyze")
+
+
+@router.post("/best-time")
+async def get_best_time(request: BestTimeRequest):
+    """
+    Analyze posting history to recommend optimal posting times.
+    
+    Returns:
+    - Traffic curve by hour
+    - Peak times per day
+    - Should wait recommendation
+    - Countdown to next peak
+    - Weekly heatmap
+    """
+    service = BestTimeService()
+    
+    try:
+        result = await service.analyze_best_time(
+            platform=request.platform,
+            days_to_analyze=request.days_to_analyze
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"Best time analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/best-time")
+async def get_best_time_get(
+    platform: str = Query("instagram", description="Platform to analyze"),
+    days: int = Query(90, ge=7, le=365, description="Days of history to analyze")
+):
+    """GET endpoint for best time analysis"""
+    request = BestTimeRequest(platform=platform, days_to_analyze=days)
+    return await get_best_time(request)
+
+
+# =========================================================================
+# Phase 2: Post Analyzer
+# =========================================================================
+
+class PostAnalyzeRequest(BaseModel):
+    transcript: Optional[str] = Field(None, description="Video transcript/script")
+    caption: Optional[str] = Field(None, description="Post caption")
+    title: Optional[str] = Field(None, description="Video title")
+    description: Optional[str] = Field(None, description="Video description")
+    content_type: str = Field("reel", description="Content type: reel, short, talking_head, etc.")
+
+
+@router.post("/analyze")
+async def analyze_post(request: PostAnalyzeRequest):
+    """
+    Analyze a post and get detailed scores.
+    
+    Scores (1-10):
+    - Hook: Does it grab attention in first 3 seconds?
+    - Body: Is content valuable and engaging?
+    - Visual: Are visuals compelling?
+    - Audio: Is the script natural and easy to listen to?
+    - Pacing: Does it maintain attention?
+    - CTA: Is there a clear call to action?
+    
+    Also returns:
+    - Detected hook and CTA
+    - Key points
+    - Top strengths and improvements
+    - Quick wins
+    - Viral score
+    """
+    service = PostAnalyzerService()
+    
+    try:
+        result = await service.analyze_post(
+            transcript=request.transcript,
+            caption=request.caption,
+            title=request.title,
+            description=request.description,
+            content_type=request.content_type
+        )
+        return result.to_dict()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Post analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================================
+# Phase 2: Viral Forecaster
+# =========================================================================
+
+class ViralForecastRequest(BaseModel):
+    topic: str = Field(..., description="Content topic/idea")
+    hook: Optional[str] = Field(None, description="Planned hook")
+    format: str = Field("reel", description="Content format")
+    niche: Optional[str] = Field(None, description="Content niche")
+    target_audience: Optional[str] = Field(None, description="Target audience description")
+
+
+@router.post("/forecast")
+async def forecast_viral_potential(request: ViralForecastRequest):
+    """
+    Forecast viral potential for a content idea.
+    
+    Returns:
+    - Viral potential: low, medium, high
+    - Confidence score
+    - Feature scores (hook strength, topic relevance, etc.)
+    - Estimated reach and engagement ranges
+    - Positive and negative factors
+    - Improvement suggestions
+    - Percentile ranking vs similar content
+    """
+    service = PostAnalyzerService()
+    
+    try:
+        result = await service.forecast_viral_potential(
+            topic=request.topic,
+            hook=request.hook,
+            format=request.format,
+            niche=request.niche,
+            target_audience=request.target_audience
+        )
+        return result.to_dict()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Viral forecast error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/forecast")
+async def forecast_viral_get(
+    topic: str = Query(..., description="Content topic/idea"),
+    hook: Optional[str] = Query(None, description="Planned hook"),
+    format: str = Query("reel", description="Content format"),
+    niche: Optional[str] = Query(None, description="Content niche")
+):
+    """GET endpoint for viral forecast"""
+    request = ViralForecastRequest(
+        topic=topic,
+        hook=hook,
+        format=format,
+        niche=niche
+    )
+    return await forecast_viral_potential(request)

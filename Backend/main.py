@@ -404,17 +404,17 @@ async def app_error_handler(request: Request, exc: AppError):
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     """Handle Pydantic validation errors."""
     correlation_id = getattr(request.state, "correlation_id", "unknown")
-    logger.warning(
-        f"[{correlation_id}] Validation error: {exc.errors()}",
-        extra={"correlation_id": correlation_id, "errors": exc.errors()}
-    )
+    # Convert errors to safe string representation to avoid loguru format issues
+    errors_list = exc.errors()
+    errors_str = str(errors_list).replace("{", "{{").replace("}", "}}")
+    logger.warning(f"[{correlation_id}] Validation error: {errors_str}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": "Validation error",
             "correlation_id": correlation_id,
             "error_code": "VALIDATION_ERROR",
-            "details": exc.errors()
+            "details": errors_list
         },
         headers={"X-Correlation-ID": correlation_id}
     )
@@ -763,6 +763,22 @@ app.include_router(app_settings.router, tags=["Settings"])
 from api.endpoints import health
 app.include_router(health.router, tags=["Health"])
 
+# Trend Intelligence System (v1)
+try:
+    from api.endpoints import trend_intelligence
+    app.include_router(trend_intelligence.router, tags=["Trend Intelligence"])
+    logger.success("✓ Trend Intelligence API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Trend Intelligence API registration failed: {e}")
+
+# Channel Analyzer (TubeLab-style metrics)
+try:
+    from api.endpoints import channel_analyzer
+    app.include_router(channel_analyzer.router, tags=["Channel Analyzer"])
+    logger.success("✓ Channel Analyzer API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Channel Analyzer API registration failed: {e}")
+
 # Explainer Video Engine (Motion Canvas)
 try:
     from api import explainer_video
@@ -812,6 +828,18 @@ app.include_router(format_discovery.router, tags=["Format Discovery"])
 # B-Roll Candidates (Story-Driven B-Roll Selection)
 from api.endpoints import broll_candidates
 app.include_router(broll_candidates.router, tags=["B-Roll Candidates"])
+
+# B-Roll Video Producer (AI Text Overlays + Remotion Rendering)
+from api.endpoints import broll_producer
+app.include_router(broll_producer.router, prefix="/api", tags=["B-Roll Producer"])
+
+# Sora Video Pipeline (Multi-clip AI Video Generation)
+from api.endpoints import sora_pipeline
+app.include_router(sora_pipeline.router, prefix="/api", tags=["Sora Video Pipeline"])
+
+# TikTok Repurpose Pipeline (Fetch, Download, Analyze, Cross-post)
+from api.endpoints import tiktok_repurpose
+app.include_router(tiktok_repurpose.router, prefix="/api", tags=["TikTok Repurpose"])
 
 # B-Roll Detection (Speech-based B-Roll Classification)
 from api.endpoints import broll

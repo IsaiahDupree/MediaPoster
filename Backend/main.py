@@ -779,6 +779,14 @@ try:
 except Exception as e:
     logger.warning(f"⚠️  Channel Analyzer API registration failed: {e}")
 
+# ReelTrends (Instagram Creator Tools)
+try:
+    from api.endpoints import reeltrends
+    app.include_router(reeltrends.router, tags=["ReelTrends"])
+    logger.success("✓ ReelTrends API registered")
+except Exception as e:
+    logger.warning(f"⚠️  ReelTrends API registration failed: {e}")
+
 # Explainer Video Engine (Motion Canvas)
 try:
     from api import explainer_video

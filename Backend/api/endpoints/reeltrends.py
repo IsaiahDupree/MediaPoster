@@ -23,6 +23,7 @@ from services.trend_intelligence.reeltrends_service import (
 )
 from services.trend_intelligence.best_time_service import BestTimeService
 from services.trend_intelligence.post_analyzer_service import PostAnalyzerService
+from services.trend_intelligence.sound_analytics_service import SoundAnalyticsService
 
 router = APIRouter(prefix="/api/v1/reeltrends", tags=["ReelTrends"])
 
@@ -644,3 +645,191 @@ async def forecast_viral_get(
         niche=niche
     )
     return await forecast_viral_potential(request)
+
+
+# =========================================================================
+# Phase 3: Sound Analytics
+# =========================================================================
+
+class SoundOfTheDayRequest(BaseModel):
+    niche: Optional[str] = Field(None, description="Target niche")
+    content_type: str = Field("reel", description="Content type")
+
+
+class SoundAnalyzeRequest(BaseModel):
+    sound_name: str = Field(..., description="Sound title")
+    artist: Optional[str] = Field(None, description="Artist name")
+
+
+class NicheSoundsRequest(BaseModel):
+    niche: str = Field(..., description="Target niche")
+    mood: Optional[str] = Field(None, description="Desired mood")
+    count: int = Field(5, ge=1, le=20, description="Number of sounds")
+
+
+@router.get("/sounds/trending")
+async def get_trending_sounds(
+    platform: str = Query("instagram", description="Platform: instagram or tiktok"),
+    niche: Optional[str] = Query(None, description="Filter by niche"),
+    limit: int = Query(10, ge=1, le=50, description="Number of sounds")
+):
+    """
+    Get currently trending sounds.
+    
+    Returns a list of trending sounds with:
+    - Usage metrics
+    - Trend status (viral, rising, stable, falling)
+    - Velocity (% change per day)
+    - Recommended niches and moods
+    """
+    service = SoundAnalyticsService()
+    
+    try:
+        sounds = await service.get_trending_sounds(
+            platform=platform,
+            niche=niche,
+            limit=limit
+        )
+        return {
+            "sounds": [
+                {
+                    "sound_id": s.sound_id,
+                    "title": s.title,
+                    "artist": s.artist,
+                    "duration_seconds": s.duration_seconds,
+                    "trend": s.trend.value,
+                    "velocity": s.velocity,
+                    "uses_today": s.uses_today,
+                    "niches": s.niches,
+                    "moods": s.moods
+                }
+                for s in sounds
+            ],
+            "count": len(sounds),
+            "platform": platform,
+            "niche": niche
+        }
+    except Exception as e:
+        logger.error(f"Trending sounds error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sounds/of-the-day")
+async def get_sound_of_the_day(request: SoundOfTheDayRequest):
+    """
+    Get AI-recommended sound of the day.
+    
+    Returns:
+    - Featured sound with metrics
+    - Why it's recommended
+    - Best content types for this sound
+    - Example hook ideas
+    """
+    service = SoundAnalyticsService()
+    
+    try:
+        result = await service.get_sound_of_the_day(
+            niche=request.niche,
+            content_type=request.content_type
+        )
+        return {
+            "sound": {
+                "title": result.sound.title,
+                "artist": result.sound.artist,
+                "duration_seconds": result.sound.duration_seconds,
+                "trend": result.sound.trend.value,
+                "niches": result.sound.niches,
+                "moods": result.sound.moods
+            },
+            "reason": result.reason,
+            "best_for": result.best_for,
+            "example_hooks": result.example_hooks,
+            "suggested_niches": result.suggested_niches
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Sound of the day error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sounds/of-the-day")
+async def get_sound_of_the_day_get(
+    niche: Optional[str] = Query(None, description="Target niche"),
+    content_type: str = Query("reel", description="Content type")
+):
+    """GET endpoint for sound of the day"""
+    request = SoundOfTheDayRequest(niche=niche, content_type=content_type)
+    return await get_sound_of_the_day(request)
+
+
+@router.post("/sounds/analyze")
+async def analyze_sound(request: SoundAnalyzeRequest):
+    """
+    Analyze a specific sound's trend potential.
+    
+    Returns:
+    - Current trend status
+    - Saturation level
+    - Best niches and formats
+    - Usage tips
+    - Similar sounds
+    - Recommendation (use now, wait, too late)
+    """
+    service = SoundAnalyticsService()
+    
+    try:
+        result = await service.analyze_sound(
+            sound_name=request.sound_name,
+            artist=request.artist
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Sound analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sounds/for-niche")
+async def get_sounds_for_niche(request: NicheSoundsRequest):
+    """
+    Get sound recommendations for a specific niche.
+    
+    Returns list of sounds with:
+    - Title and artist
+    - Why it works for the niche
+    - Content ideas
+    - Trend status
+    - Difficulty level
+    """
+    service = SoundAnalyticsService()
+    
+    try:
+        sounds = await service.get_sounds_for_niche(
+            niche=request.niche,
+            mood=request.mood,
+            count=request.count
+        )
+        return {
+            "niche": request.niche,
+            "mood": request.mood,
+            "sounds": sounds,
+            "count": len(sounds)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Niche sounds error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sounds/for-niche")
+async def get_sounds_for_niche_get(
+    niche: str = Query(..., description="Target niche"),
+    mood: Optional[str] = Query(None, description="Desired mood"),
+    count: int = Query(5, ge=1, le=20)
+):
+    """GET endpoint for niche sounds"""
+    request = NicheSoundsRequest(niche=niche, mood=mood, count=count)
+    return await get_sounds_for_niche(request)

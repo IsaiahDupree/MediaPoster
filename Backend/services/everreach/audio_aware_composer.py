@@ -896,5 +896,28 @@ async def main():
     print(f"   cd {output_dir} && ./render_compilation.sh")
 
 
+async def main_with_render():
+    """Generate and render, then open the video"""
+    await main()
+    
+    # Find the most recent output directory
+    compilations_dir = Path(OUTPUT_FOLDER)
+    audio_aware_dirs = sorted(compilations_dir.glob("audio_aware_*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    
+    if not audio_aware_dirs:
+        print("❌ No output directory found")
+        return
+    
+    latest_dir = audio_aware_dirs[0]
+    video_path = latest_dir / "everreach_compilation_final.mp4"
+    
+    if video_path.exists():
+        print(f"\n🎬 Opening video: {video_path}")
+        # Open with default video player
+        subprocess.run(["open", str(video_path)])
+    else:
+        print(f"❌ Video not found at {video_path}")
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main_with_render())

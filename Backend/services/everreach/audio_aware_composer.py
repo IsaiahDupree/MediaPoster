@@ -909,14 +909,28 @@ async def main_with_render():
         return
     
     latest_dir = audio_aware_dirs[0]
+    render_script = latest_dir / "render_compilation.sh"
     video_path = latest_dir / "everreach_compilation_final.mp4"
     
-    if video_path.exists():
+    # Run the render script
+    print(f"\n🎬 Rendering video with FFmpeg...")
+    result = subprocess.run(
+        ["bash", str(render_script)],
+        cwd=str(latest_dir),
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode == 0 and video_path.exists():
+        file_size = video_path.stat().st_size / (1024 * 1024)
+        print(f"✅ Render complete! Size: {file_size:.1f} MB")
         print(f"\n🎬 Opening video: {video_path}")
         # Open with default video player
         subprocess.run(["open", str(video_path)])
     else:
-        print(f"❌ Video not found at {video_path}")
+        print(f"❌ Render failed")
+        if result.stderr:
+            print(f"Error: {result.stderr[:500]}")
 
 
 if __name__ == "__main__":

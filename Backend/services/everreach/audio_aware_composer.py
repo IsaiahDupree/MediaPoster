@@ -1,0 +1,900 @@
+"""
+Audio-Aware Video Composer
+===========================
+Creates video compositions with proper audio-video synchronization.
+
+Features:
+- Word-level timestamp extraction from TTS audio
+- Audio duration analysis before timeline creation
+- Systematic timeline generation based on actual audio lengths
+- Support for both Motion Canvas and Remotion output formats
+"""
+import os
+import json
+import asyncio
+import subprocess
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+from dataclasses import dataclass, field
+from pathlib import Path
+from loguru import logger
+import wave
+import struct
+
+# Paths
+EVERREACH_FOLDER = "/Users/isaiahdupree/Documents/CompetitorResearch/everreach"
+OUTPUT_FOLDER = "/Users/isaiahdupree/Documents/CompetitorResearch/everreach/compilations"
+MOTION_CANVAS_PROJECT = "/Users/isaiahdupree/Documents/Software/MediaPoster/MotionCanvas"
+REMOTION_PROJECT = "/Users/isaiahdupree/Documents/Software/Remotion"
+
+
+@dataclass
+class AudioSegment:
+    """Audio segment with timing information"""
+    id: str
+    path: str
+    text: str
+    duration: float
+    word_timestamps: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class TimelineSegment:
+    """A segment in the timeline with precise timing"""
+    id: str
+    type: str  # "narration", "clip", "title", "cta"
+    start_time: float
+    end_time: float
+    duration: float
+    content: Dict[str, Any]
+
+
+@dataclass
+class CompositionTimeline:
+    """Full composition timeline with all segments"""
+    total_duration: float
+    fps: int
+    width: int
+    height: int
+    segments: List[TimelineSegment]
+    audio_tracks: List[AudioSegment]
+
+
+class AudioAnalyzer:
+    """
+    Analyzes audio files to extract duration and word-level timestamps.
+    """
+    
+    @staticmethod
+    def get_audio_duration(audio_path: str) -> float:
+        """Get precise audio duration using ffprobe"""
+        try:
+            result = subprocess.run([
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                audio_path
+            ], capture_output=True, text=True, timeout=10)
+            
+            duration = float(result.stdout.strip())
+            logger.info(f"Audio duration for {Path(audio_path).name}: {duration:.2f}s")
+            return duration
+        except Exception as e:
+            logger.error(f"Failed to get audio duration: {e}")
+            return 0.0
+    
+    @staticmethod
+    async def get_word_timestamps(audio_path: str, text: str) -> List[Dict[str, Any]]:
+        """
+        Get word-level timestamps using Whisper.
+        Falls back to estimated timestamps if Whisper fails.
+        """
+        try:
+            # Try using whisper CLI
+            result = subprocess.run([
+                "whisper", audio_path,
+                "--model", "tiny",
+                "--output_format", "json",
+                "--word_timestamps", "True",
+                "--output_dir", str(Path(audio_path).parent)
+            ], capture_output=True, text=True, timeout=60)
+            
+            # Read the JSON output
+            json_path = Path(audio_path).with_suffix(".json")
+            if json_path.exists():
+                with open(json_path) as f:
+                    data = json.load(f)
+                
+                words = []
+                for segment in data.get("segments", []):
+                    for word in segment.get("words", []):
+                        words.append({
+                            "word": word.get("word", "").strip(),
+                            "start": word.get("start", 0),
+                            "end": word.get("end", 0)
+                        })
+                
+                # Cleanup
+                json_path.unlink(missing_ok=True)
+                
+                if words:
+                    return words
+        except Exception as e:
+            logger.warning(f"Whisper failed: {e}, using estimated timestamps")
+        
+        # Fallback: estimate word timestamps based on duration
+        return AudioAnalyzer._estimate_word_timestamps(audio_path, text)
+    
+    @staticmethod
+    def _estimate_word_timestamps(audio_path: str, text: str) -> List[Dict[str, Any]]:
+        """Estimate word timestamps based on audio duration and word count"""
+        duration = AudioAnalyzer.get_audio_duration(audio_path)
+        words = text.split()
+        
+        if not words or duration <= 0:
+            return []
+        
+        # Average time per word (accounting for pauses)
+        avg_word_duration = duration / len(words) * 0.85  # 85% speaking, 15% pauses
+        
+        timestamps = []
+        current_time = 0.1  # Small initial pause
+        
+        for word in words:
+            # Adjust duration based on word length
+            word_duration = avg_word_duration * (0.8 + 0.4 * min(len(word) / 8, 1))
+            
+            timestamps.append({
+                "word": word,
+                "start": round(current_time, 3),
+                "end": round(current_time + word_duration, 3)
+            })
+            
+            current_time += word_duration
+            
+            # Add pause after punctuation
+            if word[-1] in ".!?":
+                current_time += 0.3
+            elif word[-1] in ",;:":
+                current_time += 0.15
+        
+        return timestamps
+
+
+class AudioAwareComposer:
+    """
+    Creates video compositions with proper audio-video synchronization.
+    """
+    
+    def __init__(self):
+        self.analyzer = AudioAnalyzer()
+        self.manifest_path = Path(EVERREACH_FOLDER) / "discovery_manifest.json"
+        self.output_folder = Path(OUTPUT_FOLDER)
+        self.output_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Load discovered videos
+        self.videos = self._load_manifest()
+    
+    def _load_manifest(self) -> List[Dict[str, Any]]:
+        """Load the discovery manifest"""
+        if not self.manifest_path.exists():
+            return []
+        
+        with open(self.manifest_path) as f:
+            data = json.load(f)
+        
+        return [v for v in data.get("videos", []) if v.get("downloaded") and v.get("local_path")]
+    
+    async def generate_tts_with_timestamps(
+        self,
+        text: str,
+        output_path: str,
+        voice: str = "Samantha"
+    ) -> AudioSegment:
+        """Generate TTS and extract word timestamps"""
+        
+        # Generate audio using macOS say
+        aiff_path = output_path.replace(".mp3", ".aiff")
+        
+        cmd = ["say", "-v", voice, "-o", aiff_path, text]
+        subprocess.run(cmd, capture_output=True, timeout=30)
+        
+        # Convert to MP3
+        subprocess.run([
+            "ffmpeg", "-y", "-i", aiff_path,
+            "-acodec", "libmp3lame", "-q:a", "2",
+            output_path
+        ], capture_output=True, timeout=30)
+        
+        Path(aiff_path).unlink(missing_ok=True)
+        
+        # Get duration and timestamps
+        duration = self.analyzer.get_audio_duration(output_path)
+        word_timestamps = await self.analyzer.get_word_timestamps(output_path, text)
+        
+        return AudioSegment(
+            id=Path(output_path).stem,
+            path=output_path,
+            text=text,
+            duration=duration,
+            word_timestamps=word_timestamps
+        )
+    
+    async def build_timeline(
+        self,
+        clips: List[Dict],
+        narrations: Dict[str, AudioSegment],
+        clip_duration: float = 8.0
+    ) -> CompositionTimeline:
+        """
+        Build a timeline with precise timing based on audio durations.
+        """
+        segments = []
+        audio_tracks = []
+        current_time = 0.0
+        
+        # 1. Title card (3 seconds)
+        segments.append(TimelineSegment(
+            id="title",
+            type="title",
+            start_time=current_time,
+            end_time=current_time + 3.0,
+            duration=3.0,
+            content={
+                "text": "10 Networking Tips\nThat Will Change Your Life",
+                "style": "title_card"
+            }
+        ))
+        current_time += 3.0
+        
+        # 2. Intro narration
+        if "intro" in narrations:
+            intro = narrations["intro"]
+            audio_tracks.append(intro)
+            
+            segments.append(TimelineSegment(
+                id="intro_narration",
+                type="narration",
+                start_time=current_time,
+                end_time=current_time + intro.duration,
+                duration=intro.duration,
+                content={
+                    "audio_path": intro.path,
+                    "text": intro.text,
+                    "word_timestamps": intro.word_timestamps,
+                    "style": "intro_bg"
+                }
+            ))
+            current_time += intro.duration + 0.5  # Small gap
+        
+        # 3. Each tip: narration -> clip
+        for i, clip in enumerate(clips):
+            tip_key = f"tip_{i+1}"
+            
+            # Tip narration
+            if tip_key in narrations:
+                tip_narration = narrations[tip_key]
+                audio_tracks.append(tip_narration)
+                
+                segments.append(TimelineSegment(
+                    id=f"tip_{i+1}_intro",
+                    type="narration",
+                    start_time=current_time,
+                    end_time=current_time + tip_narration.duration,
+                    duration=tip_narration.duration,
+                    content={
+                        "tip_number": i + 1,
+                        "audio_path": tip_narration.path,
+                        "text": tip_narration.text,
+                        "word_timestamps": tip_narration.word_timestamps,
+                        "style": "tip_intro"
+                    }
+                ))
+                current_time += tip_narration.duration + 0.3
+            
+            # Video clip
+            actual_clip_duration = min(clip_duration, self._get_video_duration(clip["local_path"]))
+            
+            segments.append(TimelineSegment(
+                id=f"clip_{i+1}",
+                type="clip",
+                start_time=current_time,
+                end_time=current_time + actual_clip_duration,
+                duration=actual_clip_duration,
+                content={
+                    "video_path": clip["local_path"],
+                    "creator": clip.get("creator", "unknown"),
+                    "caption": clip.get("caption", ""),
+                    "trim_start": 0,
+                    "trim_end": actual_clip_duration
+                }
+            ))
+            current_time += actual_clip_duration + 0.5
+        
+        # 4. Outro with CTA
+        if "outro" in narrations:
+            outro = narrations["outro"]
+            audio_tracks.append(outro)
+            
+            segments.append(TimelineSegment(
+                id="outro",
+                type="cta",
+                start_time=current_time,
+                end_time=current_time + outro.duration + 2.0,
+                duration=outro.duration + 2.0,
+                content={
+                    "audio_path": outro.path,
+                    "text": outro.text,
+                    "word_timestamps": outro.word_timestamps,
+                    "cta_text": "Join the Waitlist",
+                    "cta_url": "everreach.app",
+                    "style": "cta_card"
+                }
+            ))
+            current_time += outro.duration + 2.0
+        
+        return CompositionTimeline(
+            total_duration=current_time,
+            fps=30,
+            width=1080,
+            height=1920,
+            segments=segments,
+            audio_tracks=audio_tracks
+        )
+    
+    def _get_video_duration(self, video_path: str) -> float:
+        """Get video duration"""
+        try:
+            result = subprocess.run([
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                video_path
+            ], capture_output=True, text=True, timeout=10)
+            return float(result.stdout.strip())
+        except:
+            return 60.0  # Default max
+    
+    def export_motion_canvas_scene(
+        self,
+        timeline: CompositionTimeline,
+        output_dir: Path
+    ) -> str:
+        """Export timeline as Motion Canvas scene"""
+        
+        scene_code = f'''import {{makeScene2D, Txt, Rect, Video, Img, Audio}} from '@motion-canvas/2d';
+import {{all, chain, waitFor, createRef, easeInOutCubic}} from '@motion-canvas/core';
+
+export default makeScene2D(function* (view) {{
+  // Total duration: {timeline.total_duration:.2f}s
+  // FPS: {timeline.fps}
+  
+  const background = createRef<Rect>();
+  const title = createRef<Txt>();
+  const caption = createRef<Txt>();
+  
+  // Background
+  view.add(
+    <Rect
+      ref={{background}}
+      width={{1080}}
+      height={{1920}}
+      fill="{{"#1a1a2e"}}"
+    />
+  );
+  
+'''
+        
+        for segment in timeline.segments:
+            if segment.type == "title":
+                scene_code += f'''
+  // {segment.id} ({segment.duration:.2f}s)
+  view.add(
+    <Txt
+      ref={{title}}
+      text={{"{segment.content['text'].replace(chr(10), '\\n')}"}}
+      fontSize={{72}}
+      fontWeight={{700}}
+      fill="{{"#ffffff"}}"
+      textAlign="center"
+    />
+  );
+  yield* waitFor({segment.duration});
+  title().remove();
+  
+'''
+            elif segment.type == "narration":
+                word_display = ""
+                if segment.content.get("word_timestamps"):
+                    words = segment.content["word_timestamps"]
+                    word_display = f"// Words: {len(words)}, Duration: {segment.duration:.2f}s"
+                
+                scene_code += f'''
+  // {segment.id} ({segment.duration:.2f}s)
+  {word_display}
+  // Audio: {Path(segment.content.get('audio_path', '')).name}
+  background().fill("#8B5CF6");
+  view.add(
+    <Txt
+      ref={{caption}}
+      text={{"{segment.content.get('text', '')[:100]}..."}}
+      fontSize={{48}}
+      fill="{{"#ffffff"}}"
+      textAlign="center"
+      y={{400}}
+    />
+  );
+  yield* waitFor({segment.duration});
+  caption().remove();
+  background().fill("#1a1a2e");
+  
+'''
+            elif segment.type == "clip":
+                scene_code += f'''
+  // {segment.id} ({segment.duration:.2f}s) - @{segment.content.get('creator', 'unknown')}
+  // Video: {Path(segment.content.get('video_path', '')).name}
+  view.add(
+    <Video
+      src={{"{segment.content.get('video_path', '')}"}}
+      width={{1080}}
+      height={{1920}}
+      time={{0}}
+      play={{true}}
+    />
+  );
+  view.add(
+    <Txt
+      text={{"@{segment.content.get('creator', '')}"}}
+      fontSize={{32}}
+      fill="{{"#ffffff"}}"
+      x={{400}}
+      y={{800}}
+    />
+  );
+  yield* waitFor({segment.duration});
+  
+'''
+            elif segment.type == "cta":
+                scene_code += f'''
+  // {segment.id} ({segment.duration:.2f}s)
+  background().fill("#8B5CF6");
+  view.add(
+    <Txt
+      text={{"{segment.content.get('cta_text', 'Join the Waitlist')}"}}
+      fontSize={{64}}
+      fontWeight={{700}}
+      fill="{{"#ffffff"}}"
+      y={{-50}}
+    />
+  );
+  view.add(
+    <Txt
+      text={{"{segment.content.get('cta_url', 'everreach.app')}"}}
+      fontSize={{72}}
+      fontWeight={{700}}
+      fill="{{"#ffffff"}}"
+      y={{50}}
+    />
+  );
+  yield* waitFor({segment.duration});
+  
+'''
+        
+        scene_code += '''
+}});
+'''
+        
+        scene_path = output_dir / "everreach_scene.tsx"
+        with open(scene_path, "w") as f:
+            f.write(scene_code)
+        
+        return str(scene_path)
+    
+    def export_remotion_composition(
+        self,
+        timeline: CompositionTimeline,
+        output_dir: Path
+    ) -> str:
+        """Export timeline as Remotion composition"""
+        
+        # Convert to frames
+        fps = timeline.fps
+        
+        composition = {
+            "id": "EverReachCompilation",
+            "fps": fps,
+            "width": timeline.width,
+            "height": timeline.height,
+            "durationInFrames": int(timeline.total_duration * fps),
+            "defaultProps": {
+                "segments": []
+            }
+        }
+        
+        for segment in timeline.segments:
+            seg_data = {
+                "id": segment.id,
+                "type": segment.type,
+                "startFrame": int(segment.start_time * fps),
+                "endFrame": int(segment.end_time * fps),
+                "durationFrames": int(segment.duration * fps),
+                **segment.content
+            }
+            composition["defaultProps"]["segments"].append(seg_data)
+        
+        comp_path = output_dir / "remotion_composition.json"
+        with open(comp_path, "w") as f:
+            json.dump(composition, f, indent=2)
+        
+        # Also create a Remotion component
+        component_code = f'''import {{AbsoluteFill, Sequence, useCurrentFrame, Video, Audio, Img}} from 'remotion';
+import {{interpolate}} from 'remotion';
+
+// Auto-generated EverReach Compilation
+// Total Duration: {timeline.total_duration:.2f}s ({int(timeline.total_duration * fps)} frames)
+// FPS: {fps}
+
+interface Segment {{
+  id: string;
+  type: string;
+  startFrame: number;
+  endFrame: number;
+  durationFrames: number;
+  [key: string]: any;
+}}
+
+export const EverReachCompilation: React.FC<{{segments: Segment[]}}> = ({{segments}}) => {{
+  const frame = useCurrentFrame();
+  
+  return (
+    <AbsoluteFill style={{{{backgroundColor: '#1a1a2e'}}}}>
+      {{segments.map((segment, index) => (
+        <Sequence
+          key={{segment.id}}
+          from={{segment.startFrame}}
+          durationInFrames={{segment.durationFrames}}
+        >
+          {{segment.type === 'title' && (
+            <AbsoluteFill style={{{{
+              backgroundColor: '#8B5CF6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}}}>
+              <div style={{{{
+                color: 'white',
+                fontSize: 72,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                whiteSpace: 'pre-line'
+              }}}}>
+                {{segment.text}}
+              </div>
+            </AbsoluteFill>
+          )}}
+          
+          {{segment.type === 'narration' && (
+            <AbsoluteFill style={{{{
+              backgroundColor: '#8B5CF6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column'
+            }}}}>
+              {{segment.tip_number && (
+                <div style={{{{color: 'white', fontSize: 120, fontWeight: 'bold'}}}}>
+                  TIP #{{segment.tip_number}}
+                </div>
+              )}}
+              <div style={{{{
+                color: 'white',
+                fontSize: 36,
+                textAlign: 'center',
+                padding: 40,
+                maxWidth: '80%'
+              }}}}>
+                {{segment.text}}
+              </div>
+              {{segment.audio_path && <Audio src={{segment.audio_path}} />}}
+            </AbsoluteFill>
+          )}}
+          
+          {{segment.type === 'clip' && (
+            <AbsoluteFill>
+              <Video
+                src={{segment.video_path}}
+                style={{{{width: '100%', height: '100%', objectFit: 'cover'}}}}
+              />
+              <div style={{{{
+                position: 'absolute',
+                bottom: 100,
+                right: 20,
+                color: 'white',
+                fontSize: 32,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                padding: '5px 10px',
+                borderRadius: 5
+              }}}}>
+                @{{segment.creator}}
+              </div>
+            </AbsoluteFill>
+          )}}
+          
+          {{segment.type === 'cta' && (
+            <AbsoluteFill style={{{{
+              backgroundColor: '#8B5CF6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column'
+            }}}}>
+              <div style={{{{color: 'white', fontSize: 64, fontWeight: 'bold'}}}}>
+                {{segment.cta_text}}
+              </div>
+              <div style={{{{color: 'white', fontSize: 72, fontWeight: 'bold', marginTop: 20}}}}>
+                {{segment.cta_url}}
+              </div>
+              {{segment.audio_path && <Audio src={{segment.audio_path}} />}}
+            </AbsoluteFill>
+          )}}
+        </Sequence>
+      ))}}
+    </AbsoluteFill>
+  );
+}};
+'''
+        
+        component_path = output_dir / "EverReachCompilation.tsx"
+        with open(component_path, "w") as f:
+            f.write(component_code)
+        
+        return str(comp_path)
+    
+    def export_ffmpeg_script(
+        self,
+        timeline: CompositionTimeline,
+        output_dir: Path
+    ) -> str:
+        """Export as FFmpeg script with precise timing"""
+        
+        script = f'''#!/bin/bash
+# Audio-Aware FFmpeg Composition
+# Total Duration: {timeline.total_duration:.2f}s
+# Generated: {datetime.now().isoformat()}
+
+set -e
+cd "{output_dir}"
+
+echo "🎬 Building EverReach Compilation..."
+echo "   Total duration: {timeline.total_duration:.2f}s"
+echo ""
+
+'''
+        
+        # Create each segment as a separate file
+        segment_files = []
+        
+        for i, segment in enumerate(timeline.segments):
+            seg_file = f"seg_{i:03d}_{segment.id}.mp4"
+            segment_files.append(seg_file)
+            
+            if segment.type == "title":
+                script += f'''
+# Segment {i}: {segment.id} ({segment.duration:.2f}s)
+echo "Creating segment {i}: {segment.id}..."
+ffmpeg -y -f lavfi -i "color=c=0x8B5CF6:s=1080x1920:d={segment.duration}" \\
+  -vf "drawtext=text='{segment.content['text'].replace(chr(10), '\\n')}':fontsize=72:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:font=Arial" \\
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p \\
+  "{seg_file}"
+
+'''
+            elif segment.type == "narration":
+                audio_path = segment.content.get("audio_path", "")
+                tip_num = segment.content.get("tip_number", "")
+                text = segment.content.get("text", "")[:80].replace("'", "\\'")
+                
+                if tip_num:
+                    script += f'''
+# Segment {i}: {segment.id} ({segment.duration:.2f}s)
+echo "Creating segment {i}: Tip #{tip_num}..."
+ffmpeg -y -f lavfi -i "color=c=0x1a1a2e:s=1080x1920:d={segment.duration}" \\
+  -i "{audio_path}" \\
+  -vf "drawtext=text='TIP #{tip_num}':fontsize=120:fontcolor=0x8B5CF6:x=(w-text_w)/2:y=(h-text_h)/2" \\
+  -c:v libx264 -preset ultrafast -c:a aac -shortest -pix_fmt yuv420p \\
+  "{seg_file}"
+
+'''
+                else:
+                    script += f'''
+# Segment {i}: {segment.id} ({segment.duration:.2f}s)
+echo "Creating segment {i}: {segment.id}..."
+ffmpeg -y -f lavfi -i "color=c=0x8B5CF6:s=1080x1920:d={segment.duration}" \\
+  -i "{audio_path}" \\
+  -vf "drawtext=text='{text}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=h-200:font=Arial" \\
+  -c:v libx264 -preset ultrafast -c:a aac -shortest -pix_fmt yuv420p \\
+  "{seg_file}"
+
+'''
+            elif segment.type == "clip":
+                video_path = segment.content.get("video_path", "")
+                creator = segment.content.get("creator", "unknown")
+                
+                script += f'''
+# Segment {i}: {segment.id} ({segment.duration:.2f}s) - @{creator}
+echo "Creating segment {i}: @{creator}..."
+ffmpeg -y -i "{video_path}" \\
+  -t {segment.duration} \\
+  -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,drawtext=text='@{creator}':fontsize=32:fontcolor=white:x=w-text_w-20:y=h-100:box=1:boxcolor=black@0.5:boxborderw=5" \\
+  -c:v libx264 -preset ultrafast -c:a aac -pix_fmt yuv420p \\
+  "{seg_file}"
+
+'''
+            elif segment.type == "cta":
+                audio_path = segment.content.get("audio_path", "")
+                cta_text = segment.content.get("cta_text", "Join the Waitlist")
+                cta_url = segment.content.get("cta_url", "everreach.app")
+                
+                script += f'''
+# Segment {i}: {segment.id} ({segment.duration:.2f}s)
+echo "Creating segment {i}: CTA..."
+ffmpeg -y -f lavfi -i "color=c=0x8B5CF6:s=1080x1920:d={segment.duration}" \\
+  -i "{audio_path}" \\
+  -vf "drawtext=text='{cta_text}':fontsize=64:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2-50,drawtext=text='{cta_url}':fontsize=72:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2+50" \\
+  -c:v libx264 -preset ultrafast -c:a aac -shortest -pix_fmt yuv420p \\
+  "{seg_file}"
+
+'''
+        
+        # Create concat file
+        script += '''
+# Create concat list
+echo "Creating concat list..."
+cat > concat_list.txt << 'CONCAT_EOF'
+'''
+        for seg_file in segment_files:
+            script += f"file '{seg_file}'\n"
+        
+        script += '''CONCAT_EOF
+
+# Concatenate all segments
+echo "Concatenating segments..."
+ffmpeg -y -f concat -safe 0 -i concat_list.txt -c copy "everreach_compilation_final.mp4"
+
+# Get final duration
+DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "everreach_compilation_final.mp4")
+SIZE=$(du -h "everreach_compilation_final.mp4" | cut -f1)
+
+echo ""
+echo "✅ Compilation complete!"
+echo "   Duration: ${DURATION}s"
+echo "   Size: ${SIZE}"
+echo "   Output: everreach_compilation_final.mp4"
+
+# Cleanup (optional - comment out to keep segments)
+# rm -f seg_*.mp4 concat_list.txt
+'''
+        
+        script_path = output_dir / "render_compilation.sh"
+        with open(script_path, "w") as f:
+            f.write(script)
+        script_path.chmod(0o755)
+        
+        return str(script_path)
+
+
+async def main():
+    """Test the audio-aware composer"""
+    print("\n" + "="*60)
+    print("🎬 AUDIO-AWARE VIDEO COMPOSER TEST")
+    print("="*60)
+    
+    composer = AudioAwareComposer()
+    
+    if not composer.videos:
+        print("❌ No videos found. Run content_discovery.py first.")
+        return
+    
+    # Create output directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(OUTPUT_FOLDER) / f"audio_aware_{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Select top 5 clips for testing
+    clips = composer.videos[:5]
+    print(f"\n📹 Selected {len(clips)} clips for test")
+    
+    # Generate narrations with timestamps
+    print("\n🎤 Generating narrations with word timestamps...")
+    narrations = {}
+    
+    # Intro
+    intro_text = "Here are 5 networking tips that will change how you build relationships."
+    intro_audio = await composer.generate_tts_with_timestamps(
+        intro_text, str(output_dir / "narration_intro.mp3")
+    )
+    narrations["intro"] = intro_audio
+    print(f"   ✅ Intro: {intro_audio.duration:.2f}s, {len(intro_audio.word_timestamps)} words")
+    
+    # Tips
+    tip_titles = [
+        "The power of following up",
+        "Quality over quantity",
+        "Build genuine connections",
+        "Give before you ask",
+        "Stay top of mind"
+    ]
+    
+    for i, title in enumerate(tip_titles):
+        tip_text = f"Tip number {i+1}: {title}"
+        tip_audio = await composer.generate_tts_with_timestamps(
+            tip_text, str(output_dir / f"narration_tip_{i+1}.mp3")
+        )
+        narrations[f"tip_{i+1}"] = tip_audio
+        print(f"   ✅ Tip {i+1}: {tip_audio.duration:.2f}s")
+    
+    # Outro
+    outro_text = "Want a system that helps you maintain your network? Join the EverReach waitlist today."
+    outro_audio = await composer.generate_tts_with_timestamps(
+        outro_text, str(output_dir / "narration_outro.mp3")
+    )
+    narrations["outro"] = outro_audio
+    print(f"   ✅ Outro: {outro_audio.duration:.2f}s")
+    
+    # Build timeline
+    print("\n📐 Building audio-aware timeline...")
+    timeline = await composer.build_timeline(clips, narrations, clip_duration=6.0)
+    
+    print(f"   Total duration: {timeline.total_duration:.2f}s")
+    print(f"   Segments: {len(timeline.segments)}")
+    
+    # Print timeline breakdown
+    print("\n📋 Timeline breakdown:")
+    for seg in timeline.segments:
+        print(f"   [{seg.start_time:6.2f}s - {seg.end_time:6.2f}s] {seg.type}: {seg.id}")
+    
+    # Export formats
+    print("\n📦 Exporting compositions...")
+    
+    # Motion Canvas
+    mc_path = composer.export_motion_canvas_scene(timeline, output_dir)
+    print(f"   ✅ Motion Canvas: {mc_path}")
+    
+    # Remotion
+    rm_path = composer.export_remotion_composition(timeline, output_dir)
+    print(f"   ✅ Remotion: {rm_path}")
+    
+    # FFmpeg script
+    ff_path = composer.export_ffmpeg_script(timeline, output_dir)
+    print(f"   ✅ FFmpeg script: {ff_path}")
+    
+    # Save timeline JSON
+    timeline_data = {
+        "total_duration": timeline.total_duration,
+        "fps": timeline.fps,
+        "width": timeline.width,
+        "height": timeline.height,
+        "segments": [
+            {
+                "id": s.id,
+                "type": s.type,
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "duration": s.duration,
+                "content": s.content
+            }
+            for s in timeline.segments
+        ]
+    }
+    
+    timeline_path = output_dir / "timeline.json"
+    with open(timeline_path, "w") as f:
+        json.dump(timeline_data, f, indent=2, default=str)
+    
+    print(f"\n✅ All exports complete!")
+    print(f"   Output folder: {output_dir}")
+    print(f"\n🚀 To render with FFmpeg:")
+    print(f"   cd {output_dir} && ./render_compilation.sh")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

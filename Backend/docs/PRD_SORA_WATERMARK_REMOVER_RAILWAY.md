@@ -60,16 +60,16 @@ A cloud-hosted service that removes watermarks from Sora-generated videos using 
                               └─────────────────────────────────┘
 ```
 
-### Tech Stack
+### Technology Stack
 
-| Component | Technology | Railway Service |
-|-----------|------------|-----------------|
-| **Frontend** | Next.js 14, TailwindCSS, shadcn/ui | Web Service |
-| **API** | FastAPI (Python 3.11) | Web Service |
-| **Queue** | Redis + BullMQ | Redis Plugin |
-| **Worker** | Python + FFmpeg Docker | Worker Service |
-| **Storage** | Cloudflare R2 | External |
-| **Database** | PostgreSQL | Postgres Plugin |
+| Component | Technology | Justification |
+|-----------|------------|---------------|
+| **Runtime** | Python 3.11 | Railway default, optimal compatibility |
+| **API** | FastAPI | High performance async web framework |
+| **Queue** | Redis + BullMQ | Job queue for async processing |
+| **Worker** | Python + FFmpeg Docker | Video processing container |
+| **Storage** | Cloudflare R2 | Cost-effective S3-compatible storage |
+| **Database** | PostgreSQL | Job tracking and metadata |
 
 ---
 

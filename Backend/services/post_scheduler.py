@@ -238,7 +238,8 @@ class PostScheduler:
                 )
                 RETURNING 
                     id, clip_id, content_variant_id, platform, 
-                    platform_account_id, scheduled_time, status
+                    platform_account_id, scheduled_time, status,
+                    caption, title, hashtags, account_username
             """), {"now": now})
             
             posts = []
@@ -250,6 +251,10 @@ class PostScheduler:
                     "account_id": row[4],
                     "scheduled_at": row[5],
                     "status": row[6],
+                    "caption": row[7],           # Caption from scheduled_posts
+                    "title": row[8],             # Title from scheduled_posts
+                    "hashtags": row[9],          # Hashtags from scheduled_posts
+                    "account_username": row[10], # Username from scheduled_posts
                 })
             
             return posts
@@ -618,15 +623,23 @@ class PostScheduler:
             if post_data:
                 # Handle hashtags - convert to proper format for JSONB column
                 hashtags_raw = post_data[4]
+                # Convert hashtags to PostgreSQL text[] format
                 if hashtags_raw is None:
-                    hashtags_json = '[]'
+                    hashtags_array = []
                 elif isinstance(hashtags_raw, str):
-                    hashtags_json = hashtags_raw
+                    # Try to parse as JSON if it's a string
+                    try:
+                        import json
+                        hashtags_array = json.loads(hashtags_raw) if hashtags_raw.startswith('[') else [hashtags_raw]
+                    except:
+                        hashtags_array = [hashtags_raw] if hashtags_raw else []
                 elif isinstance(hashtags_raw, list):
-                    import json
-                    hashtags_json = json.dumps(hashtags_raw)
+                    hashtags_array = hashtags_raw
                 else:
-                    hashtags_json = '[]'
+                    hashtags_array = []
+                
+                # Format as PostgreSQL array literal: {"tag1", "tag2"}
+                pg_array = '{' + ','.join(f'"{h}"' for h in hashtags_array) + '}'
                 
                 conn.execute(text("""
                     INSERT INTO posted_content 
@@ -634,7 +647,7 @@ class PostScheduler:
                      account_username, caption, hashtags, status, posted_at)
                     VALUES 
                     (:platform, :platform_post_id, :platform_url, :account_id,
-                     :account_username, :caption, CAST(:hashtags AS jsonb), 'published', NOW())
+                     :account_username, :caption, CAST(:hashtags AS text[]), 'published', NOW())
                 """), {
                     "platform": post_data[0],
                     "platform_post_id": result.get("platform_post_id"),
@@ -642,7 +655,7 @@ class PostScheduler:
                     "account_id": post_data[1],
                     "account_username": post_data[2],
                     "caption": post_data[3],
-                    "hashtags": hashtags_json
+                    "hashtags": pg_array
                 })
                 conn.commit()
     

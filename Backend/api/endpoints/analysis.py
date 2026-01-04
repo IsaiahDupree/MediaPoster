@@ -428,7 +428,7 @@ Generate ONLY the title, no quotes, no explanation. Make it unique and fresh!"""
             logger.info(f"[GenerateCaptions] 🏷️ Fallback title: {title}")
     
     # Generate captions using AI or templates (will generate platform-specific titles/descriptions)
-    generated = await _generate_platform_captions(
+    generation_result = await _generate_platform_captions(
         title=title,
         transcript=transcript,
         topics=topics,
@@ -441,32 +441,42 @@ Generate ONLY the title, no quotes, no explanation. Make it unique and fresh!"""
         include_hook=request.include_hook
     )
     
+    # Extract results from generation
+    generated_captions = generation_result["captions"]
+    clean_descriptions = generation_result["platform_descriptions"]
+    generated_hashtags = generation_result.get("hashtags", [])
+    
     logger.info(f"[GenerateCaptions] ✅ Generated captions successfully")
-    logger.info(f"[GenerateCaptions] 📤 TikTok caption: {generated['tiktok'][:100]}...")
+    logger.info(f"[GenerateCaptions] 📤 TikTok caption: {generated_captions.get('tiktok', '')[:100]}...")
+    logger.info(f"[GenerateCaptions] 📝 Instagram description length: {len(clean_descriptions.get('instagram', ''))} chars")
     
-    # Extract platform-specific titles and descriptions from generated captions
-    # Note: Currently generates one title, but captions are platform-specific
-    platform_titles = {}
-    platform_descriptions = {}
+    # Build platform-specific titles (use generated title for all platforms)
+    platform_titles = {p: title for p in generated_captions.keys()}
     
-    # For now, use the generated title for all platforms
-    # TODO: Generate platform-specific titles in _generate_platform_captions
-    for platform_key in generated.keys():
-        platform_titles[platform_key] = title
-        # Extract description from caption (remove hashtags for description)
-        caption = generated[platform_key]
-        # Description is the caption without hashtags (rough extraction)
-        desc = caption.split('#')[0].strip() if '#' in caption else caption
-        platform_descriptions[platform_key] = desc
+    # Use the clean descriptions from AI (without hashtags mixed in)
+    # These are the comprehensive descriptions targeting 80% of max chars
+    platform_descriptions = clean_descriptions.copy()
+    
+    # Fallback: if a platform doesn't have a clean description, extract from caption
+    for platform_key in generated_captions.keys():
+        if platform_key not in platform_descriptions or not platform_descriptions[platform_key]:
+            caption = generated_captions[platform_key]
+            # Extract description by removing hashtags
+            desc = caption.split('#')[0].strip() if '#' in caption else caption
+            # Remove leading emojis
+            import re
+            desc = re.sub(r'^[\U0001F300-\U0001F9FF\s]+', '', desc).strip()
+            platform_descriptions[platform_key] = desc
     
     return {
         "success": True,
         "media_id": media_id,
         "title": title,  # Generic title (for backward compatibility)
         "platform_titles": platform_titles,  # Platform-specific titles
-        "platform_descriptions": platform_descriptions,  # Platform-specific descriptions
+        "platform_descriptions": platform_descriptions,  # Clean descriptions (80% of max, no hashtags)
         "transcript_available": len(transcript) > 0,
-        "captions": generated
+        "captions": generated_captions,  # Full captions with hashtags
+        "hashtags": generated_hashtags  # Separate hashtags array
     }
 
 
@@ -502,13 +512,18 @@ async def _generate_platform_captions(
     platforms_to_generate = ["tiktok", "instagram", "youtube", "twitter", "threads", "pinterest", "linkedin", "bluesky", "facebook"]
     platform_limits = {p: get_platform_limits(p) for p in platforms_to_generate}
     
-    # Build context from available data
-    topics_str = ', '.join(topics[:5]) if topics else ""
-    hooks_str = '; '.join(hooks[:3]) if hooks else ""
-    transcript_snippet = transcript[:500] if transcript else ""
+    # Build context from available data - use MORE content for better descriptions
+    topics_str = ', '.join(topics[:8]) if topics else ""
+    hooks_str = '; '.join(hooks[:5]) if hooks else ""
+    transcript_snippet = transcript[:2000] if transcript else ""  # More transcript for context
     
-    # Use AI to generate creative descriptions
-    description_text = ""
+    # Generate UNIQUE descriptions for EACH platform using AI
+    # Each platform gets its own AI call with platform-specific requirements
+    platform_descriptions = {}
+    
+    # Platform-specific character limits (targeting 80% of max = 20% buffer)
+    main_platforms = ['tiktok', 'instagram', 'youtube']
+    
     try:
         from openai import OpenAI
         import os
@@ -521,56 +536,158 @@ Topics: {topics_str}
 Key Hooks: {hooks_str}
 Content: {transcript_snippet}
 Tone: {tone}
-Platform: {platform}
 """
         
-        # Get platform-specific description target (20% of max = 80% of max limit)
-        platform_limit = platform_limits.get(platform, platform_limits.get('tiktok'))
-        desc_target = platform_limit.description_target  # Already 80% of max (20% buffer)
-        
-        desc_prompt = f"""Based on this video analysis, write a compelling description for {platform}.
-REQUIREMENTS:
-- Maximum {desc_target} characters (strict limit - this is 20% of {platform}'s max description length)
-- 2-3 sentences that summarize the VALUE and INSIGHT the viewer will get
-- DO NOT copy the transcript word-for-word
-- Make it engaging and encourage interaction
-- Match the {tone} tone
-- Optimized for {platform} audience
+        # Generate unique description for EACH main platform
+        for plat in main_platforms:
+            plat_limit = platform_limits.get(plat, platform_limits.get('tiktok'))
+            desc_target = plat_limit.description_target  # Already 80% of max
+            
+            # Platform-specific prompts for variety
+            platform_style = {
+                'tiktok': "punchy, trend-aware, Gen-Z friendly with energy and personality. Use conversational hooks.",
+                'instagram': "aesthetic, lifestyle-focused, inspirational. Encourage saves and shares with a strong CTA.",
+                'youtube': "detailed, value-packed, SEO-friendly. Explain what viewers will learn and why they should watch."
+            }
+            
+            # Calculate appropriate length guidance - be aggressive about length
+            min_chars = int(desc_target * 0.5)  # At least 50% of target for expansion trigger
+            
+            desc_prompt = f"""Write a {desc_target}-character description for {plat.upper()}.
 
-{context}
+⚠️ CRITICAL LENGTH REQUIREMENT: Your response MUST be between {min_chars} and {desc_target} characters.
+Descriptions under {min_chars} characters will be REJECTED. Count your characters carefully.
 
-Write ONLY the description (2-3 sentences), no hashtags, no title. Be creative and compelling."""
+STYLE: {platform_style.get(plat, 'engaging and compelling')}
 
-        logger.info(f"[_generate_platform_captions] 🤖 Calling OpenAI to generate platform-specific description (target: {desc_target} chars for {platform})...")
-        
-        # Adjust max_tokens based on target length (roughly 1 token = 4 chars)
-        max_tokens_for_desc = min(200, int(desc_target / 3))
-        
-        desc_response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": desc_prompt}],
-            max_tokens=max_tokens_for_desc,
-            temperature=0.7
-        )
-        
-        description_text = desc_response.choices[0].message.content.strip()
-        
-        # Enforce platform-specific limit
-        if len(description_text) > desc_target:
-            description_text = truncate_to_limit(description_text, desc_target)
-        
-        logger.info(f"[_generate_platform_captions] ✨ AI Generated description ({len(description_text)}/{desc_target} chars): {description_text[:80]}...")
+REQUIRED STRUCTURE (write 2-4 sentences for EACH section):
+
+**SECTION 1 - HOOK (100-150 chars):**
+Start with an attention-grabbing opening that stops scrollers.
+
+**SECTION 2 - VALUE PROPOSITION (200-400 chars):**
+Explain what viewers will learn, discover, or experience. Be specific about the benefits.
+
+**SECTION 3 - STORY/CONTEXT (300-500 chars):**
+Add personal touch, backstory, or relatable context from the video content below.
+
+**SECTION 4 - KEY INSIGHTS (200-400 chars):**
+Share specific takeaways, tips, or insights from the content.
+
+**SECTION 5 - CALL TO ACTION (100-200 chars):**
+Encourage engagement - comments, saves, shares, follows.
+
+VIDEO CONTENT TO REFERENCE:
+Topics: {topics_str}
+Key Points: {hooks_str}
+Transcript: {transcript_snippet[:1500] if transcript_snippet else 'General lifestyle/personal content'}
+
+OUTPUT RULES:
+- Write ONLY the description text (no section headers)
+- NO hashtags (they're added separately)
+- NO title repetition
+- Aim for EXACTLY {desc_target} characters
+- Each section should flow naturally into the next"""
+
+            logger.info(f"[_generate_platform_captions] 🤖 Generating {desc_target}-char description for {plat} (min: {min_chars})...")
+            
+            # Calculate max_tokens - need more tokens for longer output
+            # Roughly 1 token = 4 chars, so target/3 gives buffer
+            required_tokens = max(800, int(desc_target / 2.5))
+            
+            # Try up to 2 times to get a description of adequate length
+            desc_text = ""
+            for attempt in range(2):
+                desc_response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": f"You are a {plat} copywriter. Write LONG descriptions. Target: {desc_target} characters minimum."},
+                        {"role": "user", "content": desc_prompt + (f"\n\n⚠️ RETRY: Your previous response was only {len(desc_text)} characters. You MUST write at least {min_chars} characters this time." if attempt > 0 else "")}
+                    ],
+                    max_tokens=required_tokens,
+                    temperature=0.8 + (attempt * 0.1)  # Slightly higher temp on retry
+                )
+                
+                desc_text = desc_response.choices[0].message.content.strip()
+                
+                # Remove any markdown headers the model might have added
+                import re
+                desc_text = re.sub(r'\*\*[^*]+\*\*:?\s*', '', desc_text)
+                desc_text = re.sub(r'^\s*\d+\.\s*', '', desc_text, flags=re.MULTILINE)
+                desc_text = desc_text.strip()
+                
+                if len(desc_text) >= min_chars * 0.6:  # Accept if at least 60% of minimum
+                    break
+                logger.warning(f"[_generate_platform_captions] ⚠️ {plat} attempt {attempt+1}: {len(desc_text)} chars (need {min_chars}), retrying...")
+            
+            # Enforce limit
+            if len(desc_text) > desc_target:
+                desc_text = truncate_to_limit(desc_text, desc_target)
+            
+            # Always try to expand descriptions to target length using available content
+            target_len = int(desc_target * 0.7)  # Target 70% of max
+            
+            if len(desc_text) < target_len:
+                logger.info(f"[_generate_platform_captions] 📈 {plat} expanding from {len(desc_text)} to target {target_len} chars...")
+                
+                # Build expansion content - order matters (most valuable first)
+                expansion_parts = []
+                
+                # 1. Add transcript content (most valuable - actual video content)
+                if transcript_snippet and len(transcript_snippet) > 50:
+                    expansion_parts.append(f"\n\n📝 From the video: \"{transcript_snippet[:600]}...\"")
+                
+                # 2. Add hooks (key talking points)
+                if hooks:
+                    for hook in hooks[:3]:
+                        if hook and len(hook) > 10:
+                            expansion_parts.append(f"\n\n💡 {hook}")
+                
+                # 3. Add topic context
+                if topics and len(topics) > 0:
+                    expansion_parts.append(f"\n\n🎯 Topics covered: {', '.join(topics[:5])}")
+                
+                # 4. Engagement prompts
+                expansion_parts.extend([
+                    "\n\n💬 What do you think? Drop your thoughts in the comments!",
+                    "\n\n📌 Save this post - you'll want to come back to it later.",
+                    "\n\n👥 Tag someone who needs to see this!",
+                    "\n\n🔔 Follow for more content like this every day!",
+                    "\n\n❤️ Double tap if this resonates with you!",
+                ])
+                
+                # Add content until we reach target
+                for part in expansion_parts:
+                    if len(desc_text) >= target_len:
+                        break
+                    desc_text = desc_text + part
+                
+                # Truncate if over limit
+                if len(desc_text) > desc_target:
+                    desc_text = truncate_to_limit(desc_text, desc_target)
+                
+                logger.info(f"[_generate_platform_captions] ✅ {plat} expanded to: {len(desc_text)}/{desc_target} chars")
+            
+            platform_descriptions[plat] = desc_text
+            logger.info(f"[_generate_platform_captions] ✅ {plat}: {len(desc_text)}/{desc_target} chars (min: {min_chars}) - '{desc_text[:80]}...'")
         
     except Exception as e:
         logger.error(f"[_generate_platform_captions] ❌ AI description generation failed: {e}")
-        # Fallback to basic description
-        if topics:
-            description_text = f"Discover insights about {topics[0].lower()} and how it can transform your approach."
-        else:
-            description_text = "Watch to discover valuable insights that could change your perspective."
+        # Fallback to basic descriptions with variation
+        fallback_templates = {
+            'tiktok': f"You need to see this! Discover how {topics[0] if topics else 'this'} can change everything.",
+            'instagram': f"This changed my perspective on {topics[0] if topics else 'everything'}. Save this for later!",
+            'youtube': f"In this video, learn valuable insights about {topics[0] if topics else 'this topic'} that could transform your approach."
+        }
+        for plat in main_platforms:
+            platform_descriptions[plat] = fallback_templates.get(plat, "Watch to discover valuable insights.")
+    
+    # Use tiktok description as default fallback
+    description_text = platform_descriptions.get('tiktok', '')
     
     logger.info(f"[_generate_platform_captions] 📄 Title: {title[:50]}...")
-    logger.info(f"[_generate_platform_captions] 📝 Description: {description_text[:80]}...")
+    for plat, desc in platform_descriptions.items():
+        logger.info(f"[_generate_platform_captions] 📝 {plat}: {desc[:60]}...")
     
     # Determine tone modifiers
     is_humorous = tone == 'funny' or (style and 'funny' in style.lower()) or (custom_prompt and 'funny' in custom_prompt.lower())
@@ -585,79 +702,59 @@ Write ONLY the description (2-3 sentences), no hashtags, no title. Be creative a
     if topics:
         base_hashtags = [f"#{t.replace(' ', '').lower()}" for t in topics[:5]]
     
-    # Platform-specific generation
+    # Platform-specific generation using UNIQUE descriptions per platform
     # NOTE: Descriptions should NOT include the title - title is separate
     captions = {}
     
-    # TikTok caption - description only, no title
+    # Get platform-specific descriptions (each is unique)
+    tiktok_desc = platform_descriptions.get('tiktok', description_text)
+    instagram_desc = platform_descriptions.get('instagram', description_text)
+    youtube_desc = platform_descriptions.get('youtube', description_text)
+    
+    # TikTok caption - uses unique TikTok description
     if is_humorous:
-        tiktok_caption = ""
-        if description_text:
-            tiktok_caption = f"😂 You won't believe this... {description_text}\n\n"
+        tiktok_caption = f"😂 {tiktok_desc}\n\n" if tiktok_desc else ""
         tiktok_caption += f"#fyp #viral #comedy {' '.join(base_hashtags[:3])}"
     elif is_professional:
-        tiktok_caption = ""
-        if description_text:
-            tiktok_caption = f"📊 {description_text}\n\n"
+        tiktok_caption = f"📊 {tiktok_desc}\n\n" if tiktok_desc else ""
         tiktok_caption += f"#business #professional {' '.join(base_hashtags[:3])}"
     elif is_casual:
-        tiktok_caption = ""
-        if description_text:
-            tiktok_caption = f"👋 {description_text}\n\n"
+        tiktok_caption = f"👋 {tiktok_desc}\n\n" if tiktok_desc else ""
         tiktok_caption += f"#fyp #foryou {' '.join(base_hashtags[:3])}"
     else:
-        # Engaging/default
-        tiktok_caption = ""
-        if description_text:
-            tiktok_caption = f"🔥 {description_text}\n\n"
+        tiktok_caption = f"🔥 {tiktok_desc}\n\n" if tiktok_desc else ""
         tiktok_caption += f"#fyp #viral {' '.join(base_hashtags[:3])}"
     
     captions['tiktok'] = tiktok_caption.strip()
     
-    # Instagram caption - description only, no title
+    # Instagram caption - uses unique Instagram description
     if is_humorous:
-        instagram_caption = ""
-        if description_text:
-            instagram_caption = f"😂 {description_text}\n\n"
+        instagram_caption = f"😂 {instagram_desc}\n\n" if instagram_desc else ""
         instagram_caption += f"Tag someone who needs to see this! 👇\n\n#reels #funny {' '.join(base_hashtags[:5])}"
     elif is_professional:
-        instagram_caption = ""
-        if description_text:
-            instagram_caption = f"{description_text}\n\n"
+        instagram_caption = f"{instagram_desc}\n\n" if instagram_desc else ""
         instagram_caption += f"What are your thoughts? Share below.\n\n#professional {' '.join(base_hashtags[:5])}"
     elif is_casual:
-        instagram_caption = ""
-        if description_text:
-            instagram_caption = f"✨ {description_text}\n\n"
+        instagram_caption = f"✨ {instagram_desc}\n\n" if instagram_desc else ""
         instagram_caption += f"#reels #mood {' '.join(base_hashtags[:5])}"
     else:
-        instagram_caption = ""
-        if description_text:
-            instagram_caption = f"✨ {description_text}\n\n"
+        instagram_caption = f"✨ {instagram_desc}\n\n" if instagram_desc else ""
         instagram_caption += f"#reels #explore {' '.join(base_hashtags[:5])}"
     
     captions['instagram'] = instagram_caption.strip()
     
-    # YouTube caption - description only, no title
+    # YouTube caption - uses unique YouTube description
     if is_humorous:
-        youtube_caption = ""
-        if description_text:
-            youtube_caption = f"{description_text} 😂\n\n"
+        youtube_caption = f"{youtube_desc} 😂\n\n" if youtube_desc else ""
         youtube_caption += f"Don't forget to like and subscribe for more!\n\nTopics: {topics_str}"
     elif is_professional:
-        youtube_caption = ""
-        if description_text:
-            youtube_caption = f"{description_text}\n\n"
+        youtube_caption = f"{youtube_desc}\n\n" if youtube_desc else ""
         youtube_caption += f"For more professional content, subscribe to our channel.\n\nTopics: {topics_str}"
     elif is_casual:
-        youtube_caption = ""
-        if description_text:
-            youtube_caption = f"{description_text}\n\n"
+        youtube_caption = f"{youtube_desc}\n\n" if youtube_desc else ""
         youtube_caption += f"Thanks for watching! 💜\n\nTopics: {topics_str}"
     else:
-        youtube_caption = ""
-        if description_text:
-            youtube_caption = f"{description_text}\n\n"
+        youtube_caption = f"{youtube_desc}\n\n" if youtube_desc else ""
         youtube_caption += f"Topics: {topics_str}"
     
     captions['youtube'] = youtube_caption.strip()
@@ -727,7 +824,12 @@ Write ONLY the description (2-3 sentences), no hashtags, no title. Be creative a
             limit = platform_limits[p].description_target
             logger.info(f"[_generate_platform_captions] 📏 {p}: {len(caption)}/{limit} chars")
     
-    return captions
+    # Return both captions (with hashtags) and clean descriptions (without hashtags)
+    return {
+        "captions": captions,
+        "platform_descriptions": platform_descriptions,  # Clean descriptions from AI
+        "hashtags": base_hashtags
+    }
 
 
 # Background task functions

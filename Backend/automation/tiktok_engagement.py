@@ -17,6 +17,14 @@ from automation.safari_app_controller import SafariAppController
 from automation.tiktok_session_manager import TikTokSessionManager
 from automation.tiktok_login_automation_v2 import TikTokLoginAutomationV2
 
+# Import centralized Safari session manager
+try:
+    from automation.safari_session_manager import SafariSessionManager, Platform
+    HAS_SAFARI_SESSION_MANAGER = True
+except ImportError:
+    HAS_SAFARI_SESSION_MANAGER = False
+    logger.warning("Safari session manager not available")
+
 # Try to import extension bridge (optional - falls back to AppleScript if not available)
 try:
     from automation.safari_extension_bridge import SafariExtensionBridge
@@ -136,6 +144,11 @@ class TikTokEngagement:
         self.is_initialized = False
         self.is_logged_in = False
         self.current_url = ""
+        
+        # Centralized Safari session manager
+        self.safari_session_manager = None
+        if HAS_SAFARI_SESSION_MANAGER:
+            self.safari_session_manager = SafariSessionManager()
     
     # ==================== Initialization ====================
     

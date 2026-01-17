@@ -17,6 +17,17 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from loguru import logger
 
+# Import centralized Safari session manager
+try:
+    from automation.safari_session_manager import SafariSessionManager, Platform
+    HAS_SESSION_MANAGER = True
+except ImportError:
+    try:
+        from safari_session_manager import SafariSessionManager, Platform
+        HAS_SESSION_MANAGER = True
+    except ImportError:
+        HAS_SESSION_MANAGER = False
+
 STORAGE_BASE = "/Users/isaiahdupree/Documents/CompetitorResearch/accounts"
 
 
@@ -34,7 +45,17 @@ class SafariInstagramScraper:
         self.downloaded = []
         self.failed = []
         
+        # Session manager for login verification
+        self.session_manager = SafariSessionManager() if HAS_SESSION_MANAGER else None
+        
         logger.info(f"Safari Instagram scraper initialized for @{target_username}")
+    
+    def require_login(self) -> bool:
+        """Check if logged into Instagram before scraping."""
+        if self.session_manager:
+            return self.session_manager.require_login(Platform.INSTAGRAM)
+        logger.warning("Session manager not available, assuming logged in")
+        return True
     
     def run_applescript(self, script: str) -> str:
         """Execute an AppleScript and return the result."""

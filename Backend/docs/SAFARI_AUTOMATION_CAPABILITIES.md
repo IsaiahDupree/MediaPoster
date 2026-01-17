@@ -17,9 +17,11 @@ This document provides a comprehensive audit of all Safari browser automation ca
 | **Twitter/X** | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Like/RT |
 | **Threads** | ✅ Full | ✅ Full | ✅ Replies | ✅ Full | ✅ Full | - |
 | **TikTok** | ❌ Safari | ❌ Safari | ❌ Safari | ✅ Full | ✅ Full | ✅ Full |
-| **Instagram** | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | - |
+| **Instagram** | ❌ Safari | ❌ Safari | ❌ Safari | ✅ Full | ✅ Full | ✅ Scrape |
 | **Sora** | ✅ Video Gen | - | - | - | - | - |
 | **YouTube** | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | - |
+
+*Instagram Safari automation ported from Riona TypeScript codebase*
 
 ### API-Based Publishing (Backend Services)
 
@@ -146,10 +148,12 @@ python safari_tiktok_cli.py open
 
 ---
 
-### Instagram ✅ API PUBLISHING / ⚠️ SAFARI MINIMAL
+### Instagram ✅ API PUBLISHING + ✅ SAFARI DMs/NOTIFICATIONS
 
 **API File:** `services/platform_publishers.py` → `InstagramPublisher`
-**Safari File:** `automation/safari_instagram_scraper.py`
+**Safari Files:** 
+- `automation/safari_instagram_poster.py` - DMs, notifications (ported from Riona)
+- `automation/safari_instagram_scraper.py` - Reels scraping
 
 #### API Publishing (Graph API)
 
@@ -162,26 +166,30 @@ python safari_tiktok_cli.py open
 | Validate credentials | ✅ | `InstagramPublisher.validate_credentials()` |
 | Get account info | ✅ | `InstagramPublisher.get_account_info()` |
 
-#### Safari Automation
+#### Safari Automation (Ported from Riona)
 
 | Feature | Status | Class/Method |
 |---------|--------|--------------|
-| Post photo/reel | ❌ | Not implemented |
-| Post with caption | ❌ | Not implemented |
-| Reply to post | ❌ | Not implemented |
-| View notifications | ❌ | Not implemented |
-| List DM conversations | ❌ | Not implemented |
-| Read DM messages | ❌ | Not implemented |
-| Send DM | ❌ | Not implemented |
+| View notifications | ✅ | `InstagramNotifications.get_notifications()` |
+| List DM conversations | ✅ | `InstagramDM.get_conversations()` |
+| Read DM messages | ✅ | `InstagramDM.read_messages()` |
+| Send DM | ✅ | `InstagramDM.send_message()` |
+| Get notes | ✅ | `SafariInstagramAutomation.get_notes()` |
+| Login verification | ✅ | `SafariInstagramAutomation.check_login_status()` |
 | Scrape profile | ✅ | `SafariInstagramScraper` |
 | Scrape reels | ✅ | Via scraper + RapidAPI |
-| Login verification | ✅ | Via `SafariSessionManager` |
+| Post photo/reel | ❌ | Not implemented (use API) |
 
-**Missing Features:**
-- [ ] SafariInstagramPoster class
-- [ ] InstagramNotifications class
-- [ ] InstagramDM class
-- [ ] Full CLI
+**CLI Commands:**
+```bash
+python safari_instagram_poster.py --check-login
+python safari_instagram_poster.py notifications
+python safari_instagram_poster.py dm list
+python safari_instagram_poster.py dm read username
+python safari_instagram_poster.py dm send username "Hello!"
+```
+
+**Source:** Ported from Riona TypeScript codebase (`SafariController.ts`, `InstagramDM.ts`)
 
 ---
 

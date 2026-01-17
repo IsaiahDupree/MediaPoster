@@ -1385,6 +1385,179 @@ async def quick_comment_video(video_url: str, comment: str) -> bool:
         await engagement.cleanup()
 
 
+# =============================================================================
+# NOTIFICATIONS FUNCTIONALITY
+# =============================================================================
+
+class TikTokNotifications:
+    """Read TikTok notifications/activity via Safari."""
+    
+    INBOX_URL = "https://www.tiktok.com/inbox"
+    ACTIVITY_URL = "https://www.tiktok.com/activity"
+    
+    def __init__(self):
+        self.session_manager = SafariSessionManager() if HAS_SAFARI_SESSION_MANAGER else None
+    
+    def _run_applescript(self, script: str) -> tuple:
+        """Execute AppleScript."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                return True, result.stdout.strip()
+            return False, result.stderr.strip()
+        except Exception as e:
+            return False, str(e)
+    
+    def require_login(self) -> bool:
+        """Check if logged into TikTok."""
+        if self.session_manager:
+            return self.session_manager.require_login(Platform.TIKTOK)
+        return True
+    
+    def get_notifications(self, limit: int = 20) -> Dict:
+        """
+        Get recent notifications from TikTok inbox.
+        
+        Args:
+            limit: Maximum notifications to fetch
+        
+        Returns:
+            Dict with notifications list
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        # Navigate to inbox
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{self.INBOX_URL}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(3)
+        
+        # Extract notifications
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var notifications = [];
+                        var items = document.querySelectorAll('[class*=\\"NotificationItem\\"], [class*=\\"DivItemContainer\\"], [data-e2e*=\\"notification\\"]');
+                        
+                        for (var i = 0; i < Math.min(items.length, {limit}); i++) {{
+                            var item = items[i];
+                            var textEl = item.querySelector('[class*=\\"Content\\"], span');
+                            var userEl = item.querySelector('a[href*=\\"/@\\"]');
+                            var timeEl = item.querySelector('[class*=\\"Time\\"], time');
+                            var typeEl = item.querySelector('[class*=\\"Type\\"]');
+                            
+                            if (textEl) {{
+                                notifications.push({{
+                                    text: textEl.innerText.substring(0, 200),
+                                    user: userEl ? userEl.href.split('/@').pop().split('/')[0] : null,
+                                    time: timeEl ? timeEl.innerText : null,
+                                    type: typeEl ? typeEl.innerText : 'activity'
+                                }});
+                            }}
+                        }}
+                        
+                        return JSON.stringify(notifications);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                import json
+                notifications = json.loads(result)
+                return {
+                    'success': True,
+                    'count': len(notifications),
+                    'notifications': notifications
+                }
+            except:
+                return {'success': True, 'count': 0, 'notifications': [], 'raw': result}
+        
+        return {'success': False, 'error': result}
+    
+    def get_all_activity(self, limit: int = 20) -> Dict:
+        """
+        Get all activity (likes, comments, follows, mentions).
+        
+        Returns:
+            Dict with activity items
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        # Navigate to activity page (All Activity tab)
+        nav_script = '''
+        tell application "Safari"
+            activate
+            set URL of front document to "https://www.tiktok.com/inbox?tab=all"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(3)
+        
+        # Extract activity
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var activities = [];
+                        var items = document.querySelectorAll('[class*=\\"ItemContainer\\"], [class*=\\"NotificationItem\\"], article');
+                        
+                        for (var i = 0; i < Math.min(items.length, {limit}); i++) {{
+                            var item = items[i];
+                            var contentEl = item.querySelector('[class*=\\"Content\\"], span');
+                            var avatarEl = item.querySelector('img[class*=\\"Avatar\\"]');
+                            var linkEl = item.querySelector('a[href*=\\"/video/\\"]');
+                            
+                            if (contentEl) {{
+                                activities.push({{
+                                    content: contentEl.innerText.substring(0, 200),
+                                    has_avatar: !!avatarEl,
+                                    video_link: linkEl ? linkEl.href : null
+                                }});
+                            }}
+                        }}
+                        
+                        return JSON.stringify(activities);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                import json
+                activities = json.loads(result)
+                return {
+                    'success': True,
+                    'count': len(activities),
+                    'activities': activities
+                }
+            except:
+                return {'success': True, 'count': 0, 'activities': [], 'raw': result}
+        
+        return {'success': False, 'error': result}
+
+
 # ==================== Main / Test ====================
 
 async def main():

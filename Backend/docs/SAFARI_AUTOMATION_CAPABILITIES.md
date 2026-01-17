@@ -10,14 +10,26 @@ This document provides a comprehensive audit of all Safari browser automation ca
 
 ## Platform Capability Matrix
 
-| Platform | Posting | Media | Threads/Replies | DMs | Notifications | Engagement | Scraping |
-|----------|---------|-------|-----------------|-----|---------------|------------|----------|
-| **Twitter/X** | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Like/RT | - |
-| **Threads** | ✅ Full | ✅ Full | ✅ Replies | ✅ Full | ✅ Full | - | - |
-| **TikTok** | ❌ Missing | ❌ Missing | ❌ Missing | ✅ Full | ✅ Full | ✅ Full | - |
-| **Instagram** | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | - | ✅ Reels |
-| **Sora** | ✅ Video Gen | - | - | - | - | - | ✅ Videos |
-| **YouTube** | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | - | - |
+### Safari Browser Automation (AppleScript)
+
+| Platform | Posting | Media | Threads/Replies | DMs | Notifications | Engagement |
+|----------|---------|-------|-----------------|-----|---------------|------------|
+| **Twitter/X** | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Like/RT |
+| **Threads** | ✅ Full | ✅ Full | ✅ Replies | ✅ Full | ✅ Full | - |
+| **TikTok** | ❌ Safari | ❌ Safari | ❌ Safari | ✅ Full | ✅ Full | ✅ Full |
+| **Instagram** | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | - |
+| **Sora** | ✅ Video Gen | - | - | - | - | - |
+| **YouTube** | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | ❌ Safari | - |
+
+### API-Based Publishing (Backend Services)
+
+| Platform | Posting | Media | Reels/Shorts | Carousel | Stories | Scheduling |
+|----------|---------|-------|--------------|----------|---------|------------|
+| **TikTok** | ✅ API | ✅ Video | ✅ Full | - | - | ✅ |
+| **Instagram** | ✅ API | ✅ Image/Video | ✅ Reels | ⚠️ Partial | ⚠️ Partial | ✅ |
+| **YouTube** | ✅ API | ✅ Video | ✅ Shorts | - | - | ✅ |
+
+**Key:** ✅ = Implemented | ⚠️ = Partial | ❌ = Not implemented via this method
 
 ---
 
@@ -134,9 +146,23 @@ python safari_tiktok_cli.py open
 
 ---
 
-### Instagram ⚠️ MINIMAL
+### Instagram ✅ API PUBLISHING / ⚠️ SAFARI MINIMAL
 
-**File:** `automation/safari_instagram_scraper.py`
+**API File:** `services/platform_publishers.py` → `InstagramPublisher`
+**Safari File:** `automation/safari_instagram_scraper.py`
+
+#### API Publishing (Graph API)
+
+| Feature | Status | Class/Method |
+|---------|--------|--------------|
+| Post image | ✅ | `InstagramPublisher._publish_image()` |
+| Post video/reel | ✅ | `InstagramPublisher._publish_video()` |
+| Post carousel | ⚠️ | `InstagramPublisher._publish_carousel()` (stub) |
+| Post story | ⚠️ | `InstagramPublisher._publish_story()` (stub) |
+| Validate credentials | ✅ | `InstagramPublisher.validate_credentials()` |
+| Get account info | ✅ | `InstagramPublisher.get_account_info()` |
+
+#### Safari Automation
 
 | Feature | Status | Class/Method |
 |---------|--------|--------------|

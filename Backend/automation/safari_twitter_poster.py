@@ -1415,6 +1415,477 @@ def post_tweet(text: str, media_paths: Optional[List[str]] = None) -> Dict:
     return poster.post_tweet(text, media_paths)
 
 
+# =============================================================================
+# NOTIFICATIONS FUNCTIONALITY
+# =============================================================================
+
+class TwitterNotifications:
+    """Read and manage Twitter/X notifications via Safari."""
+    
+    NOTIFICATIONS_URL = "https://x.com/notifications"
+    MENTIONS_URL = "https://x.com/notifications/mentions"
+    
+    def __init__(self):
+        self.session_manager = SafariSessionManager() if HAS_SESSION_MANAGER else None
+    
+    def _run_applescript(self, script: str) -> tuple:
+        """Execute AppleScript and return (success, output)."""
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                return True, result.stdout.strip()
+            return False, result.stderr.strip()
+        except Exception as e:
+            return False, str(e)
+    
+    def require_login(self) -> bool:
+        """Check if logged into Twitter."""
+        if self.session_manager:
+            return self.session_manager.require_login(Platform.TWITTER)
+        return True
+    
+    def get_notifications(self, limit: int = 20, mentions_only: bool = False) -> Dict:
+        """
+        Get recent notifications from Twitter.
+        
+        Args:
+            limit: Maximum notifications to fetch
+            mentions_only: If True, only get mentions
+        
+        Returns:
+            Dict with notifications list
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        url = self.MENTIONS_URL if mentions_only else self.NOTIFICATIONS_URL
+        
+        # Navigate to notifications
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{url}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(3)
+        
+        # Extract notifications
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var notifications = [];
+                        var items = document.querySelectorAll('article, [data-testid=\\"notification\\"], [data-testid=\\"cellInnerDiv\\"]');
+                        
+                        for (var i = 0; i < Math.min(items.length, {limit}); i++) {{
+                            var item = items[i];
+                            var textEl = item.querySelector('[data-testid=\\"tweetText\\"], span');
+                            var userEl = item.querySelector('a[href*=\\"/\\"]');
+                            var timeEl = item.querySelector('time');
+                            
+                            if (textEl) {{
+                                notifications.push({{
+                                    text: textEl.innerText.substring(0, 200),
+                                    user: userEl ? userEl.href.split('/').pop() : null,
+                                    time: timeEl ? timeEl.getAttribute('datetime') : null
+                                }});
+                            }}
+                        }}
+                        
+                        return JSON.stringify(notifications);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                notifications = json.loads(result)
+                return {
+                    'success': True,
+                    'count': len(notifications),
+                    'notifications': notifications,
+                    'mentions_only': mentions_only
+                }
+            except json.JSONDecodeError:
+                return {'success': True, 'count': 0, 'notifications': [], 'raw': result}
+        
+        return {'success': False, 'error': result}
+    
+    def get_unread_count(self) -> Dict:
+        """Get count of unread notifications."""
+        script = '''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {
+                        var badge = document.querySelector('[aria-label*=\\"notification\\"] [aria-label*=\\"unread\\"], [data-testid=\\"notificationIndicator\\"]');
+                        if (badge) {
+                            var count = badge.innerText || badge.getAttribute('aria-label');
+                            return count ? count.match(/\\d+/)?.[0] || '1' : '0';
+                        }
+                        return '0';
+                    })();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                count = int(result) if result.isdigit() else 0
+                return {'success': True, 'unread_count': count}
+            except:
+                return {'success': True, 'unread_count': 0}
+        
+        return {'success': False, 'error': result}
+
+
+# =============================================================================
+# DM/CHAT FUNCTIONALITY
+# =============================================================================
+
+class TwitterDM:
+    """Read and send Twitter/X direct messages via Safari."""
+    
+    DM_URL = "https://x.com/messages"
+    
+    def __init__(self):
+        self.session_manager = SafariSessionManager() if HAS_SESSION_MANAGER else None
+    
+    def _run_applescript(self, script: str) -> tuple:
+        """Execute AppleScript and return (success, output)."""
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                return True, result.stdout.strip()
+            return False, result.stderr.strip()
+        except Exception as e:
+            return False, str(e)
+    
+    def _escape_for_js(self, text: str) -> str:
+        """Escape text for JavaScript."""
+        return (text
+                .replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("'", "\\'")
+                .replace("\n", "\\n"))
+    
+    def require_login(self) -> bool:
+        """Check if logged into Twitter."""
+        if self.session_manager:
+            return self.session_manager.require_login(Platform.TWITTER)
+        return True
+    
+    def get_conversations(self, limit: int = 20) -> Dict:
+        """
+        Get list of DM conversations.
+        
+        Returns:
+            Dict with conversation list
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        # Navigate to DMs
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{self.DM_URL}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(3)
+        
+        # Extract conversations
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var conversations = [];
+                        var items = document.querySelectorAll('[data-testid=\\"conversation\\"], [data-testid=\\"DMConversationEntry\\"], [role=\\"listitem\\"]');
+                        
+                        for (var i = 0; i < Math.min(items.length, {limit}); i++) {{
+                            var item = items[i];
+                            var nameEl = item.querySelector('[dir=\\"ltr\\"] span, [data-testid=\\"User-Name\\"]');
+                            var previewEl = item.querySelector('[data-testid=\\"dmConversationContent\\"], [dir=\\"auto\\"]');
+                            var timeEl = item.querySelector('time');
+                            var unread = item.querySelector('[data-testid=\\"unread\\"]') !== null;
+                            
+                            if (nameEl) {{
+                                conversations.push({{
+                                    name: nameEl.innerText,
+                                    preview: previewEl ? previewEl.innerText.substring(0, 100) : '',
+                                    time: timeEl ? timeEl.getAttribute('datetime') : null,
+                                    unread: unread
+                                }});
+                            }}
+                        }}
+                        
+                        return JSON.stringify(conversations);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                conversations = json.loads(result)
+                unread_count = sum(1 for c in conversations if c.get('unread'))
+                return {
+                    'success': True,
+                    'count': len(conversations),
+                    'unread_count': unread_count,
+                    'conversations': conversations
+                }
+            except json.JSONDecodeError:
+                return {'success': True, 'count': 0, 'conversations': [], 'raw': result}
+        
+        return {'success': False, 'error': result}
+    
+    def open_conversation(self, username: str) -> bool:
+        """
+        Open a DM conversation with a specific user.
+        
+        Args:
+            username: Twitter username (without @)
+        
+        Returns:
+            True if conversation opened
+        """
+        if not self.require_login():
+            return False
+        
+        # Navigate to new message compose
+        url = f"https://x.com/messages/compose"
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{url}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(2)
+        
+        # Search for user
+        escaped_username = self._escape_for_js(username)
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var searchInput = document.querySelector('input[placeholder*=\\"Search\\"], input[data-testid=\\"searchPeople\\"]');
+                        if (searchInput) {{
+                            searchInput.focus();
+                            searchInput.value = '{escaped_username}';
+                            searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            return 'searching';
+                        }}
+                        return 'not_found';
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success and result == 'searching':
+            time.sleep(2)
+            
+            # Click on user result
+            click_script = f'''
+            tell application "Safari"
+                tell front document
+                    do JavaScript "
+                        (function() {{
+                            var results = document.querySelectorAll('[data-testid=\\"TypeaheadUser\\"], [role=\\"option\\"]');
+                            for (var i = 0; i < results.length; i++) {{
+                                if (results[i].innerText.toLowerCase().includes('{escaped_username.lower()}')) {{
+                                    results[i].click();
+                                    return 'clicked';
+                                }}
+                            }}
+                            return 'no_match';
+                        }})();
+                    "
+                end tell
+            end tell
+            '''
+            success, result = self._run_applescript(click_script)
+            time.sleep(1)
+            
+            # Click Next button
+            next_script = '''
+            tell application "Safari"
+                tell front document
+                    do JavaScript "
+                        (function() {
+                            var nextBtn = document.querySelector('[data-testid=\\"nextButton\\"], button[type=\\"submit\\"]');
+                            if (nextBtn) {
+                                nextBtn.click();
+                                return 'opened';
+                            }
+                            return 'no_next';
+                        })();
+                    "
+                end tell
+            end tell
+            '''
+            self._run_applescript(next_script)
+            time.sleep(2)
+            return True
+        
+        return False
+    
+    def read_messages(self, limit: int = 50) -> Dict:
+        """
+        Read messages from the current open conversation.
+        
+        Returns:
+            Dict with messages list
+        """
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var messages = [];
+                        var items = document.querySelectorAll('[data-testid=\\"messageEntry\\"], [data-testid=\\"DMMessageBubble\\"]');
+                        
+                        for (var i = 0; i < Math.min(items.length, {limit}); i++) {{
+                            var item = items[i];
+                            var textEl = item.querySelector('[data-testid=\\"tweetText\\"], [dir=\\"auto\\"]');
+                            var timeEl = item.querySelector('time');
+                            var isSent = item.classList.contains('sent') || item.closest('[data-testid*=\\"sent\\"]') !== null;
+                            
+                            if (textEl) {{
+                                messages.push({{
+                                    text: textEl.innerText,
+                                    time: timeEl ? timeEl.getAttribute('datetime') : null,
+                                    is_sent: isSent
+                                }});
+                            }}
+                        }}
+                        
+                        return JSON.stringify(messages);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                messages = json.loads(result)
+                return {
+                    'success': True,
+                    'count': len(messages),
+                    'messages': messages
+                }
+            except json.JSONDecodeError:
+                return {'success': True, 'count': 0, 'messages': [], 'raw': result}
+        
+        return {'success': False, 'error': result}
+    
+    def send_message(self, text: str, username: Optional[str] = None) -> Dict:
+        """
+        Send a DM message.
+        
+        Args:
+            text: Message text
+            username: If provided, opens conversation with user first
+        
+        Returns:
+            Dict with success status
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        # Open conversation if username provided
+        if username:
+            if not self.open_conversation(username):
+                return {'success': False, 'error': f'Could not open conversation with {username}'}
+        
+        # Type message
+        escaped_text = self._escape_for_js(text)
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var input = document.querySelector('[data-testid=\\"dmComposerTextInput\\"], [contenteditable=\\"true\\"], textarea[placeholder*=\\"message\\"]');
+                        if (input) {{
+                            input.focus();
+                            if (input.tagName === 'TEXTAREA') {{
+                                input.value = '{escaped_text}';
+                            }} else {{
+                                input.innerText = '{escaped_text}';
+                            }}
+                            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            return 'typed';
+                        }}
+                        return 'input_not_found';
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if not success or result != 'typed':
+            return {'success': False, 'error': f'Failed to type message: {result}'}
+        
+        time.sleep(0.5)
+        
+        # Click send button
+        send_script = '''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {
+                        var sendBtn = document.querySelector('[data-testid=\\"dmComposerSendButton\\"], [aria-label*=\\"Send\\"]');
+                        if (sendBtn && !sendBtn.disabled) {
+                            sendBtn.click();
+                            return 'sent';
+                        }
+                        return 'send_not_found';
+                    })();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(send_script)
+        
+        if success and result == 'sent':
+            logger.success(f"✅ DM sent: {text[:50]}...")
+            return {
+                'success': True,
+                'message': text,
+                'recipient': username
+            }
+        
+        return {'success': False, 'error': f'Failed to send: {result}'}
+
+
 def test_login_status() -> Dict:
     """Test if user is logged into X/Twitter."""
     poster = SafariTwitterPoster()
@@ -1511,6 +1982,30 @@ if __name__ == "__main__":
     schedule_parser.add_argument('--time', '-t', required=True, help='Schedule time (ISO format)')
     schedule_parser.add_argument('--media', '-m', action='append', help='Media file path(s)')
     
+    # Notifications command
+    notif_parser = subparsers.add_parser('notifications', help='View notifications')
+    notif_parser.add_argument('--mentions', '-m', action='store_true', help='Only show mentions')
+    notif_parser.add_argument('--limit', '-l', type=int, default=20, help='Max notifications')
+    notif_parser.add_argument('--unread', '-u', action='store_true', help='Show unread count only')
+    
+    # DM commands
+    dm_parser = subparsers.add_parser('dm', help='Direct messages')
+    dm_subparsers = dm_parser.add_subparsers(dest='dm_action', help='DM actions')
+    
+    # DM list
+    dm_list_parser = dm_subparsers.add_parser('list', help='List conversations')
+    dm_list_parser.add_argument('--limit', '-l', type=int, default=20, help='Max conversations')
+    
+    # DM read
+    dm_read_parser = dm_subparsers.add_parser('read', help='Read messages from user')
+    dm_read_parser.add_argument('username', help='Username to read messages from')
+    dm_read_parser.add_argument('--limit', '-l', type=int, default=50, help='Max messages')
+    
+    # DM send
+    dm_send_parser = dm_subparsers.add_parser('send', help='Send a DM')
+    dm_send_parser.add_argument('username', help='Username to message')
+    dm_send_parser.add_argument('message', nargs='+', help='Message text')
+    
     args = parser.parse_args()
     poster = SafariTwitterPoster()
     
@@ -1581,6 +2076,88 @@ if __name__ == "__main__":
         print("=" * 50)
         result = poster.schedule_tweet(tweet_text, args.time, media_paths)
         print(f"\nResult: {json.dumps(result, indent=2)}")
+    
+    elif args.command == 'notifications':
+        notifications = TwitterNotifications()
+        
+        if args.unread:
+            print("=" * 50)
+            print("Checking Unread Notifications")
+            print("=" * 50)
+            result = notifications.get_unread_count()
+            print(f"\nUnread count: {result.get('unread_count', 0)}")
+        else:
+            print("=" * 50)
+            print(f"Fetching {'Mentions' if args.mentions else 'Notifications'} (limit: {args.limit})")
+            print("=" * 50)
+            result = notifications.get_notifications(limit=args.limit, mentions_only=args.mentions)
+            
+            if result.get('success'):
+                print(f"\n📬 Found {result['count']} notifications:\n")
+                for notif in result.get('notifications', []):
+                    user = notif.get('user', 'unknown')
+                    text = notif.get('text', '')[:100]
+                    time_str = notif.get('time', '')
+                    print(f"  @{user}: {text}")
+                    if time_str:
+                        print(f"    🕐 {time_str}")
+                    print()
+            else:
+                print(f"\n❌ Error: {result.get('error')}")
+    
+    elif args.command == 'dm':
+        dm = TwitterDM()
+        
+        if args.dm_action == 'list':
+            print("=" * 50)
+            print(f"Fetching DM Conversations (limit: {args.limit})")
+            print("=" * 50)
+            result = dm.get_conversations(limit=args.limit)
+            
+            if result.get('success'):
+                print(f"\n💬 Found {result['count']} conversations ({result.get('unread_count', 0)} unread):\n")
+                for conv in result.get('conversations', []):
+                    name = conv.get('name', 'Unknown')
+                    preview = conv.get('preview', '')[:60]
+                    unread = "🔵 " if conv.get('unread') else ""
+                    print(f"  {unread}{name}")
+                    print(f"    {preview}...")
+                    print()
+            else:
+                print(f"\n❌ Error: {result.get('error')}")
+        
+        elif args.dm_action == 'read':
+            print("=" * 50)
+            print(f"Reading Messages from @{args.username}")
+            print("=" * 50)
+            
+            # Open conversation first
+            if dm.open_conversation(args.username):
+                result = dm.read_messages(limit=args.limit)
+                
+                if result.get('success'):
+                    print(f"\n📨 Found {result['count']} messages:\n")
+                    for msg in result.get('messages', []):
+                        direction = "➡️ Sent" if msg.get('is_sent') else "⬅️ Received"
+                        text = msg.get('text', '')
+                        print(f"  {direction}: {text}")
+                        print()
+                else:
+                    print(f"\n❌ Error: {result.get('error')}")
+            else:
+                print(f"\n❌ Could not open conversation with @{args.username}")
+        
+        elif args.dm_action == 'send':
+            message = " ".join(args.message)
+            print("=" * 50)
+            print(f"Sending DM to @{args.username}")
+            print(f"Message: {message[:50]}...")
+            print("=" * 50)
+            result = dm.send_message(message, args.username)
+            print(f"\nResult: {json.dumps(result, indent=2)}")
+        
+        else:
+            dm_parser.print_help()
         
     else:
         parser.print_help()
@@ -1600,6 +2177,14 @@ if __name__ == "__main__":
         print("  python safari_twitter_poster.py poll 'What is best?' -o 'Option A' 'Option B' 'Option C'")
         print("\n⏰ Schedule:")
         print("  python safari_twitter_poster.py schedule 'Future tweet' -t 2026-01-20T14:30:00")
+        print("\n🔔 Notifications:")
+        print("  python safari_twitter_poster.py notifications")
+        print("  python safari_twitter_poster.py notifications --mentions")
+        print("  python safari_twitter_poster.py notifications --unread")
+        print("\n💬 DMs:")
+        print("  python safari_twitter_poster.py dm list")
+        print("  python safari_twitter_poster.py dm read elonmusk")
+        print("  python safari_twitter_poster.py dm send elonmusk 'Hey! Great work on X!'")
         print("\n🔍 Test:")
         print("  python safari_twitter_poster.py --test-login")
         print("  python safari_twitter_poster.py --test-compose")

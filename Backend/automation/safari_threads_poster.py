@@ -634,6 +634,369 @@ class SafariThreadsPoster:
         return result
 
 
+# =============================================================================
+# NOTIFICATIONS FUNCTIONALITY
+# =============================================================================
+
+class ThreadsNotifications:
+    """Read Threads notifications via Safari."""
+    
+    ACTIVITY_URL = "https://www.threads.net/activity"
+    
+    def __init__(self):
+        self.session_manager = SafariSessionManager() if HAS_SESSION_MANAGER else None
+    
+    def _run_applescript(self, script: str) -> Tuple[bool, str]:
+        """Execute AppleScript."""
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                return True, result.stdout.strip()
+            return False, result.stderr.strip()
+        except Exception as e:
+            return False, str(e)
+    
+    def require_login(self) -> bool:
+        """Check if logged into Threads."""
+        if self.session_manager:
+            return self.session_manager.require_login(Platform.THREADS)
+        return True
+    
+    def get_notifications(self, limit: int = 20) -> Dict[str, Any]:
+        """
+        Get recent notifications/activity from Threads.
+        
+        Args:
+            limit: Maximum notifications to fetch
+        
+        Returns:
+            Dict with notifications list
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        # Navigate to activity
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{self.ACTIVITY_URL}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(3)
+        
+        # Extract notifications
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var notifications = [];
+                        var items = document.querySelectorAll('[role=\\"listitem\\"], article');
+                        
+                        for (var i = 0; i < Math.min(items.length, {limit}); i++) {{
+                            var item = items[i];
+                            var textEl = item.querySelector('span, [dir=\\"auto\\"]');
+                            var userEl = item.querySelector('a[href*=\\"/@\\"]');
+                            var timeEl = item.querySelector('time');
+                            
+                            if (textEl) {{
+                                notifications.push({{
+                                    text: textEl.innerText.substring(0, 200),
+                                    user: userEl ? userEl.href.split('/@').pop().split('/')[0] : null,
+                                    time: timeEl ? timeEl.getAttribute('datetime') : null
+                                }});
+                            }}
+                        }}
+                        
+                        return JSON.stringify(notifications);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                notifications = json.loads(result)
+                return {
+                    'success': True,
+                    'count': len(notifications),
+                    'notifications': notifications
+                }
+            except json.JSONDecodeError:
+                return {'success': True, 'count': 0, 'notifications': [], 'raw': result}
+        
+        return {'success': False, 'error': result}
+
+
+# =============================================================================
+# DM/CHAT FUNCTIONALITY
+# =============================================================================
+
+class ThreadsDM:
+    """Read and send Threads direct messages via Safari."""
+    
+    DM_URL = "https://www.threads.net/direct/inbox"
+    
+    def __init__(self):
+        self.session_manager = SafariSessionManager() if HAS_SESSION_MANAGER else None
+    
+    def _run_applescript(self, script: str) -> Tuple[bool, str]:
+        """Execute AppleScript."""
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                return True, result.stdout.strip()
+            return False, result.stderr.strip()
+        except Exception as e:
+            return False, str(e)
+    
+    def _escape_for_js(self, text: str) -> str:
+        """Escape text for JavaScript."""
+        return (text
+                .replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("'", "\\'")
+                .replace("\n", "\\n"))
+    
+    def require_login(self) -> bool:
+        """Check if logged into Threads."""
+        if self.session_manager:
+            return self.session_manager.require_login(Platform.THREADS)
+        return True
+    
+    def get_conversations(self, limit: int = 20) -> Dict[str, Any]:
+        """
+        Get list of DM conversations.
+        
+        Returns:
+            Dict with conversation list
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        # Navigate to DMs
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{self.DM_URL}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(3)
+        
+        # Extract conversations
+        script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var conversations = [];
+                        var items = document.querySelectorAll('[role=\\"listitem\\"], [data-pressable-container=\\"true\\"]');
+                        
+                        for (var i = 0; i < Math.min(items.length, {limit}); i++) {{
+                            var item = items[i];
+                            var nameEl = item.querySelector('[dir=\\"ltr\\"] span, a[href*=\\"/@\\"]');
+                            var previewEl = item.querySelector('[dir=\\"auto\\"]');
+                            var timeEl = item.querySelector('time');
+                            
+                            if (nameEl) {{
+                                conversations.push({{
+                                    name: nameEl.innerText,
+                                    preview: previewEl ? previewEl.innerText.substring(0, 100) : '',
+                                    time: timeEl ? timeEl.getAttribute('datetime') : null
+                                }});
+                            }}
+                        }}
+                        
+                        return JSON.stringify(conversations);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(script)
+        
+        if success:
+            try:
+                conversations = json.loads(result)
+                return {
+                    'success': True,
+                    'count': len(conversations),
+                    'conversations': conversations
+                }
+            except json.JSONDecodeError:
+                return {'success': True, 'count': 0, 'conversations': [], 'raw': result}
+        
+        return {'success': False, 'error': result}
+    
+    def send_message(self, text: str, username: str) -> Dict[str, Any]:
+        """
+        Send a DM message to a user.
+        
+        Args:
+            text: Message text
+            username: Username to message
+        
+        Returns:
+            Dict with success status
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+        
+        # Navigate to compose new message
+        compose_url = "https://www.threads.net/direct/new"
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{compose_url}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(2)
+        
+        # Search for user
+        escaped_username = self._escape_for_js(username)
+        search_script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var searchInput = document.querySelector('input[placeholder*=\\"Search\\"], input[type=\\"text\\"]');
+                        if (searchInput) {{
+                            searchInput.focus();
+                            searchInput.value = '{escaped_username}';
+                            searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            return 'searching';
+                        }}
+                        return 'not_found';
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(search_script)
+        
+        if not success or result != 'searching':
+            return {'success': False, 'error': 'Could not find search input'}
+        
+        time.sleep(2)
+        
+        # Click on user result
+        click_script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var results = document.querySelectorAll('[role=\\"option\\"], [data-pressable-container=\\"true\\"]');
+                        for (var i = 0; i < results.length; i++) {{
+                            if (results[i].innerText.toLowerCase().includes('{escaped_username.lower()}')) {{
+                                results[i].click();
+                                return 'clicked';
+                            }}
+                        }}
+                        return 'no_match';
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        self._run_applescript(click_script)
+        time.sleep(1)
+        
+        # Click chat/next button
+        next_script = '''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {
+                        var btn = document.querySelector('button[type=\\"submit\\"], div[role=\\"button\\"]');
+                        if (btn && btn.innerText.toLowerCase().includes('chat')) {
+                            btn.click();
+                            return 'opened';
+                        }
+                        return 'no_button';
+                    })();
+                "
+            end tell
+        end tell
+        '''
+        self._run_applescript(next_script)
+        time.sleep(2)
+        
+        # Type message
+        escaped_text = self._escape_for_js(text)
+        type_script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var input = document.querySelector('[contenteditable=\\"true\\"], textarea[placeholder*=\\"message\\"]');
+                        if (input) {{
+                            input.focus();
+                            if (input.tagName === 'TEXTAREA') {{
+                                input.value = '{escaped_text}';
+                            }} else {{
+                                input.innerText = '{escaped_text}';
+                            }}
+                            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            return 'typed';
+                        }}
+                        return 'input_not_found';
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(type_script)
+        
+        if not success or result != 'typed':
+            return {'success': False, 'error': f'Failed to type message: {result}'}
+        
+        time.sleep(0.5)
+        
+        # Click send
+        send_script = '''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {
+                        var sendBtn = document.querySelector('[aria-label*=\\"Send\\"], button[type=\\"submit\\"]');
+                        if (sendBtn && !sendBtn.disabled) {
+                            sendBtn.click();
+                            return 'sent';
+                        }
+                        return 'send_not_found';
+                    })();
+                "
+            end tell
+        end tell
+        '''
+        success, result = self._run_applescript(send_script)
+        
+        if success and result == 'sent':
+            logger.success(f"✅ Threads DM sent to @{username}")
+            return {
+                'success': True,
+                'message': text,
+                'recipient': username
+            }
+        
+        return {'success': False, 'error': f'Failed to send: {result}'}
+
+
 def test_login_status() -> Dict[str, Any]:
     """Test Threads login status."""
     poster = SafariThreadsPoster()
@@ -664,6 +1027,23 @@ if __name__ == "__main__":
     
     # Open command
     open_parser = subparsers.add_parser('open', help='Open Threads in Safari')
+    
+    # Notifications command
+    notif_parser = subparsers.add_parser('notifications', help='View notifications/activity')
+    notif_parser.add_argument('--limit', '-l', type=int, default=20, help='Max notifications')
+    
+    # DM commands
+    dm_parser = subparsers.add_parser('dm', help='Direct messages')
+    dm_subparsers = dm_parser.add_subparsers(dest='dm_action', help='DM actions')
+    
+    # DM list
+    dm_list_parser = dm_subparsers.add_parser('list', help='List conversations')
+    dm_list_parser.add_argument('--limit', '-l', type=int, default=20, help='Max conversations')
+    
+    # DM send
+    dm_send_parser = dm_subparsers.add_parser('send', help='Send a DM')
+    dm_send_parser.add_argument('username', help='Username to message')
+    dm_send_parser.add_argument('message', nargs='+', help='Message text')
     
     args = parser.parse_args()
     poster = SafariThreadsPoster()
@@ -703,6 +1083,58 @@ if __name__ == "__main__":
         else:
             print("❌ Failed to open Threads")
     
+    elif args.command == 'notifications':
+        notifications = ThreadsNotifications()
+        print("=" * 50)
+        print(f"Fetching Threads Activity (limit: {args.limit})")
+        print("=" * 50)
+        result = notifications.get_notifications(limit=args.limit)
+        
+        if result.get('success'):
+            print(f"\n📬 Found {result['count']} notifications:\n")
+            for notif in result.get('notifications', []):
+                user = notif.get('user', 'unknown')
+                text = notif.get('text', '')[:100]
+                time_str = notif.get('time', '')
+                print(f"  @{user}: {text}")
+                if time_str:
+                    print(f"    🕐 {time_str}")
+                print()
+        else:
+            print(f"\n❌ Error: {result.get('error')}")
+    
+    elif args.command == 'dm':
+        dm = ThreadsDM()
+        
+        if args.dm_action == 'list':
+            print("=" * 50)
+            print(f"Fetching DM Conversations (limit: {args.limit})")
+            print("=" * 50)
+            result = dm.get_conversations(limit=args.limit)
+            
+            if result.get('success'):
+                print(f"\n💬 Found {result['count']} conversations:\n")
+                for conv in result.get('conversations', []):
+                    name = conv.get('name', 'Unknown')
+                    preview = conv.get('preview', '')[:60]
+                    print(f"  {name}")
+                    print(f"    {preview}...")
+                    print()
+            else:
+                print(f"\n❌ Error: {result.get('error')}")
+        
+        elif args.dm_action == 'send':
+            message = " ".join(args.message)
+            print("=" * 50)
+            print(f"Sending DM to @{args.username}")
+            print(f"Message: {message[:50]}...")
+            print("=" * 50)
+            result = dm.send_message(message, args.username)
+            print(f"\nResult: {json.dumps(result, indent=2)}")
+        
+        else:
+            dm_parser.print_help()
+    
     else:
         parser.print_help()
         print("\n" + "=" * 50)
@@ -718,3 +1150,9 @@ if __name__ == "__main__":
         print("  python safari_threads_poster.py reply https://threads.net/@user/post/abc123 'Great thread!'")
         print("\n🌐 Open Threads:")
         print("  python safari_threads_poster.py open")
+        print("\n🔔 Notifications:")
+        print("  python safari_threads_poster.py notifications")
+        print("  python safari_threads_poster.py notifications --limit 10")
+        print("\n💬 DMs:")
+        print("  python safari_threads_poster.py dm list")
+        print("  python safari_threads_poster.py dm send username 'Hello!'")

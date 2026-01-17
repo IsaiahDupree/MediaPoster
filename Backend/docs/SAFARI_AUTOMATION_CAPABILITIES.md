@@ -13,8 +13,8 @@ This document provides a comprehensive audit of all Safari browser automation ca
 | Platform | Posting | Media | Threads/Replies | DMs | Notifications | Engagement | Scraping |
 |----------|---------|-------|-----------------|-----|---------------|------------|----------|
 | **Twitter/X** | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Like/RT | - |
-| **Threads** | ✅ Full | ✅ Full | ✅ Replies | ❌ Missing | ❌ Missing | - | - |
-| **TikTok** | ❌ Missing | ❌ Missing | ❌ Missing | ✅ Full | ❌ Missing | ✅ Full | - |
+| **Threads** | ✅ Full | ✅ Full | ✅ Replies | ✅ Full | ✅ Full | - | - |
+| **TikTok** | ❌ Missing | ❌ Missing | ❌ Missing | ✅ Full | ✅ Full | ✅ Full | - |
 | **Instagram** | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | - | ✅ Reels |
 | **Sora** | ✅ Video Gen | - | - | - | - | - | ✅ Videos |
 | **YouTube** | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | ❌ Missing | - | - |
@@ -63,7 +63,7 @@ python safari_twitter_poster.py dm send USERNAME "Message"
 
 ---
 
-### Threads ⚠️ PARTIAL
+### Threads ✅ COMPLETE
 
 **File:** `automation/safari_threads_poster.py`
 
@@ -72,10 +72,9 @@ python safari_twitter_poster.py dm send USERNAME "Message"
 | Post thread | ✅ | `SafariThreadsPoster.post_thread()` |
 | Post with media | ✅ | `SafariThreadsPoster.post_thread(media_paths)` |
 | Reply to thread | ✅ | `SafariThreadsPoster.reply_to_thread()` |
-| View notifications | ❌ | Not implemented |
-| List DM conversations | ❌ | Not implemented |
-| Read DM messages | ❌ | Not implemented |
-| Send DM | ❌ | Not implemented |
+| View notifications | ✅ | `ThreadsNotifications.get_notifications()` |
+| List DM conversations | ✅ | `ThreadsDM.get_conversations()` |
+| Send DM | ✅ | `ThreadsDM.send_message()` |
 | URL/ID capture | ✅ | Automatic after posting |
 | Login verification | ✅ | Via `SafariSessionManager` |
 
@@ -84,28 +83,26 @@ python safari_twitter_poster.py dm send USERNAME "Message"
 python safari_threads_poster.py post "Hello Threads!"
 python safari_threads_poster.py post "Check this!" -m /path/to/image.jpg
 python safari_threads_poster.py reply URL "Reply text"
+python safari_threads_poster.py notifications
+python safari_threads_poster.py dm list
+python safari_threads_poster.py dm send username "Hello!"
 ```
-
-**Missing Features:**
-- [ ] ThreadsNotifications class
-- [ ] ThreadsDM class
-- [ ] CLI commands for notifications and DMs
 
 ---
 
-### TikTok ⚠️ PARTIAL
+### TikTok ⚠️ PARTIAL (Posting missing)
 
 **Files:**
 - `automation/tiktok_engagement.py` - Main engagement class
 - `automation/tiktok_messenger.py` - DM functionality
-- `automation/tiktok_comment_agentic.py` - Commenting automation
+- `automation/safari_tiktok_cli.py` - Unified CLI
 
 | Feature | Status | Class/Method |
 |---------|--------|--------------|
-| Post video | ❌ | Not implemented |
+| Post video | ❌ | Not implemented (complex upload flow) |
 | Post with caption | ❌ | Not implemented |
-| Reply to video | ❌ | Not implemented (commenting exists) |
-| View notifications | ❌ | Not implemented |
+| View notifications | ✅ | `TikTokNotifications.get_notifications()` |
+| View all activity | ✅ | `TikTokNotifications.get_all_activity()` |
 | List DM conversations | ✅ | `TikTokMessenger.get_conversations()` |
 | Read DM messages | ✅ | `TikTokMessenger.get_messages()` |
 | Send DM | ✅ | `TikTokMessenger.send_message()` |
@@ -118,10 +115,22 @@ python safari_threads_poster.py reply URL "Reply text"
 | Search | ✅ | `TikTokEngagement.search()` |
 | Login verification | ✅ | Via `SafariSessionManager` |
 
+**CLI Commands:**
+```bash
+python safari_tiktok_cli.py --check-login
+python safari_tiktok_cli.py like URL
+python safari_tiktok_cli.py comment URL "Great video!"
+python safari_tiktok_cli.py follow @username
+python safari_tiktok_cli.py notifications
+python safari_tiktok_cli.py activity
+python safari_tiktok_cli.py dm list
+python safari_tiktok_cli.py dm read username
+python safari_tiktok_cli.py dm send username "Hello!"
+python safari_tiktok_cli.py open
+```
+
 **Missing Features:**
-- [ ] TikTok video posting (requires upload flow)
-- [ ] TikTokNotifications class
-- [ ] Unified CLI like Twitter
+- [ ] TikTok video posting (requires complex upload flow)
 
 ---
 

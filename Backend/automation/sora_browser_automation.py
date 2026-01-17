@@ -545,4 +545,122 @@ gestures at the historic buildings around him. 9:16 vertical format, 5 seconds."
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Sora Safari Automation - Video Generation')
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+    
+    # Check login
+    parser.add_argument('--check-login', action='store_true', help='Check Sora login status')
+    
+    # Generate command
+    gen_parser = subparsers.add_parser('generate', help='Generate a video')
+    gen_parser.add_argument('prompt', nargs='+', help='Video prompt')
+    gen_parser.add_argument('--duration', '-d', type=int, default=5, choices=[5, 10, 15, 20], help='Duration in seconds')
+    gen_parser.add_argument('--ratio', '-r', default='9:16', choices=['9:16', '16:9', '1:1'], help='Aspect ratio')
+    
+    # List jobs command
+    list_parser = subparsers.add_parser('list', help='List generation jobs')
+    list_parser.add_argument('--status', '-s', choices=['pending', 'generating', 'completed', 'failed'], help='Filter by status')
+    
+    # Schedule command
+    sched_parser = subparsers.add_parser('schedule', help='Schedule a generation')
+    sched_parser.add_argument('prompt', nargs='+', help='Video prompt')
+    sched_parser.add_argument('--time', '-t', required=True, help='Schedule time (ISO format)')
+    sched_parser.add_argument('--duration', '-d', type=int, default=5, help='Duration in seconds')
+    sched_parser.add_argument('--ratio', '-r', default='9:16', help='Aspect ratio')
+    
+    # Open command
+    open_parser = subparsers.add_parser('open', help='Open Sora in Safari')
+    
+    args = parser.parse_args()
+    automation = SoraBrowserAutomation()
+    
+    if args.check_login:
+        print("=" * 50)
+        print("Checking Sora Login Status")
+        print("=" * 50)
+        if automation.require_login():
+            print("✅ Logged in to Sora")
+        else:
+            print("❌ Not logged in to Sora")
+    
+    elif args.command == 'generate':
+        prompt = " ".join(args.prompt)
+        print("=" * 50)
+        print(f"Generating Video")
+        print(f"Prompt: {prompt[:80]}...")
+        print(f"Duration: {args.duration}s | Ratio: {args.ratio}")
+        print("=" * 50)
+        
+        result = asyncio.run(automation.generate_video(
+            prompt=prompt,
+            duration=args.duration,
+            aspect_ratio=args.ratio
+        ))
+        
+        print(f"\nResult: {result.status}")
+        if result.video_path:
+            print(f"✅ Video: {result.video_path}")
+        if result.error:
+            print(f"❌ Error: {result.error}")
+    
+    elif args.command == 'list':
+        print("=" * 50)
+        print("Sora Generation Jobs")
+        print("=" * 50)
+        
+        jobs = automation.jobs
+        if args.status:
+            jobs = [j for j in jobs if j.status == args.status]
+        
+        if not jobs:
+            print("No jobs found")
+        else:
+            for job in jobs:
+                status_icon = {"completed": "✅", "failed": "❌", "generating": "⏳", "pending": "📝"}.get(job.status, "❓")
+                print(f"{status_icon} {job.id}: {job.status}")
+                print(f"   Prompt: {job.prompt[:50]}...")
+                if job.video_path:
+                    print(f"   Video: {job.video_path}")
+                print()
+    
+    elif args.command == 'schedule':
+        prompt = " ".join(args.prompt)
+        scheduled_time = datetime.fromisoformat(args.time)
+        
+        scheduler = SoraScheduler()
+        job_id = scheduler.add_scheduled_job(
+            prompt=prompt,
+            scheduled_time=scheduled_time,
+            duration=args.duration,
+            aspect_ratio=args.ratio
+        )
+        
+        print(f"✅ Scheduled job: {job_id}")
+        print(f"   Time: {scheduled_time}")
+        print(f"   Prompt: {prompt[:50]}...")
+    
+    elif args.command == 'open':
+        print("Opening Sora in Safari...")
+        if automation.open_sora():
+            print("✅ Sora opened")
+        else:
+            print("❌ Failed to open Sora")
+    
+    else:
+        parser.print_help()
+        print("\n" + "=" * 50)
+        print("EXAMPLES")
+        print("=" * 50)
+        print("\n🔍 Check login:")
+        print("  python sora_browser_automation.py --check-login")
+        print("\n🎬 Generate video:")
+        print('  python sora_browser_automation.py generate "A sunset over the ocean, cinematic" -d 10 -r 16:9')
+        print("\n📋 List jobs:")
+        print("  python sora_browser_automation.py list")
+        print("  python sora_browser_automation.py list --status completed")
+        print("\n⏰ Schedule generation:")
+        print('  python sora_browser_automation.py schedule "Future video prompt" -t 2026-01-20T10:00:00')
+        print("\n🌐 Open Sora:")
+        print("  python sora_browser_automation.py open")

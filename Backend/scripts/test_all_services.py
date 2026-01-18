@@ -55,7 +55,11 @@ class ServiceTester:
                 res = await client.get(f"{API_URL}/api/media-db/list?limit=10")
                 if res.status_code == 200:
                     data = res.json()
-                    count = len(data.get("media", []))
+                    # API returns list directly, or object with "media" key
+                    if isinstance(data, list):
+                        count = len(data)
+                    else:
+                        count = len(data.get("media", []))
                     return True, f"Media list returned {count} items"
                 return False, f"Media list failed: {res.status_code}"
             except Exception as e:

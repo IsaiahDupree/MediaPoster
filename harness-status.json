@@ -1,0 +1,16 @@
+{
+  "projectId": "mediaposter",
+  "projectRoot": "/Users/isaiahdupree/Documents/Software/MediaPoster",
+  "lastUpdated": "2026-01-18T09:22:46.388Z",
+  "sessionType": "error",
+  "status": "max_errors",
+  "stats": {
+    "total": 242,
+    "passing": 17,
+    "pending": 225,
+    "percentComplete": "7.0"
+  },
+  "pid": 80697,
+  "message": "Stopped after 5 consecutive errors",
+  "lastError": "rate_limit"
+}

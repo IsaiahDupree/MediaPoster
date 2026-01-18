@@ -19,14 +19,80 @@ logger = logging.getLogger(__name__)
 
 class VideoFormat(str, Enum):
     """Video format classifications"""
+    # === UGC (Human-Created) Formats ===
     TALKING_HEAD = "talking_head"           # Person talking directly to camera
+    VLOG = "vlog"                           # Vlog real-time style recording
+    GREEN_SCREEN = "green_screen"           # Green screen background replacement
+    LIPSYNC = "lipsync"                     # Lipsyncing to audio/music
+    
+    # === B-Roll Formats (Can be UGC or AI) ===
     BROLL_TEXT_CANDIDATE = "broll_text"     # B-roll suitable for text overlay (person not talking)
     PURE_BROLL = "pure_broll"               # No person, no speech - pure b-roll footage
-    VOICEOVER = "voiceover"                 # Voice but no visible person
+    
+    # === Audio-Based Formats ===
+    VOICEOVER = "voiceover"                 # Voice but no visible person (VO style)
     MUSIC_ONLY = "music_only"               # Just background music, no speech
     SILENT = "silent"                       # No audio at all
-    MIXED = "mixed"                         # Mixed content
+    
+    # === AI-Generated Formats ===
+    ANIMATED = "animated"                   # AI-generated animated content
+    AI_AVATAR = "ai_avatar"                 # AI avatar/digital human
+    
+    # === Static/Image Formats ===
+    CAROUSEL = "carousel"                   # Multi-image carousel post
+    STATIC_POST = "static_post"             # Single static image post
+    STORY_IMAGE = "story_image"             # Story format image (9:16)
+    
+    # === Short-Form Video Formats ===
+    STORY_VIDEO = "story_video"             # Story format video (9:16, <60s)
+    REEL = "reel"                           # Instagram Reel / TikTok style
+    
+    # === Other ===
+    MIXED = "mixed"                         # Mixed content type
     UNKNOWN = "unknown"                     # Not enough data to classify
+
+
+# Format categorization for filtering
+FORMAT_CATEGORIES = {
+    "ugc": [
+        VideoFormat.TALKING_HEAD,
+        VideoFormat.VLOG,
+        VideoFormat.GREEN_SCREEN,
+        VideoFormat.LIPSYNC,
+        VideoFormat.BROLL_TEXT_CANDIDATE,
+        VideoFormat.PURE_BROLL,
+        VideoFormat.VOICEOVER,
+        VideoFormat.CAROUSEL,
+        VideoFormat.STATIC_POST,
+        VideoFormat.STORY_IMAGE,
+        VideoFormat.STORY_VIDEO,
+        VideoFormat.REEL,
+    ],
+    "ai_generated": [
+        VideoFormat.ANIMATED,
+        VideoFormat.AI_AVATAR,
+        VideoFormat.BROLL_TEXT_CANDIDATE,  # Can be AI-enhanced
+        VideoFormat.PURE_BROLL,            # Can be AI-generated
+    ],
+    "video": [
+        VideoFormat.TALKING_HEAD,
+        VideoFormat.VLOG,
+        VideoFormat.GREEN_SCREEN,
+        VideoFormat.LIPSYNC,
+        VideoFormat.BROLL_TEXT_CANDIDATE,
+        VideoFormat.PURE_BROLL,
+        VideoFormat.VOICEOVER,
+        VideoFormat.ANIMATED,
+        VideoFormat.AI_AVATAR,
+        VideoFormat.STORY_VIDEO,
+        VideoFormat.REEL,
+    ],
+    "image": [
+        VideoFormat.CAROUSEL,
+        VideoFormat.STATIC_POST,
+        VideoFormat.STORY_IMAGE,
+    ],
+}
 
 
 @dataclass

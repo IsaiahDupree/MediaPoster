@@ -63,14 +63,18 @@ class PostScheduler:
         self._task: Optional[asyncio.Task] = None
         self._background_publisher = None
         self._check_count = 0
-        
+
         # Event Bus integration
         self.event_bus = EventBus.get_instance()
         self.event_bus.set_source("post-scheduler")
-        
+
         # Deduplication guard
         from services.deduplication_guard import get_deduplication_guard
         self.dedup_guard = get_deduplication_guard()
+
+        # Sleep mode integration
+        self._sleep_service = None
+        self._scheduled_wake_triggers: Dict[str, str] = {}  # post_id -> wake_trigger_id
     
     @property
     def background_publisher(self):
@@ -79,6 +83,18 @@ class PostScheduler:
             from services.background_publisher import get_background_publisher
             self._background_publisher = get_background_publisher()
         return self._background_publisher
+
+    @property
+    def sleep_service(self):
+        """Lazy load sleep mode service"""
+        if self._sleep_service is None:
+            try:
+                from services.sleep_mode_service import SleepModeService
+                self._sleep_service = SleepModeService.get_instance()
+            except Exception as e:
+                logger.warning(f"Sleep mode service not available: {e}")
+                self._sleep_service = None
+        return self._sleep_service
         
     # =========================================================================
     # SCHEDULER CONTROL
@@ -164,7 +180,10 @@ class PostScheduler:
                         mins = int(diff // 60)
                         secs = int(diff % 60)
                         logger.info(f"   • {p.get('title', 'Untitled')[:25]} | {p.get('platform')} | T-{mins}m {secs}s")
-                
+
+                # Schedule wake triggers for upcoming posts (5 minutes before)
+                await self._schedule_wake_triggers_for_upcoming_posts(upcoming)
+
             except Exception as e:
                 logger.error(f"[Scheduler] ❌ Error: {e}")
             
@@ -280,7 +299,69 @@ class PostScheduler:
                     "scheduled_at": row[2],
                 })
             return posts
-    
+
+    async def _schedule_wake_triggers_for_upcoming_posts(self, upcoming_posts: List[Dict]) -> None:
+        """
+        Schedule wake triggers for upcoming posts (5 minutes before scheduled time)
+
+        Args:
+            upcoming_posts: List of upcoming scheduled posts
+        """
+        if not self.sleep_service:
+            return  # Sleep mode not available
+
+        from services.sleep_mode_service import WakeTriggerType
+
+        now = datetime.now(timezone.utc)
+
+        for post in upcoming_posts:
+            post_id = str(post.get('id'))
+            scheduled_at = post.get('scheduled_at')
+
+            if not scheduled_at:
+                continue
+
+            # Parse scheduled time
+            if isinstance(scheduled_at, str):
+                scheduled_time = datetime.fromisoformat(scheduled_at.replace('Z', '+00:00'))
+            else:
+                scheduled_time = scheduled_at
+
+            # Calculate wake time (5 minutes before post)
+            wake_time = scheduled_time - timedelta(minutes=5)
+
+            # Only schedule if wake time is in the future
+            if wake_time <= now:
+                continue
+
+            # Check if we already have a wake trigger for this post
+            if post_id in self._scheduled_wake_triggers:
+                # Already scheduled, skip
+                continue
+
+            # Schedule wake trigger
+            try:
+                trigger_id = self.sleep_service.schedule_wake(
+                    wake_time=wake_time,
+                    trigger_type=WakeTriggerType.SCHEDULED_POST,
+                    metadata={
+                        "post_id": post_id,
+                        "platform": post.get('platform'),
+                        "scheduled_time": scheduled_time.isoformat()
+                    }
+                )
+
+                # Track the trigger
+                self._scheduled_wake_triggers[post_id] = trigger_id
+
+                logger.debug(
+                    f"⏰ Scheduled wake for post {post_id[:8]}... at "
+                    f"{wake_time.strftime('%H:%M:%S UTC')} (5min before post)"
+                )
+
+            except Exception as e:
+                logger.warning(f"Failed to schedule wake for post {post_id}: {e}")
+
     # =========================================================================
     # PUBLISH LOGIC
     # =========================================================================

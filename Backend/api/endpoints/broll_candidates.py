@@ -276,3 +276,220 @@ async def lock_broll_selection(
         "candidate_id": candidate_id,
         "locked_at": datetime.now().isoformat(),
     }
+
+
+class TextSuggestionRequest(BaseModel):
+    """Request for AI-powered text overlay suggestions"""
+    video_id: str
+    scene_description: Optional[str] = None
+    tags: List[str] = []
+    beat_type: str = "hook"  # hook, problem, proof, steps, cta
+    tone: str = "engaging"  # engaging, educational, inspirational, funny
+    include_trends: bool = True
+    max_suggestions: int = 5
+
+
+@router.post("/text-suggestions")
+async def generate_text_suggestions(
+    request: TextSuggestionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate AI-powered text overlay suggestions for B-roll clips.
+    
+    Integrates with:
+    - Narrative Builder: Story-driven text that fits the beat structure
+    - Trends Agent: Trendy phrases and topics for viral potential
+    
+    Returns multiple suggestions optimized for text overlays on video.
+    """
+    logger.info(f"📥 [API] POST /api/broll/text-suggestions")
+    logger.info(f"   Video: {request.video_id}, Beat: {request.beat_type}")
+    
+    import os
+    from openai import OpenAI
+    from sqlalchemy import text
+    
+    # Get video analysis for context
+    video_context = ""
+    try:
+        result = await db.execute(
+            text("""
+                SELECT v.file_name, v.title, va.transcript, va.topics, va.hooks,
+                       va.visual_analysis
+                FROM videos v
+                LEFT JOIN video_analysis va ON v.id = va.video_id
+                WHERE v.id = :video_id
+            """),
+            {"video_id": request.video_id}
+        )
+        row = result.fetchone()
+        if row:
+            video_context = f"""
+Video: {row[1] or row[0]}
+Topics: {', '.join(row[3] or []) if row[3] else 'general content'}
+Hooks: {', '.join(row[4][:2]) if row[4] else 'none'}
+Scene: {request.scene_description or 'video clip'}
+Tags: {', '.join(request.tags[:5]) if request.tags else 'none'}
+"""
+    except Exception as e:
+        logger.warning(f"Could not fetch video context: {e}")
+        video_context = f"Scene: {request.scene_description or 'video clip'}\nTags: {', '.join(request.tags[:5]) if request.tags else 'general'}"
+    
+    # Get trending topics if requested
+    trends_context = ""
+    if request.include_trends:
+        try:
+            trends_result = await db.execute(
+                text("""
+                    SELECT title, description, opportunity_score
+                    FROM trend_opportunities
+                    WHERE status = 'new' AND window_end > NOW()
+                    ORDER BY opportunity_score DESC
+                    LIMIT 5
+                """)
+            )
+            trends = trends_result.fetchall()
+            if trends:
+                trends_context = "\n\nCurrent Trends:\n" + "\n".join([
+                    f"- {t[0]}: {t[1][:100]}..." if t[1] and len(t[1]) > 100 else f"- {t[0]}: {t[1] or ''}"
+                    for t in trends
+                ])
+        except Exception as e:
+            logger.warning(f"Could not fetch trends: {e}")
+    
+    # Generate suggestions with OpenAI
+    suggestions = []
+    try:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        beat_prompts = {
+            "hook": "attention-grabbing opener that stops the scroll",
+            "problem": "relatable problem or pain point statement",
+            "proof": "credibility or social proof statement",
+            "steps": "actionable tip or step",
+            "cta": "call to action that drives engagement",
+        }
+        
+        tone_styles = {
+            "engaging": "conversational and energetic",
+            "educational": "informative and clear",
+            "inspirational": "motivational and uplifting",
+            "funny": "witty and humorous",
+        }
+        
+        prompt = f"""Generate {request.max_suggestions} SHORT text overlay suggestions for a B-roll video clip.
+
+CONTEXT:
+{video_context}
+{trends_context}
+
+REQUIREMENTS:
+- Beat Type: {request.beat_type} - {beat_prompts.get(request.beat_type, 'engaging statement')}
+- Tone: {request.tone} - {tone_styles.get(request.tone, 'engaging')}
+- Each text must be SHORT (max 8 words) - perfect for video overlays
+- Make them punchy, memorable, and scroll-stopping
+- If trends are relevant, incorporate trending topics naturally
+- Vary the suggestions (different angles/approaches)
+
+Output ONLY a JSON array of strings, no explanation:
+["text 1", "text 2", ...]"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a viral content expert creating text overlays for short-form video. Output only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=300,
+            temperature=0.9
+        )
+        
+        import json
+        raw_response = response.choices[0].message.content.strip()
+        # Clean up response if needed
+        if raw_response.startswith("```"):
+            raw_response = raw_response.split("```")[1]
+            if raw_response.startswith("json"):
+                raw_response = raw_response[4:]
+        
+        suggestions = json.loads(raw_response)
+        logger.info(f"✅ Generated {len(suggestions)} text suggestions")
+        
+    except Exception as e:
+        logger.error(f"AI text generation failed: {e}")
+        # Fallback suggestions based on beat type
+        fallback = {
+            "hook": ["Wait for it...", "You need to see this", "This changes everything"],
+            "problem": ["The struggle is real", "We've all been there", "Sound familiar?"],
+            "proof": ["The results speak", "See for yourself", "Proof is in the pudding"],
+            "steps": ["Here's how", "Try this hack", "Pro tip incoming"],
+            "cta": ["Save this for later", "Follow for more", "Drop a 🔥 if you agree"],
+        }
+        suggestions = fallback.get(request.beat_type, ["Check this out", "You won't believe this"])
+    
+    return {
+        "video_id": request.video_id,
+        "beat_type": request.beat_type,
+        "tone": request.tone,
+        "suggestions": suggestions,
+        "trends_used": bool(trends_context),
+        "generated_at": datetime.now().isoformat(),
+    }
+
+
+@router.get("/trends-context")
+async def get_trends_for_broll(
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get current trend opportunities for B-roll text context.
+    
+    Returns trending topics, phrases, and themes that can be
+    incorporated into B-roll text overlays for viral potential.
+    """
+    logger.info(f"📥 [API] GET /api/broll/trends-context")
+    
+    from sqlalchemy import text
+    
+    try:
+        result = await db.execute(
+            text("""
+                SELECT id, title, description, opportunity_score, 
+                       relevance_to_brand, priority, recommended_actions,
+                       window_end
+                FROM trend_opportunities
+                WHERE status = 'new' AND window_end > NOW()
+                ORDER BY opportunity_score DESC
+                LIMIT :limit
+            """),
+            {"limit": limit}
+        )
+        trends = result.fetchall()
+        
+        return {
+            "trends": [
+                {
+                    "id": str(t[0]),
+                    "title": t[1],
+                    "description": t[2],
+                    "score": t[3],
+                    "relevance": t[4],
+                    "priority": t[5],
+                    "actions": t[6] or [],
+                    "expires": t[7].isoformat() if t[7] else None,
+                }
+                for t in trends
+            ],
+            "count": len(trends),
+            "fetched_at": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        logger.warning(f"Could not fetch trends: {e}")
+        return {
+            "trends": [],
+            "count": 0,
+            "error": str(e),
+            "fetched_at": datetime.now().isoformat(),
+        }

@@ -6,7 +6,7 @@ Abstract base class for music source adapters.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from services.music.models import MusicSearchCriteria, MusicResponse
 

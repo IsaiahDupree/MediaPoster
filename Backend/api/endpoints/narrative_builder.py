@@ -12,8 +12,13 @@ from loguru import logger
 import json
 
 from services.event_bus import EventBus, Topics
+import openai
 
 router = APIRouter(prefix="/api/narrative-builder", tags=["Narrative Builder"])
+
+# OpenAI client for AI-powered features
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai_client = openai.OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
@@ -259,6 +264,14 @@ async def get_candidate_pool(
                 INNER JOIN video_analysis va ON v.id = va.video_id
                 WHERE va.pre_social_score IS NOT NULL
                   AND va.curation_status = 'approved'
+                  AND (
+                      LOWER(v.file_name) LIKE '%.mov' OR
+                      LOWER(v.file_name) LIKE '%.mp4' OR
+                      LOWER(v.file_name) LIKE '%.m4v' OR
+                      LOWER(v.file_name) LIKE '%.avi' OR
+                      LOWER(v.file_name) LIKE '%.mkv' OR
+                      LOWER(v.file_name) LIKE '%.webm'
+                  )
                 ORDER BY va.pre_social_score DESC NULLS LAST
                 LIMIT :limit
             """), {'limit': limit}).fetchall()
@@ -721,7 +734,390 @@ async def update_narrative_goal(goal_id: str, updates: Dict[str, Any]):
 
 
 # =============================================================================
-# PHASE 3: 7-DAY LOOKAHEAD PLANNING
+# PILLARS MANAGEMENT
+# =============================================================================
+
+class PillarCreate(BaseModel):
+    goal_id: str
+    name: str
+    description: Optional[str] = None
+    pillar_type: str = 'value'  # value, proof, cta
+    color: str = '#3b82f6'
+    keywords: Optional[List[str]] = []
+    target_percentage: float = 20.0
+    min_posts_per_week: int = 1
+    max_posts_per_week: int = 5
+
+
+@router.get("/pillars/{goal_id}")
+async def get_pillars(goal_id: str):
+    """Get pillars for a narrative goal."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT id, name, description, pillar_type, color, keywords,
+                   target_percentage, min_posts_per_week, max_posts_per_week, is_active
+            FROM narrative_pillars WHERE goal_id = :goal_id
+            ORDER BY target_percentage DESC
+        """), {"goal_id": goal_id}).fetchall()
+        
+        pillars = []
+        for row in result:
+            pillars.append({
+                'id': str(row[0]),
+                'name': row[1],
+                'description': row[2],
+                'pillar_type': row[3],
+                'color': row[4],
+                'keywords': list(row[5]) if row[5] else [],
+                'target_percentage': float(row[6]) if row[6] else 20.0,
+                'min_posts_per_week': row[7] or 1,
+                'max_posts_per_week': row[8] or 5,
+                'is_active': row[9] if row[9] is not None else True
+            })
+        
+        return {'pillars': pillars, 'count': len(pillars), 'goal_id': goal_id}
+
+
+@router.post("/pillars")
+async def create_pillar(pillar: PillarCreate):
+    """Create a narrative pillar for a goal."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("""
+                INSERT INTO narrative_pillars (
+                    goal_id, name, description, pillar_type, color, keywords,
+                    target_percentage, min_posts_per_week, max_posts_per_week
+                ) VALUES (
+                    :goal_id, :name, :description, :pillar_type, :color, :keywords,
+                    :target_percentage, :min_posts_per_week, :max_posts_per_week
+                )
+                RETURNING id
+            """), {
+                'goal_id': pillar.goal_id,
+                'name': pillar.name,
+                'description': pillar.description,
+                'pillar_type': pillar.pillar_type,
+                'color': pillar.color,
+                'keywords': pillar.keywords,
+                'target_percentage': pillar.target_percentage,
+                'min_posts_per_week': pillar.min_posts_per_week,
+                'max_posts_per_week': pillar.max_posts_per_week
+            })
+            
+            pillar_id = str(result.fetchone()[0])
+            conn.commit()
+            
+            return {'id': pillar_id, 'name': pillar.name, 'message': 'Pillar created'}
+        except Exception as e:
+            return {'error': str(e), 'message': 'Could not create pillar'}
+
+
+# =============================================================================
+# AI-POWERED PILLAR MATCHING
+# =============================================================================
+
+async def match_content_to_pillar_ai(content: Dict, pillars: List[Dict]) -> Dict:
+    """Use AI to match content to the best pillar based on semantic understanding."""
+    if not openai_client or not pillars:
+        # Fallback to keyword matching
+        return match_content_to_pillar_keywords(content, pillars)
+    
+    pillar_descriptions = "\n".join([
+        f"- {p['name']}: {p.get('description', '')} (keywords: {', '.join(p.get('keywords', []))})"
+        for p in pillars
+    ])
+    
+    content_summary = f"""
+Title: {content.get('title', 'Unknown')}
+Topics: {', '.join(content.get('topics', []))}
+Hooks: {', '.join(content.get('hooks', [])[:3]) if content.get('hooks') else 'None'}
+Tone: {content.get('tone', 'Unknown')}
+"""
+    
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a content strategist. Match content to the most appropriate pillar. Return ONLY the pillar name, nothing else."},
+                {"role": "user", "content": f"Available pillars:\n{pillar_descriptions}\n\nContent:\n{content_summary}\n\nWhich pillar does this content best fit? Return ONLY the pillar name."}
+            ],
+            max_tokens=50,
+            temperature=0.3
+        )
+        
+        matched_pillar = response.choices[0].message.content.strip()
+        
+        # Find the matching pillar
+        for p in pillars:
+            if p['name'].lower() in matched_pillar.lower() or matched_pillar.lower() in p['name'].lower():
+                return {'pillar': p['name'], 'pillar_id': p.get('id'), 'method': 'ai', 'confidence': 0.9}
+        
+        # Fallback if no match found
+        return match_content_to_pillar_keywords(content, pillars)
+    except Exception as e:
+        logger.warning(f"AI pillar matching failed: {e}, falling back to keywords")
+        return match_content_to_pillar_keywords(content, pillars)
+
+
+def match_content_to_pillar_keywords(content: Dict, pillars: List[Dict]) -> Dict:
+    """Fallback: Match content to pillar using keyword overlap."""
+    content_text = " ".join([
+        content.get('title', ''),
+        " ".join(content.get('topics', [])),
+        " ".join(content.get('hooks', [])[:3]) if content.get('hooks') else ''
+    ]).lower()
+    
+    best_match = None
+    best_score = 0
+    
+    for pillar in pillars:
+        keywords = pillar.get('keywords', [])
+        score = sum(1 for kw in keywords if kw.lower() in content_text)
+        if score > best_score:
+            best_score = score
+            best_match = pillar
+    
+    if best_match:
+        return {'pillar': best_match['name'], 'pillar_id': best_match.get('id'), 'method': 'keywords', 'confidence': min(best_score / 3, 1.0)}
+    
+    # Default to first pillar if no match
+    if pillars:
+        return {'pillar': pillars[0]['name'], 'pillar_id': pillars[0].get('id'), 'method': 'default', 'confidence': 0.3}
+    
+    return {'pillar': 'general', 'pillar_id': None, 'method': 'none', 'confidence': 0}
+
+
+@router.post("/match-pillars")
+async def batch_match_pillars(goal_id: str, content_ids: List[str] = None):
+    """Match content to pillars using AI for a goal. If content_ids not provided, matches all candidates."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Get pillars for this goal
+        pillars_result = conn.execute(text("""
+            SELECT id, name, description, keywords FROM narrative_pillars 
+            WHERE goal_id = :goal_id AND is_active = true
+        """), {"goal_id": goal_id}).fetchall()
+        
+        pillars = [
+            {'id': str(r[0]), 'name': r[1], 'description': r[2], 'keywords': list(r[3]) if r[3] else []}
+            for r in pillars_result
+        ]
+        
+        if not pillars:
+            return {'error': 'No pillars found for this goal', 'matches': []}
+        
+        # Get content to match
+        if content_ids:
+            content_result = conn.execute(text("""
+                SELECT v.id, COALESCE(v.title, v.file_name) as title, va.topics, va.hooks, va.tone
+                FROM videos v
+                INNER JOIN video_analysis va ON v.id = va.video_id
+                WHERE v.id = ANY(:ids) AND va.curation_status = 'approved'
+            """), {"ids": content_ids}).fetchall()
+        else:
+            content_result = conn.execute(text("""
+                SELECT v.id, COALESCE(v.title, v.file_name) as title, va.topics, va.hooks, va.tone
+                FROM videos v
+                INNER JOIN video_analysis va ON v.id = va.video_id
+                WHERE va.curation_status = 'approved'
+                  AND va.pre_social_score >= 50
+                  AND (LOWER(v.file_name) LIKE '%.mov' OR LOWER(v.file_name) LIKE '%.mp4')
+                LIMIT 50
+            """)).fetchall()
+        
+        matches = []
+        for row in content_result:
+            content = {
+                'id': str(row[0]),
+                'title': row[1],
+                'topics': list(row[2]) if row[2] else [],
+                'hooks': list(row[3]) if row[3] else [],
+                'tone': row[4]
+            }
+            
+            match_result = await match_content_to_pillar_ai(content, pillars)
+            matches.append({
+                'content_id': content['id'],
+                'title': content['title'],
+                **match_result
+            })
+        
+        return {
+            'goal_id': goal_id,
+            'pillars': [p['name'] for p in pillars],
+            'matches': matches,
+            'count': len(matches)
+        }
+
+
+# =============================================================================
+# SCHEDULE 7-DAY PLAN
+# =============================================================================
+
+class SchedulePlanRequest(BaseModel):
+    platforms: List[str] = ["tiktok", "instagram"]
+    posts_per_day: int = 3
+    start_date: Optional[str] = None  # ISO format, defaults to tomorrow
+    time_slots: List[str] = ["09:00", "12:00", "18:00"]
+    goal_id: Optional[str] = None
+
+
+@router.post("/schedule-7-day-plan")
+async def schedule_seven_day_plan(request: SchedulePlanRequest):
+    """Generate and schedule a 7-day content plan to actual scheduled_posts."""
+    engine = get_engine()
+    
+    # Parse start date
+    if request.start_date:
+        start_date = datetime.fromisoformat(request.start_date)
+    else:
+        start_date = datetime.now() + timedelta(days=1)
+        start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    scheduled_posts = []
+    errors = []
+    
+    with engine.connect() as conn:
+        # Get approved video candidates (excluding already scheduled)
+        candidates_result = conn.execute(text("""
+            SELECT v.id, COALESCE(v.title, v.file_name) as title, va.pre_social_score, va.topics, va.hooks
+            FROM videos v
+            INNER JOIN video_analysis va ON v.id = va.video_id
+            WHERE va.pre_social_score >= 50
+              AND va.curation_status = 'approved'
+              AND (
+                  LOWER(v.file_name) LIKE '%.mov' OR
+                  LOWER(v.file_name) LIKE '%.mp4' OR
+                  LOWER(v.file_name) LIKE '%.m4v'
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM scheduled_posts sp 
+                  WHERE (sp.content_id = v.id::text OR sp.clip_id = v.id)
+                    AND sp.status IN ('scheduled', 'publishing', 'posted', 'published')
+              )
+            ORDER BY va.pre_social_score DESC
+            LIMIT :limit
+        """), {"limit": 7 * request.posts_per_day * len(request.platforms)}).fetchall()
+        
+        candidates = list(candidates_result)
+        logger.info(f"[Schedule 7-day] Found {len(candidates)} available video candidates")
+        
+        if not candidates:
+            return {"error": "No available video candidates to schedule", "scheduled": [], "count": 0}
+        
+        # Get Blotato accounts for each platform from config
+        from config.blotato_accounts import BLOTATO_ACCOUNTS
+        platform_accounts = {}
+        for platform in request.platforms:
+            # Find first account for this platform (BLOTATO_ACCOUNTS is a list of BlotatoAccount)
+            for acc in BLOTATO_ACCOUNTS:
+                if acc.platform == platform and acc.is_active:
+                    platform_accounts[platform] = {
+                        "id": str(acc.blotato_id),
+                        "handle": f"@{acc.username}"
+                    }
+                    break
+        
+        if not platform_accounts:
+            return {"error": "No active accounts found for requested platforms", "scheduled": [], "count": 0}
+        
+        # Schedule posts
+        candidate_idx = 0
+        for day_offset in range(7):
+            day_date = start_date + timedelta(days=day_offset)
+            
+            for slot_idx, time_slot in enumerate(request.time_slots[:request.posts_per_day]):
+                if candidate_idx >= len(candidates):
+                    break
+                
+                # Alternate platforms
+                platform = request.platforms[slot_idx % len(request.platforms)]
+                if platform not in platform_accounts:
+                    platform = list(platform_accounts.keys())[0]
+                
+                account = platform_accounts[platform]
+                candidate = candidates[candidate_idx]
+                candidate_idx += 1
+                
+                # Parse time slot
+                hour, minute = map(int, time_slot.split(":"))
+                scheduled_time = day_date.replace(hour=hour, minute=minute)
+                
+                # Get first hook as caption
+                hooks = list(candidate[4]) if candidate[4] else []
+                caption = hooks[0] if hooks else candidate[1]
+                
+                try:
+                    result = conn.execute(text("""
+                        INSERT INTO scheduled_posts (
+                            clip_id, content_id, platform, platform_account_id,
+                            scheduled_time, status, source, title, caption
+                        ) VALUES (
+                            :clip_id, :content_id, :platform, :account_id,
+                            :scheduled_time, 'scheduled', 'narrative_builder', :title, :caption
+                        )
+                        RETURNING id
+                    """), {
+                        "clip_id": candidate[0],
+                        "content_id": str(candidate[0]),
+                        "platform": platform,
+                        "account_id": account["id"],
+                        "scheduled_time": scheduled_time,
+                        "title": candidate[1],
+                        "caption": caption[:500] if caption else None
+                    })
+                    
+                    post_id = str(result.fetchone()[0])
+                    scheduled_posts.append({
+                        "post_id": post_id,
+                        "content_id": str(candidate[0]),
+                        "title": candidate[1],
+                        "platform": platform,
+                        "account": account["handle"],
+                        "scheduled_time": scheduled_time.isoformat(),
+                        "day": day_date.strftime("%A"),
+                        "slot": time_slot
+                    })
+                except Exception as e:
+                    errors.append({"content_id": str(candidate[0]), "error": str(e)})
+        
+        conn.commit()
+    
+    # Emit event
+    if scheduled_posts:
+        try:
+            import asyncio
+            event_bus = EventBus.get_instance()
+            asyncio.create_task(event_bus.publish(Topics.NARRATIVE_PLAN_GENERATED, {
+                "scheduled_count": len(scheduled_posts),
+                "post_ids": [p["post_id"] for p in scheduled_posts],
+                "platforms": list(set(p["platform"] for p in scheduled_posts)),
+                "date_range": f"{start_date.date()} to {(start_date + timedelta(days=6)).date()}"
+            }))
+        except Exception as e:
+            logger.warning(f"Failed to emit event: {e}")
+    
+    logger.info(f"[Schedule 7-day] Scheduled {len(scheduled_posts)} posts, {len(errors)} errors")
+    
+    return {
+        "scheduled": scheduled_posts,
+        "count": len(scheduled_posts),
+        "errors": errors,
+        "date_range": {
+            "start": start_date.isoformat(),
+            "end": (start_date + timedelta(days=6)).isoformat()
+        },
+        "platforms_used": list(platform_accounts.keys())
+    }
+
+
+# =============================================================================
+# PHASE 3: 7-DAY LOOKAHEAD PLANNING (AI-POWERED)
 # =============================================================================
 
 @router.get("/plan/7-day")
@@ -738,15 +1134,17 @@ async def get_seven_day_plan(use_demo: bool = True):
     
     try:
         with engine.connect() as conn:
-            # 1. Get active goals (with fallback if table/columns don't exist)
+            # 1. Get active goals
             try:
-                goals = conn.execute(text("""
-                    SELECT id, name, content_pillars, platform_mix, posting_cadence
+                goals = list(conn.execute(text("""
+                    SELECT id, goal_statement, primary_cta, target_audience, time_horizon
                     FROM narrative_goals WHERE status = 'active'
-                    ORDER BY priority DESC LIMIT 3
-                """)).fetchall()
+                    ORDER BY created_at DESC LIMIT 3
+                """)).fetchall())
+                logger.info(f"[7-day plan] Loaded {len(goals)} active goals")
             except Exception as e:
-                logger.debug(f"narrative_goals query failed: {e}")
+                logger.warning(f"narrative_goals query failed: {e}")
+                conn.rollback()  # Prevent transaction abort cascade
             
             # 2. Get applicable KB rules
             try:
@@ -760,6 +1158,7 @@ async def get_seven_day_plan(use_demo: bool = True):
                         for r in rules_result]
             except Exception as e:
                 logger.debug(f"kb_rules query failed: {e}")
+                conn.rollback()
             
             # 3. Get trend opportunities
             try:
@@ -774,19 +1173,37 @@ async def get_seven_day_plan(use_demo: bool = True):
                                for o in opp_result]
             except Exception as e:
                 logger.debug(f"trend_opportunities query failed: {e}")
+                conn.rollback()
             
-            # 4. Get candidate content - using only columns that exist
+            # 4. Get candidate content - APPROVED VIDEOS only, exclude scheduled/posted
             try:
-                candidates = conn.execute(text("""
+                result = conn.execute(text("""
                     SELECT v.id, COALESCE(v.title, v.file_name) as title, va.pre_social_score, va.topics
                     FROM videos v
                     INNER JOIN video_analysis va ON v.id = va.video_id
                     WHERE va.pre_social_score >= 50
+                      AND va.curation_status = 'approved'
+                      AND (
+                          LOWER(v.file_name) LIKE '%.mov' OR
+                          LOWER(v.file_name) LIKE '%.mp4' OR
+                          LOWER(v.file_name) LIKE '%.m4v' OR
+                          LOWER(v.file_name) LIKE '%.avi' OR
+                          LOWER(v.file_name) LIKE '%.mkv' OR
+                          LOWER(v.file_name) LIKE '%.webm'
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1 FROM scheduled_posts sp 
+                          WHERE (sp.content_id = v.id::text OR sp.clip_id = v.id)
+                            AND sp.status IN ('scheduled', 'publishing', 'posted', 'published')
+                      )
                     ORDER BY va.pre_social_score DESC
                     LIMIT 30
-                """)).fetchall()
+                """))
+                candidates = list(result.fetchall())
+                logger.info(f"[7-day plan] Found {len(candidates)} approved candidates (excluding scheduled/posted)")
             except Exception as e:
-                logger.debug(f"candidates query failed: {e}")
+                logger.warning(f"candidates query failed: {e}")
+                conn.rollback()
             
             # 5. Get MAINLINE accounts
             try:
@@ -797,6 +1214,7 @@ async def get_seven_day_plan(use_demo: bool = True):
                 mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
             except Exception as e:
                 logger.debug(f"mainline accounts query failed: {e}")
+                conn.rollback()
                 # Fallback if account_role doesn't exist
                 try:
                     accounts = conn.execute(text("""
@@ -805,9 +1223,12 @@ async def get_seven_day_plan(use_demo: bool = True):
                     mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
                 except Exception as e2:
                     logger.debug(f"fallback accounts query failed: {e2}")
+                    conn.rollback()
     except Exception as e:
-        # Database connection failed - use demo data
-        pass
+        logger.error(f"[7-day plan] Database error: {e}")
+    
+    # Log final state before plan generation
+    logger.info(f"[7-day plan] Final state: {len(candidates)} candidates, {len(goals)} goals, use_demo={use_demo}")
     
     # Generate demo content if no real data and use_demo is True
     if use_demo and not candidates:
@@ -853,20 +1274,17 @@ async def get_seven_day_plan(use_demo: bool = True):
     # 6. Generate 7-day plan
     plan_days = []
     candidate_idx = 0
+    posts_per_day = 3  # Default
+    platforms = ['tiktok', 'instagram']  # Default platforms
+    
+    logger.info(f"[7-day plan] Building plan with {len(candidates)} candidates")
     
     for day_offset in range(7):
         day_date = datetime.now() + timedelta(days=day_offset)
         day_name = day_date.strftime('%A')
         
-        # Determine posts for this day based on cadence
-        posts_today = 2  # Default
-        if goals:
-            cadence = goals[0][4] if len(goals[0]) > 4 else {}
-            if isinstance(cadence, dict):
-                posts_today = cadence.get('target_per_day', 2)
-        
         day_posts = []
-        for post_num in range(min(posts_today, 3)):
+        for post_num in range(min(posts_per_day, 3)):
             if candidate_idx < len(candidates):
                 cand = candidates[candidate_idx]
                 candidate_idx += 1
@@ -877,19 +1295,13 @@ async def get_seven_day_plan(use_demo: bool = True):
                     content_title = cand[1]
                     content_score = cand[2] if len(cand) > 2 else 70
                     topics = cand[3] if len(cand) > 3 else []
-                    platform = cand[4] if len(cand) > 4 else 'tiktok'
+                    platform = cand[4] if len(cand) > 4 else platforms[post_num % len(platforms)]
                 else:
                     content_id = str(cand[0])
                     content_title = cand[1]
                     content_score = int(cand[2]) if cand[2] else 0
                     topics = cand[3] or []
-                    platform = 'tiktok'
-                
-                # Override platform from goals if available
-                if goals and len(goals[0]) > 3 and goals[0][3]:
-                    platform_mix = goals[0][3]
-                    if isinstance(platform_mix, dict) and platform_mix:
-                        platform = max(platform_mix.items(), key=lambda x: x[1])[0]
+                    platform = platforms[post_num % len(platforms)]
                 
                 # Determine time slot
                 time_slots = ['9:00 AM', '12:00 PM', '6:00 PM']

@@ -197,32 +197,44 @@ class NarrativeScheduler:
         self, 
         constraints: SchedulingConstraints
     ) -> List[VideoCandidate]:
-        """Load videos that have been analyzed and meet score thresholds"""
+        """Load videos that have been analyzed, approved, and not already scheduled/posted"""
         videos = []
         
         with self.engine.connect() as conn:
-            # First try with min_score threshold
+            # Load APPROVED videos with score threshold, excluding already scheduled/posted
             result = conn.execute(text("""
                 SELECT v.id, v.file_name, v.source_uri, v.thumbnail_path, v.duration_sec,
                        va.pre_social_score, va.transcript, va.topics, va.hooks, va.tone
                 FROM videos v
                 JOIN video_analysis va ON va.video_id = v.id
                 WHERE va.pre_social_score >= :min_score
+                  AND va.curation_status = 'approved'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM scheduled_posts sp 
+                      WHERE (sp.content_id = v.id::text OR sp.clip_id = v.id)
+                        AND sp.status IN ('scheduled', 'publishing', 'posted', 'published')
+                  )
                 ORDER BY va.pre_social_score DESC
                 LIMIT 500
             """), {"min_score": constraints.min_pre_social_score})
             
             rows = list(result)
             
-            # If no videos meet threshold, get all analyzed videos regardless of score
+            # If no approved videos meet threshold, get approved videos with lower scores
             if not rows:
-                logger.info(f"[NarrativeScheduler] No videos with score >= {constraints.min_pre_social_score}, loading all analyzed videos")
+                logger.info(f"[NarrativeScheduler] No approved videos with score >= {constraints.min_pre_social_score}, loading all approved videos")
                 result = conn.execute(text("""
                     SELECT v.id, v.file_name, v.source_uri, v.thumbnail_path, v.duration_sec,
                            COALESCE(va.pre_social_score, 50) as pre_social_score, 
                            va.transcript, va.topics, va.hooks, va.tone
                     FROM videos v
-                    LEFT JOIN video_analysis va ON va.video_id = v.id
+                    JOIN video_analysis va ON va.video_id = v.id
+                    WHERE va.curation_status = 'approved'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM scheduled_posts sp 
+                          WHERE (sp.content_id = v.id::text OR sp.clip_id = v.id)
+                            AND sp.status IN ('scheduled', 'publishing', 'posted', 'published')
+                      )
                     ORDER BY va.pre_social_score DESC NULLS LAST
                     LIMIT 100
                 """))

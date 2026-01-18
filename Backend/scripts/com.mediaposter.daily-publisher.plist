@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.mediaposter.daily-publisher</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/scripts/daily_publish.sh</string>
+    </array>
+    
+    <key>StartCalendarInterval</key>
+    <array>
+        <!-- Run at 9am, 12pm, 3pm, 6pm, 9pm daily -->
+        <dict>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>12</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>15</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>18</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>21</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+    
+    <key>StandardOutPath</key>
+    <string>/tmp/mediaposter-daily-publisher.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/tmp/mediaposter-daily-publisher.log</string>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/isaiahdupree/Documents/Software/MediaPoster/Backend</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

@@ -370,13 +370,11 @@ class BrollCandidateService:
             if analysis and analysis.visual_analysis:
                 visual_data = analysis.visual_analysis if isinstance(analysis.visual_analysis, dict) else {}
             
-            # Build thumbnail URL
-            thumbnail_url = ""
-            if video.thumbnail_path:
-                thumbnail_url = f"/api/thumbnails/{video.id}"
+            # Build thumbnail URL - use media-db endpoint for consistency
+            thumbnail_url = f"/api/media-db/thumbnail/{video.id}"
             
-            # Build video URL
-            video_url = f"/api/videos/{video.id}/stream"
+            # Build video URL - use media-provider for streaming
+            video_url = f"/api/media-provider/stream/{video.id}"
             
             # Extract tags from analysis
             tags = []

@@ -91,6 +91,8 @@ class MediaStatusResponse(BaseModel):
     detected_hook: Optional[str] = None  # Main detected hook for search
     curation_status: Optional[str] = None  # 'pending', 'approved', 'rejected'
     media_type: Optional[str] = None  # 'video' or 'image'
+    source_type: Optional[str] = None  # 'local', 'sora', 'generated', 'broll_producer', 'tiktok_repurpose'
+    content_format: Optional[str] = None  # 'talking_head', 'broll', 'animated', etc.
     created_at: str
     updated_at: Optional[str] = None
 
@@ -446,7 +448,12 @@ async def list_media(
         status = "analyzed" if is_complete_analysis else "ingested"
         
         # Log if analysis exists but is incomplete (for debugging)
-        if analysis and not is_complete_analysis:
+        # Only log for VIDEOS - images correctly don't have transcripts
+        is_video = video.file_name and any(
+            video.file_name.lower().endswith(ext) 
+            for ext in ['.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm']
+        )
+        if analysis and not is_complete_analysis and is_video:
             # Safely get topics length - handle None case
             topics_list = analysis.get('topics') or []
             topics_len = len(topics_list) if topics_list else 0
@@ -529,6 +536,14 @@ async def list_media(
             else:
                 media_type_value = 'video'  # Default to video
             
+            # Get source_type from video model
+            source_type_value = video.source_type if hasattr(video, 'source_type') else 'local'
+            
+            # Determine content_format from format classification if available
+            content_format_value = None
+            if format_type_filter:
+                content_format_value = format_type_filter  # Use the filter value if filtering
+            
             response.append(MediaStatusResponse(
                 media_id=str(video.id),  # This is the video_id, which media-provider needs
                 filename=video.file_name or "",
@@ -547,6 +562,8 @@ async def list_media(
                 detected_hook=detected_hook,
                 visual_summary=visual_summary,
                 curation_status=curation_status,  # Will be None if not curated, or 'pending'/'approved'/'rejected' if set
+                source_type=source_type_value,
+                content_format=content_format_value,
                 created_at=video.created_at.isoformat() if video.created_at else "",
                 updated_at=video.updated_at.isoformat() if video.updated_at else None
             ))

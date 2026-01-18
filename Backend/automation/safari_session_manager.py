@@ -29,6 +29,7 @@ class Platform(Enum):
     SORA = "sora"
     YOUTUBE = "youtube"
     THREADS = "threads"
+    REDDIT = "reddit"
 
 
 @dataclass
@@ -151,6 +152,25 @@ PLATFORM_CONFIGS: Dict[Platform, PlatformConfig] = {
         ],
         refresh_interval_minutes=25,
         session_timeout_minutes=60,
+    ),
+    Platform.REDDIT: PlatformConfig(
+        name="Reddit",
+        home_url="https://www.reddit.com/",
+        login_url="https://www.reddit.com/login/",
+        logged_in_indicators=[
+            '[id="USER_DROPDOWN_ID"]',
+            'button[aria-label*="profile"]',
+            'a[href*="/user/"]',
+            '[data-testid="create-post"]',
+            'faceplate-dropdown-menu[name="user-drawer-tray"]',
+        ],
+        logged_out_indicators=[
+            'a[href*="/login"]',
+            'button[data-testid="login-button"]',
+            'faceplate-tracker[noun="login"]',
+        ],
+        refresh_interval_minutes=30,
+        session_timeout_minutes=120,
     ),
 }
 
@@ -393,22 +413,69 @@ class SafariSessionManager:
         """
         Check login and return True only if logged in.
         Use this before running any automation.
-        
+
         Args:
             platform: The platform to check
-            
+
         Returns:
             True if logged in, False otherwise
         """
         state = self.check_login_status(platform)
-        
+
         if not state.is_logged_in:
             config = PLATFORM_CONFIGS.get(platform)
             logger.error(f"🚫 Automation blocked: Not logged in to {config.name}")
             logger.info(f"Please log in manually at: {config.login_url}")
             return False
-        
+
         return True
+
+    async def trigger_safari_wake(self, task_type: str, metadata: Optional[Dict] = None) -> bool:
+        """
+        Trigger sleep mode wake when Safari automation task is queued.
+
+        This ensures the system is awake before attempting Safari automation,
+        as Safari automation requires active UI interaction.
+
+        Args:
+            task_type: Type of Safari task (e.g., "twitter_post", "sora_generation")
+            metadata: Additional task context
+
+        Returns:
+            True if wake triggered successfully (or already awake)
+
+        Example:
+            manager = SafariSessionManager()
+            await manager.trigger_safari_wake("twitter_post", {"text": "Hello world"})
+        """
+        try:
+            # Lazy import to avoid circular dependency
+            from services.sleep_mode_service import SleepModeService, WakeTriggerType, SleepState
+
+            sleep_service = SleepModeService.get_instance()
+
+            # If already awake, nothing to do
+            if sleep_service.state == SleepState.AWAKE:
+                logger.debug(f"System already awake for Safari task: {task_type}")
+                return True
+
+            # Wake the system immediately
+            await sleep_service.wake(
+                trigger_type=WakeTriggerType.SAFARI_AUTOMATION,
+                metadata={
+                    "task_type": task_type,
+                    "platform": metadata.get("platform") if metadata else None,
+                    **(metadata or {})
+                }
+            )
+
+            logger.info(f"⏰ Woke system for Safari automation: {task_type}")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to trigger Safari wake: {e}")
+            # Don't block automation if sleep mode is unavailable
+            return True
     
     def refresh_session(self, platform: Platform) -> bool:
         """

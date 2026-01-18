@@ -390,6 +390,52 @@ async def create_scheduled_post(post: ScheduledPostCreate):
     return {"id": str(new_id), "message": "Post scheduled successfully"}
 
 
+@router.get("/status-summary")
+async def get_schedule_status_summary():
+    """Get a summary of scheduled posts by status."""
+    ensure_table_exists()
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Get counts by status
+        result = conn.execute(text("""
+            SELECT 
+                status,
+                COUNT(*) as count
+            FROM scheduled_posts
+            GROUP BY status
+        """)).fetchall()
+        
+        status_counts = {row[0]: row[1] for row in result}
+        
+        # Get upcoming posts count (scheduled for future)
+        upcoming = conn.execute(text("""
+            SELECT COUNT(*) FROM scheduled_posts 
+            WHERE status = 'scheduled' AND scheduled_time > NOW()
+        """)).scalar() or 0
+        
+        # Get due now count
+        due_now = conn.execute(text("""
+            SELECT COUNT(*) FROM scheduled_posts 
+            WHERE status = 'scheduled' AND scheduled_time <= NOW()
+        """)).scalar() or 0
+        
+        # Get unique content count
+        unique_content = conn.execute(text("""
+            SELECT COUNT(DISTINCT COALESCE(content_id, clip_id::text)) 
+            FROM scheduled_posts
+        """)).scalar() or 0
+        
+        return {
+            "status_counts": status_counts,
+            "total": sum(status_counts.values()),
+            "upcoming": upcoming,
+            "due_now": due_now,
+            "unique_content": unique_content,
+            "by_platform": {}  # Can expand later
+        }
+
+
 @router.get("/{post_id}")
 async def get_scheduled_post(post_id: str):
     """Get a single scheduled post by ID."""

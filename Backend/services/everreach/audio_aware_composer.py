@@ -10,6 +10,7 @@ Features:
 - Support for both Motion Canvas and Remotion output formats
 """
 import os
+import sys
 import json
 import asyncio
 import subprocess
@@ -18,8 +19,18 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from pathlib import Path
 from loguru import logger
-import wave
-import struct
+
+# Add Backend to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Try to import TranscriptionService (requires openai)
+try:
+    from services.transcription import TranscriptionService
+    TRANSCRIPTION_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"TranscriptionService not available: {e}")
+    TranscriptionService = None
+    TRANSCRIPTION_AVAILABLE = False
 
 # Paths
 EVERREACH_FOLDER = "/Users/isaiahdupree/Documents/CompetitorResearch/everreach"
@@ -63,10 +74,28 @@ class CompositionTimeline:
 class AudioAnalyzer:
     """
     Analyzes audio files to extract duration and word-level timestamps.
+    Uses OpenAI Whisper API for accurate word-level transcription.
     """
     
-    @staticmethod
-    def get_audio_duration(audio_path: str) -> float:
+    def __init__(self):
+        """Initialize with TranscriptionService for word-level timestamps"""
+        self.transcription_service = None
+        self.whisper_enabled = False
+        
+        if TRANSCRIPTION_AVAILABLE and TranscriptionService:
+            try:
+                self.transcription_service = TranscriptionService()
+                self.whisper_enabled = self.transcription_service.is_enabled()
+                if self.whisper_enabled:
+                    logger.info("✅ OpenAI Whisper API enabled for word-level timestamps")
+                else:
+                    logger.warning("⚠️ OpenAI API key not configured - using estimated timestamps")
+            except Exception as e:
+                logger.warning(f"TranscriptionService init failed: {e}")
+        else:
+            logger.warning("⚠️ TranscriptionService not available - using estimated timestamps")
+    
+    def get_audio_duration(self, audio_path: str) -> float:
         """Get precise audio duration using ffprobe"""
         try:
             result = subprocess.run([
@@ -83,53 +112,70 @@ class AudioAnalyzer:
             logger.error(f"Failed to get audio duration: {e}")
             return 0.0
     
-    @staticmethod
-    async def get_word_timestamps(audio_path: str, text: str) -> List[Dict[str, Any]]:
+    async def get_word_timestamps(self, audio_path: str, text: str = "") -> List[Dict[str, Any]]:
         """
-        Get word-level timestamps using Whisper.
+        Get word-level timestamps using OpenAI Whisper API.
         Falls back to estimated timestamps if Whisper fails.
-        """
-        try:
-            # Try using whisper CLI
-            result = subprocess.run([
-                "whisper", audio_path,
-                "--model", "tiny",
-                "--output_format", "json",
-                "--word_timestamps", "True",
-                "--output_dir", str(Path(audio_path).parent)
-            ], capture_output=True, text=True, timeout=60)
+        
+        Args:
+            audio_path: Path to audio file
+            text: Optional expected text (used for fallback estimation)
             
-            # Read the JSON output
-            json_path = Path(audio_path).with_suffix(".json")
-            if json_path.exists():
-                with open(json_path) as f:
-                    data = json.load(f)
+        Returns:
+            List of {word, start, end} dictionaries
+        """
+        # Try OpenAI Whisper API first
+        if self.whisper_enabled and self.transcription_service:
+            try:
+                logger.info(f"🎤 Transcribing with OpenAI Whisper: {Path(audio_path).name}")
+                result = self.transcription_service.transcribe_audio_only(audio_path)
                 
-                words = []
-                for segment in data.get("segments", []):
-                    for word in segment.get("words", []):
-                        words.append({
-                            "word": word.get("word", "").strip(),
-                            "start": word.get("start", 0),
-                            "end": word.get("end", 0)
-                        })
-                
-                # Cleanup
-                json_path.unlink(missing_ok=True)
-                
-                if words:
+                if "error" not in result and result.get("words"):
+                    words = result["words"]
+                    logger.success(f"✅ Got {len(words)} word timestamps from Whisper")
                     return words
-        except Exception as e:
-            logger.warning(f"Whisper failed: {e}, using estimated timestamps")
+                elif "error" in result:
+                    logger.warning(f"Whisper API error: {result['error']}")
+            except Exception as e:
+                logger.warning(f"Whisper API failed: {e}")
         
         # Fallback: estimate word timestamps based on duration
-        return AudioAnalyzer._estimate_word_timestamps(audio_path, text)
+        logger.info("Using estimated word timestamps")
+        return self._estimate_word_timestamps(audio_path, text)
     
-    @staticmethod
-    def _estimate_word_timestamps(audio_path: str, text: str) -> List[Dict[str, Any]]:
+    async def transcribe_video_with_timestamps(self, video_path: str) -> Dict[str, Any]:
+        """
+        Transcribe a video file and get word-level timestamps.
+        
+        Args:
+            video_path: Path to video file
+            
+        Returns:
+            Dict with text, words, segments, duration
+        """
+        if not self.whisper_enabled or not self.transcription_service:
+            logger.warning("Whisper not available for video transcription")
+            return {"text": "", "words": [], "segments": [], "duration": 0}
+        
+        try:
+            logger.info(f"🎬 Transcribing video: {Path(video_path).name}")
+            result = self.transcription_service.transcribe_video(video_path)
+            
+            if "error" not in result:
+                word_count = len(result.get("words", []))
+                logger.success(f"✅ Video transcribed: {word_count} words, {result.get('duration', 0):.1f}s")
+                return result
+            else:
+                logger.warning(f"Video transcription error: {result['error']}")
+                return {"text": "", "words": [], "segments": [], "duration": 0}
+        except Exception as e:
+            logger.error(f"Video transcription failed: {e}")
+            return {"text": "", "words": [], "segments": [], "duration": 0}
+    
+    def _estimate_word_timestamps(self, audio_path: str, text: str) -> List[Dict[str, Any]]:
         """Estimate word timestamps based on audio duration and word count"""
-        duration = AudioAnalyzer.get_audio_duration(audio_path)
-        words = text.split()
+        duration = self.get_audio_duration(audio_path)
+        words = text.split() if text else []
         
         if not words or duration <= 0:
             return []
@@ -164,6 +210,7 @@ class AudioAnalyzer:
 class AudioAwareComposer:
     """
     Creates video compositions with proper audio-video synchronization.
+    Uses OpenAI Whisper for word-level timestamps on both narrations AND source clips.
     """
     
     def __init__(self):
@@ -174,6 +221,76 @@ class AudioAwareComposer:
         
         # Load discovered videos
         self.videos = self._load_manifest()
+        
+        # Track transcriptions for source clips
+        self.clip_transcriptions: Dict[str, Dict[str, Any]] = {}
+    
+    async def transcribe_source_clips(self, clips: List[Dict]) -> None:
+        """
+        Transcribe all source video clips to get word-level timestamps.
+        This ensures we don't cut clips in the middle of words.
+        """
+        print("\n📝 Transcribing source video clips...")
+        
+        for i, clip in enumerate(clips):
+            video_path = clip.get("local_path")
+            if not video_path or not Path(video_path).exists():
+                continue
+            
+            print(f"   [{i+1}/{len(clips)}] {Path(video_path).name}...", end=" ")
+            
+            # Transcribe the video
+            result = await self.analyzer.transcribe_video_with_timestamps(video_path)
+            
+            if result.get("words"):
+                self.clip_transcriptions[video_path] = result
+                print(f"✅ {len(result['words'])} words")
+            else:
+                print("⚠️ No words detected")
+                self.clip_transcriptions[video_path] = {"words": [], "text": "", "duration": 0}
+    
+    def find_safe_cut_point(
+        self, 
+        video_path: str, 
+        target_duration: float,
+        buffer: float = 0.3
+    ) -> float:
+        """
+        Find a safe cut point that doesn't clip a word.
+        
+        Args:
+            video_path: Path to the video
+            target_duration: Desired clip duration
+            buffer: Time buffer after last word (seconds)
+            
+        Returns:
+            Safe duration that ends after a complete word
+        """
+        transcription = self.clip_transcriptions.get(video_path, {})
+        words = transcription.get("words", [])
+        
+        if not words:
+            # No transcription available, use target duration
+            return target_duration
+        
+        # Find the last word that ends before target_duration
+        safe_end = 0.0
+        for word in words:
+            word_end = word.get("end", 0)
+            if word_end <= target_duration:
+                safe_end = word_end
+            else:
+                break
+        
+        # Add small buffer after the word
+        safe_duration = safe_end + buffer
+        
+        # Ensure we don't exceed target by too much
+        if safe_duration > target_duration + 1.0:
+            safe_duration = target_duration
+        
+        logger.info(f"Safe cut point for {Path(video_path).name}: {safe_duration:.2f}s (target: {target_duration:.2f}s)")
+        return max(safe_duration, 1.0)  # Minimum 1 second
     
     def _load_manifest(self) -> List[Dict[str, Any]]:
         """Load the discovery manifest"""
@@ -292,24 +409,40 @@ class AudioAwareComposer:
                 ))
                 current_time += tip_narration.duration + 0.3
             
-            # Video clip
-            actual_clip_duration = min(clip_duration, self._get_video_duration(clip["local_path"]))
+            # Video clip - use safe cut point to avoid clipping words
+            video_path = clip["local_path"]
+            max_duration = min(clip_duration, self._get_video_duration(video_path))
+            
+            # Find safe cut point that doesn't clip a word
+            safe_duration = self.find_safe_cut_point(video_path, max_duration)
+            
+            # Get transcription for this clip (for captions)
+            clip_transcript = self.clip_transcriptions.get(video_path, {})
+            clip_words = clip_transcript.get("words", [])
+            
+            # Filter words that fall within our clip duration
+            clip_word_timestamps = [
+                w for w in clip_words 
+                if w.get("end", 0) <= safe_duration
+            ]
             
             segments.append(TimelineSegment(
                 id=f"clip_{i+1}",
                 type="clip",
                 start_time=current_time,
-                end_time=current_time + actual_clip_duration,
-                duration=actual_clip_duration,
+                end_time=current_time + safe_duration,
+                duration=safe_duration,
                 content={
-                    "video_path": clip["local_path"],
+                    "video_path": video_path,
                     "creator": clip.get("creator", "unknown"),
                     "caption": clip.get("caption", ""),
+                    "transcript": clip_transcript.get("text", "")[:200],
+                    "word_timestamps": clip_word_timestamps,
                     "trim_start": 0,
-                    "trim_end": actual_clip_duration
+                    "trim_end": safe_duration
                 }
             ))
-            current_time += actual_clip_duration + 0.5
+            current_time += safe_duration + 0.5
         
         # 4. Outro with CTA
         if "outro" in narrations:
@@ -490,12 +623,77 @@ export default makeScene2D(function* (view) {{
         
         return str(scene_path)
     
+    def export_remotion_props(
+        self,
+        timeline: CompositionTimeline,
+        output_dir: Path
+    ) -> str:
+        """Export Remotion props for EverReachCompilation component with word timestamps"""
+        
+        fps = timeline.fps
+        
+        # Extract narrations and clips from timeline
+        narrations = []
+        clips = []
+        title_text = ""
+        cta_text = "Join the Waitlist"
+        cta_url = "everreach.app"
+        
+        for segment in timeline.segments:
+            if segment.type == "title":
+                title_text = segment.content.get("text", "")
+            elif segment.type == "narration":
+                narrations.append({
+                    "id": segment.id,
+                    "text": segment.content.get("text", ""),
+                    "audioSrc": segment.content.get("audio_path", "").replace(str(output_dir) + "/", ""),
+                    "duration": segment.duration,
+                    "wordTimestamps": segment.content.get("word_timestamps", [])
+                })
+            elif segment.type == "clip":
+                clips.append({
+                    "id": segment.id,
+                    "videoSrc": segment.content.get("video_path", ""),
+                    "duration": segment.duration,
+                    "creator": segment.content.get("creator", "unknown"),
+                    "transcript": segment.content.get("transcript", ""),
+                    "wordTimestamps": segment.content.get("word_timestamps", [])
+                })
+            elif segment.type == "cta":
+                cta_text = segment.content.get("cta_text", cta_text)
+                cta_url = segment.content.get("cta_url", cta_url)
+        
+        props = {
+            "title": title_text.split("\n")[0] if title_text else "5 Tips",
+            "subtitle": title_text.split("\n")[1] if "\n" in title_text else None,
+            "narrations": narrations,
+            "clips": clips,
+            "ctaText": cta_text,
+            "ctaUrl": cta_url,
+            "captionStyle": "bouncy",
+            "theme": {
+                "primaryColor": "#8B5CF6",
+                "accentColor": "#00ff88",
+                "backgroundColor": "linear-gradient(135deg, #1a0a2e 0%, #0a1a2e 100%)"
+            }
+        }
+        
+        props_path = output_dir / "remotion_props.json"
+        with open(props_path, "w") as f:
+            json.dump(props, f, indent=2)
+        
+        logger.info(f"Exported Remotion props with {len(narrations)} narrations, {len(clips)} clips")
+        return str(props_path)
+    
     def export_remotion_composition(
         self,
         timeline: CompositionTimeline,
         output_dir: Path
     ) -> str:
         """Export timeline as Remotion composition"""
+        
+        # Also export props for the new EverReachCompilation component
+        self.export_remotion_props(timeline, output_dir)
         
         # Convert to frames
         fps = timeline.fps
@@ -679,12 +877,14 @@ echo ""
             segment_files.append(seg_file)
             
             if segment.type == "title":
+                # Add silent audio so concat works properly (all segments need audio)
                 script += f'''
 # Segment {i}: {segment.id} ({segment.duration:.2f}s)
 echo "Creating segment {i}: {segment.id}..."
 ffmpeg -y -f lavfi -i "color=c=0x8B5CF6:s=1080x1920:d={segment.duration}" \\
+  -f lavfi -i "anullsrc=r=44100:cl=stereo" \\
   -vf "drawtext=text='{segment.content['text'].replace(chr(10), '\\n')}':fontsize=72:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:font=Arial" \\
-  -c:v libx264 -preset ultrafast -pix_fmt yuv420p \\
+  -c:v libx264 -preset ultrafast -c:a aac -shortest -pix_fmt yuv420p \\
   "{seg_file}"
 
 '''
@@ -718,13 +918,15 @@ ffmpeg -y -f lavfi -i "color=c=0x8B5CF6:s=1080x1920:d={segment.duration}" \\
             elif segment.type == "clip":
                 video_path = segment.content.get("video_path", "")
                 creator = segment.content.get("creator", "unknown")
+                tip_num = segment.content.get("tip_number", i // 2)
                 
+                # Safe zones: bottom 400px reserved for TikTok UI, sides 60px padding
                 script += f'''
 # Segment {i}: {segment.id} ({segment.duration:.2f}s) - @{creator}
 echo "Creating segment {i}: @{creator}..."
 ffmpeg -y -i "{video_path}" \\
   -t {segment.duration} \\
-  -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,drawtext=text='@{creator}':fontsize=32:fontcolor=white:x=w-text_w-20:y=h-100:box=1:boxcolor=black@0.5:boxborderw=5" \\
+  -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,drawtext=text='TIP #{tip_num}':fontsize=48:fontcolor=0x00ff88:x=60:y=120:box=1:boxcolor=black@0.6:boxborderw=10,drawtext=text='@{creator}':fontsize=28:fontcolor=white:x=w-text_w-60:y=h-450:box=1:boxcolor=black@0.5:boxborderw=5" \\
   -c:v libx264 -preset ultrafast -c:a aac -pix_fmt yuv420p \\
   "{seg_file}"
 
@@ -802,6 +1004,9 @@ async def main():
     # Select top 5 clips for testing
     clips = composer.videos[:5]
     print(f"\n📹 Selected {len(clips)} clips for test")
+    
+    # Transcribe source video clips for word-level timestamps
+    await composer.transcribe_source_clips(clips)
     
     # Generate narrations with timestamps
     print("\n🎤 Generating narrations with word timestamps...")

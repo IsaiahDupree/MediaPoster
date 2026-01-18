@@ -346,7 +346,17 @@ class Topics:
     SYSTEM_HEALTH_CHECK = "system.health.check"           # Health check event
     WORKER_STARTED = "worker.started"                     # Worker came online
     WORKER_STOPPED = "worker.stopped"                     # Worker went offline
-    
+
+    # =========================================================================
+    # SLEEP/WAKE MODE (CPU Efficiency)
+    # =========================================================================
+    SLEEP_SERVICE_STARTED = "sleep.service.started"       # Sleep mode service started
+    SLEEP_SERVICE_STOPPED = "sleep.service.stopped"       # Sleep mode service stopped
+    SLEEP_ENTERED = "sleep.entered"                       # System entered sleep mode
+    SLEEP_WAKE = "sleep.wake"                             # System woke from sleep
+    SLEEP_WAKE_SCHEDULED = "sleep.wake.scheduled"         # Wake event scheduled
+    SLEEP_WAKE_CANCELLED = "sleep.wake.cancelled"         # Wake event cancelled
+
     @classmethod
     def all_topics(cls) -> list:
         """Return list of all defined topics."""

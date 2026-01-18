@@ -736,23 +736,29 @@ class SafariTwitterPoster:
     def post_tweet(self, text: str, media_paths: Optional[List[str]] = None) -> Dict:
         """
         Post a tweet via Safari automation.
-        
+
         Args:
             text: Tweet text (max 280 chars)
             media_paths: Optional list of media file paths to attach
-            
+
         Returns:
             Dict with success status and details
         """
         logger.info(f"Posting tweet via Safari: {text[:50]}...")
-        
+
+        # Wake system if sleeping (Safari automation requires active UI)
+        self.session_manager.trigger_safari_wake(
+            task_type="twitter_post",
+            metadata={"text": text[:50], "has_media": bool(media_paths)}
+        )
+
         # Validate tweet length
         if len(text) > 280:
             return {
                 'success': False,
                 'error': f'Tweet too long: {len(text)} chars (max 280)'
             }
-        
+
         # Rate limiting
         if self.last_post_time:
             elapsed = time.time() - self.last_post_time
@@ -760,7 +766,7 @@ class SafariTwitterPoster:
                 wait_time = self.min_interval_seconds - elapsed
                 logger.info(f"Rate limiting: waiting {wait_time:.1f}s")
                 time.sleep(wait_time)
-        
+
         try:
             # Step 1: Check login status FIRST using session manager
             if HAS_SESSION_MANAGER:

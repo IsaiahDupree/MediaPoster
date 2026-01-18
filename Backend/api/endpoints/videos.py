@@ -452,8 +452,8 @@ async def upload_video(
         # Use a placeholder user ID until auth is fully implemented
         current_user_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
         
-        # Map source to allowed values
-        valid_source_type = source if source in ['local', 'gdrive', 'supabase', 's3', 'other'] else 'local'
+        # Map source to allowed values (includes AI-generated types)
+        valid_source_type = source if source in ['local', 'gdrive', 'supabase', 's3', 'other', 'sora', 'generated', 'broll_producer'] else 'local'
         
         video = Video(
             id=uuid.uuid4(),

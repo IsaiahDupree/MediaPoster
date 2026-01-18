@@ -1,10 +1,15 @@
 """
 Background Job Scheduler for Content Intelligence
 Handles automated checkback metrics collection and comment analysis
+
+SLEEP MODE INTEGRATION:
+This scheduler integrates with SleepModeService to schedule wake triggers
+at checkback intervals (1h, 6h, 24h, 72h, 7d) so the system wakes up
+to collect metrics even when in low-power sleep mode.
 """
 import logging
-from datetime import datetime, timedelta
-from typing import List, Callable, Dict, Any
+from datetime import datetime, timedelta, timezone
+from typing import List, Callable, Dict, Any, Optional
 from dataclasses import dataclass
 import uuid
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -39,7 +44,21 @@ class CheckbackScheduler:
             timezone='UTC'
         )
         self.scheduled_jobs: Dict[str, ScheduledCheckback] = {}
+        self._sleep_service = None
+        self._wake_trigger_map: Dict[str, str] = {}  # job_id -> wake_trigger_id
         logger.info("CheckbackScheduler initialized")
+
+    @property
+    def sleep_service(self):
+        """Lazy load sleep mode service"""
+        if self._sleep_service is None:
+            try:
+                from services.sleep_mode_service import SleepModeService
+                self._sleep_service = SleepModeService.get_instance()
+            except Exception as e:
+                logger.warning(f"Sleep mode service not available: {e}")
+                self._sleep_service = None
+        return self._sleep_service
     
     def start(self):
         """Start the scheduler"""
@@ -58,31 +77,35 @@ class CheckbackScheduler:
         post_id: uuid.UUID,
         published_at: datetime,
         checkback_hours: int,
-        callback: Callable[[uuid.UUID, int], None]
+        callback: Callable[[uuid.UUID, int], None],
+        platform: Optional[str] = None,
+        platform_url: Optional[str] = None
     ) -> str:
         """
         Schedule a checkback job
-        
+
         Args:
             post_id: Platform post ID
             published_at: When the post was published
             checkback_hours: Hours after publishing to collect metrics
             callback: Function to call (should accept post_id and checkback_hours)
-            
+            platform: Platform name (e.g., "twitter", "tiktok")
+            platform_url: URL of the published post
+
         Returns:
             Job ID
         """
         # Calculate when to run
         scheduled_time = published_at + timedelta(hours=checkback_hours)
-        
+
         # Don't schedule if in the past
-        if scheduled_time < datetime.now():
+        if scheduled_time < datetime.now(timezone.utc):
             logger.warning(f"Checkback time {scheduled_time} is in the past, skipping")
             return None
-        
+
         # Create job ID
         job_id = f"checkback_{post_id}_{checkback_hours}h"
-        
+
         # Schedule the job
         try:
             job = self.scheduler.add_job(
@@ -93,7 +116,7 @@ class CheckbackScheduler:
                 replace_existing=True,
                 misfire_grace_time=3600  # Allow 1 hour grace period
             )
-            
+
             # Track scheduled job
             self.scheduled_jobs[job_id] = ScheduledCheckback(
                 post_id=post_id,
@@ -101,10 +124,32 @@ class CheckbackScheduler:
                 scheduled_time=scheduled_time,
                 job_id=job_id
             )
-            
+
+            # SLEEP MODE INTEGRATION: Schedule wake trigger
+            if self.sleep_service:
+                try:
+                    from services.sleep_mode_service import WakeTriggerType
+
+                    wake_trigger_id = self.sleep_service.schedule_wake(
+                        wake_time=scheduled_time,
+                        trigger_type=WakeTriggerType.CHECKBACK_PERIOD,
+                        metadata={
+                            "post_id": str(post_id),
+                            "platform": platform,
+                            "platform_url": platform_url,
+                            "checkback_hours": checkback_hours,
+                            "published_at": published_at.isoformat()
+                        }
+                    )
+                    self._wake_trigger_map[job_id] = wake_trigger_id
+                    logger.info(f"  ⏰ Scheduled wake trigger for {checkback_hours}h checkback")
+
+                except Exception as e:
+                    logger.warning(f"Failed to schedule wake trigger: {e}")
+
             logger.info(f"Scheduled checkback: {job_id} at {scheduled_time}")
             return job_id
-            
+
         except Exception as e:
             logger.error(f"Error scheduling checkback: {e}")
             return None
@@ -147,22 +192,31 @@ class CheckbackScheduler:
     def cancel_checkback(self, job_id: str) -> bool:
         """
         Cancel a scheduled checkback
-        
+
         Args:
             job_id: Job ID to cancel
-            
+
         Returns:
             True if cancelled
         """
         try:
             self.scheduler.remove_job(job_id)
-            
+
             if job_id in self.scheduled_jobs:
                 del self.scheduled_jobs[job_id]
-            
+
+            # SLEEP MODE INTEGRATION: Cancel wake trigger
+            if job_id in self._wake_trigger_map and self.sleep_service:
+                wake_trigger_id = self._wake_trigger_map.pop(job_id)
+                try:
+                    self.sleep_service.cancel_wake(wake_trigger_id)
+                    logger.info(f"  ⏰ Cancelled wake trigger for {job_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to cancel wake trigger: {e}")
+
             logger.info(f"Cancelled checkback: {job_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error cancelling checkback {job_id}: {e}")
             return False

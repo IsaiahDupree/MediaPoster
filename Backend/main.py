@@ -129,6 +129,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Event Bus initialization failed: {e}")
     
+    # Start the Sleep Mode Service (CPU efficiency)
+    sleep_service = None
+    try:
+        from services.sleep_mode_service import SleepModeService
+        sleep_service = SleepModeService.get_instance()
+        await sleep_service.start()
+        logger.success("✓ Sleep Mode Service started")
+    except Exception as e:
+        logger.warning(f"⚠️  Sleep Mode Service failed to start: {e}")
+
     # Start the Post Scheduler background worker
     post_scheduler = None
     try:
@@ -291,6 +301,14 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Post Scheduler stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Post Scheduler: {e}")
+
+    # Stop the Sleep Mode Service on shutdown
+    if sleep_service:
+        try:
+            await sleep_service.stop()
+            logger.success("✓ Sleep Mode Service stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Sleep Mode Service: {e}")
     
     # Stop the TTS Worker on shutdown
     if tts_worker:
@@ -377,6 +395,10 @@ app.add_middleware(
 from middleware.error_tracking import ErrorTrackingMiddleware, RequestLoggingMiddleware
 app.add_middleware(ErrorTrackingMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+
+# Wake middleware - wake system on user access
+from middleware.wake_middleware import WakeMiddleware
+app.add_middleware(WakeMiddleware)
 
 # BUG FIX: Add correlation ID middleware (must be early in the stack)
 from middleware.correlation_id import CorrelationIDMiddleware
@@ -576,6 +598,10 @@ async def broadcast_update(message: dict):
 
 
 # Include routers
+# Sleep Mode (CPU Efficiency)
+from api.endpoints import sleep
+app.include_router(sleep.router, tags=["Sleep Mode"])
+
 app.include_router(videos.router, prefix="/api/videos", tags=["videos"])
 app.include_router(ingestion.router, prefix="/api/ingestion", tags=["ingestion"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
@@ -604,6 +630,14 @@ app.include_router(ai_video.router, prefix="/api", tags=["AI Video Generation"])
 # AI Video Generation with Pub/Sub (Sora, Runway, etc.)
 from api.endpoints import ai_video_generation
 app.include_router(ai_video_generation.router, tags=["AI Video Generation Pub/Sub"])
+
+# Sora Browser Automation (Safari-based video generation)
+try:
+    from api.endpoints import sora
+    app.include_router(sora.router, tags=["Sora Automation"])
+    logger.success("✓ Sora Automation API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
 
 # Format-Agnostic Video Rendering API
 try:
@@ -763,6 +797,22 @@ app.include_router(app_settings.router, tags=["Settings"])
 from api.endpoints import health
 app.include_router(health.router, tags=["Health"])
 
+# Performance Review (UGC vs AI/Sora analysis)
+try:
+    from api.endpoints import review
+    app.include_router(review.router, tags=["Performance Review"])
+    logger.success("✓ Performance Review API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Performance Review API registration failed: {e}")
+
+# Closed-Loop Content System
+try:
+    from api.endpoints import content_loop
+    app.include_router(content_loop.router, tags=["Content Loop"])
+    logger.success("✓ Content Loop API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Content Loop API registration failed: {e}")
+
 # Trend Intelligence System (v1)
 try:
     from api.endpoints import trend_intelligence
@@ -786,6 +836,22 @@ try:
     logger.success("✓ ReelTrends API registered")
 except Exception as e:
     logger.warning(f"⚠️  ReelTrends API registration failed: {e}")
+
+# Twitter Campaign Automation (60 tweets/day for Everreach, BlankLogo, Apple App Kit)
+try:
+    from routers import twitter_campaign
+    app.include_router(twitter_campaign.router, tags=["Twitter Campaign"])
+    logger.success("✓ Twitter Campaign API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Twitter Campaign API registration failed: {e}")
+
+# Visual Campaign (Instagram Carousels & TikTok Picture Videos)
+try:
+    from routers import visual_campaign
+    app.include_router(visual_campaign.router, tags=["Visual Campaign"])
+    logger.success("✓ Visual Campaign API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Visual Campaign API registration failed: {e}")
 
 # Content Guard (Duplicate Detection)
 try:
@@ -944,6 +1010,22 @@ app.include_router(music_crawler.router, prefix="/api/music-crawler", tags=["Mus
 # Competitor Audit System
 from api.endpoints import competitor_audit
 app.include_router(competitor_audit.router, prefix="/api/competitor-audit", tags=["Competitor Audit"])
+
+# Video Formats (Saved Prompt Templates for AI Video Generation)
+try:
+    from api.routes import video_formats
+    app.include_router(video_formats.router, tags=["Video Formats"])
+    logger.success("✓ Video Formats API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Video Formats API registration failed: {e}")
+
+# Sora Browser Automation (Safari automation for video generation)
+try:
+    from api.routes import sora_automation
+    app.include_router(sora_automation.router, tags=["Sora Automation"])
+    logger.success("✓ Sora Automation API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
 
 # Publishing endpoints
 from api.endpoints import publishing

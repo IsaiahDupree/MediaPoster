@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 from services.event_bus import EventBus, Event, Topics
 from services.workers.base import BaseWorker
+from services.content_guard.duplicate_detector import DuplicateDetector
 
 logger = logging.getLogger(__name__)
 
@@ -126,8 +127,18 @@ class PublishWorker(BaseWorker):
                 correlation_id
             )
             
+            # Step 0: Duplicate Check (prevent posting same content twice)
+            await self.emit_progress("publish", 2, "checking_duplicates", correlation_id, media_id=media_id)
+            duplicate_check = await self._check_for_duplicates(payload)
+            if duplicate_check.get("is_duplicate"):
+                raise ValueError(
+                    f"Duplicate content detected: {duplicate_check.get('reason')} "
+                    f"(similarity: {duplicate_check.get('similarity_score', 0):.0%})"
+                )
+            await self.emit_progress("publish", 5, "duplicate_check_passed", correlation_id, media_id=media_id)
+            
             # Step 1: Verify
-            await self.emit_progress("publish", 5, "verifying", correlation_id, media_id=media_id)
+            await self.emit_progress("publish", 7, "verifying", correlation_id, media_id=media_id)
             verification = await self._verify_publish_request(payload)
             if not verification.get("valid"):
                 raise ValueError(verification.get("error", "Verification failed"))
@@ -194,6 +205,9 @@ class PublishWorker(BaseWorker):
             }
             
             await self.emit(Topics.PUBLISH_COMPLETED, result, correlation_id)
+            
+            # Register content fingerprint for future duplicate detection
+            await self._register_content_fingerprint(media_id, account_id, platform)
             
             return {"success": True, **result}
             
@@ -386,6 +400,91 @@ class PublishWorker(BaseWorker):
             return None
         except Exception as e:
             logger.warning(f"Could not get video path: {e}")
+            return None
+    
+    async def _check_for_duplicates(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Check if content is a duplicate before publishing."""
+        try:
+            account_id = payload.get("account_id")
+            platform = payload.get("platform")
+            media_id = payload.get("media_id") or payload.get("content_id")
+            
+            # Get transcript for the video
+            transcript = await self._get_video_transcript(media_id)
+            
+            if not transcript or len(transcript) < 10:
+                logger.debug(f"No transcript for {media_id}, skipping duplicate check")
+                return {"is_duplicate": False, "reason": "No transcript available"}
+            
+            detector = DuplicateDetector()
+            result = await detector.check_content(
+                account_id=str(account_id),
+                transcript=transcript,
+                platform=platform
+            )
+            
+            logger.info(f"Duplicate check for {media_id}: is_duplicate={result.is_duplicate}, score={result.similarity_score:.2f}")
+            
+            return {
+                "is_duplicate": result.is_duplicate,
+                "similarity_score": result.similarity_score,
+                "reason": result.reason,
+                "similar_post_id": result.similar_post_id
+            }
+        except Exception as e:
+            logger.warning(f"Duplicate check failed (allowing publish): {e}")
+            return {"is_duplicate": False, "reason": f"Check failed: {e}"}
+    
+    async def _register_content_fingerprint(
+        self,
+        media_id: str,
+        account_id: str,
+        platform: str
+    ) -> bool:
+        """Register content fingerprint after successful publish."""
+        try:
+            transcript = await self._get_video_transcript(media_id)
+            if not transcript:
+                return False
+            
+            detector = DuplicateDetector()
+            return await detector.register_posted_content(
+                content_id=str(media_id),
+                account_id=str(account_id),
+                platform=platform,
+                transcript=transcript
+            )
+        except Exception as e:
+            logger.warning(f"Failed to register fingerprint: {e}")
+            return False
+    
+    async def _get_video_transcript(self, media_id: str) -> Optional[str]:
+        """Get video transcript from database."""
+        try:
+            from sqlalchemy import create_engine, text
+            import os
+            
+            DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+            engine = create_engine(DATABASE_URL)
+            
+            with engine.connect() as conn:
+                # Try multiple tables for transcript
+                result = conn.execute(
+                    text("""
+                        SELECT COALESCE(transcript, transcript_full, '')
+                        FROM videos v
+                        LEFT JOIN analyzed_videos av ON v.id = av.original_video_id
+                        WHERE v.id = :id
+                        LIMIT 1
+                    """),
+                    {"id": media_id}
+                ).fetchone()
+                
+                if result and result[0]:
+                    return result[0]
+            return None
+        except Exception as e:
+            logger.warning(f"Could not get video transcript: {e}")
             return None
     
     async def _get_scheduled_post(self, post_id: str) -> Optional[Dict[str, Any]]:

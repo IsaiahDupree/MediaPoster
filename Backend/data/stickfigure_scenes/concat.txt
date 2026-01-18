@@ -1,0 +1,17 @@
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_01.png'
+duration 6.1
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_02.png'
+duration 5.199999999999999
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_03.png'
+duration 6.600000000000001
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_04.png'
+duration 7.0
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_05.png'
+duration 7.099999999999998
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_06.png'
+duration 4.600000000000001
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_07.png'
+duration 28.5
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_08.png'
+duration 23.400000000000006
+file '/Users/isaiahdupree/Documents/Software/MediaPoster/Backend/data/stickfigure_scenes/scene_08.png'

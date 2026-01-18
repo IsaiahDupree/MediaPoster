@@ -48,7 +48,7 @@ class BaseWorker(ABC):
     ):
         """
         Initialize the worker.
-        
+
         Args:
             event_bus: EventBus instance (uses singleton if not provided)
             worker_id: Unique worker identifier (auto-generated if not provided)
@@ -59,10 +59,18 @@ class BaseWorker(ABC):
         self._events_processed = 0
         self._events_failed = 0
         self._started_at: Optional[datetime] = None
-        
+
+        # Sleep mode support (SLEEP-008)
+        self._is_paused = False
+        self._paused_at: Optional[datetime] = None
+        self._total_pause_seconds = 0.0
+
         # Set up subscriptions
         self._setup_subscriptions()
-        
+
+        # Subscribe to sleep/wake events (SLEEP-008)
+        self._setup_sleep_subscriptions()
+
         logger.info(f"🔧 Worker initialized: {self.worker_id}")
     
     @abstractmethod
@@ -97,41 +105,59 @@ class BaseWorker(ABC):
         for topic_pattern in self.get_subscriptions():
             self.event_bus.subscribe(topic_pattern, self._wrapped_handler)
             logger.debug(f"📫 {self.worker_id} subscribed to: {topic_pattern}")
+
+    def _setup_sleep_subscriptions(self) -> None:
+        """
+        Subscribe to sleep/wake events for automatic pause/resume (SLEEP-008).
+
+        Workers automatically pause when system enters sleep mode and
+        resume when system wakes up. This reduces CPU usage during idle periods.
+        """
+        self.event_bus.subscribe(Topics.SLEEP_ENTERED, self._handle_sleep_entered)
+        self.event_bus.subscribe(Topics.SLEEP_WAKE, self._handle_sleep_wake)
+        logger.debug(f"💤 {self.worker_id} subscribed to sleep/wake events")
     
     async def _wrapped_handler(self, event: Event) -> None:
         """
         Wrapper that adds logging, metrics, and error handling.
-        
+
         This is the actual handler registered with the event bus.
         It wraps the user's handle_event method.
         """
+        # SLEEP-008: Skip processing if worker is paused
+        if self._is_paused:
+            logger.debug(
+                f"[{self.worker_id}] ⏸️  Skipping event (paused): {event.topic}"
+            )
+            return
+
         start_time = time.time()
-        
+
         logger.info(
             f"[{self.worker_id}] 📥 Received: {event.topic} | "
             f"cid={event.correlation_id[:8]}..."
         )
-        
+
         try:
             await self.handle_event(event)
-            
+
             duration = time.time() - start_time
             self._events_processed += 1
-            
+
             logger.info(
                 f"[{self.worker_id}] ✅ Completed: {event.topic} | "
                 f"duration={duration:.2f}s"
             )
-            
+
         except Exception as e:
             duration = time.time() - start_time
             self._events_failed += 1
-            
+
             logger.error(
                 f"[{self.worker_id}] ❌ Failed: {event.topic} | "
                 f"error={str(e)} | duration={duration:.2f}s"
             )
-            
+
             # Re-raise to let event bus handle dead-lettering
             raise
     
@@ -235,9 +261,52 @@ class BaseWorker(ABC):
             "worker_id": self.worker_id,
             "worker_type": self.__class__.__name__,
             "is_running": self.is_running,
+            "is_paused": self._is_paused,
             "events_processed": self._events_processed,
             "events_failed": self._events_failed,
             "uptime_seconds": self.get_uptime_seconds(),
+            "total_pause_seconds": self._total_pause_seconds,
             "subscriptions": self.get_subscriptions(),
             "started_at": self._started_at.isoformat() if self._started_at else None,
+            "paused_at": self._paused_at.isoformat() if self._paused_at else None,
         }
+
+    async def _handle_sleep_entered(self, event: Event) -> None:
+        """
+        Handle system entering sleep mode (SLEEP-008).
+
+        Pauses the worker to reduce CPU usage. The worker will stop
+        processing new events until the system wakes up.
+
+        Args:
+            event: sleep.entered event
+        """
+        if not self._is_paused:
+            self._is_paused = True
+            self._paused_at = datetime.now(timezone.utc)
+
+            logger.info(
+                f"💤 Worker paused due to sleep mode: {self.worker_id}"
+            )
+
+    async def _handle_sleep_wake(self, event: Event) -> None:
+        """
+        Handle system waking from sleep mode (SLEEP-008).
+
+        Resumes the worker to process events normally.
+
+        Args:
+            event: sleep.wake event
+        """
+        if self._is_paused:
+            # Calculate pause duration
+            if self._paused_at:
+                pause_duration = (datetime.now(timezone.utc) - self._paused_at).total_seconds()
+                self._total_pause_seconds += pause_duration
+
+            self._is_paused = False
+            self._paused_at = None
+
+            logger.info(
+                f"⏰ Worker resumed after sleep mode: {self.worker_id}"
+            )

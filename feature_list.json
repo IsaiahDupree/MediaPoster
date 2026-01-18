@@ -1,0 +1,4163 @@
+{
+  "project": "MediaPoster",
+  "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
+  "version": "5.0",
+  "totalFeatures": 310,
+  "completedFeatures": 14,
+  "phases": {
+    "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
+    "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
+    "phase3_templates": "25 AI Templates (Awareness \u00d7 FATE)",
+    "phase4_platform_adapters": "Platform adapters (X, Instagram, TikTok, YouTube, Threads, Stories)",
+    "phase5_media_factory": "Video production: Sora, SFX Audio, AI Characters, Remotion, Music",
+    "phase6_content_pipeline": "Auto content sourcing, analysis, Tinder swipe, competitor research, trends",
+    "phase7_multi_channel": "Comments, DMs, Email loops",
+    "phase8_autonomy": "Experiments, A/B testing, n8n orchestration, bandit allocation",
+    "phase9_testing": "Full test coverage from PRD_CONTENT_OPS_TESTS",
+    "phase10_modular": "Event-driven architecture, pub/sub, modular services"
+  },
+  "features": [
+    {
+      "id": "SLEEP-001",
+      "name": "Sleep Mode Core Service",
+      "description": "Central service to manage app sleep/wake states, reduce CPU when idle",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "4h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/services/sleep_mode_service.py",
+        "Backend/api/endpoints/sleep.py"
+      ],
+      "acceptance": [
+        "Service can enter sleep mode",
+        "CPU usage drops below 5% when sleeping"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-002",
+      "name": "Wake Triggers Registry",
+      "description": "Registry of events that should wake the system: scheduled posts, checkback periods, user access, safari automation",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "3h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/services/sleep_mode_service.py"
+      ],
+      "acceptance": [
+        "All trigger types registered",
+        "Triggers can be added/removed dynamically"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-003",
+      "name": "Scheduled Post Wake Trigger",
+      "description": "Wake system 5 minutes before scheduled post time",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "2h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/services/post_scheduler.py"
+      ],
+      "acceptance": [
+        "System wakes before scheduled posts",
+        "Post executes on time"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-004",
+      "name": "Safari Automation Wake Trigger",
+      "description": "Wake system when Safari automation tasks are queued",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "2h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/automation/safari_session_manager.py"
+      ],
+      "acceptance": [
+        "Safari tasks trigger wake",
+        "Automation executes correctly"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-005",
+      "name": "Checkback Period Wake Trigger",
+      "description": "Wake system for metrics checkback at 1h, 6h, 24h, 72h, 7d intervals",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "2h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/services/metrics_scheduler.py"
+      ],
+      "acceptance": [
+        "Checkback triggers wake",
+        "Metrics collected at all intervals"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-006",
+      "name": "User Access Wake Trigger",
+      "description": "Wake system when user accesses dashboard or API",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "2h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/middleware/wake_middleware.py"
+      ],
+      "acceptance": [
+        "API requests trigger wake",
+        "Dashboard loads without delay"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-007",
+      "name": "Post Creation Wake Trigger",
+      "description": "Wake system when new post is being created",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "1h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/services/wake_triggers.py"
+      ],
+      "acceptance": [
+        "Post creation triggers wake",
+        "Post workflow completes"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-008",
+      "name": "Sleep Mode Worker Management",
+      "description": "Pause background workers during sleep, resume on wake",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "4h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/workers/worker_manager.py"
+      ],
+      "acceptance": [
+        "Workers pause in sleep mode",
+        "Workers resume on wake",
+        "No dropped tasks"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-009",
+      "name": "Sleep Mode Status API",
+      "description": "GET /api/sleep/status - returns current mode, next wake time, active triggers",
+      "priority": "P1",
+      "phase": 1,
+      "effort": "1h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/api/endpoints/sleep.py"
+      ],
+      "acceptance": [
+        "Status endpoint works",
+        "Shows next wake time"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-010",
+      "name": "Sleep Mode Dashboard Widget",
+      "description": "UI widget showing sleep status and upcoming wake events",
+      "priority": "P1",
+      "phase": 1,
+      "effort": "2h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "dashboard/app/components/SleepStatus.tsx",
+        "dashboard/lib/hooks/useSleepStatus.ts"
+      ],
+      "acceptance": [
+        "Widget displays status",
+        "Shows countdown to next wake"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-011",
+      "name": "Graceful Sleep Transition",
+      "description": "Complete in-flight operations before sleeping",
+      "priority": "P0",
+      "phase": 1,
+      "effort": "2h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/services/sleep_mode_service.py"
+      ],
+      "acceptance": [
+        "No operations interrupted",
+        "Clean transition to sleep"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "SLEEP-012",
+      "name": "Wake Event Logging",
+      "description": "Log all wake events with trigger type and duration",
+      "priority": "P1",
+      "phase": 1,
+      "effort": "1h",
+      "passes": true,
+      "category": "sleep-wake",
+      "files": [
+        "Backend/services/sleep_mode_service.py"
+      ],
+      "acceptance": [
+        "Wake events logged",
+        "Duration tracked"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "OPS-001",
+      "name": "FATE Scoring Service",
+      "description": "Score content for Focus, Authority, Tribe, Emotion elements",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "4h",
+      "passes": true,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/fate_scorer.py",
+        "Backend/tests/unit/test_fate_scoring.py"
+      ],
+      "acceptance": [
+        "All FATE elements scored 0-1",
+        "Combined score calculated"
+      ],
+      "completed": "2026-01-18",
+      "testResults": "25 of 31 tests passing (81% pass rate)"
+    },
+    {
+      "id": "OPS-002",
+      "name": "Awareness Level Classifier",
+      "description": "Classify content by Schwartz awareness levels (unaware to most-aware)",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "3h",
+      "passes": true,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/awareness_classifier.py"
+      ],
+      "acceptance": [
+        "5 awareness levels classified correctly"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "OPS-003",
+      "name": "Template Validation Service",
+      "description": "Validate templates for required variables, FATE weights, banned phrases",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "3h",
+      "passes": true,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/template_validator.py",
+        "Backend/tests/unit/test_template_validation.py"
+      ],
+      "acceptance": [
+        "Missing variables detected",
+        "Invalid weights rejected"
+      ],
+      "completed": "2026-01-18",
+      "testResults": "41 of 41 tests passing (100% pass rate)"
+    },
+    {
+      "id": "OPS-004",
+      "name": "Engagement Rate Scoring",
+      "description": "Calculate like_rate, reply_rate, click_rate from metrics",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "2h",
+      "passes": true,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/engagement_scorer.py"
+      ],
+      "acceptance": [
+        "Rates calculated correctly",
+        "Zero impressions handled"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "OPS-005",
+      "name": "Reward Function Scorer",
+      "description": "Weighted score: 1.0*click + 0.8*reply + 0.6*repost + 0.4*like",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "2h",
+      "passes": true,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/engagement_scorer.py"
+      ],
+      "acceptance": [
+        "Weights applied correctly",
+        "Winners/losers labeled"
+      ],
+      "completed": "2026-01-18"
+    },
+    {
+      "id": "OPS-006",
+      "name": "Shortlink Attribution Service",
+      "description": "Create shortlinks with full attribution (touchpoint, offer, template, ICP)",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/shortlink_service.py"
+      ],
+      "acceptance": [
+        "All IDs encoded",
+        "UTM format valid"
+      ]
+    },
+    {
+      "id": "OPS-007",
+      "name": "Template Leaderboard",
+      "description": "Rank templates by performance, bandit allocation (70/20/10)",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/template_leaderboard.py"
+      ],
+      "acceptance": [
+        "Templates ranked",
+        "Allocation follows 70/20/10 rule"
+      ]
+    },
+    {
+      "id": "OPS-008",
+      "name": "Content Generation Pipeline",
+      "description": "Slot \u2192 Template selection \u2192 Generation \u2192 Draft with variants",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "6h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/generation_service.py"
+      ],
+      "acceptance": [
+        "3 variants per slot",
+        "All with valid FATE scores"
+      ]
+    },
+    {
+      "id": "OPS-009",
+      "name": "QA Gate Service",
+      "description": "Block banned phrases, spam patterns, route uncertain content to approval",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/qa_gate.py"
+      ],
+      "acceptance": [
+        "100% banned phrases blocked",
+        "Uncertain routed to approval"
+      ]
+    },
+    {
+      "id": "OPS-010",
+      "name": "Metrics Snapshot Service",
+      "description": "Collect metrics at 1h, 6h, 24h, 72h, 7d intervals",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/metrics_snapshot_service.py"
+      ],
+      "acceptance": [
+        "All intervals collected",
+        "All fields captured"
+      ]
+    },
+    {
+      "id": "OPS-011",
+      "name": "Touchpoint Attribution Logging",
+      "description": "Every touchpoint traces to prompt/template/offer/ICP",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/touchpoint_service.py"
+      ],
+      "acceptance": [
+        "Full attribution chain",
+        "No orphaned touchpoints"
+      ]
+    },
+    {
+      "id": "OPS-012",
+      "name": "Weekly Plan Generator",
+      "description": "Generate weekly slots: 40% value, 30% authority, 20% tribe, 10% offer",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/planner_service.py"
+      ],
+      "acceptance": [
+        "Slots follow grid distribution",
+        "200 slots in <30s"
+      ]
+    },
+    {
+      "id": "OPS-013",
+      "name": "Slot Executor Worker",
+      "description": "Execute scheduled slots: generate \u2192 QA \u2192 publish",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/workers/slot_executor.py"
+      ],
+      "acceptance": [
+        "Slots execute on schedule",
+        "99% success rate"
+      ]
+    },
+    {
+      "id": "OPS-014",
+      "name": "Learner Worker",
+      "description": "Update leaderboard, fork winning templates, demote losers",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/workers/learner_worker.py"
+      ],
+      "acceptance": [
+        "Winners get 70% allocation",
+        "Losers < 5%"
+      ]
+    },
+    {
+      "id": "OPS-015",
+      "name": "Inbound Listener Worker",
+      "description": "Listen for comments, DMs, mentions across platforms",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/workers/inbound_listener.py"
+      ],
+      "acceptance": [
+        "Inbound items captured",
+        "Routed to responder"
+      ]
+    },
+    {
+      "id": "OPS-016",
+      "name": "Responder Worker",
+      "description": "Generate and send responses to inbound items",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/workers/responder_worker.py"
+      ],
+      "acceptance": [
+        "Responses appropriate",
+        "DM permission gate enforced"
+      ]
+    },
+    {
+      "id": "OPS-017",
+      "name": "DM Permission Gate",
+      "description": "No links in DMs until consent received",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "2h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/dm_permission_service.py"
+      ],
+      "acceptance": [
+        "100% links blocked without consent"
+      ]
+    },
+    {
+      "id": "OPS-018",
+      "name": "Stop Command Handler",
+      "description": "Detect 'stop' in messages, mark contact as do-not-message",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "1h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/dm_permission_service.py"
+      ],
+      "acceptance": [
+        "Stop honored immediately",
+        "No further messages sent"
+      ]
+    },
+    {
+      "id": "OPS-019",
+      "name": "Rate Limiting Service",
+      "description": "Token bucket per platform/account/endpoint with backoff",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/rate_limiter.py"
+      ],
+      "acceptance": [
+        "0 platform violations",
+        "Exponential backoff on 429"
+      ]
+    },
+    {
+      "id": "OPS-020",
+      "name": "Dead Letter Queue",
+      "description": "Failed jobs go to DLQ for retry/investigation",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "2h",
+      "passes": false,
+      "category": "content-ops",
+      "files": [
+        "Backend/services/dlq_service.py"
+      ],
+      "acceptance": [
+        "Failed jobs captured",
+        "Retry mechanism works"
+      ]
+    },
+    {
+      "id": "ADAPT-001",
+      "name": "X/Twitter Adapter - Publish",
+      "description": "Publish posts and threads to X/Twitter",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/services/adapters/x_adapter.py"
+      ],
+      "acceptance": [
+        "Posts published",
+        "Threads work"
+      ]
+    },
+    {
+      "id": "ADAPT-002",
+      "name": "X/Twitter Adapter - Metrics",
+      "description": "Fetch impressions, likes, replies, reposts, clicks from X",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/services/adapters/x_adapter.py"
+      ],
+      "acceptance": [
+        "All metrics fields retrieved"
+      ]
+    },
+    {
+      "id": "ADAPT-003",
+      "name": "X/Twitter Adapter - DMs",
+      "description": "Send and receive DMs via Safari automation",
+      "priority": "P1",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/automation/safari_twitter_poster.py"
+      ],
+      "acceptance": [
+        "DMs sent",
+        "Conversations tracked"
+      ]
+    },
+    {
+      "id": "ADAPT-004",
+      "name": "Instagram Adapter - Publish API",
+      "description": "Publish posts via Graph API",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/services/adapters/instagram_adapter.py"
+      ],
+      "acceptance": [
+        "Posts published via API"
+      ]
+    },
+    {
+      "id": "ADAPT-005",
+      "name": "Instagram Adapter - DMs Safari",
+      "description": "Send DMs via Safari automation",
+      "priority": "P1",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/automation/safari_instagram_poster.py"
+      ],
+      "acceptance": [
+        "DMs sent via Safari",
+        "Login verified"
+      ]
+    },
+    {
+      "id": "ADAPT-006",
+      "name": "Instagram Adapter - Scraper",
+      "description": "Scrape profiles and posts for analysis",
+      "priority": "P1",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/automation/safari_instagram_scraper.py"
+      ],
+      "acceptance": [
+        "Profiles scraped",
+        "Posts collected"
+      ]
+    },
+    {
+      "id": "ADAPT-007",
+      "name": "TikTok Adapter - Publish",
+      "description": "Publish videos via Blotato API",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/services/adapters/tiktok_adapter.py"
+      ],
+      "acceptance": [
+        "Videos published",
+        "Thumbnails work"
+      ]
+    },
+    {
+      "id": "ADAPT-008",
+      "name": "TikTok Adapter - DMs Safari",
+      "description": "Send DMs via Safari automation",
+      "priority": "P2",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/automation/safari_tiktok_poster.py"
+      ],
+      "acceptance": [
+        "DMs sent via Safari"
+      ]
+    },
+    {
+      "id": "ADAPT-009",
+      "name": "YouTube Adapter - Publish",
+      "description": "Publish videos via YouTube API",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/services/adapters/youtube_adapter.py"
+      ],
+      "acceptance": [
+        "Videos published",
+        "Metadata set"
+      ]
+    },
+    {
+      "id": "ADAPT-010",
+      "name": "YouTube Adapter - Comments",
+      "description": "Fetch and reply to comments",
+      "priority": "P1",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/services/adapters/youtube_adapter.py"
+      ],
+      "acceptance": [
+        "Comments fetched",
+        "Replies posted"
+      ]
+    },
+    {
+      "id": "ADAPT-011",
+      "name": "Threads Adapter - Safari",
+      "description": "Publish posts, read comments via Safari",
+      "priority": "P1",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/automation/safari_threads_poster.py"
+      ],
+      "acceptance": [
+        "Posts published",
+        "Comments read"
+      ]
+    },
+    {
+      "id": "ADAPT-012",
+      "name": "Safari Session Manager",
+      "description": "Check and refresh login sessions for all platforms",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/automation/safari_session_manager.py"
+      ],
+      "acceptance": [
+        "Session status checked",
+        "Expired sessions detected"
+      ]
+    },
+    {
+      "id": "ADAPT-013",
+      "name": "Platform Adapter Interface",
+      "description": "Unified interface for all platform adapters",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "adapters",
+      "files": [
+        "Backend/services/adapters/base_adapter.py"
+      ],
+      "acceptance": [
+        "All adapters implement interface",
+        "Interchangeable"
+      ]
+    },
+    {
+      "id": "TEST-001",
+      "name": "FATE Scoring Unit Tests",
+      "description": "Tests for Focus, Authority, Tribe, Emotion detection",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/unit/test_fate_scoring.py"
+      ],
+      "acceptance": [
+        "All test cases pass",
+        "90% coverage"
+      ]
+    },
+    {
+      "id": "TEST-002",
+      "name": "Awareness Classifier Unit Tests",
+      "description": "Tests for all 5 awareness levels",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/unit/test_awareness_classifier.py"
+      ],
+      "acceptance": [
+        "All levels tested",
+        "90% coverage"
+      ]
+    },
+    {
+      "id": "TEST-003",
+      "name": "Template Validation Unit Tests",
+      "description": "Tests for variable, weight, and phrase validation",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/unit/test_template_validation.py"
+      ],
+      "acceptance": [
+        "All validation rules tested",
+        "95% coverage"
+      ]
+    },
+    {
+      "id": "TEST-004",
+      "name": "Scoring Function Unit Tests",
+      "description": "Tests for rate calculation, z-scores, reward function",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/unit/test_scoring.py"
+      ],
+      "acceptance": [
+        "All formulas tested",
+        "95% coverage"
+      ]
+    },
+    {
+      "id": "TEST-005",
+      "name": "Attribution Unit Tests",
+      "description": "Tests for shortlink encoding/decoding, UTM format",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/unit/test_attribution.py"
+      ],
+      "acceptance": [
+        "All IDs preserved",
+        "95% coverage"
+      ]
+    },
+    {
+      "id": "TEST-006",
+      "name": "Generation Pipeline Integration Tests",
+      "description": "Tests for slot \u2192 template \u2192 generation \u2192 draft flow",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "4h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/integration/test_generation_pipeline.py"
+      ],
+      "acceptance": [
+        "Pipeline works end-to-end",
+        "Real OpenAI calls"
+      ]
+    },
+    {
+      "id": "TEST-007",
+      "name": "QA Gate Integration Tests",
+      "description": "Tests for banned phrases, spam patterns, approval routing",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/integration/test_qa_gate.py"
+      ],
+      "acceptance": [
+        "100% banned blocked",
+        "0% false positives"
+      ]
+    },
+    {
+      "id": "TEST-008",
+      "name": "Publishing Pipeline Integration Tests",
+      "description": "Tests for touchpoint creation, platform ID storage, shortlinks",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/integration/test_publishing_pipeline.py"
+      ],
+      "acceptance": [
+        "Touchpoints created",
+        "All fields populated"
+      ]
+    },
+    {
+      "id": "TEST-009",
+      "name": "Metrics Collection Integration Tests",
+      "description": "Tests for snapshot intervals, field capture, API handling",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/integration/test_metrics_collection.py"
+      ],
+      "acceptance": [
+        "All intervals tested",
+        "Error handling works"
+      ]
+    },
+    {
+      "id": "TEST-010",
+      "name": "Scoring Pipeline Integration Tests",
+      "description": "Tests for rate \u2192 z-score \u2192 reward \u2192 label flow",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/integration/test_scoring_pipeline.py"
+      ],
+      "acceptance": [
+        "Winners identified",
+        "Leaderboard updated"
+      ]
+    },
+    {
+      "id": "TEST-011",
+      "name": "E2E Post Lifecycle Test",
+      "description": "Plan \u2192 Generate \u2192 QA \u2192 Publish \u2192 Metrics \u2192 Score \u2192 Learn",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "4h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/e2e/test_post_lifecycle.py"
+      ],
+      "acceptance": [
+        "Full cycle completes",
+        "Attribution intact"
+      ]
+    },
+    {
+      "id": "TEST-012",
+      "name": "E2E Cross-Platform Test",
+      "description": "Same slot generates platform-appropriate content",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/e2e/test_cross_platform.py"
+      ],
+      "acceptance": [
+        "X \u2264280 chars",
+        "LinkedIn \u22643000 chars"
+      ]
+    },
+    {
+      "id": "TEST-013",
+      "name": "E2E DM Flow Test",
+      "description": "Keyword \u2192 Resource \u2192 Qualification \u2192 Email capture",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/e2e/test_dm_flow.py"
+      ],
+      "acceptance": [
+        "Permission gate enforced",
+        "Email captured"
+      ]
+    },
+    {
+      "id": "TEST-014",
+      "name": "X/Twitter Adapter Tests",
+      "description": "Publish, thread, reply, metrics, DM tests",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/adapters/test_x_adapter.py"
+      ],
+      "acceptance": [
+        "All operations tested",
+        "Rate limit handling"
+      ]
+    },
+    {
+      "id": "TEST-015",
+      "name": "Instagram Adapter Tests",
+      "description": "Publish via API, DM via Safari, notifications",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/adapters/test_instagram_adapter.py"
+      ],
+      "acceptance": [
+        "API and Safari paths tested"
+      ]
+    },
+    {
+      "id": "TEST-016",
+      "name": "TikTok Adapter Tests",
+      "description": "Video publish, DM via Safari",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/adapters/test_tiktok_adapter.py"
+      ],
+      "acceptance": [
+        "Video upload works",
+        "Blotato API tested"
+      ]
+    },
+    {
+      "id": "TEST-017",
+      "name": "Rate Limiting Tests",
+      "description": "Platform, account, user limits; backoff; DM cooldown",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/safety/test_rate_limiting.py"
+      ],
+      "acceptance": [
+        "All limits enforced",
+        "0 violations"
+      ]
+    },
+    {
+      "id": "TEST-018",
+      "name": "Permission Gate Tests",
+      "description": "DM links blocked, stop command, blocked users",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/safety/test_permission_gates.py"
+      ],
+      "acceptance": [
+        "100% permission gate enforced"
+      ]
+    },
+    {
+      "id": "TEST-019",
+      "name": "Error Handling Tests",
+      "description": "Timeout retry, error logging, DLQ, no silent skips",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/safety/test_error_handling.py"
+      ],
+      "acceptance": [
+        "All errors handled",
+        "No silent skips"
+      ]
+    },
+    {
+      "id": "TEST-020",
+      "name": "Performance Tests",
+      "description": "Generation <5s, publish <2s, concurrent loads",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/performance/test_throughput.py"
+      ],
+      "acceptance": [
+        "All latency targets met"
+      ]
+    },
+    {
+      "id": "TEST-021",
+      "name": "Sleep Mode Unit Tests",
+      "description": "Tests for sleep/wake transitions, trigger registry",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/unit/test_sleep_mode.py"
+      ],
+      "acceptance": [
+        "All triggers tested",
+        "Transitions work"
+      ]
+    },
+    {
+      "id": "TEST-022",
+      "name": "Sleep Mode Integration Tests",
+      "description": "Tests for CPU reduction, worker pause/resume, wake timing",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "Backend/tests/integration/test_sleep_mode.py"
+      ],
+      "acceptance": [
+        "CPU <5% when sleeping",
+        "Tasks complete after wake"
+      ]
+    },
+    {
+      "id": "MOD-001",
+      "name": "Service Registry",
+      "description": "Central registry for all services with dependency injection",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/services/registry.py"
+      ],
+      "acceptance": [
+        "Services registered",
+        "Dependencies resolved"
+      ]
+    },
+    {
+      "id": "MOD-002",
+      "name": "Event Bus Implementation",
+      "description": "Pub/sub event bus for decoupled service communication",
+      "priority": "P0",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/services/event_bus.py"
+      ],
+      "acceptance": [
+        "Events published",
+        "Subscribers notified"
+      ]
+    },
+    {
+      "id": "MOD-003",
+      "name": "Worker Queue Abstraction",
+      "description": "Abstract worker queue for Redis/BullMQ or in-memory",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/workers/queue_abstraction.py"
+      ],
+      "acceptance": [
+        "Works with Redis",
+        "Works in-memory for testing"
+      ]
+    },
+    {
+      "id": "MOD-004",
+      "name": "Config Management",
+      "description": "Centralized config with environment-based overrides",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/config/settings.py"
+      ],
+      "acceptance": [
+        "All config centralized",
+        "Env vars work"
+      ]
+    },
+    {
+      "id": "MOD-005",
+      "name": "Health Check Endpoints",
+      "description": "Health checks for all services, workers, and external deps",
+      "priority": "P0",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/api/endpoints/health.py"
+      ],
+      "acceptance": [
+        "All components checked",
+        "Status aggregated"
+      ]
+    },
+    {
+      "id": "MOD-006",
+      "name": "Graceful Shutdown",
+      "description": "Complete in-flight operations before shutdown",
+      "priority": "P0",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/main.py"
+      ],
+      "acceptance": [
+        "No dropped tasks",
+        "Clean exit"
+      ]
+    },
+    {
+      "id": "MOD-007",
+      "name": "Adapter Factory",
+      "description": "Factory for creating platform adapters based on config",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/services/adapters/adapter_factory.py"
+      ],
+      "acceptance": [
+        "Correct adapter returned",
+        "Config-driven"
+      ]
+    },
+    {
+      "id": "MOD-008",
+      "name": "Database Connection Pool",
+      "description": "Efficient connection pooling for Supabase/Postgres",
+      "priority": "P1",
+      "phase": 10,
+      "effort": "2h",
+      "passes": false,
+      "category": "modular",
+      "files": [
+        "Backend/db/connection_pool.py"
+      ],
+      "acceptance": [
+        "Pool configured",
+        "Connections reused"
+      ]
+    },
+    {
+      "id": "TPL-001",
+      "name": "Template Library Data Model",
+      "description": "Template entity with awareness_level, fate_weights, format, intent, cta_strength, prompt_text",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/models/template.py",
+        "supabase/migrations/templates.sql"
+      ],
+      "acceptance": [
+        "Template model complete",
+        "All fields supported"
+      ]
+    },
+    {
+      "id": "TPL-002",
+      "name": "Problem-Aware Templates (8)",
+      "description": "Templates 1-8: Symptom mirror, Cost of inaction, Mistake story, Mechanism reveal, Checklist, Myth bust, Identity callout, Diagnostic question",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "4h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/templates/problem_aware/"
+      ],
+      "acceptance": [
+        "8 templates created",
+        "All with FATE weights"
+      ]
+    },
+    {
+      "id": "TPL-003",
+      "name": "Solution-Aware Templates (7)",
+      "description": "Templates 9-15: 3 approaches, Framework steps, Decision tree, Tool stack, Do this first, Case study, Benchmarks",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/templates/solution_aware/"
+      ],
+      "acceptance": [
+        "7 templates created",
+        "All with FATE weights"
+      ]
+    },
+    {
+      "id": "TPL-004",
+      "name": "Product-Aware Templates (6)",
+      "description": "Templates 16-21: Why we built it, Feature\u2192outcome, Objection handling, Before/after, Walkthrough, Competitive positioning",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "3h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/templates/product_aware/"
+      ],
+      "acceptance": [
+        "6 templates created",
+        "Direct CTAs included"
+      ]
+    },
+    {
+      "id": "TPL-005",
+      "name": "Most-Aware Templates (4)",
+      "description": "Templates 22-25: Offer reminder, Bonus/deadline, Guarantee/risk reversal, Exactly what you get",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/templates/most_aware/"
+      ],
+      "acceptance": [
+        "4 templates created",
+        "All with direct CTAs"
+      ]
+    },
+    {
+      "id": "TPL-006",
+      "name": "Template Variables System",
+      "description": "Support {brand}, {offer}, {icp}, {pain}, {outcome}, {objection}, {mechanism}, {cta_link}, {proof}",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/services/template_renderer.py"
+      ],
+      "acceptance": [
+        "All variables interpolated",
+        "Missing variables detected"
+      ]
+    },
+    {
+      "id": "TPL-007",
+      "name": "Template CRUD API",
+      "description": "GET/POST/PUT /v1/templates with filtering by awareness, channel, offer",
+      "priority": "P0",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/api/endpoints/templates.py"
+      ],
+      "acceptance": [
+        "CRUD operations work",
+        "Filtering works"
+      ]
+    },
+    {
+      "id": "TPL-008",
+      "name": "Template Forking",
+      "description": "Fork winning templates (tpl_09a, tpl_09b), never overwrite originals",
+      "priority": "P1",
+      "phase": 3,
+      "effort": "2h",
+      "passes": false,
+      "category": "templates",
+      "files": [
+        "Backend/services/template_forker.py"
+      ],
+      "acceptance": [
+        "Forks created with suffix",
+        "Original preserved"
+      ]
+    },
+    {
+      "id": "MF-001",
+      "name": "Media Factory Pipeline Orchestrator",
+      "description": "Orchestrate Script \u2192 TTS \u2192 Music \u2192 Visuals \u2192 Render \u2192 Publish pipeline",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "6h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/orchestrator.py"
+      ],
+      "acceptance": [
+        "Full pipeline executes",
+        "Status tracked per stage"
+      ]
+    },
+    {
+      "id": "MF-002",
+      "name": "Script Generator Service",
+      "description": "Generate script.json + shotlist.json from content brief",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/script_generator.py"
+      ],
+      "acceptance": [
+        "Script JSON output",
+        "Shotlist JSON output"
+      ]
+    },
+    {
+      "id": "MF-003",
+      "name": "TTS Service (HuggingFace)",
+      "description": "Text-to-speech via HuggingFace API with voice cloning",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/tts_service.py"
+      ],
+      "acceptance": [
+        "Audio generated",
+        "Voice reference supported"
+      ]
+    },
+    {
+      "id": "MF-004",
+      "name": "Music Service (Suno/SoundCloud)",
+      "description": "Generate or source background music matching video mood",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/music_service.py"
+      ],
+      "acceptance": [
+        "Music sourced",
+        "Mood matching works"
+      ]
+    },
+    {
+      "id": "MF-005",
+      "name": "Visuals Service (B-Roll, Matting)",
+      "description": "Source B-roll, apply matting, generate meme overlays",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "6h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/visuals_service.py"
+      ],
+      "acceptance": [
+        "B-roll sourced",
+        "Matting applied"
+      ]
+    },
+    {
+      "id": "MF-006",
+      "name": "Remotion Render Service",
+      "description": "Compose and render video using Remotion",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "6h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/remotion_service.py"
+      ],
+      "acceptance": [
+        "Video rendered",
+        "Multiple formats supported"
+      ]
+    },
+    {
+      "id": "MF-007",
+      "name": "Media Factory JSON Contracts",
+      "description": "Define JSON contracts for all pipeline stages",
+      "priority": "P0",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/contracts/"
+      ],
+      "acceptance": [
+        "All contracts defined",
+        "Validation works"
+      ]
+    },
+    {
+      "id": "MF-008",
+      "name": "Provider Swapping",
+      "description": "Swap providers (HF\u2194ElevenLabs, Suno\u2194SoundCloud) without breaking",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "media-factory",
+      "files": [
+        "Backend/services/media_factory/providers/"
+      ],
+      "acceptance": [
+        "Providers interchangeable",
+        "Config-driven"
+      ]
+    },
+    {
+      "id": "TREND-001",
+      "name": "Trend Discovery Engine",
+      "description": "Discover trending topics from Reddit, TikTok, Instagram",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "6h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/discovery.py"
+      ],
+      "acceptance": [
+        "Trends extracted",
+        "Multi-source"
+      ]
+    },
+    {
+      "id": "TREND-002",
+      "name": "Trend Scoring",
+      "description": "Score trends by volume, growth, sentiment, opportunity",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/scorer.py"
+      ],
+      "acceptance": [
+        "Trends ranked",
+        "Scores 0-100"
+      ]
+    },
+    {
+      "id": "TREND-003",
+      "name": "Trend \u2192 Content Brief",
+      "description": "Convert trend into content brief for media factory",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/brief_generator.py"
+      ],
+      "acceptance": [
+        "Brief generated",
+        "Links to trend evidence"
+      ]
+    },
+    {
+      "id": "TREND-004",
+      "name": "Instagram Trend Analysis",
+      "description": "Analyze Instagram hashtags, reels, engagement patterns",
+      "priority": "P2",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/instagram_trends.py"
+      ],
+      "acceptance": [
+        "IG trends extracted",
+        "Patterns identified"
+      ]
+    },
+    {
+      "id": "TREND-005",
+      "name": "Trend Dashboard Widget",
+      "description": "Dashboard showing live trends with scores and actions",
+      "priority": "P2",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "dashboard/app/components/TrendDashboard.tsx"
+      ],
+      "acceptance": [
+        "Trends displayed",
+        "One-click brief creation"
+      ]
+    },
+    {
+      "id": "MC-001",
+      "name": "Comment Listener Worker",
+      "description": "Listen for comments on posts across platforms",
+      "priority": "P1",
+      "phase": 7,
+      "effort": "4h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/workers/comment_listener.py"
+      ],
+      "acceptance": [
+        "Comments captured",
+        "Intent classified"
+      ]
+    },
+    {
+      "id": "MC-002",
+      "name": "Comment Reply Templates",
+      "description": "Templates for public comment replies (1-3 lines, high signal)",
+      "priority": "P1",
+      "phase": 7,
+      "effort": "2h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/templates/comment_replies/"
+      ],
+      "acceptance": [
+        "Reply templates created",
+        "Context-aware"
+      ]
+    },
+    {
+      "id": "MC-003",
+      "name": "Comment \u2192 DM Routing",
+      "description": "Route qualified commenters to DM flow",
+      "priority": "P1",
+      "phase": 7,
+      "effort": "3h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/services/dm_router.py"
+      ],
+      "acceptance": [
+        "Qualified users routed",
+        "Keyword CTAs work"
+      ]
+    },
+    {
+      "id": "MC-004",
+      "name": "DM Conversation State Machine",
+      "description": "Track DM conversation state: trigger \u2192 qualify \u2192 deliver \u2192 capture",
+      "priority": "P0",
+      "phase": 7,
+      "effort": "4h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/services/dm_state_machine.py"
+      ],
+      "acceptance": [
+        "States tracked",
+        "Transitions logged"
+      ]
+    },
+    {
+      "id": "MC-005",
+      "name": "DM Qualification Flow",
+      "description": "Ask qualifying questions, deliver assets, capture email",
+      "priority": "P1",
+      "phase": 7,
+      "effort": "4h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/services/dm_qualification.py"
+      ],
+      "acceptance": [
+        "Questions asked",
+        "Emails captured"
+      ]
+    },
+    {
+      "id": "MC-006",
+      "name": "DM Scoring",
+      "description": "+1 reply, +2 qualify, +3 click, +5 email, +8 booking, +10 purchase",
+      "priority": "P1",
+      "phase": 7,
+      "effort": "2h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/services/dm_scorer.py"
+      ],
+      "acceptance": [
+        "Scores calculated",
+        "Leaderboard updated"
+      ]
+    },
+    {
+      "id": "MC-007",
+      "name": "Email Capture Service",
+      "description": "Capture emails from DMs, link-in-bio, lead magnets",
+      "priority": "P1",
+      "phase": 7,
+      "effort": "3h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/services/email_capture.py"
+      ],
+      "acceptance": [
+        "Emails captured",
+        "Segmented by source"
+      ]
+    },
+    {
+      "id": "MC-008",
+      "name": "Email Sequence Sender",
+      "description": "Welcome, nurture, conversion sequences with tracking",
+      "priority": "P2",
+      "phase": 7,
+      "effort": "4h",
+      "passes": false,
+      "category": "multi-channel",
+      "files": [
+        "Backend/services/email_sequences.py"
+      ],
+      "acceptance": [
+        "Sequences execute",
+        "Opens/clicks tracked"
+      ]
+    },
+    {
+      "id": "AUTO-001",
+      "name": "n8n Workflow Integration",
+      "description": "Connect to n8n for orchestration workflows",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/services/n8n_integration.py"
+      ],
+      "acceptance": [
+        "Workflows triggered",
+        "Status synced"
+      ]
+    },
+    {
+      "id": "AUTO-002",
+      "name": "Bandit Allocation Automation",
+      "description": "Automated 70/20/10 allocation based on template performance",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/services/bandit_allocator.py"
+      ],
+      "acceptance": [
+        "Allocation automatic",
+        "Winners get 70%"
+      ]
+    },
+    {
+      "id": "AUTO-003",
+      "name": "Template Auto-Fork",
+      "description": "Automatically fork winning templates for A/B testing",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/services/template_evolution.py"
+      ],
+      "acceptance": [
+        "Forks created automatically",
+        "A/B allocation set"
+      ]
+    },
+    {
+      "id": "AUTO-004",
+      "name": "Template Retirement",
+      "description": "Retire losing templates (< 5% allocation)",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "2h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/services/template_evolution.py"
+      ],
+      "acceptance": [
+        "Losers retired",
+        "No orphaned content"
+      ]
+    },
+    {
+      "id": "AUTO-005",
+      "name": "Human Approval Queue",
+      "description": "Queue uncertain content for human review",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/services/approval_queue.py",
+        "dashboard/app/approvals/page.tsx"
+      ],
+      "acceptance": [
+        "Queue displays items",
+        "Approve/reject works"
+      ]
+    },
+    {
+      "id": "AUTO-006",
+      "name": "Autonomous Slot Executor",
+      "description": "Execute scheduled slots without human intervention",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/workers/slot_executor.py"
+      ],
+      "acceptance": [
+        "Slots execute on time",
+        "Failures logged"
+      ]
+    },
+    {
+      "id": "AUTO-007",
+      "name": "Same-Day Adjustment",
+      "description": "Adjust remaining slots based on early performance",
+      "priority": "P2",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/services/same_day_adjuster.py"
+      ],
+      "acceptance": [
+        "Adjustments made",
+        "Winners prioritized"
+      ]
+    },
+    {
+      "id": "AUTO-008",
+      "name": "Weekly Plan Auto-Generation",
+      "description": "Generate next week's plan based on learnings",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "autonomy",
+      "files": [
+        "Backend/services/weekly_planner.py"
+      ],
+      "acceptance": [
+        "Plan generated weekly",
+        "Learning incorporated"
+      ]
+    },
+    {
+      "id": "ENTITY-001",
+      "name": "Brand Entity & API",
+      "description": "Brand model with positioning, allowed/disallowed topics",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "2h",
+      "passes": false,
+      "category": "entities",
+      "files": [
+        "Backend/models/brand.py",
+        "Backend/api/endpoints/brands.py"
+      ],
+      "acceptance": [
+        "CRUD works",
+        "Multiple brands supported"
+      ]
+    },
+    {
+      "id": "ENTITY-002",
+      "name": "Offer Entity & API",
+      "description": "Offer model with promise, CTAs, landing URL, for/not-for",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "2h",
+      "passes": false,
+      "category": "entities",
+      "files": [
+        "Backend/models/offer.py",
+        "Backend/api/endpoints/offers.py"
+      ],
+      "acceptance": [
+        "CRUD works",
+        "Linked to brands"
+      ]
+    },
+    {
+      "id": "ENTITY-003",
+      "name": "ICP Entity & API",
+      "description": "ICP model with pains, outcomes, objections, language patterns",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "2h",
+      "passes": false,
+      "category": "entities",
+      "files": [
+        "Backend/models/icp.py",
+        "Backend/api/endpoints/icps.py"
+      ],
+      "acceptance": [
+        "CRUD works",
+        "Linked to offers"
+      ]
+    },
+    {
+      "id": "ENTITY-004",
+      "name": "Creator Profile Entity",
+      "description": "Creator voice rules, banned phrases, tone descriptors",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "2h",
+      "passes": false,
+      "category": "entities",
+      "files": [
+        "Backend/models/creator_profile.py"
+      ],
+      "acceptance": [
+        "Profile saved",
+        "Voice rules applied"
+      ]
+    },
+    {
+      "id": "ENTITY-005",
+      "name": "Content Plan Entity",
+      "description": "Weekly plan with slots tagged by Awareness \u00d7 FATE",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "entities",
+      "files": [
+        "Backend/models/content_plan.py",
+        "Backend/api/endpoints/plans.py"
+      ],
+      "acceptance": [
+        "Plans created",
+        "Slots managed"
+      ]
+    },
+    {
+      "id": "ENTITY-006",
+      "name": "Prompt Run Traceback",
+      "description": "Every post traces to template \u2192 prompt \u2192 offer \u2192 ICP \u2192 slot",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "entities",
+      "files": [
+        "Backend/models/prompt_run.py"
+      ],
+      "acceptance": [
+        "Full chain stored",
+        "Traceback query works"
+      ]
+    },
+    {
+      "id": "ENTITY-007",
+      "name": "Touchpoint Unified Model",
+      "description": "Unified model for post/comment/dm/email touchpoints",
+      "priority": "P0",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "entities",
+      "files": [
+        "Backend/models/touchpoint.py"
+      ],
+      "acceptance": [
+        "All channels supported",
+        "Attribution intact"
+      ]
+    },
+    {
+      "id": "UI-001",
+      "name": "Brands/Offers/ICP Manager",
+      "description": "Dashboard UI to create and edit brands, offers, ICPs",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/brands/page.tsx",
+        "dashboard/app/offers/page.tsx"
+      ],
+      "acceptance": [
+        "CRUD UI works",
+        "Relationships shown"
+      ]
+    },
+    {
+      "id": "UI-002",
+      "name": "Content Plan Calendar",
+      "description": "Weekly calendar view showing slots with Awareness \u00d7 FATE",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/calendar/page.tsx"
+      ],
+      "acceptance": [
+        "Calendar displays",
+        "Slots editable"
+      ]
+    },
+    {
+      "id": "UI-003",
+      "name": "Generate Queue",
+      "description": "Per slot: generate 3 variants, pick 1 or auto-pick",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/generate/page.tsx"
+      ],
+      "acceptance": [
+        "Variants generated",
+        "Selection works"
+      ]
+    },
+    {
+      "id": "UI-004",
+      "name": "Published Posts View",
+      "description": "List of posts with metrics, scores, and traceback links",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/posts/page.tsx"
+      ],
+      "acceptance": [
+        "Posts listed",
+        "Metrics shown"
+      ]
+    },
+    {
+      "id": "UI-005",
+      "name": "Traceback View",
+      "description": "Click post to see prompt_run, template, inputs, offer/ICP, clicks",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/posts/[id]/page.tsx"
+      ],
+      "acceptance": [
+        "Full traceback shown",
+        "All fields populated"
+      ]
+    },
+    {
+      "id": "UI-006",
+      "name": "Template Leaderboard",
+      "description": "Performance by template, offer, ICP with scores",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "3h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/leaderboard/page.tsx"
+      ],
+      "acceptance": [
+        "Leaderboard displays",
+        "Filtering works"
+      ]
+    },
+    {
+      "id": "UI-007",
+      "name": "Insights Dashboard",
+      "description": "Hooks that win, CTAs that win, Best offer per ICP",
+      "priority": "P2",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/insights/page.tsx"
+      ],
+      "acceptance": [
+        "Insights calculated",
+        "Actionable recommendations"
+      ]
+    },
+    {
+      "id": "SORA-001",
+      "name": "Sora Story IR Generator",
+      "description": "Generate format-agnostic Story IR from trend + brief (beats with HOOK, STEP, CTA)",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "sora-video",
+      "files": [
+        "Backend/services/sora_video_pipeline.py"
+      ],
+      "acceptance": [
+        "Story IR JSON output",
+        "Beats include narration, on_screen, broll, audio"
+      ]
+    },
+    {
+      "id": "SORA-002",
+      "name": "Sora Shot Plan Generator",
+      "description": "Convert Story IR to Sora-facing shot plan with visual styles",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "sora-video",
+      "files": [
+        "Backend/services/sora_video_pipeline.py"
+      ],
+      "acceptance": [
+        "Shot plan JSON",
+        "Visual styles applied"
+      ]
+    },
+    {
+      "id": "SORA-003",
+      "name": "Sora API Integration",
+      "description": "Call OpenAI Videos API for AI scene generation",
+      "priority": "P0",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "sora-video",
+      "files": [
+        "Backend/services/sora_video_pipeline.py"
+      ],
+      "acceptance": [
+        "Videos generated via API",
+        "Async job management"
+      ]
+    },
+    {
+      "id": "SORA-004",
+      "name": "Format Packs (Visual Styles)",
+      "description": "Swappable visual styles: stick-figure, dev-vlog, documentary",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "sora-video",
+      "files": [
+        "Backend/services/sora_video_pipeline.py"
+      ],
+      "acceptance": [
+        "Multiple format packs",
+        "Styles apply correctly"
+      ]
+    },
+    {
+      "id": "SORA-005",
+      "name": "Asset Caching (Hash-based)",
+      "description": "Cache generated assets by hash to avoid regenerating unchanged shots",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "sora-video",
+      "files": [
+        "Backend/services/sora_video_pipeline.py"
+      ],
+      "acceptance": [
+        "Cached assets reused",
+        "Hash comparison works"
+      ]
+    },
+    {
+      "id": "SORA-006",
+      "name": "Sora Watermark Remover",
+      "description": "FFmpeg crop processing to remove Sora watermarks",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "sora-video",
+      "files": [
+        "Backend/services/video/watermark_remover.py"
+      ],
+      "acceptance": [
+        "Bottom 100px cropped",
+        "Audio preserved",
+        "<30s processing"
+      ]
+    },
+    {
+      "id": "SFX-001",
+      "name": "SFX Library Manifest",
+      "description": "AI-addressable manifest for locally owned sound effects",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "sfx-audio",
+      "files": [
+        "Backend/services/sfx_library/manifest.json"
+      ],
+      "acceptance": [
+        "Manifest includes id, tags, description, license"
+      ]
+    },
+    {
+      "id": "SFX-002",
+      "name": "Beat Extractor",
+      "description": "Extract timeline beats from script with pacing estimation",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "sfx-audio",
+      "files": [
+        "Backend/services/sfx_library/beat_extractor.py"
+      ],
+      "acceptance": [
+        "Beats extracted",
+        "Timing estimated"
+      ]
+    },
+    {
+      "id": "SFX-003",
+      "name": "AI SFX Selection",
+      "description": "LLM-driven SFX selection from manifest with validation",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "sfx-audio",
+      "files": [
+        "Backend/services/sfx_library/sfx_selector.py"
+      ],
+      "acceptance": [
+        "Valid SFX IDs selected",
+        "Fallback matching for hallucinations"
+      ]
+    },
+    {
+      "id": "SFX-004",
+      "name": "Audio Events Timeline",
+      "description": "Engine-agnostic audio_events.json for voiceover, music, SFX placement",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "sfx-audio",
+      "files": [
+        "Backend/services/sfx_library/audio_events.py"
+      ],
+      "acceptance": [
+        "Timeline JSON output",
+        "Frame-accurate timing"
+      ]
+    },
+    {
+      "id": "SFX-005",
+      "name": "FFmpeg Audio Mixer",
+      "description": "Mix all audio into single track for Motion Canvas",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "sfx-audio",
+      "files": [
+        "Backend/services/sfx_library/audio_mixer.py"
+      ],
+      "acceptance": [
+        "Mixed audio output",
+        "Correct layering"
+      ]
+    },
+    {
+      "id": "SFX-006",
+      "name": "SFX QA Gates",
+      "description": "Density warnings, gap detection, pacing validation",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "sfx-audio",
+      "files": [
+        "Backend/services/sfx_library/qa_gates.py"
+      ],
+      "acceptance": [
+        "Density warnings",
+        "Gap detection"
+      ]
+    },
+    {
+      "id": "CHAR-001",
+      "name": "AI Character Generator",
+      "description": "Generate characters via image models with consistent prompts",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "ai-characters",
+      "files": [
+        "Backend/services/ai_video_pipeline/character_generator.py"
+      ],
+      "acceptance": [
+        "Characters generated",
+        "Consistent identity"
+      ]
+    },
+    {
+      "id": "CHAR-002",
+      "name": "Background Removal (rembg)",
+      "description": "Automated background removal for transparent PNGs",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "ai-characters",
+      "files": [
+        "Backend/services/matting/background_remover.py"
+      ],
+      "acceptance": [
+        "Transparent PNGs output",
+        "Clean alpha channel"
+      ]
+    },
+    {
+      "id": "CHAR-003",
+      "name": "Character Manifest",
+      "description": "JSON index of all character variants for Remotion",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "ai-characters",
+      "files": [
+        "Backend/services/ai_video_pipeline/character_manifest.py"
+      ],
+      "acceptance": [
+        "Manifest generated",
+        "All variants indexed"
+      ]
+    },
+    {
+      "id": "CHAR-004",
+      "name": "Lip-Sync Mouth Layers",
+      "description": "Separate body/mouth layers for word timestamp lip-sync",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "ai-characters",
+      "files": [
+        "Backend/services/ai_video_pipeline/lip_sync.py"
+      ],
+      "acceptance": [
+        "Mouth states animate",
+        "Word timestamps drive shapes"
+      ]
+    },
+    {
+      "id": "PIPE-001",
+      "name": "Content Sourcing Engine",
+      "description": "Auto-discover and ingest content from local media folders",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "Backend/services/ingestion/content_sourcer.py"
+      ],
+      "acceptance": [
+        "Auto-import images/videos",
+        "Duplicate detection"
+      ]
+    },
+    {
+      "id": "PIPE-002",
+      "name": "AI Content Analysis",
+      "description": "Analyze visual content: scene, objects, mood, niche, quality score",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "Backend/services/content_analyzer.py"
+      ],
+      "acceptance": [
+        "Quality score 1-100",
+        "Niche detected"
+      ]
+    },
+    {
+      "id": "PIPE-003",
+      "name": "AI Title/Description Generator",
+      "description": "Generate 3-5 title and description variations per content",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "Backend/services/ai_content_generator.py"
+      ],
+      "acceptance": [
+        "Multiple variations generated",
+        "Platform-specific"
+      ]
+    },
+    {
+      "id": "PIPE-004",
+      "name": "Platform Matching Engine",
+      "description": "Match content to platforms based on format, niche, quality",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "Backend/services/platform_matcher.py"
+      ],
+      "acceptance": [
+        ">85% match accuracy",
+        "Respects quality thresholds"
+      ]
+    },
+    {
+      "id": "PIPE-005",
+      "name": "Tinder-Style Swipe Approval",
+      "description": "Rapid content curation with swipe gestures (right=approve, left=skip)",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "dashboard/app/swipe/page.tsx"
+      ],
+      "acceptance": [
+        "<5s approval time",
+        "Keyboard shortcuts work"
+      ]
+    },
+    {
+      "id": "PIPE-006",
+      "name": "Smart Scheduling (4hr intervals)",
+      "description": "Post every 4 hours during daylight (6AM-10PM) with timezone awareness",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "Backend/services/post_scheduler.py"
+      ],
+      "acceptance": [
+        ">95% on-schedule",
+        "Timezone aware"
+      ]
+    },
+    {
+      "id": "PIPE-007",
+      "name": "60-Day Content Runway",
+      "description": "Maintain 60+ approved content pieces for consistent posting",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "dashboard/app/runway/page.tsx"
+      ],
+      "acceptance": [
+        "Runway dashboard",
+        "Alerts when low"
+      ]
+    },
+    {
+      "id": "PIPE-008",
+      "name": "Content Reusability System",
+      "description": "Store multiple title/description variations, track usage",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "content-pipeline",
+      "files": [
+        "Backend/services/content_variations.py"
+      ],
+      "acceptance": [
+        "Variations stored",
+        "Usage tracked"
+      ]
+    },
+    {
+      "id": "COMP-001",
+      "name": "Competitor Account Tracker",
+      "description": "Monitor specific Instagram accounts for content insights",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "competitor",
+      "files": [
+        "Backend/services/competitor_service.py"
+      ],
+      "acceptance": [
+        "Accounts tracked",
+        "Sync scheduler works"
+      ]
+    },
+    {
+      "id": "COMP-002",
+      "name": "Competitor Content Downloader",
+      "description": "Fetch reels, posts, media with metrics via RapidAPI",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "competitor",
+      "files": [
+        "Backend/services/rapidapi_social_fetcher.py"
+      ],
+      "acceptance": [
+        "Content downloaded",
+        "Metrics captured"
+      ]
+    },
+    {
+      "id": "COMP-003",
+      "name": "Competitor Performance Analyzer",
+      "description": "Study viral content patterns: hooks, formats, timing",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "competitor",
+      "files": [
+        "Backend/services/competitor_analysis_service.py"
+      ],
+      "acceptance": [
+        "Patterns identified",
+        "Viral hooks extracted"
+      ]
+    },
+    {
+      "id": "COMP-004",
+      "name": "Competitor Learnings Generator",
+      "description": "Generate actionable documentation from competitor analysis",
+      "priority": "P2",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "competitor",
+      "files": [
+        "Backend/services/competitor_analysis_service.py"
+      ],
+      "acceptance": [
+        "Learnings docs generated",
+        "Cross-account insights"
+      ]
+    },
+    {
+      "id": "EXP-001",
+      "name": "Experiment Agent",
+      "description": "AI agent for planning, executing, analyzing content experiments",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "6h",
+      "passes": false,
+      "category": "experiments",
+      "files": [
+        "Backend/services/experiments_scheduler/agent.py"
+      ],
+      "acceptance": [
+        "Agent plans experiments",
+        "Results analyzed"
+      ]
+    },
+    {
+      "id": "EXP-002",
+      "name": "Hypothesis Framework",
+      "description": "Testable hypotheses with success criteria and sample sizes",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "experiments",
+      "files": [
+        "Backend/services/experiments_scheduler/hypothesis.py"
+      ],
+      "acceptance": [
+        "Hypotheses tracked",
+        "Pass/fail determined"
+      ]
+    },
+    {
+      "id": "EXP-003",
+      "name": "Content Experiment Tagging",
+      "description": "Tag posts with experiment_id, hypothesis_id for attribution",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "2h",
+      "passes": false,
+      "category": "experiments",
+      "files": [
+        "Backend/services/experiments_scheduler/tagging.py"
+      ],
+      "acceptance": [
+        "Posts tagged",
+        "Origin tracked"
+      ]
+    },
+    {
+      "id": "EXP-004",
+      "name": "Winner Detection & Promotion",
+      "description": "Identify winning experiments and promote to main narrative",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "experiments",
+      "files": [
+        "Backend/services/experiments_scheduler/winner_detector.py"
+      ],
+      "acceptance": [
+        "Winners detected",
+        "Promoted to narrative"
+      ]
+    },
+    {
+      "id": "EXP-005",
+      "name": "A/B Test Variants",
+      "description": "Generate and compare content variants for A/B testing",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "experiments",
+      "files": [
+        "Backend/services/ab_testing.py"
+      ],
+      "acceptance": [
+        "Variants generated",
+        "Statistical comparison"
+      ]
+    },
+    {
+      "id": "EVENT-001",
+      "name": "Event Bus Core",
+      "description": "Topic-based pub/sub for async service communication",
+      "priority": "P0",
+      "phase": 10,
+      "effort": "6h",
+      "passes": false,
+      "category": "event-driven",
+      "files": [
+        "Backend/services/event_bus/core.py"
+      ],
+      "acceptance": [
+        "Events published",
+        "Subscribers notified"
+      ]
+    },
+    {
+      "id": "EVENT-002",
+      "name": "Media Ingestion Events",
+      "description": "media.ingested, media.analysis.started/completed/failed",
+      "priority": "P0",
+      "phase": 10,
+      "effort": "3h",
+      "passes": false,
+      "category": "event-driven",
+      "files": [
+        "Backend/services/event_bus/media_events.py"
+      ],
+      "acceptance": [
+        "Ingestion events fire",
+        "Analysis chain works"
+      ]
+    },
+    {
+      "id": "EVENT-003",
+      "name": "Publishing Events",
+      "description": "publish.requested/uploading/submitted/completed/failed",
+      "priority": "P0",
+      "phase": 10,
+      "effort": "3h",
+      "passes": false,
+      "category": "event-driven",
+      "files": [
+        "Backend/services/event_bus/publish_events.py"
+      ],
+      "acceptance": [
+        "Publish events fire",
+        "Status tracked"
+      ]
+    },
+    {
+      "id": "EVENT-004",
+      "name": "Metrics Events",
+      "description": "metrics.fetch.requested, metrics.updated",
+      "priority": "P1",
+      "phase": 10,
+      "effort": "2h",
+      "passes": false,
+      "category": "event-driven",
+      "files": [
+        "Backend/services/event_bus/metrics_events.py"
+      ],
+      "acceptance": [
+        "Metrics events fire",
+        "Backfill works"
+      ]
+    },
+    {
+      "id": "EVENT-005",
+      "name": "AI Generation Events",
+      "description": "ai.generation.requested/completed for Sora and other AI",
+      "priority": "P1",
+      "phase": 10,
+      "effort": "2h",
+      "passes": false,
+      "category": "event-driven",
+      "files": [
+        "Backend/services/event_bus/ai_events.py"
+      ],
+      "acceptance": [
+        "AI events fire",
+        "Async tracking works"
+      ]
+    },
+    {
+      "id": "MUSIC-001",
+      "name": "Music Library with Metadata",
+      "description": "Background music library with mood, tempo, genre tags",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "music",
+      "files": [
+        "Backend/services/music/library.py"
+      ],
+      "acceptance": [
+        "Music indexed",
+        "Metadata queryable"
+      ]
+    },
+    {
+      "id": "MUSIC-002",
+      "name": "Auto Music Matching",
+      "description": "Match background music to video based on content analysis",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "music",
+      "files": [
+        "Backend/services/music_selector.py"
+      ],
+      "acceptance": [
+        "Music matched",
+        "Match score 0-100"
+      ]
+    },
+    {
+      "id": "MUSIC-003",
+      "name": "Music Suggestion API",
+      "description": "GET /api/music/suggest/{media_id} with alternatives",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "2h",
+      "passes": false,
+      "category": "music",
+      "files": [
+        "Backend/api/endpoints/music.py"
+      ],
+      "acceptance": [
+        "Suggestions returned",
+        "Top 5 alternatives"
+      ]
+    },
+    {
+      "id": "MUSIC-004",
+      "name": "Music Overlay (Remotion)",
+      "description": "Professional music overlay with volume ducking",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "music",
+      "files": [
+        "Backend/services/remotion/music_overlay.py"
+      ],
+      "acceptance": [
+        "Music overlaid",
+        "Ducking works"
+      ]
+    },
+    {
+      "id": "STORY-001",
+      "name": "Instagram Story Posting",
+      "description": "Post Stories via Blotato API with mediaType: 'story'",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "stories",
+      "files": [
+        "Backend/services/blotato_api.py"
+      ],
+      "acceptance": [
+        "Stories posted",
+        "24h expiry shown"
+      ]
+    },
+    {
+      "id": "STORY-002",
+      "name": "Story Scheduling UI",
+      "description": "Media type selector (Reel vs Story) with indicators",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "stories",
+      "files": [
+        "dashboard/app/schedule/page.tsx"
+      ],
+      "acceptance": [
+        "Selector works",
+        "Calendar shows Story icon"
+      ]
+    },
+    {
+      "id": "IG-TREND-001",
+      "name": "Instagram Trends Feed",
+      "description": "Regional trending content, sounds, hashtags with velocity",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "instagram-trends",
+      "files": [
+        "Backend/services/trend_intelligence/instagram_trends.py"
+      ],
+      "acceptance": [
+        "Trends displayed",
+        "Velocity metrics"
+      ]
+    },
+    {
+      "id": "IG-TREND-002",
+      "name": "Content Format Templates",
+      "description": "Library of proven formats: Text-Hook, Overhead Grab POV, etc.",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "instagram-trends",
+      "files": [
+        "Backend/services/template_library.py"
+      ],
+      "acceptance": [
+        "Templates categorized",
+        "Matchable to content"
+      ]
+    },
+    {
+      "id": "IG-TREND-003",
+      "name": "Best Time to Post (IG)",
+      "description": "Optimal posting time based on follower online activity",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "instagram-trends",
+      "files": [
+        "Backend/services/optimal_posting_times.py"
+      ],
+      "acceptance": [
+        "Times calculated",
+        "Based on real data"
+      ]
+    },
+    {
+      "id": "IG-TREND-004",
+      "name": "Hashtag Generator",
+      "description": "Generate hashtags from trends + niche with velocity ranking",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "instagram-trends",
+      "files": [
+        "Backend/services/trending_keywords_service.py"
+      ],
+      "acceptance": [
+        "Hashtags generated",
+        "Ranked by velocity"
+      ]
+    },
+    {
+      "id": "TIKTOK-001",
+      "name": "TikTok Content Scraper",
+      "description": "Scrape TikTok content for trend analysis",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "tiktok",
+      "files": [
+        "Backend/services/tiktok_scraper.py"
+      ],
+      "acceptance": [
+        "Content scraped",
+        "Metrics captured"
+      ]
+    },
+    {
+      "id": "TIKTOK-002",
+      "name": "TikTok Repurpose Service",
+      "description": "Repurpose TikTok content for other platforms",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "tiktok",
+      "files": [
+        "Backend/services/tiktok_repurpose_service.py"
+      ],
+      "acceptance": [
+        "Content adapted",
+        "Watermarks handled"
+      ]
+    },
+    {
+      "id": "TRANS-001",
+      "name": "Whisper Transcription",
+      "description": "Transcribe video audio using Whisper/Groq",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "transcription",
+      "files": [
+        "Backend/services/whisper_transcriber.py"
+      ],
+      "acceptance": [
+        "Transcripts generated",
+        "Word timestamps"
+      ]
+    },
+    {
+      "id": "TRANS-002",
+      "name": "Caption/Subtitle Generation",
+      "description": "Generate captions/subtitles from transcription",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "transcription",
+      "files": [
+        "Backend/services/transcription_adapter.py"
+      ],
+      "acceptance": [
+        "Captions generated",
+        "SRT/VTT output"
+      ]
+    },
+    {
+      "id": "THUMB-001",
+      "name": "AI Thumbnail Generator",
+      "description": "Generate thumbnail suggestions from video frames",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "thumbnails",
+      "files": [
+        "Backend/services/thumbnail_generator.py"
+      ],
+      "acceptance": [
+        "Thumbnails generated",
+        "Best frames selected"
+      ]
+    },
+    {
+      "id": "THUMB-002",
+      "name": "AI Thumbnail Selector",
+      "description": "AI scoring to select best thumbnail from candidates",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "thumbnails",
+      "files": [
+        "Backend/services/ai_thumbnail_selector.py"
+      ],
+      "acceptance": [
+        "Best thumbnail selected",
+        "Scoring visible"
+      ]
+    },
+    {
+      "id": "ANALYTICS-001",
+      "name": "Multi-Platform Analytics Aggregator",
+      "description": "Aggregate analytics from IG, TikTok, YouTube, Twitter",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "analytics",
+      "files": [
+        "Backend/services/analytics_aggregator.py"
+      ],
+      "acceptance": [
+        "Unified metrics",
+        "Cross-platform comparison"
+      ]
+    },
+    {
+      "id": "ANALYTICS-002",
+      "name": "Performance Correlator",
+      "description": "Correlate content features with performance metrics",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "analytics",
+      "files": [
+        "Backend/services/performance_correlator.py"
+      ],
+      "acceptance": [
+        "Correlations identified",
+        "Actionable insights"
+      ]
+    },
+    {
+      "id": "ANALYTICS-003",
+      "name": "Predictive Analytics",
+      "description": "Predict content performance before posting",
+      "priority": "P2",
+      "phase": 6,
+      "effort": "6h",
+      "passes": false,
+      "category": "analytics",
+      "files": [
+        "Backend/services/predictive_analytics.py"
+      ],
+      "acceptance": [
+        "Predictions generated",
+        "Accuracy tracked"
+      ]
+    },
+    {
+      "id": "VID-001",
+      "name": "Video Orientation Router",
+      "description": "Route videos to platforms by orientation (9:16 \u2192 Shorts/Reels, 16:9 \u2192 YouTube)",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "video",
+      "files": [
+        "Backend/services/format_detector.py"
+      ],
+      "acceptance": [
+        "Orientation detected",
+        "Correct routing"
+      ]
+    },
+    {
+      "id": "VID-002",
+      "name": "Clip Extraction Service",
+      "description": "Extract clips from long-form video with AI scene detection",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "video",
+      "files": [
+        "Backend/services/clip_extraction_service.py"
+      ],
+      "acceptance": [
+        "Clips extracted",
+        "Scene detection works"
+      ]
+    },
+    {
+      "id": "VID-003",
+      "name": "B-Roll Candidate Service",
+      "description": "Find and suggest B-roll for video production",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "video",
+      "files": [
+        "Backend/services/broll_candidate_service.py"
+      ],
+      "acceptance": [
+        "B-roll sourced",
+        "Relevance scored"
+      ]
+    },
+    {
+      "id": "VID-004",
+      "name": "Video Viral Analyzer",
+      "description": "Analyze videos for viral potential based on patterns",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "video",
+      "files": [
+        "Backend/services/video_viral_analyzer.py"
+      ],
+      "acceptance": [
+        "Viral score calculated",
+        "Improvement suggestions"
+      ]
+    },
+    {
+      "id": "ORCH-001",
+      "name": "Video Orchestrator Director",
+      "description": "Orchestrate narrative flow, pacing, and clip planning for long-form videos up to 5 min",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "6h",
+      "passes": false,
+      "category": "video-orchestrator",
+      "files": [
+        "Backend/services/video_orchestrator/director.py"
+      ],
+      "acceptance": [
+        "Script chunking works",
+        "Pacing control 150 wpm"
+      ]
+    },
+    {
+      "id": "ORCH-002",
+      "name": "Scene Crafter",
+      "description": "Build provider-specific prompts with style/character bibles",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "video-orchestrator",
+      "files": [
+        "Backend/services/video_orchestrator/scene_crafter.py"
+      ],
+      "acceptance": [
+        "Prompts generated",
+        "Style bibles applied"
+      ]
+    },
+    {
+      "id": "ORCH-003",
+      "name": "Clip Assessor (QA/Retry)",
+      "description": "Quality check clips for transcript, visual, continuity, artifacts",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "video-orchestrator",
+      "files": [
+        "Backend/services/video_orchestrator/assessor.py"
+      ],
+      "acceptance": [
+        ">70% first-attempt pass rate",
+        "Auto-retry failed clips"
+      ]
+    },
+    {
+      "id": "ORCH-004",
+      "name": "Provider Adapters (Sora, Runway, Kling)",
+      "description": "Multi-provider support with fallback logic",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "6h",
+      "passes": false,
+      "category": "video-orchestrator",
+      "files": [
+        "Backend/services/video_providers/"
+      ],
+      "acceptance": [
+        "Sora primary",
+        "Runway/Kling fallback",
+        "Mock for testing"
+      ]
+    },
+    {
+      "id": "ORCH-005",
+      "name": "Timeline Assembler",
+      "description": "Concatenate clips + transitions + audio overlay via FFmpeg/MoviePy",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "video-orchestrator",
+      "files": [
+        "Backend/services/video_orchestrator/timeline_assembler.py"
+      ],
+      "acceptance": [
+        "Final MP4 rendered",
+        "<15 min for 60s video"
+      ]
+    },
+    {
+      "id": "ORCH-006",
+      "name": "Style & Character Bibles",
+      "description": "Visual style rules and character appearance/personality canon",
+      "priority": "P1",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "video-orchestrator",
+      "files": [
+        "Backend/models/style_bible.py",
+        "Backend/models/character_bible.py"
+      ],
+      "acceptance": [
+        "Bibles stored",
+        "Consistency across clips"
+      ]
+    },
+    {
+      "id": "ORCH-007",
+      "name": "Storyboard Workflow UI",
+      "description": "Dashboard UI for storyboard mode with timeline + assessments",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "4h",
+      "passes": false,
+      "category": "video-orchestrator",
+      "files": [
+        "dashboard/app/storyboard/page.tsx"
+      ],
+      "acceptance": [
+        "Timeline view",
+        "Assessment results shown"
+      ]
+    },
+    {
+      "id": "AC-001",
+      "name": "Automation Center Dashboard",
+      "description": "Unified automation center with Narrative Builder + Experiments tabs",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "automation-center",
+      "files": [
+        "dashboard/app/automation/page.tsx"
+      ],
+      "acceptance": [
+        "Tab switching works",
+        "Queue depth visible"
+      ]
+    },
+    {
+      "id": "AC-002",
+      "name": "Agent Schedules System",
+      "description": "Schedule agent runs with cron/interval, enable/disable",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "automation-center",
+      "files": [
+        "Backend/services/agent_scheduler.py"
+      ],
+      "acceptance": [
+        "Schedules created",
+        "Next run calculated"
+      ]
+    },
+    {
+      "id": "AC-003",
+      "name": "Agent Runs Tracking",
+      "description": "Track runs with status, progress, heartbeat, artifacts",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "automation-center",
+      "files": [
+        "Backend/models/agent_run.py"
+      ],
+      "acceptance": [
+        "Runs tracked",
+        "Progress updated"
+      ]
+    },
+    {
+      "id": "AC-004",
+      "name": "Agent Steps Timeline",
+      "description": "Step-by-step tracking with status, duration, summary",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "automation-center",
+      "files": [
+        "Backend/models/agent_step.py"
+      ],
+      "acceptance": [
+        "Steps tracked",
+        "Timeline stream works"
+      ]
+    },
+    {
+      "id": "AC-005",
+      "name": "Agent Events (Append-Only)",
+      "description": "Append-only event timeline for debugging and observability",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "2h",
+      "passes": false,
+      "category": "automation-center",
+      "files": [
+        "Backend/models/agent_event.py"
+      ],
+      "acceptance": [
+        "Events logged",
+        "Filterable by step/topic"
+      ]
+    },
+    {
+      "id": "AC-006",
+      "name": "Run Detail Agent Panel",
+      "description": "Steps sidebar, timeline stream, artifacts drawer, pause/cancel/retry",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "automation-center",
+      "files": [
+        "dashboard/app/runs/[runId]/page.tsx"
+      ],
+      "acceptance": [
+        "Panel loads",
+        "Controls work"
+      ]
+    },
+    {
+      "id": "AC-007",
+      "name": "Pub/Sub Inspector",
+      "description": "Topics list, last events, consumer lag visualization",
+      "priority": "P2",
+      "phase": 10,
+      "effort": "3h",
+      "passes": false,
+      "category": "automation-center",
+      "files": [
+        "dashboard/app/topics/page.tsx"
+      ],
+      "acceptance": [
+        "Topics displayed",
+        "Events streamed"
+      ]
+    },
+    {
+      "id": "NAR-001",
+      "name": "Narrative Goals System",
+      "description": "Define goals with statement, CTA, audience, time horizon, targets",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "narrative",
+      "files": [
+        "Backend/models/narrative_goal.py",
+        "Backend/api/endpoints/narrative.py"
+      ],
+      "acceptance": [
+        "Goals CRUD works",
+        "Templates available"
+      ]
+    },
+    {
+      "id": "NAR-002",
+      "name": "Narrative Pillars System",
+      "description": "Content themes (value, proof, CTA) with target percentages",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "narrative",
+      "files": [
+        "Backend/models/narrative_pillar.py"
+      ],
+      "acceptance": [
+        "Pillars linked to goals",
+        "Mix targets enforced"
+      ]
+    },
+    {
+      "id": "NAR-003",
+      "name": "Scheduling Constraints",
+      "description": "Platforms, posting windows, blackout dates, min/max per day",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "2h",
+      "passes": false,
+      "category": "narrative",
+      "files": [
+        "Backend/models/narrative_constraint.py"
+      ],
+      "acceptance": [
+        "Constraints applied",
+        "Conflicts detected"
+      ]
+    },
+    {
+      "id": "NAR-004",
+      "name": "Weekly Cycle Executor",
+      "description": "Execute 7-day plan with reflection phase and learnings",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "6h",
+      "passes": false,
+      "category": "narrative",
+      "files": [
+        "Backend/services/narrative_scheduler/weekly_executor.py"
+      ],
+      "acceptance": [
+        "Week plan executes",
+        "Reflection phase runs"
+      ]
+    },
+    {
+      "id": "NAR-005",
+      "name": "AI Content Selection",
+      "description": "Select UGC videos based on goals, pillars, and constraints",
+      "priority": "P0",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "narrative",
+      "files": [
+        "Backend/services/narrative_scheduler/content_selector.py"
+      ],
+      "acceptance": [
+        "Content selected",
+        "Reasoning logged"
+      ]
+    },
+    {
+      "id": "NAR-006",
+      "name": "Learning & Reflection",
+      "description": "Aggregate metrics, compare to goals, generate learnings",
+      "priority": "P1",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "narrative",
+      "files": [
+        "Backend/services/narrative_scheduler/reflection.py"
+      ],
+      "acceptance": [
+        "Learnings generated",
+        "Applied to next week"
+      ]
+    },
+    {
+      "id": "CUR-001",
+      "name": "Batch Video Analysis",
+      "description": "Queue all unanalyzed videos for AI analysis (transcript, sentiment)",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "curation",
+      "files": [
+        "Backend/api/endpoints/analysis.py"
+      ],
+      "acceptance": [
+        "100% analysis coverage",
+        "Progress tracking"
+      ]
+    },
+    {
+      "id": "CUR-002",
+      "name": "Sentiment Analysis",
+      "description": "Score transcripts (-1 to 1) with labels (negative/neutral/positive)",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "curation",
+      "files": [
+        "Backend/services/sentiment_analyzer.py"
+      ],
+      "acceptance": [
+        "Sentiment stored",
+        "Labels assigned"
+      ]
+    },
+    {
+      "id": "CUR-003",
+      "name": "Duplicate Transcript Detection",
+      "description": "Fuzzy matching to identify >90% similar transcripts",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "curation",
+      "files": [
+        "Backend/services/duplicate_detector.py"
+      ],
+      "acceptance": [
+        "Duplicates grouped",
+        "Best version identified"
+      ]
+    },
+    {
+      "id": "CUR-004",
+      "name": "Bulk Delete with Audit Log",
+      "description": "Bulk delete duplicates from iPhone Import folder with confirmation",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "curation",
+      "files": [
+        "Backend/api/endpoints/media.py"
+      ],
+      "acceptance": [
+        "Files deleted",
+        "Audit log created"
+      ]
+    },
+    {
+      "id": "CUR-005",
+      "name": "Auto-Curation Rules",
+      "description": "Automatically approve/deny based on sentiment thresholds",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "curation",
+      "files": [
+        "Backend/services/auto_curator.py"
+      ],
+      "acceptance": [
+        "40-60% auto-curated",
+        "<5s per video"
+      ]
+    },
+    {
+      "id": "SAF-001",
+      "name": "Safari AppleScript Controller",
+      "description": "Control Safari via AppleScript for TikTok/Instagram automation",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-automation",
+      "files": [
+        "Backend/automation/safari_app_controller.py"
+      ],
+      "acceptance": [
+        "Safari launched",
+        "JS executed in tabs"
+      ]
+    },
+    {
+      "id": "SAF-002",
+      "name": "TikTok Comment Automation",
+      "description": "Post comments on TikTok via Safari with Draft.js input handling",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-automation",
+      "files": [
+        "Backend/automation/tiktok_engagement.py"
+      ],
+      "acceptance": [
+        "Comments posted",
+        "Captcha detection"
+      ]
+    },
+    {
+      "id": "SAF-003",
+      "name": "Instagram Comment Automation",
+      "description": "Post comments on Instagram via Safari browser control",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-automation",
+      "files": [
+        "Backend/automation/comment_automation.py"
+      ],
+      "acceptance": [
+        "Comments posted",
+        "Login status checked"
+      ]
+    },
+    {
+      "id": "SAF-004",
+      "name": "Safari Session Manager",
+      "description": "Manage Safari windows, tabs, cookies for persistent sessions",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "3h",
+      "passes": false,
+      "category": "safari-automation",
+      "files": [
+        "Backend/automation/safari_session_manager.py"
+      ],
+      "acceptance": [
+        "Sessions persisted",
+        "Cookies maintained"
+      ]
+    },
+    {
+      "id": "SAF-005",
+      "name": "Captcha Detection & Pause",
+      "description": "Detect captchas and pause automation for manual solve",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "safari-automation",
+      "files": [
+        "Backend/automation/safari_app_controller.py"
+      ],
+      "acceptance": [
+        "Captcha detected",
+        "User notified"
+      ]
+    },
+    {
+      "id": "BLOT-001",
+      "name": "Blotato API Integration",
+      "description": "Multi-platform publishing via Blotato API (Twitter, IG, TikTok, etc.)",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "4h",
+      "passes": false,
+      "category": "blotato",
+      "files": [
+        "Backend/services/blotato_api.py"
+      ],
+      "acceptance": [
+        "Posts published",
+        "All platforms supported"
+      ]
+    },
+    {
+      "id": "BLOT-002",
+      "name": "Blotato Media Upload",
+      "description": "Upload media to Blotato with progress tracking",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "blotato",
+      "files": [
+        "Backend/services/blotato_api.py"
+      ],
+      "acceptance": [
+        "Media uploaded",
+        "URL returned"
+      ]
+    },
+    {
+      "id": "BLOT-003",
+      "name": "Blotato Scheduled Posts",
+      "description": "Schedule posts with scheduledTime or useNextFreeSlot",
+      "priority": "P0",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "blotato",
+      "files": [
+        "Backend/services/blotato_api.py"
+      ],
+      "acceptance": [
+        "Posts scheduled",
+        "Calendar slot used"
+      ]
+    },
+    {
+      "id": "BLOT-004",
+      "name": "Blotato Rate Limit Handler",
+      "description": "Handle 10/min upload and 30/min publish rate limits",
+      "priority": "P1",
+      "phase": 4,
+      "effort": "2h",
+      "passes": false,
+      "category": "blotato",
+      "files": [
+        "Backend/services/api_rate_limiter.py"
+      ],
+      "acceptance": [
+        "429 errors handled",
+        "Retry logic works"
+      ]
+    },
+    {
+      "id": "BLOT-005",
+      "name": "Blotato AI Video Generation",
+      "description": "Generate AI videos via Blotato Create Video API",
+      "priority": "P2",
+      "phase": 5,
+      "effort": "3h",
+      "passes": false,
+      "category": "blotato",
+      "files": [
+        "Backend/services/blotato_api.py"
+      ],
+      "acceptance": [
+        "Videos generated",
+        "Status polling works"
+      ]
+    },
+    {
+      "id": "TREND-006",
+      "name": "Hashtag Velocity Scoring",
+      "description": "Score hashtags by velocity (acceleration, not just popularity)",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/hashtag_velocity.py"
+      ],
+      "acceptance": [
+        "Velocity calculated",
+        "Rising vs declining"
+      ]
+    },
+    {
+      "id": "TREND-007",
+      "name": "Sound/Audio Trend Tracking",
+      "description": "Track trending sounds/audio with audio_id extraction",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/sound_trends.py"
+      ],
+      "acceptance": [
+        "Sounds tracked",
+        "Usage count computed"
+      ]
+    },
+    {
+      "id": "TREND-008",
+      "name": "Keyword/Concept Clustering",
+      "description": "NLP-based clustering of rising keywords and concepts",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/keyword_clustering.py"
+      ],
+      "acceptance": [
+        "Clusters formed",
+        "Emerging concepts identified"
+      ]
+    },
+    {
+      "id": "TREND-009",
+      "name": "Saturation Analysis",
+      "description": "Classify hashtags as hot_accessible, overcrowded, or emerging",
+      "priority": "P2",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "trends",
+      "files": [
+        "Backend/services/trend_intelligence/saturation.py"
+      ],
+      "acceptance": [
+        "Saturation levels assigned",
+        "Competition assessed"
+      ]
+    },
+    {
+      "id": "QUERY-001",
+      "name": "Top 50 Hashtags Query (Daily)",
+      "description": "Query top 50 niche hashtags with trend_score, delta, saturation",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "advanced-queries",
+      "files": [
+        "Backend/services/trend_intelligence/queries.py"
+      ],
+      "acceptance": [
+        "Query returns results",
+        "Examples linked"
+      ]
+    },
+    {
+      "id": "QUERY-002",
+      "name": "Rising Topics Query",
+      "description": "Detect rising hook patterns and angles week-over-week",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "advanced-queries",
+      "files": [
+        "Backend/services/trend_intelligence/queries.py"
+      ],
+      "acceptance": [
+        "Patterns detected",
+        "Growth % calculated"
+      ]
+    },
+    {
+      "id": "QUERY-003",
+      "name": "Creator Discovery Query",
+      "description": "Find rising creators by engagement rate and growth",
+      "priority": "P2",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "advanced-queries",
+      "files": [
+        "Backend/services/trend_intelligence/queries.py"
+      ],
+      "acceptance": [
+        "Creators ranked",
+        "Collab candidates flagged"
+      ]
+    },
+    {
+      "id": "QUERY-004",
+      "name": "Competitive Gap Query",
+      "description": "Identify underserved topics with low competition",
+      "priority": "P2",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "advanced-queries",
+      "files": [
+        "Backend/services/trend_intelligence/queries.py"
+      ],
+      "acceptance": [
+        "Gaps identified",
+        "Opportunity score"
+      ]
+    },
+    {
+      "id": "UI-008",
+      "name": "Expandable Content Cards",
+      "description": "Click content card to expand with inline stats, graphs, comments",
+      "priority": "P1",
+      "phase": 2,
+      "effort": "4h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/(dashboard)/posted-content/page.tsx"
+      ],
+      "acceptance": [
+        "Card expands",
+        "Engagement graph shown"
+      ]
+    },
+    {
+      "id": "UI-009",
+      "name": "Duplicate Review UI",
+      "description": "Review duplicate groups with preview and bulk delete",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/duplicates/page.tsx"
+      ],
+      "acceptance": [
+        "Groups displayed",
+        "Bulk delete works"
+      ]
+    },
+    {
+      "id": "UI-010",
+      "name": "Analysis Coverage Dashboard",
+      "description": "Widget showing analysis coverage: analyzed, unanalyzed, with_transcript",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "2h",
+      "passes": false,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/components/AnalysisCoverage.tsx"
+      ],
+      "acceptance": [
+        "Stats displayed",
+        "Progress tracked"
+      ]
+    },
+    {
+      "id": "JOBS-001",
+      "name": "Background Jobs Database",
+      "description": "Persistent job tracking in database instead of in-memory",
+      "priority": "P0",
+      "phase": 10,
+      "effort": "4h",
+      "passes": false,
+      "category": "background-jobs",
+      "files": [
+        "Backend/services/background_jobs_service.py"
+      ],
+      "acceptance": [
+        "Jobs persisted",
+        "Survives restart"
+      ]
+    },
+    {
+      "id": "JOBS-002",
+      "name": "Import Job Migration",
+      "description": "Migrate iOS/Android import tracking to database",
+      "priority": "P1",
+      "phase": 10,
+      "effort": "2h",
+      "passes": false,
+      "category": "background-jobs",
+      "files": [
+        "Backend/api/endpoints/android_import_api.py",
+        "Backend/api/endpoints/ios_import_api.py"
+      ],
+      "acceptance": [
+        "Imports tracked",
+        "History preserved"
+      ]
+    },
+    {
+      "id": "JOBS-003",
+      "name": "Extraction/Render Job Migration",
+      "description": "Migrate clip extraction and render jobs to database",
+      "priority": "P1",
+      "phase": 10,
+      "effort": "2h",
+      "passes": false,
+      "category": "background-jobs",
+      "files": [
+        "Backend/api/endpoints/clip_extraction.py",
+        "Backend/api/endpoints/video_render.py"
+      ],
+      "acceptance": [
+        "Jobs tracked",
+        "Progress visible"
+      ]
+    },
+    {
+      "id": "IPHONE-001",
+      "name": "iPhone Direct Import",
+      "description": "Direct import from iPhone via USB/local folder monitoring",
+      "priority": "P0",
+      "phase": 6,
+      "effort": "4h",
+      "passes": false,
+      "category": "import",
+      "files": [
+        "Backend/services/iphone_direct_import.py"
+      ],
+      "acceptance": [
+        "Files imported",
+        "Metadata extracted"
+      ]
+    },
+    {
+      "id": "IPHONE-002",
+      "name": "Resource Folder Monitor",
+      "description": "Watch folders for new content and auto-import",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "import",
+      "files": [
+        "Backend/services/resource_folder_monitor.py"
+      ],
+      "acceptance": [
+        "New files detected",
+        "Auto-analysis triggered"
+      ]
+    },
+    {
+      "id": "EMBED-001",
+      "name": "Embedding Service",
+      "description": "Generate text embeddings for semantic search",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "ai",
+      "files": [
+        "Backend/services/embedding_service.py"
+      ],
+      "acceptance": [
+        "Embeddings generated",
+        "Stored in database"
+      ]
+    },
+    {
+      "id": "EMBED-002",
+      "name": "Semantic Content Search",
+      "description": "Search content by meaning using embeddings",
+      "priority": "P1",
+      "phase": 6,
+      "effort": "3h",
+      "passes": false,
+      "category": "ai",
+      "files": [
+        "Backend/services/content_search.py"
+      ],
+      "acceptance": [
+        "Semantic search works",
+        "Relevant results ranked"
+      ]
+    },
+    {
+      "id": "COACHING-001",
+      "name": "AI Coaching Service",
+      "description": "Provide AI-powered coaching recommendations based on performance",
+      "priority": "P2",
+      "phase": 8,
+      "effort": "4h",
+      "passes": false,
+      "category": "coaching",
+      "files": [
+        "Backend/services/coaching_service.py"
+      ],
+      "acceptance": [
+        "Recommendations generated",
+        "Actionable insights"
+      ]
+    },
+    {
+      "id": "GOAL-001",
+      "name": "Goal Recommendations Engine",
+      "description": "Suggest goals based on account performance and trends",
+      "priority": "P2",
+      "phase": 8,
+      "effort": "3h",
+      "passes": false,
+      "category": "coaching",
+      "files": [
+        "Backend/services/goal_recommendations.py"
+      ],
+      "acceptance": [
+        "Goals suggested",
+        "Based on data"
+      ]
+    }
+  ]
+}

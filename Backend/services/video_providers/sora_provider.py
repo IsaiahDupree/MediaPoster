@@ -247,12 +247,12 @@ class SoraProvider(VideoProviderAdapter):
         size = self._validate_size(input.size)
         seconds = self._validate_seconds(input.seconds)
         
-        # Build request payload
+        # Build request payload (per OpenAI Sora API docs)
         payload: Dict[str, Any] = {
             "model": model,
             "prompt": input.prompt,
             "size": size,
-            "duration": seconds,
+            "seconds": str(seconds),  # API expects string
         }
         
         # Add image reference if provided
@@ -269,7 +269,7 @@ class SoraProvider(VideoProviderAdapter):
         logger.info(f"Creating Sora clip: model={model}, size={size}, duration={seconds}s")
         
         try:
-            response = await client.post("/videos/generations", json=payload)
+            response = await client.post("/videos", json=payload)
             response.raise_for_status()
             data = response.json()
             
@@ -325,19 +325,16 @@ class SoraProvider(VideoProviderAdapter):
         """
         client = self._get_client()
         
-        # Build request payload
+        # Build request payload (per OpenAI Sora API docs)
         payload: Dict[str, Any] = {
-            "video_id": input.source_generation_id,
             "prompt": input.prompt_delta,
         }
-        
-        if input.seconds:
-            payload["duration"] = self._validate_seconds(input.seconds)
         
         logger.info(f"Remixing Sora clip: source={input.source_generation_id}")
         
         try:
-            response = await client.post("/videos/remixes", json=payload)
+            # Remix endpoint is POST /videos/{video_id}/remix
+            response = await client.post(f"/videos/{input.source_generation_id}/remix", json=payload)
             response.raise_for_status()
             data = response.json()
             

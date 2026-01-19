@@ -1,7 +1,29 @@
 # MediaPoster PRD Index
 
 **Complete list of Product Requirement Documents and feature specifications**  
-**Last Updated:** 2026-01-16
+**Last Updated:** 2026-01-19
+
+---
+
+## 0. NEW PRDs - Gap Analysis 2026
+
+### 0.1 Feature PRDs (January 2026)
+
+| PRD | Location | Description | Effort |
+|-----|----------|-------------|--------|
+| **Link-in-Bio / Start Page** | `docs/PRD_LINK_IN_BIO.md` | Custom landing page builder with click analytics (Buffer/Later competitor) | 2 weeks |
+| **Community Inbox** | `docs/PRD_COMMUNITY_INBOX.md` | Unified comments/DMs with AI reply suggestions | 3 weeks |
+| **Content Repurposing Engine** | `docs/PRD_CONTENT_REPURPOSING_ENGINE.md` | Long video → shorts with AI clipping (Opus competitor) | 4-6 weeks |
+| **Modal Voice Cloning** | `docs/PRD_MODAL_VOICE_CLONING.md` | AI voice cloning via Modal GPU, integrates with ai-video-platform repo | 1-2 weeks |
+| **Media Asset Discovery** | `docs/PRD_MEDIA_ASSET_DISCOVERY.md` | Unified search for GIFs, videos, images (Giphy, Pexels, Unsplash, etc.) | 2-3 weeks |
+| **E2E Testing & Debug Framework** | `docs/PRD_E2E_TESTING_DEBUG_FRAMEWORK.md` | Playwright E2E tests with structured console logging for debugging | 2 weeks |
+
+### 0.2 Gap Analysis & Roadmap
+
+| Document | Location | Description |
+|----------|----------|-------------|
+| **Gap Analysis 2026** | `docs/PRD_GAP_ANALYSIS_2026.md` | Comprehensive competitor gap analysis, feature roadmap, Q1-Q4 2026 plan |
+| **Code Improvements Roadmap** | `docs/CODE_IMPROVEMENTS_ROADMAP.md` | Technical debt, Supabase fix, Redis caching, error handling |
 
 ---
 

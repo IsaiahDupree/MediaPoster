@@ -6,7 +6,7 @@ Supports different check-back periods per platform.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
@@ -52,11 +52,13 @@ class PlatformSyncConfig:
 @dataclass
 class MetricsSyncScheduler:
     """Manages scheduled metrics syncing across platforms"""
-    
+
     configs: Dict[str, PlatformSyncConfig] = field(default_factory=dict)
     is_running: bool = False
     sync_history: List[Dict[str, Any]] = field(default_factory=list)
-    
+    _sleep_service = None
+    _scheduled_wake_triggers: Dict[str, str] = field(default_factory=dict)  # platform -> wake_trigger_id
+
     def __post_init__(self):
         # Initialize default configs for all platforms
         default_platforms = [
@@ -70,20 +72,32 @@ class MetricsSyncScheduler:
             ("bluesky", SyncInterval.EVERY_6_HOURS),
             ("pinterest", SyncInterval.DAILY),
         ]
-        
+
         for platform, interval in default_platforms:
             if platform not in self.configs:
                 self.configs[platform] = PlatformSyncConfig(
                     platform=platform,
                     interval=interval,
-                    next_sync=datetime.utcnow(),
+                    next_sync=datetime.now(timezone.utc),
                 )
+
+    @property
+    def sleep_service(self):
+        """Lazy load sleep mode service"""
+        if self._sleep_service is None:
+            try:
+                from services.sleep_mode_service import SleepModeService
+                self._sleep_service = SleepModeService.get_instance()
+            except Exception as e:
+                logger.warning(f"Sleep mode service not available: {e}")
+                self._sleep_service = None
+        return self._sleep_service
     
     def set_interval(self, platform: str, interval: SyncInterval) -> bool:
         """Update sync interval for a platform"""
         if platform in self.configs:
             self.configs[platform].interval = interval
-            self.configs[platform].next_sync = datetime.utcnow()
+            self.configs[platform].next_sync = datetime.now(timezone.utc)
             return True
         return False
     
@@ -119,34 +133,37 @@ class MetricsSyncScheduler:
         """Record a sync attempt"""
         if platform in self.configs:
             config = self.configs[platform]
-            config.last_sync = datetime.utcnow()
-            config.next_sync = datetime.utcnow() + timedelta(
+            config.last_sync = datetime.now(timezone.utc)
+            config.next_sync = datetime.now(timezone.utc) + timedelta(
                 seconds=INTERVAL_SECONDS[config.interval]
             )
             config.sync_count += 1
-            
+
             if not success:
                 config.error_count += 1
                 config.last_error = error
             else:
                 config.last_error = None
-            
+
             # Add to history
             self.sync_history.append({
                 "platform": platform,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "success": success,
                 "error": error,
                 "posts_synced": posts_synced,
             })
-            
+
             # Keep only last 100 entries
             if len(self.sync_history) > 100:
                 self.sync_history = self.sync_history[-100:]
+
+            # Schedule wake trigger for next checkback (SLEEP-005)
+            self._schedule_wake_for_next_checkback(platform)
     
     def get_due_platforms(self) -> List[str]:
         """Get platforms that are due for syncing"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return [
             platform
             for platform, config in self.configs.items()
@@ -159,6 +176,53 @@ class MetricsSyncScheduler:
         if platform:
             history = [h for h in history if h["platform"] == platform]
         return history[-limit:]
+
+    def _schedule_wake_for_next_checkback(self, platform: str) -> None:
+        """
+        Schedule wake trigger for next metrics checkback (SLEEP-005)
+
+        Args:
+            platform: Platform to schedule wake for
+        """
+        if not self.sleep_service or platform not in self.configs:
+            return
+
+        from services.sleep_mode_service import WakeTriggerType
+
+        config = self.configs[platform]
+
+        # Cancel previous wake trigger if exists
+        if platform in self._scheduled_wake_triggers:
+            old_trigger_id = self._scheduled_wake_triggers[platform]
+            self.sleep_service.cancel_wake(old_trigger_id)
+            del self._scheduled_wake_triggers[platform]
+
+        # Only schedule if next_sync is in the future
+        if not config.next_sync or config.next_sync <= datetime.now(timezone.utc):
+            return
+
+        try:
+            # Schedule wake trigger for next checkback
+            trigger_id = self.sleep_service.schedule_wake(
+                wake_time=config.next_sync,
+                trigger_type=WakeTriggerType.CHECKBACK_PERIOD,
+                metadata={
+                    "platform": platform,
+                    "interval": config.interval.value,
+                    "checkback_type": "metrics_sync"
+                }
+            )
+
+            # Track the trigger
+            self._scheduled_wake_triggers[platform] = trigger_id
+
+            logger.debug(
+                f"⏰ Scheduled wake for {platform} metrics checkback at "
+                f"{config.next_sync.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to schedule wake for {platform} checkback: {e}")
 
 
 # Global scheduler instance

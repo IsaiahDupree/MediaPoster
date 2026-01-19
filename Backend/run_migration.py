@@ -54,7 +54,7 @@ def apply_migration():
         return False
     
     # Read migration file
-    migration_path = '../supabase/migrations/20250122000000_fix_schema_mismatches.sql'
+    migration_path = 'supabase/migrations/20260119_content_ops_entities.sql'
     try:
         with open(migration_path, 'r') as f:
             migration_sql = f.read()
@@ -91,10 +91,11 @@ def apply_migration():
         print("✅ Migration completed!")
         print()
         print("Schema updates:")
-        print("  ✓ video_metadata column added to original_videos")
-        print("  ✓ processing_jobs table created")
-        print("  ✓ scheduled_posts table created")
-        print("  ✓ posting_goals table created")
+        print("  ✓ brands table created (ENTITY-001)")
+        print("  ✓ offers table created (ENTITY-002)")
+        print("  ✓ icps table created (ENTITY-003)")
+        print("  ✓ content_templates table created (TPL-001 to TPL-008)")
+        print("  ✓ touchpoints table created (ENTITY-004)")
         print()
         return True
         

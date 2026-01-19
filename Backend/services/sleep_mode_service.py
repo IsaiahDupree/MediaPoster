@@ -328,7 +328,15 @@ class SleepModeService:
 
         Returns:
             Wake trigger ID
+
+        Raises:
+            ValueError: If wake_time is not in the future
         """
+        # Validate wake_time is in the future
+        now = datetime.now(timezone.utc)
+        if wake_time <= now:
+            raise ValueError(f"wake_time must be in the future (got {wake_time}, now is {now})")
+
         trigger_id = str(uuid4())
 
         trigger = WakeTrigger(
@@ -501,3 +509,11 @@ class SleepModeService:
 
         except Exception as e:
             logger.error(f"Error handling schedule created event: {e}")
+
+    def is_sleeping(self) -> bool:
+        """Check if currently in sleep mode"""
+        return self.state == SleepState.SLEEPING
+
+    def is_awake(self) -> bool:
+        """Check if currently awake"""
+        return self.state == SleepState.AWAKE

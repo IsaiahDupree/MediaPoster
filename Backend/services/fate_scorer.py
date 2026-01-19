@@ -176,9 +176,9 @@ class FATEScorer:
 
         # Combine signals
         base_score = min(matches * 0.35, 0.65)  # Each match adds 0.35, cap at 0.65
-        numbers_bonus = 0.2 if has_numbers else 0.0
-        mechanism_bonus = 0.15 if has_mechanism else 0.0
-        proof_bonus = 0.1 if has_proof_words else 0.0
+        numbers_bonus = 0.27 if has_numbers else 0.0
+        mechanism_bonus = 0.22 if has_mechanism else 0.0
+        proof_bonus = 0.18 if has_proof_words else 0.0
 
         score = min(base_score + numbers_bonus + mechanism_bonus + proof_bonus, 1.0)
 
@@ -210,10 +210,10 @@ class FATEScorer:
         has_identity = bool(re.search(r'\b(founder|builder|creator|entrepreneur|bootstrapper)\b', text, re.IGNORECASE))
 
         # Combine signals
-        base_score = min(matches * 0.3, 0.7)  # Each match adds 0.3, cap at 0.7
-        second_person_bonus = 0.1 if has_second_person else 0.0
-        plural_bonus = 0.1 if has_first_person_plural else 0.0
-        identity_bonus = 0.1 if has_identity else 0.0
+        base_score = min(matches * 0.4, 0.7)  # Each match adds 0.4, cap at 0.7
+        second_person_bonus = 0.15 if has_second_person else 0.0
+        plural_bonus = 0.22 if has_first_person_plural else 0.0
+        identity_bonus = 0.15 if has_identity else 0.0
 
         score = min(base_score + second_person_bonus + plural_bonus + identity_bonus, 1.0)
 
@@ -246,11 +246,11 @@ class FATEScorer:
         has_vivid_language = bool(re.search(r'\b(imagine|picture|feel|pain|frustration|hope|dream)\b', text, re.IGNORECASE))
 
         # Combine signals
-        base_score = min(matches * 0.3, 0.6)  # Each match adds 0.3, cap at 0.6
-        story_bonus = 0.2 if has_story_markers else 0.0
-        contrast_bonus = 0.1 if has_contrast else 0.0
-        transformation_bonus = 0.15 if has_transformation else 0.0
-        vivid_bonus = 0.05 if has_vivid_language else 0.0
+        base_score = min(matches * 0.4, 0.6)  # Each match adds 0.4, cap at 0.6
+        story_bonus = 0.3 if has_story_markers else 0.0
+        contrast_bonus = 0.2 if has_contrast else 0.0
+        transformation_bonus = 0.25 if has_transformation else 0.0
+        vivid_bonus = 0.15 if has_vivid_language else 0.0
 
         score = min(base_score + story_bonus + contrast_bonus + transformation_bonus + vivid_bonus, 1.0)
 

@@ -1560,3 +1560,470 @@ class PostedContent(Base):
         Index('idx_posted_content_platform_post_id', 'platform_post_id'),
         Index('idx_posted_content_posted_at', 'posted_at'),
     )
+
+
+# =====================================================
+# CONTENT OPS ENTITIES (Phase 2)
+# =====================================================
+
+class Brand(Base):
+    """Brand entity - represents a company/product brand"""
+    __tablename__ = "brands"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(Text, nullable=False)
+    description = Column(Text)
+    logo_url = Column(Text)
+    website_url = Column(Text)
+
+    # Brand voice and values
+    brand_voice = Column(JSONB)  # {tone: str, keywords: List[str], avoid: List[str]}
+    core_values = Column(ARRAY(Text))
+    target_audience = Column(Text)
+
+    # Metadata
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    offers = relationship("Offer", back_populates="brand", cascade="all, delete-orphan")
+    templates = relationship("ContentTemplate", back_populates="brand", cascade="all, delete-orphan")
+
+
+class Offer(Base):
+    """Offer entity - products/services/CTAs linked to a brand"""
+    __tablename__ = "offers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id", ondelete="CASCADE"), nullable=False)
+
+    title = Column(Text, nullable=False)
+    description = Column(Text)
+    offer_type = Column(String(50))  # product, service, lead_magnet, content, event
+
+    # Offer details
+    landing_page_url = Column(Text)
+    cta_text = Column(Text)  # Default CTA for this offer
+    terms = Column(Text)  # Terms and conditions
+
+    # Pricing (optional)
+    price = Column(Numeric(10, 2))
+    currency = Column(String(3), default='USD')
+
+    # Metadata
+    is_active = Column(Boolean, default=True)
+    priority = Column(Integer, default=0)  # Higher = more priority
+    valid_from = Column(TIMESTAMP(timezone=True))
+    valid_until = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    brand = relationship("Brand", back_populates="offers")
+    touchpoints = relationship("Touchpoint", back_populates="offer", cascade="all, delete-orphan")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_offers_brand_id', 'brand_id'),
+        Index('idx_offers_is_active', 'is_active'),
+    )
+
+
+class ICP(Base):
+    """Ideal Customer Profile - target audience personas"""
+    __tablename__ = "icps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    name = Column(Text, nullable=False)  # e.g., "Solo Founder", "Enterprise CMO"
+    description = Column(Text)
+
+    # Demographics
+    age_range = Column(String(50))  # e.g., "25-34", "35-44"
+    location = Column(ARRAY(Text))  # Countries/regions
+    job_titles = Column(ARRAY(Text))
+    company_size = Column(String(50))  # e.g., "1-10", "11-50", "51-200"
+
+    # Psychographics
+    pain_points = Column(ARRAY(Text))
+    goals = Column(ARRAY(Text))
+    interests = Column(ARRAY(Text))
+    objections = Column(ARRAY(Text))
+
+    # Awareness level (default for this ICP)
+    default_awareness_level = Column(String(50))  # unaware, problem_aware, solution_aware, product_aware, most_aware
+
+    # Metadata
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    touchpoints = relationship("Touchpoint", back_populates="icp", cascade="all, delete-orphan")
+
+
+class ContentTemplate(Base):
+    """Content template - AI prompts with FATE weights and awareness levels"""
+    __tablename__ = "content_templates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id", ondelete="CASCADE"))
+
+    # Template identity
+    name = Column(Text, nullable=False)
+    description = Column(Text)
+    template_type = Column(String(50))  # post, email, dm, ad, story
+
+    # Template content
+    prompt_text = Column(Text, nullable=False)  # AI prompt with {variable} placeholders
+    required_variables = Column(ARRAY(Text))  # Extracted variable names
+
+    # FATE weights (must sum to ~1.0)
+    fate_focus = Column(Float, nullable=False)
+    fate_authority = Column(Float, nullable=False)
+    fate_tribe = Column(Float, nullable=False)
+    fate_emotion = Column(Float, nullable=False)
+
+    # Awareness level
+    awareness_level = Column(String(50), nullable=False)  # unaware, problem_aware, solution_aware, product_aware, most_aware
+
+    # CTA configuration
+    cta_strength = Column(String(20))  # none, soft, direct
+    cta_template = Column(Text)  # Optional CTA template
+
+    # Performance tracking
+    usage_count = Column(Integer, default=0)
+    avg_reward_score = Column(Float, default=0.0)
+    performance_label = Column(String(20))  # winner, promising, average, loser
+
+    # Metadata
+    is_active = Column(Boolean, default=True)
+    created_by = Column(Text)  # User ID or "system"
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    brand = relationship("Brand", back_populates="templates")
+    touchpoints = relationship("Touchpoint", back_populates="template", cascade="all, delete-orphan")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_templates_brand_id', 'brand_id'),
+        Index('idx_templates_awareness_level', 'awareness_level'),
+        Index('idx_templates_performance', 'performance_label'),
+    )
+
+
+class Touchpoint(Base):
+    """Touchpoint - links Brand → Offer → ICP → Template with attribution"""
+    __tablename__ = "touchpoints"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Traceback chain
+    brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id", ondelete="CASCADE"))
+    offer_id = Column(UUID(as_uuid=True), ForeignKey("offers.id", ondelete="CASCADE"), nullable=False)
+    icp_id = Column(UUID(as_uuid=True), ForeignKey("icps.id", ondelete="CASCADE"))
+    template_id = Column(UUID(as_uuid=True), ForeignKey("content_templates.id", ondelete="CASCADE"))
+
+    # Touchpoint details
+    channel = Column(String(50), nullable=False)  # twitter, instagram, email, dm, ad
+    message_type = Column(String(50))  # post, story, comment, dm, email
+
+    # Content reference
+    posted_content_id = Column(UUID(as_uuid=True), ForeignKey("posted_content.id", ondelete="SET NULL"))
+    shortlink = Column(Text)  # Attribution shortlink
+
+    # Performance metrics (copied from posted_content on checkback)
+    impressions = Column(Integer, default=0)
+    clicks = Column(Integer, default=0)
+    likes = Column(Integer, default=0)
+    replies = Column(Integer, default=0)
+    reposts = Column(Integer, default=0)
+
+    # Calculated scores
+    engagement_rate = Column(Float, default=0.0)
+    click_rate = Column(Float, default=0.0)
+    reward_score = Column(Float, default=0.0)
+
+    # Metadata
+    published_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    offer = relationship("Offer", back_populates="touchpoints")
+    icp = relationship("ICP", back_populates="touchpoints")
+    template = relationship("ContentTemplate", back_populates="touchpoints")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_touchpoints_offer_id', 'offer_id'),
+        Index('idx_touchpoints_icp_id', 'icp_id'),
+        Index('idx_touchpoints_template_id', 'template_id'),
+        Index('idx_touchpoints_channel', 'channel'),
+        Index('idx_touchpoints_published_at', 'published_at'),
+    )
+
+
+class Shortlink(Base):
+    """Shortlink tracking for attribution"""
+    __tablename__ = "shortlinks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Shortlink details
+    short_code = Column(String(20), unique=True, nullable=False)
+    destination_url = Column(Text, nullable=False)
+
+    # Attribution chain
+    touchpoint_id = Column(UUID(as_uuid=True), ForeignKey("touchpoints.id", ondelete="CASCADE"))
+    offer_id = Column(UUID(as_uuid=True), ForeignKey("offers.id", ondelete="CASCADE"))
+    template_id = Column(UUID(as_uuid=True), ForeignKey("content_templates.id", ondelete="SET NULL"))
+    icp_id = Column(UUID(as_uuid=True), ForeignKey("icps.id", ondelete="SET NULL"))
+
+    # UTM parameters
+    utm_source = Column(String(100))
+    utm_medium = Column(String(100))
+    utm_campaign = Column(String(200))
+    utm_content = Column(String(200))
+    utm_term = Column(String(200))
+
+    # Click tracking
+    click_count = Column(Integer, default=0)
+    last_clicked_at = Column(TIMESTAMP(timezone=True))
+
+    # Metadata
+    is_active = Column(Boolean, default=True)
+    expires_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_shortlinks_short_code', 'short_code'),
+        Index('idx_shortlinks_touchpoint_id', 'touchpoint_id'),
+        Index('idx_shortlinks_offer_id', 'offer_id'),
+    )
+
+
+# =====================================================
+# CONTENT OPS ENTITIES (Phase 2)
+# =====================================================
+
+class CreatorProfile(Base):
+    """Creator Profile - Voice rules, banned phrases, tone descriptors (ENTITY-004)"""
+    __tablename__ = "creator_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+
+    # Profile details
+    name = Column(String(200), nullable=False)
+    description = Column(Text)
+
+    # Voice rules
+    voice_tone = Column(ARRAY(String))  # ["casual", "educational", "witty"]
+    voice_style = Column(ARRAY(String))  # ["first_person", "storytelling", "data_driven"]
+
+    # Banned phrases
+    banned_phrases = Column(ARRAY(String))  # ["click here", "limited time only"]
+    banned_patterns = Column(ARRAY(String))  # ["ALL CAPS", "excessive emojis"]
+
+    # Tone descriptors
+    tone_descriptors = Column(JSONB)  # {"formality": "casual", "humor": "high", "technical": "medium"}
+
+    # Content preferences
+    preferred_length_min = Column(Integer)  # Min word count
+    preferred_length_max = Column(Integer)  # Max word count
+    preferred_formats = Column(ARRAY(String))  # ["thread", "single_post", "carousel"]
+
+    # Language and style
+    language = Column(String(10), default="en")
+    emoji_policy = Column(String(50))  # "none", "minimal", "moderate", "heavy"
+    hashtag_policy = Column(String(50))  # "none", "end_only", "inline", "both"
+
+    # Metadata
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    content_plans = relationship("ContentPlan", back_populates="creator_profile", cascade="all, delete-orphan")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_creator_profiles_workspace_id', 'workspace_id'),
+        Index('idx_creator_profiles_is_active', 'is_active'),
+    )
+
+
+class ContentPlan(Base):
+    """Content Plan - Weekly plan with slots tagged by Awareness × FATE (ENTITY-005)"""
+    __tablename__ = "content_plans"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    creator_profile_id = Column(UUID(as_uuid=True), ForeignKey("creator_profiles.id", ondelete="CASCADE"))
+
+    # Plan details
+    name = Column(String(200), nullable=False)
+    description = Column(Text)
+
+    # Time range
+    week_start_date = Column(Date, nullable=False)
+    week_end_date = Column(Date, nullable=False)
+
+    # Plan strategy
+    target_posts_per_day = Column(Integer, default=3)
+    awareness_distribution = Column(JSONB)  # {"unaware": 0.1, "problem_aware": 0.4, "solution_aware": 0.3, "product_aware": 0.15, "most_aware": 0.05}
+    fate_emphasis = Column(JSONB)  # {"focus": 0.3, "authority": 0.25, "tribe": 0.25, "emotion": 0.2}
+
+    # Status
+    status = Column(String(50), default="draft")  # draft, active, executing, completed, archived
+    execution_progress = Column(Float, default=0.0)  # 0.0 to 1.0
+
+    # Learnings from execution
+    learnings = Column(JSONB)  # {"winning_templates": [], "losing_templates": [], "best_time": ""}
+    avg_performance_score = Column(Float)
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    creator_profile = relationship("CreatorProfile", back_populates="content_plans")
+    slots = relationship("ContentSlot", back_populates="content_plan", cascade="all, delete-orphan")
+    prompt_runs = relationship("PromptRun", back_populates="content_plan", cascade="all, delete-orphan")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_content_plans_workspace_id', 'workspace_id'),
+        Index('idx_content_plans_creator_profile_id', 'creator_profile_id'),
+        Index('idx_content_plans_week_start_date', 'week_start_date'),
+        Index('idx_content_plans_status', 'status'),
+    )
+
+
+class ContentSlot(Base):
+    """Content Slot - Individual time slot in a content plan"""
+    __tablename__ = "content_slots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    content_plan_id = Column(UUID(as_uuid=True), ForeignKey("content_plans.id", ondelete="CASCADE"), nullable=False)
+
+    # Slot details
+    scheduled_time = Column(TIMESTAMP(timezone=True), nullable=False)
+
+    # Awareness × FATE targeting
+    awareness_level = Column(String(50))  # unaware, problem_aware, solution_aware, product_aware, most_aware
+    fate_primary = Column(String(50))  # focus, authority, tribe, emotion
+
+    # Routing
+    offer_id = Column(UUID(as_uuid=True), ForeignKey("offers.id", ondelete="SET NULL"))
+    icp_id = Column(UUID(as_uuid=True), ForeignKey("icps.id", ondelete="SET NULL"))
+    template_id = Column(UUID(as_uuid=True), ForeignKey("content_templates.id", ondelete="SET NULL"))
+
+    # Platform targeting
+    platforms = Column(ARRAY(String))  # ["twitter", "instagram", "tiktok"]
+    content_format = Column(String(50))  # "post", "thread", "video", "carousel"
+
+    # Execution status
+    status = Column(String(50), default="pending")  # pending, generating, qa_review, approved, published, failed
+    executed_at = Column(TIMESTAMP(timezone=True))
+    touchpoint_id = Column(UUID(as_uuid=True), ForeignKey("touchpoints.id", ondelete="SET NULL"))
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    content_plan = relationship("ContentPlan", back_populates="slots")
+    offer = relationship("Offer")
+    icp = relationship("ICP")
+    template = relationship("ContentTemplate")
+    prompt_runs = relationship("PromptRun", back_populates="content_slot")
+    touchpoint = relationship("Touchpoint")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_content_slots_content_plan_id', 'content_plan_id'),
+        Index('idx_content_slots_scheduled_time', 'scheduled_time'),
+        Index('idx_content_slots_status', 'status'),
+        Index('idx_content_slots_awareness_level', 'awareness_level'),
+    )
+
+
+class PromptRun(Base):
+    """Prompt Run - Traceback of every post to template → prompt → offer → ICP → slot (ENTITY-006)"""
+    __tablename__ = "prompt_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Full traceback chain
+    content_plan_id = Column(UUID(as_uuid=True), ForeignKey("content_plans.id", ondelete="CASCADE"))
+    content_slot_id = Column(UUID(as_uuid=True), ForeignKey("content_slots.id", ondelete="SET NULL"))
+    template_id = Column(UUID(as_uuid=True), ForeignKey("content_templates.id", ondelete="CASCADE"), nullable=False)
+    offer_id = Column(UUID(as_uuid=True), ForeignKey("offers.id", ondelete="CASCADE"), nullable=False)
+    icp_id = Column(UUID(as_uuid=True), ForeignKey("icps.id", ondelete="CASCADE"))
+    brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id", ondelete="CASCADE"))
+
+    # Template snapshot (in case template changes)
+    template_snapshot = Column(JSONB)  # Full template at time of generation
+
+    # Input variables
+    input_variables = Column(JSONB, nullable=False)  # {"pain": "...", "outcome": "...", "mechanism": "..."}
+
+    # Prompt details
+    prompt_text = Column(Text, nullable=False)  # Final rendered prompt sent to AI
+    system_prompt = Column(Text)  # System instructions
+
+    # AI model details
+    model_name = Column(String(100))  # "gpt-4o", "claude-3-opus", etc.
+    temperature = Column(Float, default=0.7)
+    max_tokens = Column(Integer)
+
+    # Generated output
+    generated_text = Column(Text, nullable=False)
+    generated_variants = Column(JSONB)  # Multiple variants if requested
+    selected_variant_index = Column(Integer, default=0)
+
+    # QA Gate results
+    qa_status = Column(String(50))  # "pending", "passed", "failed", "needs_review"
+    qa_flags = Column(JSONB)  # {"banned_phrase": false, "spam_pattern": false, ...}
+    qa_reviewed_by = Column(String(100))  # User who reviewed
+    qa_reviewed_at = Column(TIMESTAMP(timezone=True))
+
+    # Publication details
+    published_touchpoint_id = Column(UUID(as_uuid=True), ForeignKey("touchpoints.id", ondelete="SET NULL"))
+    published_at = Column(TIMESTAMP(timezone=True))
+
+    # Performance (copied from touchpoint after metrics collection)
+    engagement_rate = Column(Float)
+    click_rate = Column(Float)
+    reward_score = Column(Float)
+    performance_label = Column(String(50))  # "winner", "loser", "neutral", "insufficient_data"
+
+    # Metadata
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    content_plan = relationship("ContentPlan", back_populates="prompt_runs")
+    content_slot = relationship("ContentSlot", foreign_keys=[content_slot_id], back_populates="prompt_runs")
+    template = relationship("ContentTemplate")
+    offer = relationship("Offer")
+    icp = relationship("ICP")
+    brand = relationship("Brand")
+    touchpoint = relationship("Touchpoint")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_prompt_runs_content_plan_id', 'content_plan_id'),
+        Index('idx_prompt_runs_template_id', 'template_id'),
+        Index('idx_prompt_runs_offer_id', 'offer_id'),
+        Index('idx_prompt_runs_published_at', 'published_at'),
+        Index('idx_prompt_runs_performance_label', 'performance_label'),
+        Index('idx_prompt_runs_qa_status', 'qa_status'),
+    )

@@ -14,32 +14,32 @@ class TestAIClient:
     def test_init_openai_client(self, monkeypatch):
         """Test initializing OpenAI client"""
         monkeypatch.setenv("OPENAI_API_KEY", "test_key")
-        
+
         config = ModelConfig(
             provider="openai",
             model="gpt-4o-mini",
             api_key_env="OPENAI_API_KEY"
         )
-        
-        with patch('services.ai_client.OpenAI') as mock_openai:
+
+        with patch('openai.OpenAI') as mock_openai:
             client = AIClient(config)
-            
+
             assert client.config == config
             mock_openai.assert_called_once_with(api_key="test_key")
     
     def test_init_groq_client(self, monkeypatch):
         """Test initializing Groq client"""
         monkeypatch.setenv("GROQ_API_KEY", "test_key")
-        
+
         config = ModelConfig(
             provider="groq",
             model="llama-3.3-70b-versatile",
             api_key_env="GROQ_API_KEY"
         )
-        
-        with patch('services.ai_client.Groq') as mock_groq:
+
+        with patch('groq.Groq') as mock_groq:
             client = AIClient(config)
-            
+
             assert client.config == config
             mock_groq.assert_called_once_with(api_key="test_key")
     

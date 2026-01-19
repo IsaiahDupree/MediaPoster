@@ -19,6 +19,7 @@ from config import settings
 from api.endpoints import videos, ingestion, jobs, analytics, analysis, highlights, clips, content, segments, messages, briefs, people, content_metrics, email, app_config, calendar, workspaces, trends
 from api.endpoints import event_history, video_routing_api
 from api.endpoints import tts, matting, remotion, pipeline, music, visuals
+from api.endpoints import twitter_api
 from database.connection import init_db, close_db
 
 # Event Bus imports
@@ -138,6 +139,22 @@ async def lifespan(app: FastAPI):
         logger.success("✓ Sleep Mode Service started")
     except Exception as e:
         logger.warning(f"⚠️  Sleep Mode Service failed to start: {e}")
+
+    # Start the CPU Monitor (SLEEP-010, SLEEP-011)
+    cpu_monitor = None
+    try:
+        from services.cpu_monitor import get_cpu_monitor
+        cpu_monitor = get_cpu_monitor()
+        await cpu_monitor.start()
+
+        # Enable auto-sleep: idle if CPU < 5% for 5 minutes
+        cpu_monitor.enable_auto_sleep(
+            idle_threshold=5.0,
+            idle_timeout_seconds=300
+        )
+        logger.success("✓ CPU Monitor started with auto-sleep enabled")
+    except Exception as e:
+        logger.warning(f"⚠️  CPU Monitor failed to start: {e}")
 
     # Start the Post Scheduler background worker
     post_scheduler = None
@@ -259,7 +276,46 @@ async def lifespan(app: FastAPI):
         logger.success("✓ Format Video Render Worker started")
     except Exception as e:
         logger.warning(f"⚠️  Format Video Render Worker failed to start: {e}")
-    
+
+    # Start the Template Leaderboard (OPS-007)
+    template_leaderboard = None
+    try:
+        from services.template_leaderboard import TemplateLeaderboard
+        template_leaderboard = TemplateLeaderboard.get_instance()
+        await template_leaderboard.start()
+        logger.success("✓ Template Leaderboard started")
+    except Exception as e:
+        logger.warning(f"⚠️  Template Leaderboard failed to start: {e}")
+
+    # Start Content Ops Workers (OPS-013 to OPS-016)
+    slot_executor_worker = None
+    learner_worker = None
+    inbound_listener_worker = None
+    responder_worker = None
+    try:
+        from services.workers.slot_executor_worker import SlotExecutorWorker
+        from services.workers.learner_worker import LearnerWorker
+        from services.workers.inbound_listener_worker import InboundListenerWorker
+        from services.workers.responder_worker import ResponderWorker
+
+        slot_executor_worker = SlotExecutorWorker(event_bus)
+        await slot_executor_worker.start()
+        logger.success("✓ Slot Executor Worker started (OPS-013)")
+
+        learner_worker = LearnerWorker(event_bus)
+        await learner_worker.start()
+        logger.success("✓ Learner Worker started (OPS-014)")
+
+        inbound_listener_worker = InboundListenerWorker(event_bus)
+        await inbound_listener_worker.start()
+        logger.success("✓ Inbound Listener Worker started (OPS-015)")
+
+        responder_worker = ResponderWorker(event_bus)
+        await responder_worker.start()
+        logger.success("✓ Responder Worker started (OPS-016)")
+    except Exception as e:
+        logger.warning(f"⚠️  Content Ops Workers failed to start: {e}")
+
     yield
     
     # Stop the Notification Worker on shutdown
@@ -301,6 +357,14 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Post Scheduler stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Post Scheduler: {e}")
+
+    # Stop the CPU Monitor on shutdown
+    if cpu_monitor:
+        try:
+            await cpu_monitor.stop()
+            logger.success("✓ CPU Monitor stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping CPU Monitor: {e}")
 
     # Stop the Sleep Mode Service on shutdown
     if sleep_service:
@@ -349,7 +413,44 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Visuals Worker stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Visuals Worker: {e}")
-    
+
+    # Stop the Template Leaderboard on shutdown
+    if template_leaderboard:
+        try:
+            await template_leaderboard.stop()
+            logger.success("✓ Template Leaderboard stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Template Leaderboard: {e}")
+
+    # Stop Content Ops Workers on shutdown
+    if slot_executor_worker:
+        try:
+            await slot_executor_worker.stop()
+            logger.success("✓ Slot Executor Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Slot Executor Worker: {e}")
+
+    if learner_worker:
+        try:
+            await learner_worker.stop()
+            logger.success("✓ Learner Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Learner Worker: {e}")
+
+    if inbound_listener_worker:
+        try:
+            await inbound_listener_worker.stop()
+            logger.success("✓ Inbound Listener Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Inbound Listener Worker: {e}")
+
+    if responder_worker:
+        try:
+            await responder_worker.stop()
+            logger.success("✓ Responder Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Responder Worker: {e}")
+
     # Shutdown Event Bus
     if event_bus:
         try:
@@ -599,8 +700,9 @@ async def broadcast_update(message: dict):
 
 # Include routers
 # Sleep Mode (CPU Efficiency)
-from api.endpoints import sleep
+from api.endpoints import sleep, cpu_monitor
 app.include_router(sleep.router, tags=["Sleep Mode"])
+app.include_router(cpu_monitor.router, tags=["CPU Monitor"])
 
 app.include_router(videos.router, prefix="/api/videos", tags=["videos"])
 app.include_router(ingestion.router, prefix="/api/ingestion", tags=["ingestion"])
@@ -663,6 +765,9 @@ app.include_router(trend_opportunities.router, prefix="/api", tags=["Trend Oppor
 from api.endpoints import platform_publishing
 app.include_router(platform_publishing.router, prefix="/api/platform", tags=["Platform Publishing"])
 
+# Twitter/X Platform API (ADAPT-001, ADAPT-002, ADAPT-003)
+app.include_router(twitter_api.router, tags=["Twitter"])
+
 # Content Intelligence - Analytics & Insights
 from api.endpoints import analytics_insights
 app.include_router(analytics_insights.router, prefix="/api/analytics-ci", tags=["Analytics & Insights"])
@@ -702,6 +807,33 @@ app.include_router(goals.router, tags=["Goals"])
 # Goal Recommendations (Phase 3)
 from api.endpoints import goal_recommendations
 app.include_router(goal_recommendations.router, tags=["Goal Recommendations"])
+
+# Content Ops Entities (Phase 2: ENTITY-001, ENTITY-002, ENTITY-003)
+from api.endpoints import brands, offers, icps
+app.include_router(brands.router, tags=["Content Ops Entities"])
+app.include_router(offers.router, tags=["Content Ops Entities"])
+app.include_router(icps.router, tags=["Content Ops Entities"])
+logger.success("✓ Content Ops Entities API registered (Brand, Offer, ICP)")
+
+# Template Leaderboard (Phase 2: OPS-007)
+from api.endpoints import template_leaderboard
+app.include_router(template_leaderboard.router, tags=["Template Leaderboard"])
+logger.success("✓ Template Leaderboard API registered (OPS-007)")
+
+# Content Templates CRUD API (Phase 3: TPL-007)
+from api.endpoints import templates
+app.include_router(templates.router, tags=["Content Templates"])
+logger.success("✓ Content Templates API registered (TPL-007)")
+
+# Content Generation Pipeline (Phase 2: OPS-008)
+from api.endpoints import content_generation
+app.include_router(content_generation.router, tags=["Content Generation"])
+logger.success("✓ Content Generation Pipeline API registered (OPS-008)")
+
+# QA Gate Service (Phase 2: OPS-009)
+from api.endpoints import qa_gate
+app.include_router(qa_gate.router, tags=["QA Gate"])
+logger.success("✓ QA Gate Service API registered (OPS-009)")
 
 # Viral Video Analysis (Unified Schema)
 from api.endpoints import viral_analysis

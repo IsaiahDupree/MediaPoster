@@ -185,6 +185,7 @@ class Topics:
     RULE_UPDATED = "mp.rules.evt.rule_updated"                    # Rule confidence updated
     RULE_DEPRECATED = "mp.rules.evt.rule_deprecated"              # Rule no longer valid
     TEMPLATE_CREATED = "mp.rules.evt.template_created"            # New template
+    TEMPLATE_LEADERBOARD_UPDATED = "mp.template.leaderboard.updated"  # Template rankings updated
     PLAYBOOK_ACTIVATED = "mp.rules.evt.playbook_activated"        # Playbook in use
     
     # =========================================================================
@@ -356,6 +357,34 @@ class Topics:
     SLEEP_WAKE = "sleep.wake"                             # System woke from sleep
     SLEEP_WAKE_SCHEDULED = "sleep.wake.scheduled"         # Wake event scheduled
     SLEEP_WAKE_CANCELLED = "sleep.wake.cancelled"         # Wake event cancelled
+
+    # =========================================================================
+    # CONTENT OPS ENTITIES (Brand → Offer → ICP)
+    # =========================================================================
+    BRAND_CREATED = "brand.created"                       # New brand created
+    BRAND_UPDATED = "brand.updated"                       # Brand updated
+    BRAND_DELETED = "brand.deleted"                       # Brand deleted
+    OFFER_CREATED = "offer.created"                       # New offer created
+    OFFER_UPDATED = "offer.updated"                       # Offer updated
+    OFFER_DELETED = "offer.deleted"                       # Offer deleted
+    ICP_CREATED = "icp.created"                          # New ICP created
+    ICP_UPDATED = "icp.updated"                          # ICP updated
+    ICP_DELETED = "icp.deleted"                          # ICP deleted
+
+    # =========================================================================
+    # DM PERMISSIONS (OPS-017, OPS-018)
+    # =========================================================================
+    DM_CONSENT_REQUESTED = "dm.consent.requested"         # Consent requested from contact
+    DM_CONSENT_GRANTED = "dm.consent.granted"             # Consent granted (can send links)
+    DM_CONSENT_DENIED = "dm.consent.denied"               # Consent denied (no links)
+    DM_CONTACT_STOPPED = "dm.contact.stopped"             # Contact said "stop" (no messages)
+
+    # =========================================================================
+    # TOUCHPOINTS (Unified Model for All Channels)
+    # =========================================================================
+    TOUCHPOINT_CREATED = "touchpoint.created"             # New touchpoint created
+    TOUCHPOINT_UPDATED = "touchpoint.updated"             # Touchpoint metrics updated
+    TOUCHPOINT_DELETED = "touchpoint.deleted"             # Touchpoint deleted
 
     @classmethod
     def all_topics(cls) -> list:

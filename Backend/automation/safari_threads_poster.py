@@ -997,6 +997,127 @@ class ThreadsDM:
         return {'success': False, 'error': f'Failed to send: {result}'}
 
 
+# =============================================================================
+# COMMENT READING FUNCTIONALITY (ADAPT-011)
+# =============================================================================
+
+class ThreadsComments:
+    """Read and interact with comments on Threads posts via Safari."""
+
+    def __init__(self):
+        self.session_manager = SafariSessionManager() if HAS_SESSION_MANAGER else None
+
+    def _run_applescript(self, script: str) -> Tuple[bool, str]:
+        """Execute AppleScript."""
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                return True, result.stdout.strip()
+            return False, result.stderr.strip()
+        except Exception as e:
+            return False, str(e)
+
+    def require_login(self) -> bool:
+        """Check if logged into Threads."""
+        if self.session_manager:
+            return self.session_manager.require_login(Platform.THREADS)
+        return True
+
+    def get_comments(self, post_url: str, limit: int = 50) -> Dict[str, Any]:
+        """
+        Get comments from a Threads post.
+
+        Args:
+            post_url: Full URL to the Threads post
+            limit: Maximum number of comments to fetch (default: 50)
+
+        Returns:
+            Dict with success status and list of comments
+        """
+        if not self.require_login():
+            return {'success': False, 'error': 'Not logged in'}
+
+        logger.info(f"Fetching comments from {post_url}...")
+
+        # Navigate to the post
+        nav_script = f'''
+        tell application "Safari"
+            activate
+            set URL of front document to "{post_url}"
+        end tell
+        '''
+        self._run_applescript(nav_script)
+        time.sleep(3)
+
+        # Extract comments using JavaScript
+        extract_script = f'''
+        tell application "Safari"
+            tell front document
+                do JavaScript "
+                    (function() {{
+                        var comments = [];
+
+                        // Find comment elements
+                        var commentElements = document.querySelectorAll('article, [role=\\"article\\"]');
+
+                        for (var i = 0; i < Math.min(commentElements.length, {limit}); i++) {{
+                            var el = commentElements[i];
+
+                            // Extract author
+                            var authorEl = el.querySelector('a[href*=\\"/@\\"]');
+                            var author = authorEl ? authorEl.href.split('/@').pop().split('/')[0] : null;
+
+                            // Extract comment text
+                            var textEl = el.querySelector('[dir=\\"auto\\"], span');
+                            var text = textEl ? textEl.innerText : '';
+
+                            // Extract timestamp
+                            var timeEl = el.querySelector('time');
+                            var timestamp = timeEl ? timeEl.getAttribute('datetime') : null;
+
+                            // Skip if it's the main post (not a comment)
+                            if (i === 0 && !author) continue;
+
+                            if (author && text) {{
+                                comments.push({{
+                                    author: author,
+                                    text: text.substring(0, 500),
+                                    timestamp: timestamp
+                                }});
+                            }}
+                        }}
+
+                        return JSON.stringify(comments);
+                    }})();
+                "
+            end tell
+        end tell
+        '''
+
+        success, result = self._run_applescript(extract_script)
+
+        if success:
+            try:
+                comments = json.loads(result)
+                logger.success(f"Fetched {len(comments)} comments")
+                return {
+                    'success': True,
+                    'post_url': post_url,
+                    'count': len(comments),
+                    'comments': comments
+                }
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse comments JSON: {result}")
+                return {'success': False, 'error': 'Failed to parse comments', 'raw': result}
+
+        return {'success': False, 'error': result}
+
+
 def test_login_status() -> Dict[str, Any]:
     """Test Threads login status."""
     poster = SafariThreadsPoster()

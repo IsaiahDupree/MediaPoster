@@ -35,7 +35,18 @@ def initialize_adapters():
             adapters_enabled += 1
     except Exception as e:
         logger.warning(f"Blotato adapter not available: {e}")
-    
+
+    try:
+        # Import Twitter adapter
+        from .twitter import TwitterConnector
+        twitter_adapter = TwitterConnector()
+        registry.register(twitter_adapter)
+        adapters_registered += 1
+        if twitter_adapter.is_enabled():
+            adapters_enabled += 1
+    except Exception as e:
+        logger.warning(f"Twitter adapter not available: {e}")
+
     # Log summary
     supported_platforms = registry.get_all_supported_platforms()
     logger.info(f"Adapters initialized: {adapters_enabled} enabled out of {adapters_registered} registered")

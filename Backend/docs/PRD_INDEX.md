@@ -18,6 +18,7 @@
 | **Media Asset Discovery** | `docs/PRD_MEDIA_ASSET_DISCOVERY.md` | Unified search for GIFs, videos, images (Giphy, Pexels, Unsplash, etc.) | 2-3 weeks |
 | **E2E Testing & Debug Framework** | `docs/PRD_E2E_TESTING_DEBUG_FRAMEWORK.md` | Playwright E2E tests with structured console logging for debugging | 2 weeks |
 | **Safari Session Manager** | `docs/PRD_SAFARI_SESSION_MANAGER.md` | Session keep-alive, health dashboard, multi-account support, analytics | 1-2 weeks |
+| **System Benchmarks** | `docs/PRD_SYSTEM_BENCHMARKS.md` | Critical workflows: Ingestion→Export, Sora→Twitter, DM Sync, DevVlog→Shorts | 3-4 weeks |
 
 ### 0.2 Gap Analysis & Roadmap
 

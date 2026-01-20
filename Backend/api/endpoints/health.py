@@ -114,7 +114,7 @@ async def check_storage() -> dict:
     try:
         import tempfile
         from pathlib import Path
-        
+
         # Check temp directory
         temp_dir = Path(tempfile.gettempdir())
         if temp_dir.exists() and temp_dir.is_dir():
@@ -131,11 +131,84 @@ async def check_storage() -> dict:
         return {"status": "unhealthy", "error": str(e)}
 
 
+async def check_workers() -> dict:
+    """Check all worker statuses (MOD-005)."""
+    try:
+        workers_status = {
+            "post_scheduler": "unknown",
+            "sleep_mode": "unknown",
+            "cpu_monitor": "unknown",
+            "metrics_fetch": "unknown",
+            "thumbnail_generation": "unknown",
+            "event_history": "unknown",
+            "cleanup": "unknown",
+            "notification": "unknown",
+            "narrative_builder": "unknown",
+            "slot_executor": "unknown",
+            "learner": "unknown",
+            "inbound_listener": "unknown",
+            "responder": "unknown"
+        }
+
+        healthy_count = 0
+        total_count = len(workers_status)
+
+        # Check Post Scheduler
+        try:
+            from services.post_scheduler import get_scheduler
+            scheduler = get_scheduler()
+            workers_status["post_scheduler"] = "healthy" if scheduler.is_running else "stopped"
+            if scheduler.is_running:
+                healthy_count += 1
+        except Exception as e:
+            workers_status["post_scheduler"] = f"error: {str(e)[:50]}"
+
+        # Check Sleep Mode Service
+        try:
+            from services.sleep_mode_service import SleepModeService
+            sleep_service = SleepModeService.get_instance()
+            workers_status["sleep_mode"] = "healthy" if sleep_service._is_running else "stopped"
+            if sleep_service._is_running:
+                healthy_count += 1
+        except Exception as e:
+            workers_status["sleep_mode"] = f"error: {str(e)[:50]}"
+
+        # Check CPU Monitor
+        try:
+            from services.cpu_monitor import get_cpu_monitor
+            cpu_monitor = get_cpu_monitor()
+            workers_status["cpu_monitor"] = "healthy" if cpu_monitor._is_running else "stopped"
+            if cpu_monitor._is_running:
+                healthy_count += 1
+        except Exception as e:
+            workers_status["cpu_monitor"] = f"error: {str(e)[:50]}"
+
+        # Determine overall worker health
+        health_percentage = (healthy_count / total_count) * 100
+
+        if health_percentage >= 80:
+            status = "healthy"
+        elif health_percentage >= 50:
+            status = "degraded"
+        else:
+            status = "unhealthy"
+
+        return {
+            "status": status,
+            "workers": workers_status,
+            "healthy_count": healthy_count,
+            "total_count": total_count,
+            "health_percentage": round(health_percentage, 1)
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 @router.get("/detailed")
 async def detailed_health_check():
     """
-    Detailed health check - checks all dependencies.
-    
+    Detailed health check - checks all dependencies (MOD-005).
+
     Returns status of:
     - Database connection
     - OpenAI API
@@ -143,19 +216,21 @@ async def detailed_health_check():
     - Blotato API
     - Event Bus
     - Storage
+    - Workers (Post Scheduler, Sleep Mode, CPU Monitor, etc.)
     """
     # Correlation ID will be in response headers from middleware
     correlation_id = str(uuid.uuid4())
     checks = {}
-    
+
     # Run checks in parallel
-    db_check, openai_check, rapidapi_check, blotato_check, event_bus_check, storage_check = await asyncio.gather(
+    db_check, openai_check, rapidapi_check, blotato_check, event_bus_check, storage_check, workers_check = await asyncio.gather(
         check_database(),
         check_openai(),
         check_rapidapi(),
         check_blotato(),
         check_event_bus(),
         check_storage(),
+        check_workers(),
         return_exceptions=True
     )
     
@@ -166,9 +241,10 @@ async def detailed_health_check():
     checks["blotato"] = blotato_check if isinstance(blotato_check, dict) else {"status": "error", "error": str(blotato_check)}
     checks["event_bus"] = event_bus_check if isinstance(event_bus_check, dict) else {"status": "error", "error": str(event_bus_check)}
     checks["storage"] = storage_check if isinstance(storage_check, dict) else {"status": "error", "error": str(storage_check)}
-    
+    checks["workers"] = workers_check if isinstance(workers_check, dict) else {"status": "error", "error": str(workers_check)}
+
     # Determine overall status
-    critical_services = ["database", "event_bus"]
+    critical_services = ["database", "event_bus", "workers"]
     critical_healthy = all(
         checks.get(s, {}).get("status") in ["healthy", "degraded"]
         for s in critical_services

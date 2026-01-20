@@ -476,3 +476,90 @@ class FormatDetector:
                 "broll_visual_type": video_analysis.get("broll_visual_type"),
             } if video_analysis.get("is_broll") is not None else None
         )
+
+    def route_video_by_orientation(
+        self,
+        width: int,
+        height: int,
+        format_analysis: Optional[FormatAnalysis] = None
+    ) -> List[str]:
+        """
+        Route videos to appropriate platforms based on orientation (VID-001).
+
+        Routing rules:
+        - 9:16 (vertical) → TikTok, Instagram Reels, YouTube Shorts
+        - 16:9 (horizontal) → YouTube, LinkedIn
+        - Square (1:1) → Instagram Feed, LinkedIn, Twitter/X
+
+        Args:
+            width: Video width in pixels
+            height: Video height in pixels
+            format_analysis: Optional format analysis for additional routing context
+
+        Returns:
+            List of recommended platform identifiers
+        """
+        aspect_ratio = width / height if height > 0 else 1.0
+        platforms = []
+
+        # Vertical video (9:16, approximately 0.5625)
+        if 0.4 < aspect_ratio < 0.7:
+            platforms = ["tiktok", "instagram_reels", "youtube_shorts"]
+            logger.info(f"[VideoRouter] Vertical video ({width}x{height}) → {platforms}")
+
+        # Horizontal video (16:9, approximately 1.777)
+        elif 1.5 < aspect_ratio < 2.0:
+            platforms = ["youtube", "linkedin", "facebook"]
+            logger.info(f"[VideoRouter] Horizontal video ({width}x{height}) → {platforms}")
+
+        # Square video (1:1)
+        elif 0.9 < aspect_ratio < 1.1:
+            platforms = ["instagram_feed", "linkedin", "twitter", "facebook"]
+            logger.info(f"[VideoRouter] Square video ({width}x{height}) → {platforms}")
+
+        # Ultra-wide (21:9 and wider)
+        elif aspect_ratio >= 2.0:
+            platforms = ["youtube", "twitter"]
+            logger.info(f"[VideoRouter] Ultra-wide video ({width}x{height}) → {platforms}")
+
+        # Other aspect ratios
+        else:
+            platforms = ["youtube", "instagram_feed"]
+            logger.info(f"[VideoRouter] Non-standard video ({width}x{height}, {aspect_ratio:.2f}) → {platforms}")
+
+        # If format analysis is provided, refine recommendations
+        if format_analysis:
+            # Short-form content strongly prefers vertical platforms
+            if format_analysis.duration_category == "short" and "tiktok" not in platforms:
+                platforms.insert(0, "tiktok")
+
+            # Long-form content prefers YouTube
+            if format_analysis.duration_category == "long" and "youtube" not in platforms:
+                platforms.insert(0, "youtube")
+
+            # Professional quality content goes to YouTube
+            if format_analysis.production_quality == ProductionQuality.PROFESSIONAL:
+                if "youtube" not in platforms:
+                    platforms.insert(0, "youtube")
+
+        return platforms
+
+    def get_video_orientation_category(self, width: int, height: int) -> str:
+        """
+        Get human-readable orientation category for video.
+
+        Returns:
+            "vertical", "horizontal", "square", or "ultra-wide"
+        """
+        aspect_ratio = width / height if height > 0 else 1.0
+
+        if 0.4 < aspect_ratio < 0.7:
+            return "vertical"
+        elif 1.5 < aspect_ratio < 2.0:
+            return "horizontal"
+        elif 0.9 < aspect_ratio < 1.1:
+            return "square"
+        elif aspect_ratio >= 2.0:
+            return "ultra-wide"
+        else:
+            return "non-standard"

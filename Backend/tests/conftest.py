@@ -178,10 +178,6 @@ def event_loop():
     finally:
         loop.close()
         asyncio.set_event_loop(None)
-    import asyncio
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 # Initialize database before all tests

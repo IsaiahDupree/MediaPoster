@@ -67,6 +67,11 @@ class Event:
         """Create event from JSON string."""
         return cls.from_dict(json.loads(json_str))
     
+    @property
+    def event_id(self) -> str:
+        """Alias for id to match test expectations."""
+        return self.id
+
     def with_metadata(self, **kwargs) -> "Event":
         """Return a new event with additional metadata."""
         new_metadata = {**self.metadata, **kwargs}
@@ -79,6 +84,6 @@ class Event:
             payload=self.payload,
             metadata=new_metadata,
         )
-    
+
     def __repr__(self) -> str:
         return f"Event(topic={self.topic}, id={self.id[:8]}..., cid={self.correlation_id[:8]}...)"

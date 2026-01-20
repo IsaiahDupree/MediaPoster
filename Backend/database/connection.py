@@ -140,6 +140,16 @@ def get_supabase() -> Client:
     return supabase_client
 
 
+def get_db_session_factory() -> async_sessionmaker:
+    """
+    Get the database session factory
+    Used in tests and background workers to create new sessions
+    """
+    if not async_session_maker:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    return async_session_maker
+
+
 # CRUD base class
 class CRUDBase:
     """Base class for CRUD operations"""

@@ -59,6 +59,14 @@ class APIRateLimiter:
             "tiktok_scraper": {
                 "monthly_limit": 250,
                 "safety_margin": 0.9  # Use only 90% of limit (225 calls)
+            },
+            "blotato_upload": {
+                "per_minute_limit": 10,  # 10 uploads per minute
+                "safety_margin": 0.9  # Use only 90% (9 calls/min)
+            },
+            "blotato_publish": {
+                "per_minute_limit": 30,  # 30 publishes per minute
+                "safety_margin": 0.9  # Use only 90% (27 calls/min)
             }
         }
     
@@ -93,7 +101,48 @@ class APIRateLimiter:
             logger.warning(f"API budget running low: {remaining} calls remaining for {self.api_name}")
         
         return True, f"OK ({remaining} calls remaining)"
-    
+
+    def can_make_call_per_minute(self, endpoint: str) -> tuple[bool, str]:
+        """
+        Check if API call is allowed within per-minute rate limit (BLOT-004).
+
+        Specifically for Blotato API:
+        - Upload endpoint: 10 calls/minute
+        - Publish endpoint: 30 calls/minute
+
+        Args:
+            endpoint: Endpoint to call
+
+        Returns:
+            Tuple of (allowed, reason)
+        """
+        config = self.budgets.get(self.api_name)
+
+        # If no per-minute limit configured, allow the call
+        if not config or "per_minute_limit" not in config:
+            return True, "No per-minute limit configured"
+
+        per_minute_limit = int(config["per_minute_limit"] * config["safety_margin"])
+
+        # Get call count for current minute
+        one_minute_ago = datetime.now() - timedelta(minutes=1)
+
+        call_count = self.db.query(APICallLog).filter(
+            APICallLog.api_name == self.api_name,
+            APICallLog.timestamp >= one_minute_ago,
+            APICallLog.success == True,
+            APICallLog.cache_hit == False  # Only count real API calls
+        ).count()
+
+        if call_count >= per_minute_limit:
+            return False, f"Per-minute rate limit exceeded ({call_count}/{per_minute_limit} calls in last minute)"
+
+        remaining = per_minute_limit - call_count
+        if remaining <= 2:
+            logger.warning(f"API rate limit nearly reached: {remaining} calls remaining this minute for {self.api_name}")
+
+        return True, f"OK ({remaining} calls remaining this minute)"
+
     def get_cached(self, cache_key: str, ttl_hours: int = 24) -> Optional[Any]:
         """
         Get cached result if available and fresh

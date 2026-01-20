@@ -81,6 +81,39 @@ class Settings(BaseSettings):
     max_video_size_mb: int = Field(default=5000, env="MAX_VIDEO_SIZE_MB")  # Supports large iPhone videos
     temp_dir: str = Field(default="/tmp/mediaposter", env="TEMP_DIR")
     working_dir: str = Field(default="./workspace", env="WORKING_DIR")
+
+    # Worker Queue Configuration (MOD-003)
+    use_redis_queue: bool = Field(
+        default_factory=lambda: bool(os.getenv("REDIS_URL")),
+        env="USE_REDIS_QUEUE"
+    )
+    queue_max_size: int = Field(default=1000, env="QUEUE_MAX_SIZE")
+    queue_worker_concurrency: int = Field(default=5, env="QUEUE_WORKER_CONCURRENCY")
+    queue_poll_interval: float = Field(default=1.0, env="QUEUE_POLL_INTERVAL")
+    queue_max_retries: int = Field(default=3, env="QUEUE_MAX_RETRIES")
+    queue_retry_delay: float = Field(default=5.0, env="QUEUE_RETRY_DELAY")
+
+    # Media Factory Configuration
+    media_factory_enabled: bool = Field(default=True, env="MEDIA_FACTORY_ENABLED")
+    media_factory_output_dir: str = Field(default="./output/media_factory", env="MEDIA_FACTORY_OUTPUT_DIR")
+
+    # TTS Configuration
+    tts_provider: str = Field(default="huggingface", env="TTS_PROVIDER")  # huggingface, elevenlabs
+    huggingface_api_key: Optional[str] = Field(None, env="HUGGINGFACE_API_KEY")
+    elevenlabs_api_key: Optional[str] = Field(None, env="ELEVENLABS_API_KEY")
+
+    # Music Configuration
+    music_provider: str = Field(default="suno", env="MUSIC_PROVIDER")  # suno, soundcloud
+    suno_api_key: Optional[str] = Field(None, env="SUNO_API_KEY")
+
+    # Remotion Configuration
+    remotion_enabled: bool = Field(default=True, env="REMOTION_ENABLED")
+    remotion_timeout: int = Field(default=300, env="REMOTION_TIMEOUT")  # 5 minutes
+
+    # Sleep Mode Configuration
+    sleep_mode_enabled: bool = Field(default=True, env="SLEEP_MODE_ENABLED")
+    sleep_mode_grace_period: float = Field(default=2.0, env="SLEEP_MODE_GRACE_PERIOD")
+    sleep_mode_check_interval: int = Field(default=30, env="SLEEP_MODE_CHECK_INTERVAL")
     
     # Video Source Directory - PRIMARY: iPhone Import (116GB, 8491 items)
     # Host path: ~/Documents/IphoneImport
@@ -121,23 +154,85 @@ _settings: Optional[Settings] = None
 
 
 def get_settings() -> Settings:
-    """Get or create settings instance"""
+    """
+    Get or create settings instance (MOD-004: Config Management)
+
+    This implements centralized configuration management with:
+    - Environment variable loading
+    - Default values
+    - Type validation via Pydantic
+    - Automatic directory creation
+    """
     global _settings
     if _settings is None:
         _settings = Settings()
-        
+
         # Create necessary directories
         os.makedirs(_settings.temp_dir, exist_ok=True)
         os.makedirs(_settings.working_dir, exist_ok=True)
-        
+        os.makedirs(_settings.media_factory_output_dir, exist_ok=True)
+
         # Ensure critical env vars are in os.environ for legacy code
         if _settings.openai_api_key:
             os.environ["OPENAI_API_KEY"] = _settings.openai_api_key
         if _settings.blotato_api_key:
             os.environ["BLOTATO_API_KEY"] = _settings.blotato_api_key
-    
+
     return _settings
+
+
+def validate_config() -> dict[str, list[str]]:
+    """
+    Validate configuration and return missing required fields.
+
+    Returns:
+        Dictionary mapping service names to lists of missing config keys
+    """
+    settings = get_settings()
+    missing = {}
+
+    # Check OpenAI (required for most features)
+    if not settings.openai_api_key:
+        missing.setdefault("openai", []).append("OPENAI_API_KEY")
+
+    # Check database
+    if not settings.database_url:
+        missing.setdefault("database", []).append("DATABASE_URL")
+
+    # Check Blotato (required for publishing)
+    if not settings.blotato_api_key:
+        missing.setdefault("blotato", []).append("BLOTATO_API_KEY")
+
+    # Check TTS providers
+    if settings.tts_provider == "huggingface" and not settings.huggingface_api_key:
+        missing.setdefault("tts", []).append("HUGGINGFACE_API_KEY")
+    elif settings.tts_provider == "elevenlabs" and not settings.elevenlabs_api_key:
+        missing.setdefault("tts", []).append("ELEVENLABS_API_KEY")
+
+    return missing
+
+
+def is_production() -> bool:
+    """Check if running in production environment."""
+    settings = get_settings()
+    return settings.app_env.lower() in ("production", "prod")
+
+
+def is_development() -> bool:
+    """Check if running in development environment."""
+    settings = get_settings()
+    return settings.app_env.lower() in ("development", "dev")
 
 
 # Export settings instance
 settings = get_settings()
+
+
+__all__ = [
+    "Settings",
+    "get_settings",
+    "validate_config",
+    "is_production",
+    "is_development",
+    "settings",
+]

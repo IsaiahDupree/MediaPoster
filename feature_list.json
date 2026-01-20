@@ -2,8 +2,8 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 322,
-  "completedFeatures": 77,
+  "totalFeatures": 293,
+  "completedFeatures": 118,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -14,7 +14,12 @@
     "phase7_multi_channel": "Comments, DMs, Email loops",
     "phase8_autonomy": "Experiments, A/B testing, n8n orchestration, bandit allocation",
     "phase9_testing": "Full test coverage from PRD_CONTENT_OPS_TESTS",
-    "phase10_modular": "Event-driven architecture, pub/sub, modular services"
+    "phase10_modular": "Event-driven architecture, pub/sub, modular services",
+    "phase11_community_inbox": "Unified comments/DMs with AI reply suggestions",
+    "phase12_repurposing": "Long video to shorts content repurposing engine",
+    "phase13_asset_discovery": "GIFs, videos, images search (Giphy, Pexels, Unsplash)",
+    "phase14_e2e_testing": "Playwright E2E tests with debug logging",
+    "phase15_safari_session": "Safari session manager with health dashboard, multi-account, analytics"
   },
   "features": [
     {
@@ -1022,7 +1027,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/e2e/test_post_lifecycle.py"
@@ -1030,7 +1035,8 @@
       "acceptance": [
         "Full cycle completes",
         "Attribution intact"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-012",
@@ -1039,7 +1045,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/e2e/test_cross_platform.py"
@@ -1047,7 +1053,8 @@
       "acceptance": [
         "X \u2264280 chars",
         "LinkedIn \u22643000 chars"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-013",
@@ -1056,7 +1063,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/e2e/test_dm_flow.py"
@@ -1064,7 +1071,8 @@
       "acceptance": [
         "Permission gate enforced",
         "Email captured"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-014",
@@ -1073,7 +1081,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/adapters/test_x_adapter.py"
@@ -1081,7 +1089,8 @@
       "acceptance": [
         "All operations tested",
         "Rate limit handling"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-015",
@@ -1090,14 +1099,15 @@
       "priority": "P0",
       "phase": 4,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/adapters/test_instagram_adapter.py"
       ],
       "acceptance": [
         "API and Safari paths tested"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-016",
@@ -1106,7 +1116,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/adapters/test_tiktok_adapter.py"
@@ -1114,7 +1124,8 @@
       "acceptance": [
         "Video upload works",
         "Blotato API tested"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-017",
@@ -1123,7 +1134,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/safety/test_rate_limiting.py"
@@ -1131,7 +1142,8 @@
       "acceptance": [
         "All limits enforced",
         "0 violations"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-018",
@@ -1140,14 +1152,15 @@
       "priority": "P0",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/safety/test_permission_gates.py"
       ],
       "acceptance": [
         "100% permission gate enforced"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-019",
@@ -1156,7 +1169,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/safety/test_error_handling.py"
@@ -1164,7 +1177,8 @@
       "acceptance": [
         "All errors handled",
         "No silent skips"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-020",
@@ -1173,14 +1187,15 @@
       "priority": "P1",
       "phase": 4,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
         "Backend/tests/performance/test_throughput.py"
       ],
       "acceptance": [
         "All latency targets met"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "TEST-021",
@@ -1225,7 +1240,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/services/registry.py"
@@ -1233,7 +1248,8 @@
       "acceptance": [
         "Services registered",
         "Dependencies resolved"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MOD-002",
@@ -1242,7 +1258,7 @@
       "priority": "P0",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/services/event_bus.py"
@@ -1250,7 +1266,8 @@
       "acceptance": [
         "Events published",
         "Subscribers notified"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MOD-003",
@@ -1259,7 +1276,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/workers/queue_abstraction.py"
@@ -1267,7 +1284,8 @@
       "acceptance": [
         "Works with Redis",
         "Works in-memory for testing"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MOD-004",
@@ -1276,7 +1294,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/config/settings.py"
@@ -1284,7 +1302,8 @@
       "acceptance": [
         "All config centralized",
         "Env vars work"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MOD-005",
@@ -1293,7 +1312,7 @@
       "priority": "P0",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/api/endpoints/health.py"
@@ -1301,7 +1320,8 @@
       "acceptance": [
         "All components checked",
         "Status aggregated"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MOD-006",
@@ -1310,7 +1330,7 @@
       "priority": "P0",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/main.py"
@@ -1318,7 +1338,8 @@
       "acceptance": [
         "No dropped tasks",
         "Clean exit"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MOD-007",
@@ -1506,7 +1527,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/orchestrator.py"
@@ -1514,7 +1535,8 @@
       "acceptance": [
         "Full pipeline executes",
         "Status tracked per stage"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MF-002",
@@ -1523,7 +1545,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/script_generator.py"
@@ -1531,7 +1553,9 @@
       "acceptance": [
         "Script JSON output",
         "Shotlist JSON output"
-      ]
+      ],
+      "completed": "2026-01-19",
+      "testResults": "8 of 8 tests passing (100% pass rate)"
     },
     {
       "id": "MF-003",
@@ -1608,7 +1632,7 @@
       "priority": "P0",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/contracts/"
@@ -1616,7 +1640,8 @@
       "acceptance": [
         "All contracts defined",
         "Validation works"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MF-008",
@@ -2818,15 +2843,18 @@
       "priority": "P0",
       "phase": 10,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "event-driven",
       "files": [
-        "Backend/services/event_bus/core.py"
+        "Backend/services/event_bus/bus.py",
+        "Backend/services/event_bus/event.py",
+        "Backend/services/event_bus/topics.py"
       ],
       "acceptance": [
         "Events published",
         "Subscribers notified"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "EVENT-002",
@@ -2835,15 +2863,18 @@
       "priority": "P0",
       "phase": 10,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "event-driven",
       "files": [
-        "Backend/services/event_bus/media_events.py"
+        "Backend/services/event_bus/topics.py",
+        "Backend/api/endpoints/ingestion.py",
+        "Backend/services/workers/analysis_worker.py"
       ],
       "acceptance": [
         "Ingestion events fire",
         "Analysis chain works"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "EVENT-003",
@@ -2852,15 +2883,18 @@
       "priority": "P0",
       "phase": 10,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "event-driven",
       "files": [
-        "Backend/services/event_bus/publish_events.py"
+        "Backend/services/event_bus/topics.py",
+        "Backend/services/background_publisher.py",
+        "Backend/services/workers/publish_worker.py"
       ],
       "acceptance": [
         "Publish events fire",
         "Status tracked"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "EVENT-004",
@@ -2869,15 +2903,18 @@
       "priority": "P1",
       "phase": 10,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "event-driven",
       "files": [
-        "Backend/services/event_bus/metrics_events.py"
+        "Backend/services/event_bus/topics.py",
+        "Backend/services/workers/metrics_fetch_worker.py",
+        "Backend/services/metrics_snapshot_service.py"
       ],
       "acceptance": [
         "Metrics events fire",
         "Backfill works"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "EVENT-005",
@@ -2886,15 +2923,18 @@
       "priority": "P1",
       "phase": 10,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "event-driven",
       "files": [
-        "Backend/services/event_bus/ai_events.py"
+        "Backend/services/event_bus/topics.py",
+        "Backend/api/endpoints/video_generation.py",
+        "Backend/api/endpoints/ai_video_generation.py"
       ],
       "acceptance": [
         "AI events fire",
         "Async tracking works"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "MUSIC-001",
@@ -2971,7 +3011,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "stories",
       "files": [
         "Backend/services/blotato_api.py"
@@ -2979,7 +3019,9 @@
       "acceptance": [
         "Stories posted",
         "24h expiry shown"
-      ]
+      ],
+      "completed": "2026-01-19",
+      "testResults": "10 of 10 tests passing (100% pass rate)"
     },
     {
       "id": "STORY-002",
@@ -2988,7 +3030,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "stories",
       "files": [
         "dashboard/app/schedule/page.tsx"
@@ -2996,7 +3038,8 @@
       "acceptance": [
         "Selector works",
         "Calendar shows Story icon"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "IG-TREND-001",
@@ -3226,7 +3269,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "video",
       "files": [
         "Backend/services/format_detector.py"
@@ -3234,7 +3277,9 @@
       "acceptance": [
         "Orientation detected",
         "Correct routing"
-      ]
+      ],
+      "completed": "2026-01-19",
+      "testResults": "17 of 17 tests passing (100% pass rate)"
     },
     {
       "id": "VID-002",
@@ -3722,7 +3767,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-automation",
       "files": [
         "Backend/automation/safari_app_controller.py"
@@ -3730,7 +3775,8 @@
       "acceptance": [
         "Safari launched",
         "JS executed in tabs"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "SAF-002",
@@ -3739,7 +3785,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-automation",
       "files": [
         "Backend/automation/tiktok_engagement.py"
@@ -3747,7 +3793,8 @@
       "acceptance": [
         "Comments posted",
         "Captcha detection"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "SAF-003",
@@ -3756,15 +3803,16 @@
       "priority": "P1",
       "phase": 4,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-automation",
       "files": [
-        "Backend/automation/comment_automation.py"
+        "Backend/automation/instagram_comment_automation.py"
       ],
       "acceptance": [
         "Comments posted",
         "Login status checked"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "SAF-004",
@@ -3773,7 +3821,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "safari-automation",
       "files": [
         "Backend/automation/safari_session_manager.py"
@@ -3781,7 +3829,8 @@
       "acceptance": [
         "Sessions persisted",
         "Cookies maintained"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "SAF-005",
@@ -3790,7 +3839,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "safari-automation",
       "files": [
         "Backend/automation/safari_app_controller.py"
@@ -3798,7 +3847,8 @@
       "acceptance": [
         "Captcha detected",
         "User notified"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "BLOT-001",
@@ -3807,7 +3857,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "blotato",
       "files": [
         "Backend/services/blotato_api.py"
@@ -3815,7 +3865,8 @@
       "acceptance": [
         "Posts published",
         "All platforms supported"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "BLOT-002",
@@ -3824,7 +3875,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "blotato",
       "files": [
         "Backend/services/blotato_api.py"
@@ -3832,7 +3883,8 @@
       "acceptance": [
         "Media uploaded",
         "URL returned"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "BLOT-003",
@@ -3841,7 +3893,7 @@
       "priority": "P0",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "blotato",
       "files": [
         "Backend/services/blotato_api.py"
@@ -3849,7 +3901,8 @@
       "acceptance": [
         "Posts scheduled",
         "Calendar slot used"
-      ]
+      ],
+      "completed": "2026-01-19"
     },
     {
       "id": "BLOT-004",
@@ -3858,7 +3911,7 @@
       "priority": "P1",
       "phase": 4,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "blotato",
       "files": [
         "Backend/services/api_rate_limiter.py"
@@ -3866,7 +3919,9 @@
       "acceptance": [
         "429 errors handled",
         "Retry logic works"
-      ]
+      ],
+      "completed": "2026-01-19",
+      "testResults": "11 of 11 tests passing (100% pass rate)"
     },
     {
       "id": "BLOT-005",
@@ -4455,6 +4510,711 @@
         "Map speakers to voice references",
         "Generate and interleave audio",
         "Timing/pacing controls"
+      ]
+    },
+    {
+      "id": "INBOX-001",
+      "name": "Community Inbox Database",
+      "description": "Unified table for comments and DMs across all platforms",
+      "priority": "P1",
+      "phase": 11,
+      "effort": "3h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "supabase/migrations/community_inbox.sql"
+      ],
+      "acceptance": [
+        "Schema created",
+        "Platform enum",
+        "Indexes added"
+      ]
+    },
+    {
+      "id": "INBOX-002",
+      "name": "Comment Fetcher Service",
+      "description": "Fetch comments from X, Instagram, TikTok, YouTube",
+      "priority": "P1",
+      "phase": 11,
+      "effort": "6h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "Backend/services/comment_fetcher.py"
+      ],
+      "acceptance": [
+        "Multi-platform fetch",
+        "Deduplication",
+        "Rate limit handling"
+      ]
+    },
+    {
+      "id": "INBOX-003",
+      "name": "DM Fetcher Service",
+      "description": "Fetch DMs from supported platforms",
+      "priority": "P1",
+      "phase": 11,
+      "effort": "6h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "Backend/services/dm_fetcher.py"
+      ],
+      "acceptance": [
+        "X DMs",
+        "Instagram DMs",
+        "Thread grouping"
+      ]
+    },
+    {
+      "id": "INBOX-004",
+      "name": "AI Reply Suggestions",
+      "description": "Generate reply suggestions using GPT-4o",
+      "priority": "P0",
+      "phase": 11,
+      "effort": "4h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "Backend/services/reply_suggestions.py"
+      ],
+      "acceptance": [
+        "Context-aware replies",
+        "Tone matching",
+        "3 suggestions per message"
+      ]
+    },
+    {
+      "id": "INBOX-005",
+      "name": "Unified Inbox UI",
+      "description": "Dashboard page for managing all messages",
+      "priority": "P0",
+      "phase": 11,
+      "effort": "8h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "dashboard/app/inbox/page.tsx"
+      ],
+      "acceptance": [
+        "Filter by platform",
+        "Search messages",
+        "Reply inline"
+      ]
+    },
+    {
+      "id": "INBOX-006",
+      "name": "Auto-Reply Rules Engine",
+      "description": "Configure automatic replies based on keywords/patterns",
+      "priority": "P2",
+      "phase": 11,
+      "effort": "4h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "Backend/services/auto_reply_rules.py"
+      ],
+      "acceptance": [
+        "Rule configuration UI",
+        "Keyword matching",
+        "Pattern actions"
+      ]
+    },
+    {
+      "id": "INBOX-007",
+      "name": "Sentiment Analysis",
+      "description": "Classify messages as positive/negative/neutral",
+      "priority": "P2",
+      "phase": 11,
+      "effort": "3h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "Backend/services/sentiment_analyzer.py"
+      ],
+      "acceptance": [
+        "Sentiment scores",
+        "Priority flagging",
+        "Filter by sentiment"
+      ]
+    },
+    {
+      "id": "INBOX-008",
+      "name": "Inbox Analytics",
+      "description": "Track response rates, sentiment trends, engagement",
+      "priority": "P2",
+      "phase": 11,
+      "effort": "4h",
+      "passes": false,
+      "category": "community",
+      "files": [
+        "dashboard/app/inbox/analytics/page.tsx"
+      ],
+      "acceptance": [
+        "Response time metrics",
+        "Sentiment charts",
+        "Platform breakdown"
+      ]
+    },
+    {
+      "id": "REPURPOSE-001",
+      "name": "Video Analyzer Service",
+      "description": "Analyze long video for highlight moments",
+      "priority": "P0",
+      "phase": 12,
+      "effort": "8h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/video_analyzer.py"
+      ],
+      "acceptance": [
+        "Transcript extraction",
+        "Highlight detection",
+        "Timestamp mapping"
+      ]
+    },
+    {
+      "id": "REPURPOSE-002",
+      "name": "Clip Extraction Engine",
+      "description": "Extract short clips from long videos (Opus-style)",
+      "priority": "P0",
+      "phase": 12,
+      "effort": "8h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/clip_extractor.py"
+      ],
+      "acceptance": [
+        "FFmpeg integration",
+        "Auto-cropping",
+        "Multiple formats"
+      ]
+    },
+    {
+      "id": "REPURPOSE-003",
+      "name": "AI Caption Generator",
+      "description": "Generate engaging captions for clips",
+      "priority": "P1",
+      "phase": 12,
+      "effort": "4h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/caption_generator.py"
+      ],
+      "acceptance": [
+        "Platform-specific captions",
+        "Hashtag suggestions",
+        "Hook generation"
+      ]
+    },
+    {
+      "id": "REPURPOSE-004",
+      "name": "Repurposing Queue UI",
+      "description": "Dashboard for managing repurposing jobs",
+      "priority": "P0",
+      "phase": 12,
+      "effort": "6h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "dashboard/app/repurpose/page.tsx"
+      ],
+      "acceptance": [
+        "Upload long video",
+        "Preview clips",
+        "Edit before publish"
+      ]
+    },
+    {
+      "id": "REPURPOSE-005",
+      "name": "Auto-Publish Clips",
+      "description": "Schedule extracted clips to multiple platforms",
+      "priority": "P1",
+      "phase": 12,
+      "effort": "4h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/clip_scheduler.py"
+      ],
+      "acceptance": [
+        "Platform selection",
+        "Optimal timing",
+        "Batch scheduling"
+      ]
+    },
+    {
+      "id": "ASSET-001",
+      "name": "Giphy Integration",
+      "description": "Search and use GIFs from Giphy API",
+      "priority": "P1",
+      "phase": 13,
+      "effort": "3h",
+      "passes": false,
+      "category": "assets",
+      "files": [
+        "Backend/services/giphy_service.py"
+      ],
+      "acceptance": [
+        "Search API",
+        "Trending GIFs",
+        "Category browse"
+      ]
+    },
+    {
+      "id": "ASSET-002",
+      "name": "Pexels Integration",
+      "description": "Search stock photos and videos from Pexels",
+      "priority": "P1",
+      "phase": 13,
+      "effort": "3h",
+      "passes": false,
+      "category": "assets",
+      "files": [
+        "Backend/services/pexels_service.py"
+      ],
+      "acceptance": [
+        "Photo search",
+        "Video search",
+        "Attribution handling"
+      ]
+    },
+    {
+      "id": "ASSET-003",
+      "name": "Unsplash Integration",
+      "description": "Search high-quality images from Unsplash",
+      "priority": "P1",
+      "phase": 13,
+      "effort": "3h",
+      "passes": false,
+      "category": "assets",
+      "files": [
+        "Backend/services/unsplash_service.py"
+      ],
+      "acceptance": [
+        "Search API",
+        "Collections",
+        "Download tracking"
+      ]
+    },
+    {
+      "id": "ASSET-004",
+      "name": "Unified Asset Search UI",
+      "description": "Single search interface for all asset sources",
+      "priority": "P0",
+      "phase": 13,
+      "effort": "6h",
+      "passes": false,
+      "category": "assets",
+      "files": [
+        "dashboard/components/asset-search.tsx"
+      ],
+      "acceptance": [
+        "Combined search",
+        "Source filters",
+        "Preview grid"
+      ]
+    },
+    {
+      "id": "ASSET-005",
+      "name": "Asset Library",
+      "description": "Save and organize favorite assets",
+      "priority": "P2",
+      "phase": 13,
+      "effort": "4h",
+      "passes": false,
+      "category": "assets",
+      "files": [
+        "dashboard/app/assets/library/page.tsx"
+      ],
+      "acceptance": [
+        "Save to library",
+        "Folder organization",
+        "Quick insert"
+      ]
+    },
+    {
+      "id": "E2E-001",
+      "name": "Playwright Setup",
+      "description": "Configure Playwright for E2E testing",
+      "priority": "P0",
+      "phase": 14,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "playwright.config.ts"
+      ],
+      "acceptance": [
+        "Config created",
+        "Browser setup",
+        "CI integration"
+      ]
+    },
+    {
+      "id": "E2E-002",
+      "name": "Debug Logging Utility",
+      "description": "Console logging helper for test debugging",
+      "priority": "P0",
+      "phase": 14,
+      "effort": "2h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "tests/utils/debug-logger.ts"
+      ],
+      "acceptance": [
+        "Step logging",
+        "Screenshot on fail",
+        "Network logs"
+      ]
+    },
+    {
+      "id": "E2E-003",
+      "name": "Auth Flow E2E Tests",
+      "description": "Test login, logout, session management",
+      "priority": "P0",
+      "phase": 14,
+      "effort": "4h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "tests/e2e/auth.spec.ts"
+      ],
+      "acceptance": [
+        "Login works",
+        "Logout works",
+        "Protected routes"
+      ]
+    },
+    {
+      "id": "E2E-004",
+      "name": "Content Creation E2E Tests",
+      "description": "Test post creation and scheduling flow",
+      "priority": "P0",
+      "phase": 14,
+      "effort": "4h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "tests/e2e/content-creation.spec.ts"
+      ],
+      "acceptance": [
+        "Create post",
+        "Schedule post",
+        "Edit post"
+      ]
+    },
+    {
+      "id": "E2E-005",
+      "name": "Publishing E2E Tests",
+      "description": "Test multi-platform publishing flow",
+      "priority": "P1",
+      "phase": 14,
+      "effort": "4h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "tests/e2e/publishing.spec.ts"
+      ],
+      "acceptance": [
+        "Platform selection",
+        "Publish success",
+        "Error handling"
+      ]
+    },
+    {
+      "id": "E2E-006",
+      "name": "Analytics E2E Tests",
+      "description": "Test analytics dashboard functionality",
+      "priority": "P2",
+      "phase": 14,
+      "effort": "3h",
+      "passes": false,
+      "category": "testing",
+      "files": [
+        "tests/e2e/analytics.spec.ts"
+      ],
+      "acceptance": [
+        "Dashboard loads",
+        "Charts render",
+        "Date filtering"
+      ]
+    },
+    {
+      "id": "SSM-001",
+      "name": "Session Health Dashboard",
+      "description": "Visual status of all 7 platforms with real-time updates (Active/Stale/Expired/Paused)",
+      "priority": "P0",
+      "phase": 15,
+      "effort": "6h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "dashboard/app/safari/health/page.tsx"
+      ],
+      "acceptance": [
+        "7 platform cards",
+        "Status icons",
+        "Real-time updates",
+        "Last refresh time"
+      ]
+    },
+    {
+      "id": "SSM-002",
+      "name": "Safari Accounts Table",
+      "description": "Database schema for multi-account support per platform",
+      "priority": "P0",
+      "phase": 15,
+      "effort": "2h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "supabase/migrations/safari_accounts.sql"
+      ],
+      "acceptance": [
+        "Schema created",
+        "Platform enum",
+        "Account credentials encrypted"
+      ]
+    },
+    {
+      "id": "SSM-003",
+      "name": "Session Logs Table",
+      "description": "Track session events, uptime, failures for analytics",
+      "priority": "P0",
+      "phase": 15,
+      "effort": "2h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "supabase/migrations/safari_session_logs.sql"
+      ],
+      "acceptance": [
+        "Events logged",
+        "Timestamps",
+        "Failure reasons stored"
+      ]
+    },
+    {
+      "id": "SSM-004",
+      "name": "Multi-Account Registry",
+      "description": "Switch between accounts per platform with account management UI",
+      "priority": "P1",
+      "phase": 15,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/services/account_registry.py",
+        "dashboard/app/safari/accounts/page.tsx"
+      ],
+      "acceptance": [
+        "Add/remove accounts",
+        "Set active account",
+        "Switch accounts"
+      ]
+    },
+    {
+      "id": "SSM-005",
+      "name": "Account Switching API",
+      "description": "API endpoints for switching active account per platform",
+      "priority": "P1",
+      "phase": 15,
+      "effort": "3h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/api/endpoints/safari_accounts.py"
+      ],
+      "acceptance": [
+        "POST /safari/switch",
+        "Account validation",
+        "Session transfer"
+      ]
+    },
+    {
+      "id": "SSM-006",
+      "name": "Session Analytics Dashboard",
+      "description": "Uptime tracking, failure count, event logs visualization",
+      "priority": "P1",
+      "phase": 15,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "dashboard/app/safari/analytics/page.tsx"
+      ],
+      "acceptance": [
+        "Uptime percentage",
+        "Failure charts",
+        "Event timeline"
+      ]
+    },
+    {
+      "id": "SSM-007",
+      "name": "Analytics API Endpoints",
+      "description": "GET /safari/analytics with date range filtering",
+      "priority": "P1",
+      "phase": 15,
+      "effort": "3h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/api/endpoints/safari_analytics.py"
+      ],
+      "acceptance": [
+        "Date range filter",
+        "Per-platform stats",
+        "Aggregated metrics"
+      ]
+    },
+    {
+      "id": "SSM-008",
+      "name": "Auto-Recovery Service",
+      "description": "Attempt to restore sessions from saved cookies automatically",
+      "priority": "P0",
+      "phase": 15,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/services/session_recovery.py"
+      ],
+      "acceptance": [
+        "Cookie restore",
+        "Retry logic",
+        "Fallback to manual login"
+      ]
+    },
+    {
+      "id": "SSM-009",
+      "name": "Session Keeper Enhancement",
+      "description": "Background task to refresh sessions before expiry",
+      "priority": "P0",
+      "phase": 15,
+      "effort": "3h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/services/session_keeper.py"
+      ],
+      "acceptance": [
+        "Scheduled refresh",
+        "Platform-specific intervals",
+        "Failure alerts"
+      ]
+    },
+    {
+      "id": "SSM-010",
+      "name": "Expiry Notifications",
+      "description": "Push/email alerts on session expiry or failures",
+      "priority": "P2",
+      "phase": 15,
+      "effort": "3h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/services/session_notifications.py"
+      ],
+      "acceptance": [
+        "Push notifications",
+        "Email alerts",
+        "Configurable thresholds"
+      ]
+    },
+    {
+      "id": "SSM-011",
+      "name": "WebSocket Real-time Updates",
+      "description": "Real-time dashboard updates via WebSocket",
+      "priority": "P1",
+      "phase": 15,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/api/websocket/safari_status.py"
+      ],
+      "acceptance": [
+        "WS connection",
+        "Status broadcasts",
+        "Reconnect handling"
+      ]
+    },
+    {
+      "id": "SSM-012",
+      "name": "CLI Health Command",
+      "description": "python safari_session_manager.py --health for JSON health report",
+      "priority": "P2",
+      "phase": 15,
+      "effort": "2h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/safari_session_manager.py"
+      ],
+      "acceptance": [
+        "JSON output",
+        "All platforms included",
+        "Exit codes"
+      ]
+    },
+    {
+      "id": "SSM-013",
+      "name": "CLI Account Commands",
+      "description": "--accounts list, --switch platform:account CLI commands",
+      "priority": "P2",
+      "phase": 15,
+      "effort": "2h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/safari_session_manager.py"
+      ],
+      "acceptance": [
+        "List accounts",
+        "Switch works",
+        "Error handling"
+      ]
+    },
+    {
+      "id": "SSM-014",
+      "name": "CLI Analytics Command",
+      "description": "--analytics 7d for last N days stats",
+      "priority": "P2",
+      "phase": 15,
+      "effort": "2h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/safari_session_manager.py"
+      ],
+      "acceptance": [
+        "Date range parsing",
+        "Stats output",
+        "Export options"
+      ]
+    },
+    {
+      "id": "SSM-015",
+      "name": "Session Status API",
+      "description": "12 API endpoints for sessions, accounts, keeper, analytics",
+      "priority": "P0",
+      "phase": 15,
+      "effort": "4h",
+      "passes": false,
+      "category": "safari-session",
+      "files": [
+        "Backend/api/endpoints/safari_sessions.py"
+      ],
+      "acceptance": [
+        "GET /sessions",
+        "POST /refresh",
+        "GET /keeper/status",
+        "PATCH /keeper/toggle"
       ]
     }
   ]

@@ -11,6 +11,9 @@ from enum import Enum
 import uuid
 import random
 
+# Import content sourcing service
+from services.ingestion.content_sourcer import ContentSourcer
+
 router = APIRouter(prefix="/api/content-pipeline", tags=["Content Pipeline"])
 
 
@@ -926,5 +929,130 @@ async def cancel_batch(batch_id: str):
     """Cancel a running batch."""
     processor = get_batch_processor()
     processor.cancel_batch(batch_id)
-    
+
     return {"success": True, "batch_id": batch_id, "status": "cancelled"}
+
+
+# ============================================================================
+# CONTENT SOURCING API (PIPE-001)
+# ============================================================================
+
+@router.get("/sourcing/status")
+async def get_sourcing_status():
+    """
+    Get content sourcing service status (PIPE-001)
+
+    Returns current scan folders, stats, and configuration.
+    """
+    try:
+        sourcer = ContentSourcer.get_instance()
+        stats = sourcer.get_stats()
+
+        return {
+            "success": True,
+            "data": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sourcing/folders/add")
+async def add_scan_folder(folder_path: str = Body(..., embed=True)):
+    """
+    Add a folder to scan for content (PIPE-001: CS-001)
+
+    Args:
+        folder_path: Absolute path to media folder
+    """
+    try:
+        sourcer = ContentSourcer.get_instance()
+        sourcer.add_scan_folder(folder_path)
+
+        return {
+            "success": True,
+            "message": f"Added scan folder: {folder_path}",
+            "scan_folders": [str(f) for f in sourcer.scan_folders]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/sourcing/folders/remove")
+async def remove_scan_folder(folder_path: str = Body(..., embed=True)):
+    """
+    Remove a folder from scanning (PIPE-001)
+
+    Args:
+        folder_path: Path to remove
+    """
+    try:
+        sourcer = ContentSourcer.get_instance()
+        sourcer.remove_scan_folder(folder_path)
+
+        return {
+            "success": True,
+            "message": f"Removed scan folder: {folder_path}",
+            "scan_folders": [str(f) for f in sourcer.scan_folders]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/sourcing/scan")
+async def trigger_scan(background_tasks: BackgroundTasks):
+    """
+    Manually trigger a content scan (PIPE-001: CS-001, CS-002)
+
+    Scans all configured folders and imports new content.
+    """
+    try:
+        sourcer = ContentSourcer.get_instance()
+
+        # Run scan in background
+        async def run_scan():
+            results = await sourcer.scan_folders_once()
+            return results
+
+        background_tasks.add_task(run_scan)
+
+        return {
+            "success": True,
+            "message": "Content scan started",
+            "scan_folders": [str(f) for f in sourcer.scan_folders]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sourcing/import-file")
+async def import_single_file(
+    file_path: str = Body(..., embed=True),
+    source_type: str = Body(default="upload", embed=True)
+):
+    """
+    Import a single file into the content pipeline (PIPE-001: CS-002)
+
+    Args:
+        file_path: Absolute path to media file
+        source_type: Source of file (media_library, upload, import)
+    """
+    try:
+        sourcer = ContentSourcer.get_instance()
+        content_id = await sourcer.import_file(file_path, source_type=source_type)
+
+        if not content_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to import file. Check if file exists and is valid media."
+            )
+
+        return {
+            "success": True,
+            "message": f"File imported successfully",
+            "content_id": content_id,
+            "file_path": file_path
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

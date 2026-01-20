@@ -77,6 +77,7 @@ class PlatformConstraints(BaseModel):
 # Platform constraints
 PLATFORM_CONSTRAINTS = {
     "x": PlatformConstraints(platform="x", max_length=280, recommended_length=240, supports_links=True),
+    "twitter": PlatformConstraints(platform="twitter", max_length=280, recommended_length=240, supports_links=True),
     "instagram": PlatformConstraints(platform="instagram", max_length=2200, recommended_length=150, requires_media=True),
     "tiktok": PlatformConstraints(platform="tiktok", max_length=2200, recommended_length=100, requires_media=True),
     "youtube": PlatformConstraints(platform="youtube", max_length=5000, recommended_length=200, supports_links=True),
@@ -93,9 +94,11 @@ class QAGateService:
     Checks FATE scores, awareness level, platform constraints, and content quality.
 
     Usage:
-        qa_gate = QAGateService()
+        qa_gate = QAGateService.get_instance()
         result = qa_gate.check(content, template_id, awareness_level, platform, fate_scores)
     """
+
+    _instance: Optional["QAGateService"] = None
 
     # Minimum FATE scores (can be overridden per template)
     DEFAULT_MIN_FATE_SCORES = {
@@ -112,6 +115,11 @@ class QAGateService:
         r'\b100%\s+free\b',
         r'\bno\s+risk\b',
         r'\bunlimited\s+money\b',
+        r'\blose\s+weight\s+overnight\b',
+        r'\bmiracle\s+cure\b',
+        r'\bmake\s+money\s+fast\b',
+        r'\bwork\s+from\s+home\s+opportunity\b',
+        r'\bbe\s+your\s+own\s+boss\b',
         # Add more as needed
     ]
 
@@ -124,37 +132,64 @@ class QAGateService:
         5: [r'\bbuy\s+now\b', r'\bget\s+started\b', r'\btry\s+it\b', r'\bclaim\b'],  # Most-aware
     }
 
-    def __init__(self):
+    def __init__(self, db=None):
         """Initialize QA gate service"""
+        if QAGateService._instance is not None:
+            raise RuntimeError("Use QAGateService.get_instance()")
+        self.db = db
         self.forbidden_regexes = [re.compile(pattern, re.IGNORECASE) for pattern in self.FORBIDDEN_PATTERNS]
         logger.info("🛡️ QA Gate Service initialized")
 
-    def check(
+    @classmethod
+    def get_instance(cls, db=None) -> "QAGateService":
+        """Get singleton instance"""
+        if cls._instance is None:
+            cls._instance = cls.__new__(cls)
+            cls._instance.db = db
+            cls._instance.forbidden_regexes = [re.compile(pattern, re.IGNORECASE) for pattern in cls.FORBIDDEN_PATTERNS]
+            logger.info("🛡️ QA Gate Service initialized")
+        return cls._instance
+
+    async def check(
         self,
-        content: str,
-        template_id: str,
-        awareness_level: int,
-        platform: str,
-        fate_scores: Optional[Dict[str, float]] = None,
-        classified_awareness: Optional[int] = None
+        content: Dict[str, Any]
     ) -> QAResult:
         """
         Check content quality
 
         Args:
-            content: Generated content to check
-            template_id: Template ID used
-            awareness_level: Target awareness level (1-5)
-            platform: Target platform
-            fate_scores: FATE scores (optional, will skip FATE check if not provided)
-            classified_awareness: Classified awareness level (optional)
+            content: Content dict with:
+                - text: Generated content to check
+                - fate_scores: Dict with FATE scores (focus, authority, tribe, emotion)
+                - awareness_level: Classified awareness level (1-5)
+                - target_awareness: Target awareness level (1-5)
+                - platform: Target platform
+                - template_id: Template ID (optional)
+                - intent: Content intent (optional)
 
         Returns:
             QA result with status and issues
         """
+        text = content.get("text", "")
+        fate_scores = content.get("fate_scores", {})
+        awareness_level = content.get("awareness_level", 0)
+        target_awareness = content.get("target_awareness", awareness_level)
+        platform = content.get("platform", "twitter")
+        template_id = content.get("template_id", "")
+        intent = content.get("intent")
+
         logger.info(f"🛡️ QA check | Platform: {platform} | Awareness: {awareness_level}")
 
         issues = []
+
+        # Check 0: Empty content
+        if not text or len(text.strip()) == 0:
+            issues.append(QAIssue(
+                severity="error",
+                category="length",
+                message="Content cannot be empty",
+                details={"length": len(text)}
+            ))
 
         # Check 1: FATE Score Validation
         if fate_scores:
@@ -162,24 +197,24 @@ class QAGateService:
             issues.extend(fate_issues)
 
         # Check 2: Awareness Level Match
-        if classified_awareness is not None:
-            awareness_issues = self._check_awareness_match(content, awareness_level, classified_awareness)
+        if awareness_level > 0 and target_awareness > 0:
+            awareness_issues = self._check_awareness_match(text, target_awareness, awareness_level)
             issues.extend(awareness_issues)
 
         # Check 3: Platform Length Constraints
-        length_issues = self._check_length(content, platform)
+        length_issues = self._check_length(text, platform)
         issues.extend(length_issues)
 
         # Check 4: Forbidden Content
-        forbidden_issues = self._check_forbidden_content(content)
+        forbidden_issues = self._check_forbidden_content(text)
         issues.extend(forbidden_issues)
 
         # Check 5: CTA Presence
-        cta_issues = self._check_cta_presence(content, awareness_level)
+        cta_issues = self._check_cta_presence(text, awareness_level)
         issues.extend(cta_issues)
 
         # Check 6: Link Validation
-        link_issues = self._check_links(content, platform)
+        link_issues = self._check_links(text, platform, intent)
         issues.extend(link_issues)
 
         # Determine status
@@ -206,8 +241,9 @@ class QAGateService:
             metadata={
                 "template_id": template_id,
                 "awareness_level": awareness_level,
+                "target_awareness": target_awareness,
                 "platform": platform,
-                "content_length": len(content)
+                "content_length": len(text)
             }
         )
 
@@ -215,8 +251,21 @@ class QAGateService:
         """Check if FATE scores meet minimum thresholds"""
         issues = []
 
+        # Normalize FATE score keys (support both "F"/"focus", "A"/"authority", etc.)
+        normalized_scores = {}
+        for key, value in fate_scores.items():
+            key_lower = key.lower()
+            if key_lower in ["f", "focus"]:
+                normalized_scores["F"] = value
+            elif key_lower in ["a", "authority"]:
+                normalized_scores["A"] = value
+            elif key_lower in ["t", "tribe"]:
+                normalized_scores["T"] = value
+            elif key_lower in ["e", "emotion"]:
+                normalized_scores["E"] = value
+
         for element, min_score in self.DEFAULT_MIN_FATE_SCORES.items():
-            actual_score = fate_scores.get(element, 0.0)
+            actual_score = normalized_scores.get(element, 0.0)
 
             if actual_score < min_score:
                 issues.append(QAIssue(
@@ -271,7 +320,7 @@ class QAGateService:
             issues.append(QAIssue(
                 severity="error",
                 category="length",
-                message=f"Content too long: {content_length} chars (max: {constraints.max_length})",
+                message=f"Content length exceeds maximum: {content_length} chars (max: {constraints.max_length})",
                 details={"length": content_length, "max": constraints.max_length, "overflow": content_length - constraints.max_length}
             ))
 
@@ -333,7 +382,7 @@ class QAGateService:
 
         return issues
 
-    def _check_links(self, content: str, platform: str) -> List[QAIssue]:
+    def _check_links(self, content: str, platform: str, intent: Optional[str] = None) -> List[QAIssue]:
         """Check for link presence and validity"""
         issues = []
 
@@ -345,8 +394,15 @@ class QAGateService:
         url_pattern = r'https?://[^\s]+'
         urls = re.findall(url_pattern, content)
 
-        # Check for links (optional warning)
-        if not urls:
+        # Check for links - warn if lead_generation intent but no link
+        if intent == "lead_generation" and not urls:
+            issues.append(QAIssue(
+                severity="warning",
+                category="link",
+                message="Lead generation content lacks URL/link",
+                details={"platform": platform, "intent": intent}
+            ))
+        elif not urls:
             issues.append(QAIssue(
                 severity="info",
                 category="link",

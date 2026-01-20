@@ -386,6 +386,20 @@ class Topics:
     TOUCHPOINT_UPDATED = "touchpoint.updated"             # Touchpoint metrics updated
     TOUCHPOINT_DELETED = "touchpoint.deleted"             # Touchpoint deleted
 
+    # =========================================================================
+    # MEDIA FACTORY (MF-001)
+    # =========================================================================
+    MEDIA_FACTORY_JOB_CREATED = "media_factory.job.created"           # New production job created
+    MEDIA_FACTORY_JOB_STARTED = "media_factory.job.started"           # Job execution started
+    MEDIA_FACTORY_JOB_STAGE_STARTED = "media_factory.job.stage.started"       # Pipeline stage started
+    MEDIA_FACTORY_JOB_STAGE_COMPLETED = "media_factory.job.stage.completed"   # Pipeline stage completed
+    MEDIA_FACTORY_JOB_STAGE_FAILED = "media_factory.job.stage.failed"         # Pipeline stage failed
+    MEDIA_FACTORY_JOB_COMPLETED = "media_factory.job.completed"       # Job completed successfully
+    MEDIA_FACTORY_JOB_FAILED = "media_factory.job.failed"             # Job failed
+    MEDIA_FACTORY_JOB_CANCELLED = "media_factory.job.cancelled"       # Job cancelled
+    MEDIA_FACTORY_STAGE_STARTED = "media_factory.stage.started"       # Stage started (alias for compatibility)
+    MEDIA_FACTORY_STAGE_COMPLETED = "media_factory.stage.completed"   # Stage completed (alias for compatibility)
+
     @classmethod
     def all_topics(cls) -> list:
         """Return list of all defined topics."""

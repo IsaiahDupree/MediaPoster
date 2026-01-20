@@ -1,12 +1,15 @@
 """
 Android Import API Endpoints
 Import media from Android devices via ADB with duplicate detection.
+
+JOBS-002: Migrated to use BackgroundJobsService for persistent job tracking
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
 import os
 import json
 import hashlib
@@ -15,12 +18,13 @@ import asyncio
 from loguru import logger
 
 from services.event_bus import EventBus, Topics
+from services.background_jobs_service import BackgroundJobsService
+from database.connection import get_db
 
 router = APIRouter(prefix="/api/import/android", tags=["Android Import"])
 
 # Storage paths
 IMPORT_HISTORY_FILE = Path("/tmp/mediaposter/android_import_history.json")
-IMPORT_JOBS_FILE = Path("/tmp/mediaposter/android_import_jobs.json")
 DEFAULT_IMPORT_PATH = Path.home() / "Documents" / "AndroidImport"
 DEFAULT_ADB_PATH = "/opt/homebrew/bin/adb"
 
@@ -28,8 +32,7 @@ DEFAULT_ADB_PATH = "/opt/homebrew/bin/adb"
 IMPORT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 DEFAULT_IMPORT_PATH.mkdir(parents=True, exist_ok=True)
 
-# In-memory job tracking
-_current_job: Optional[Dict[str, Any]] = None
+# Import history (kept as file-based for duplicate detection)
 _import_history: Dict[str, Dict[str, Any]] = {}
 
 
@@ -199,9 +202,18 @@ async def get_import_stats():
 
 
 @router.get("/job/current")
-async def get_current_job():
+async def get_current_job(db: AsyncSession = Depends(get_db)):
     """Get current import job status"""
-    return {"job": _current_job}
+    # Get the most recent active import job
+    service = BackgroundJobsService(db)
+    jobs = await service.get_active_jobs(job_type="import")
+
+    # Return the most recent one
+    if jobs:
+        job = jobs[0]  # Already sorted by created_at DESC
+        return {"job": job}
+
+    return {"job": None}
 
 
 @router.post("/scan")
@@ -289,182 +301,222 @@ async def pull_from_device(
 
 
 @router.post("/start")
-async def start_import(request: StartImportRequest, background_tasks: BackgroundTasks):
-    """Start import job"""
-    global _current_job
-    
-    if _current_job and _current_job.get("status") in ["scanning", "importing", "analyzing"]:
+async def start_import(
+    request: StartImportRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """Start import job (JOBS-002: uses BackgroundJobsService)"""
+    # Check if an import is already running
+    service = BackgroundJobsService(db)
+    active_jobs = await service.get_active_jobs(job_type="import")
+    if active_jobs:
         raise HTTPException(status_code=400, detail="Import already in progress")
-    
+
     path = Path(request.path).expanduser()
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Directory not found: {path}")
-    
-    job_id = f"android-import-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    _current_job = {
-        "id": job_id,
-        "status": "scanning",
-        "total_files": 0,
-        "processed_files": 0,
-        "success_count": 0,
-        "failed_count": 0,
-        "skipped_duplicates": 0,
-        "current_file": None,
-        "started_at": datetime.now().isoformat(),
-        "completed_at": None,
-        "error_message": None,
-        "path": str(path),
-        "filters": request.filters.dict()
-    }
-    
-    background_tasks.add_task(run_import_job, path, request.filters)
-    
-    return {"job": _current_job}
+
+    # Create job in database
+    job_id = await service.create_job(
+        job_type="import",
+        input_data={
+            "source": "android",
+            "path": str(path),
+            "filters": request.filters.dict(),
+            "adb_path": request.adb_path
+        }
+    )
+
+    # Start the job
+    await service.start_job(job_id)
+
+    # Run import in background
+    background_tasks.add_task(run_import_job, job_id, path, request.filters)
+
+    # Return job details
+    job = await service.get_job(job_id)
+    return {"job": job}
 
 
-async def run_import_job(path: Path, filters: ImportFilter):
-    """Background task to run the import"""
-    global _current_job
-    
-    try:
-        load_import_history()
-        
-        files_to_import = []
-        for file_path in path.rglob("*"):
-            if not file_path.is_file():
-                continue
-            
-            media_type = get_media_type(file_path)
-            if not media_type or media_type not in filters.media_types:
-                continue
-            
-            stat = file_path.stat()
-            size_mb = stat.st_size / (1024 * 1024)
-            
-            if size_mb < filters.min_size_mb or size_mb > filters.max_size_mb:
-                continue
-            
-            is_dup = is_duplicate(file_path)
-            if filters.skip_duplicates and is_dup:
-                _current_job["skipped_duplicates"] += 1
-                continue
-            
-            files_to_import.append(file_path)
-        
-        _current_job["total_files"] = len(files_to_import)
-        _current_job["status"] = "importing"
-        
-        # Emit job started event
+async def run_import_job(job_id: str, path: Path, filters: ImportFilter):
+    """Background task to run the import (JOBS-002: uses BackgroundJobsService)"""
+    # Get database session
+    from database.connection import get_db_context
+
+    async with get_db_context() as db:
+        service = BackgroundJobsService(db)
+
         try:
-            event_bus = EventBus.get_instance()
-            await event_bus.publish(Topics.IMPORT_JOB_STARTED, {
-                "job_id": _current_job["id"],
-                "source": "android",
-                "path": str(path),
-                "total_files": len(files_to_import),
-                "duplicates_skipped": _current_job["skipped_duplicates"],
-                "timestamp": datetime.now().isoformat()
-            })
-        except Exception as e:
-            logger.warning(f"Failed to emit IMPORT_JOB_STARTED event: {e}")
-        
-        # Process files - ingest to media-db and mark as imported
-        import httpx
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for file_path in files_to_import:
-                if _current_job.get("status") == "cancelled":
-                    break
-                
-                while _current_job.get("status") == "paused":
-                    await asyncio.sleep(0.5)
-                
-                _current_job["current_file"] = file_path.name
-                
-                try:
-                    # Ingest file to media-db (adds to Library)
-                    response = await client.post(
-                        "http://localhost:5555/api/media-db/ingest/file",
-                        params={"file_path": str(file_path)}
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        if result.get("status") in ["ingested", "exists"]:
-                            mark_as_imported(file_path)
-                            _current_job["success_count"] += 1
-                            logger.info(f"Ingested to library: {file_path.name} ({result.get('status')})")
+            load_import_history()
+
+            # Scan for files
+            files_to_import = []
+            skipped_duplicates = 0
+
+            for file_path in path.rglob("*"):
+                if not file_path.is_file():
+                    continue
+
+                media_type = get_media_type(file_path)
+                if not media_type or media_type not in filters.media_types:
+                    continue
+
+                stat = file_path.stat()
+                size_mb = stat.st_size / (1024 * 1024)
+
+                if size_mb < filters.min_size_mb or size_mb > filters.max_size_mb:
+                    continue
+
+                is_dup = is_duplicate(file_path)
+                if filters.skip_duplicates and is_dup:
+                    skipped_duplicates += 1
+                    continue
+
+                files_to_import.append(file_path)
+
+            # Update job with scan results
+            await service.update_progress(
+                job_id,
+                progress=10.0,
+                output_data={
+                    "total_files": len(files_to_import),
+                    "processed_files": 0,
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "skipped_duplicates": skipped_duplicates
+                }
+            )
+
+            # Emit job started event
+            try:
+                event_bus = EventBus.get_instance()
+                await event_bus.publish(Topics.IMPORT_JOB_STARTED, {
+                    "job_id": job_id,
+                    "source": "android",
+                    "path": str(path),
+                    "total_files": len(files_to_import),
+                    "duplicates_skipped": skipped_duplicates,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                logger.warning(f"Failed to emit IMPORT_JOB_STARTED event: {e}")
+
+            # Process files - ingest to media-db and mark as imported
+            import httpx
+
+            success_count = 0
+            failed_count = 0
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                for i, file_path in enumerate(files_to_import):
+                    # Check if job was cancelled
+                    job = await service.get_job(job_id)
+                    if job and job.get("status") == "cancelled":
+                        break
+
+                    try:
+                        # Ingest file to media-db (adds to Library)
+                        response = await client.post(
+                            "http://localhost:5555/api/media-db/ingest/file",
+                            params={"file_path": str(file_path)}
+                        )
+
+                        if response.status_code == 200:
+                            result = response.json()
+                            if result.get("status") in ["ingested", "exists"]:
+                                mark_as_imported(file_path)
+                                success_count += 1
+                                logger.info(f"Ingested to library: {file_path.name} ({result.get('status')})")
+                            else:
+                                failed_count += 1
+                                logger.warning(f"Unexpected ingest response for {file_path.name}: {result}")
                         else:
-                            _current_job["failed_count"] += 1
-                            logger.warning(f"Unexpected ingest response for {file_path.name}: {result}")
-                    else:
-                        _current_job["failed_count"] += 1
-                        logger.error(f"Failed to ingest {file_path.name}: HTTP {response.status_code}")
-                        
-                except Exception as e:
-                    _current_job["failed_count"] += 1
-                    logger.error(f"Failed to import {file_path.name}: {e}")
-                
-                _current_job["processed_files"] += 1
-                await asyncio.sleep(0.05)
-        
-        _current_job["status"] = "completed"
-        _current_job["completed_at"] = datetime.now().isoformat()
-        _current_job["current_file"] = None
-        
-        logger.info(f"Import completed: {_current_job['success_count']} success, {_current_job['failed_count']} failed, {_current_job['skipped_duplicates']} duplicates skipped")
-        
-        # Emit job completed event
-        try:
-            event_bus = EventBus.get_instance()
-            await event_bus.publish(Topics.IMPORT_JOB_COMPLETED, {
-                "job_id": _current_job["id"],
-                "source": "android",
-                "success_count": _current_job["success_count"],
-                "failed_count": _current_job["failed_count"],
-                "duplicates_skipped": _current_job["skipped_duplicates"],
-                "timestamp": datetime.now().isoformat()
-            })
+                            failed_count += 1
+                            logger.error(f"Failed to ingest {file_path.name}: HTTP {response.status_code}")
+
+                    except Exception as e:
+                        failed_count += 1
+                        logger.error(f"Failed to import {file_path.name}: {e}")
+
+                    # Update progress
+                    processed = i + 1
+                    progress = 10.0 + (90.0 * processed / len(files_to_import))
+                    await service.update_progress(
+                        job_id,
+                        progress=min(progress, 99.0),
+                        output_data={
+                            "total_files": len(files_to_import),
+                            "processed_files": processed,
+                            "success_count": success_count,
+                            "failed_count": failed_count,
+                            "skipped_duplicates": skipped_duplicates,
+                            "current_file": file_path.name
+                        }
+                    )
+                    await asyncio.sleep(0.05)
+
+            # Mark job as completed
+            await service.complete_job(
+                job_id,
+                output_data={
+                    "total_files": len(files_to_import),
+                    "processed_files": len(files_to_import),
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                    "skipped_duplicates": skipped_duplicates,
+                    "source": "android",
+                    "path": str(path)
+                }
+            )
+
+            logger.info(f"Import completed: {success_count} success, {failed_count} failed, {skipped_duplicates} duplicates skipped")
+
+            # Emit job completed event
+            try:
+                event_bus = EventBus.get_instance()
+                await event_bus.publish(Topics.IMPORT_JOB_COMPLETED, {
+                    "job_id": job_id,
+                    "source": "android",
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                    "duplicates_skipped": skipped_duplicates,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                logger.warning(f"Failed to emit IMPORT_JOB_COMPLETED event: {e}")
+
         except Exception as e:
-            logger.warning(f"Failed to emit IMPORT_JOB_COMPLETED event: {e}")
-        
-    except Exception as e:
-        logger.error(f"Import job failed: {e}")
-        _current_job["status"] = "failed"
-        _current_job["error_message"] = str(e)
-
-
-@router.post("/job/{job_id}/pause")
-async def pause_job(job_id: str):
-    """Pause import job"""
-    global _current_job
-    if not _current_job or _current_job.get("id") != job_id:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    _current_job["status"] = "paused"
-    return {"status": "paused"}
-
-
-@router.post("/job/{job_id}/resume")
-async def resume_job(job_id: str):
-    """Resume import job"""
-    global _current_job
-    if not _current_job or _current_job.get("id") != job_id:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    _current_job["status"] = "importing"
-    return {"status": "importing"}
+            logger.error(f"Import job failed: {e}")
+            await service.fail_job(job_id, str(e))
 
 
 @router.post("/job/{job_id}/cancel")
-async def cancel_job(job_id: str):
-    """Cancel import job"""
-    global _current_job
-    if not _current_job or _current_job.get("id") != job_id:
+async def cancel_job(job_id: str, db: AsyncSession = Depends(get_db)):
+    """Cancel import job (JOBS-002: uses BackgroundJobsService)"""
+    service = BackgroundJobsService(db)
+    job = await service.get_job(job_id)
+
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    _current_job["status"] = "cancelled"
-    return {"status": "cancelled"}
+
+    success = await service.cancel_job(job_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Job cannot be cancelled")
+
+    return {"status": "cancelled", "job_id": job_id}
+
+
+@router.get("/job/{job_id}")
+async def get_job_status(job_id: str, db: AsyncSession = Depends(get_db)):
+    """Get job status by ID (JOBS-002)"""
+    service = BackgroundJobsService(db)
+    job = await service.get_job(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return {"job": job}
 
 
 @router.get("/history")

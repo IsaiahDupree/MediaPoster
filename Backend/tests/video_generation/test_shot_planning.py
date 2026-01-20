@@ -9,7 +9,7 @@ Tests:
 """
 
 import pytest
-from services.video_generation.types import StoryIRV1, Beat, BeatType, StoryIRMeta
+from services.video_generation.types import StoryIRV1, Beat, BeatType, StoryIRMeta, StoryIRVariables
 
 # Import with fallbacks for functions that may not exist
 try:
@@ -48,22 +48,22 @@ class TestShotBudget:
     def test_default_budget_has_reasonable_limits(self):
         """Default budget should have reasonable limits."""
         budget = ShotBudget()
-        
+
         assert budget.max_sora_jobs > 0
         assert budget.max_total_seconds > 0
-        assert budget.plate_seconds > 0
+        assert budget.step_bg_plate_count > 0
     
     def test_budget_can_be_customized(self):
         """Budget should accept custom values."""
         budget = ShotBudget(
             max_sora_jobs=5,
             max_total_seconds=30,
-            plate_seconds=6,
+            step_bg_plate_count=4,
         )
-        
+
         assert budget.max_sora_jobs == 5
         assert budget.max_total_seconds == 30
-        assert budget.plate_seconds == 6
+        assert budget.step_bg_plate_count == 4
 
 
 @pytest.mark.skipif(not HAS_SHOT_BUDGETER, reason="shot_budgeter not fully implemented")
@@ -75,6 +75,12 @@ class TestBudgetPlanGeneration:
         """Create a sample Story IR for testing."""
         return StoryIRV1(
             meta=StoryIRMeta(fps=30, aspect="9:16"),
+            variables=StoryIRVariables(
+                topic="test topic",
+                angle="test angle",
+                audience="test audience",
+                promise="test promise",
+            ),
             beats=[
                 Beat(id="beat_1", type=BeatType.HOOK, duration_s=2.5, narration="Hook text"),
                 Beat(id="beat_2", type=BeatType.STEP, duration_s=5.0, narration="Step 1"),
@@ -125,6 +131,12 @@ class TestShotPlanGeneration:
     def sample_story_ir(self) -> StoryIRV1:
         return StoryIRV1(
             meta=StoryIRMeta(fps=30, aspect="9:16"),
+            variables=StoryIRVariables(
+                topic="test topic",
+                angle="test angle",
+                audience="test audience",
+                promise="test promise",
+            ),
             beats=[
                 Beat(id="beat_1", type=BeatType.HOOK, duration_s=2.5, narration="Hook"),
                 Beat(id="beat_2", type=BeatType.STEP, duration_s=5.0, narration="Step"),

@@ -144,8 +144,40 @@ class TTSWorker(BaseWorker):
         """Process a TTS generation request."""
         job_status.status = "processing"
         job_status.started_at = datetime.now(timezone.utc)
-        
+
         try:
+            # VC-005: Voice Cloning Integration
+            # Try voice cloning first if requested
+            if request.use_voice_cloning or request.voice_profile_id:
+                try:
+                    logger.info(f"[{self.worker_id}] Attempting voice cloning for job {request.job_id}")
+                    response = await self._generate_with_voice_cloning(request, job_status)
+                    if response and response.success:
+                        # Voice cloning succeeded
+                        job_status.status = "completed"
+                        job_status.completed_at = datetime.now(timezone.utc)
+                        job_status.progress = 1.0
+                        job_status.response = response
+
+                        await self.emit(
+                            Topics.TTS_COMPLETED,
+                            {
+                                "job_id": response.job_id,
+                                "audio_path": response.audio_path,
+                                "audio_url": response.audio_url,
+                                "duration_seconds": response.duration_seconds,
+                                "model_used": "voice_cloning",
+                                "generation_time": response.generation_time,
+                                "correlation_id": response.correlation_id
+                            },
+                            response.correlation_id
+                        )
+                        return
+                except Exception as e:
+                    logger.warning(f"[{self.worker_id}] Voice cloning failed: {e}. Falling back to standard TTS.")
+                    # Continue to standard TTS fallback below
+
+            # Standard TTS pipeline
             # Get or create adapter for the model
             adapter = await self._get_adapter(request.model)
             
@@ -231,10 +263,140 @@ class TTSWorker(BaseWorker):
                 request.correlation_id
             )
     
+    async def _generate_with_voice_cloning(
+        self,
+        request: TTSRequest,
+        job_status: TTSJobStatus
+    ) -> Optional[TTSResponse]:
+        """
+        Generate audio using voice cloning service (VC-005)
+
+        Args:
+            request: TTS request with voice_profile_id
+            job_status: Job status tracker
+
+        Returns:
+            TTSResponse if successful, None otherwise
+        """
+        from services.voice.generation_service import VoiceGenerationService
+        from services.voice.voice_profile_service import VoiceProfileService
+        import os
+        from pathlib import Path
+
+        try:
+            generation_service = VoiceGenerationService()
+            profile_service = VoiceProfileService()
+
+            # Get user_id from request metadata (would be set by API)
+            user_id = request.correlation_id  # Placeholder - should come from auth
+
+            # Progress update
+            await self.emit(
+                Topics.TTS_PROGRESS,
+                {
+                    "job_id": request.job_id,
+                    "progress": 0.2,
+                    "message": "Loading voice profile...",
+                    "correlation_id": request.correlation_id
+                },
+                request.correlation_id
+            )
+            job_status.progress = 0.2
+
+            # Prepare voice cloning options
+            options = {}
+            if request.emotion:
+                # Map emotion config to voice cloning params
+                if request.emotion.method == "natural":
+                    options["emotion"] = "neutral"
+                else:
+                    options["emotion"] = request.emotion.text or "neutral"
+                options["emotion_weight"] = request.emotion.weight
+
+            # Progress update
+            await self.emit(
+                Topics.TTS_PROGRESS,
+                {
+                    "job_id": request.job_id,
+                    "progress": 0.4,
+                    "message": "Generating voice with cloning...",
+                    "correlation_id": request.correlation_id
+                },
+                request.correlation_id
+            )
+            job_status.progress = 0.4
+
+            # Generate audio using voice cloning
+            start_time = datetime.now(timezone.utc)
+
+            result = await generation_service.generate_audio(
+                user_id=user_id,
+                text=request.text,
+                voice_profile_id=request.voice_profile_id,
+                options=options
+            )
+
+            generation_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+
+            if not result or result.get("status") != "completed":
+                logger.error(f"Voice cloning failed: {result.get('error', 'Unknown error')}")
+                return None
+
+            # Progress update
+            await self.emit(
+                Topics.TTS_PROGRESS,
+                {
+                    "job_id": request.job_id,
+                    "progress": 0.8,
+                    "message": "Processing audio output...",
+                    "correlation_id": request.correlation_id
+                },
+                request.correlation_id
+            )
+            job_status.progress = 0.8
+
+            # Download audio from result URL and save to output path
+            output_path = request.output_path
+            if not output_path:
+                output_dir = Path("/tmp/mediaposter/tts")
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_path = str(output_dir / f"{request.job_id}.{request.output_format}")
+
+            # Get audio URL from result
+            audio_url = result.get("output_url")
+
+            # If we need to download and save locally
+            if audio_url and audio_url.startswith("http"):
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(audio_url)
+                    response.raise_for_status()
+
+                    with open(output_path, "wb") as f:
+                        f.write(response.content)
+
+                logger.info(f"Saved voice cloned audio to {output_path}")
+
+            # Create response
+            return TTSResponse(
+                job_id=request.job_id,
+                success=True,
+                audio_path=output_path,
+                audio_url=audio_url,
+                duration_seconds=result.get("duration_seconds"),
+                model_used="voice_cloning",
+                generation_time=generation_time,
+                correlation_id=request.correlation_id
+            )
+
+        except Exception as e:
+            logger.error(f"Voice cloning generation error: {e}", exc_info=True)
+            return None
+
     async def _get_adapter(self, model: TTSModel):
         """Get or create adapter for the specified model."""
         model_key = model.value
-        
+
         if model_key not in self._adapters:
             # Create adapter based on model type
             if model == TTSModel.INDEXTTS2:
@@ -250,7 +412,7 @@ class TTSWorker(BaseWorker):
             else:
                 logger.warning(f"[{self.worker_id}] Model {model_key} not yet implemented")
                 return None
-        
+
         return self._adapters.get(model_key)
     
     def get_job_status(self, job_id: str) -> Optional[TTSJobStatus]:

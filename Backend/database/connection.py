@@ -116,7 +116,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception as e:
             logger.error(f"Failed to reinitialize database: {e}")
             raise RuntimeError("Database not initialized and reinitialization failed.")
-    
+
     async with async_session_maker() as session:
         try:
             # Test connection with a simple query
@@ -128,6 +128,30 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             # Re-raise the exception to be handled by FastAPI
             raise
+
+
+def get_db_context():
+    """
+    Context manager for getting database session in background tasks
+    Use with 'async with get_db_context() as db:'
+    """
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _context():
+        if not async_session_maker:
+            logger.warning("Database not initialized, attempting to reinitialize...")
+            await init_db()
+
+        async with async_session_maker() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    return _context()
 
 
 def get_supabase() -> Client:

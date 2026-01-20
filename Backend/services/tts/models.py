@@ -42,7 +42,7 @@ class EmotionConfig:
 class TTSRequest:
     """TTS generation request."""
     text: str
-    voice_reference: str  # Path to voice reference audio
+    voice_reference: Optional[str] = None  # Path to voice reference audio (optional if voice_profile_id provided)
     model: TTSModel = TTSModel.INDEXTTS2
     emotion: Optional[EmotionConfig] = None
     output_format: str = "wav"  # "wav", "mp3"
@@ -50,7 +50,10 @@ class TTSRequest:
     output_path: Optional[str] = None  # Auto-generated if not provided
     correlation_id: Optional[str] = None
     job_id: Optional[str] = None
-    
+    # VC-005: Voice cloning integration
+    voice_profile_id: Optional[str] = None  # Voice profile ID for voice cloning
+    use_voice_cloning: bool = False  # Enable voice cloning instead of standard TTS
+
     def __post_init__(self):
         """Generate job_id and correlation_id if not provided."""
         if self.job_id is None:
@@ -59,6 +62,9 @@ class TTSRequest:
             self.correlation_id = str(uuid4())
         if self.emotion is None:
             self.emotion = EmotionConfig()
+        # Auto-enable voice cloning if voice_profile_id is provided
+        if self.voice_profile_id:
+            self.use_voice_cloning = True
 
 
 @dataclass

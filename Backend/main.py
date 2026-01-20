@@ -20,6 +20,7 @@ from api.endpoints import videos, ingestion, jobs, analytics, analysis, highligh
 from api.endpoints import event_history, video_routing_api
 from api.endpoints import tts, matting, remotion, pipeline, music, visuals
 from api.endpoints import twitter_api
+from api.endpoints import smart_schedule, batch_analysis
 from database.connection import init_db, close_db
 
 # Event Bus imports
@@ -1031,6 +1032,11 @@ app.include_router(audio_analysis.router, tags=["Audio Analysis"])
 from api.endpoints import music_matching
 app.include_router(music_matching.router, tags=["Music Matching"])
 
+# Music Library (MUSIC-001: Music Library with Metadata)
+from api.endpoints import music_library
+app.include_router(music_library.router, tags=["Music Library"])
+logger.success("✓ Music Library API registered (MUSIC-001)")
+
 # Goal Recommendations (Phase 3)
 from api.endpoints import goal_recommendations
 app.include_router(goal_recommendations.router, tags=["Goal Recommendations"])
@@ -1252,12 +1258,21 @@ app.include_router(ios_import_api.router, tags=["iOS Import"])
 # Android Import (device import via ADB with duplicate detection)
 from api.endpoints import android_import_api
 app.include_router(android_import_api.router, tags=["Android Import"])
-from api.endpoints import voice_cloning_quality
+
+# Voice Cloning (VC-001 to VC-012: Voice profiles, generation, TTS)
+from api.endpoints import voice_cloning, voice_cloning_quality
+app.include_router(voice_cloning.router, tags=["Voice Cloning"])
 app.include_router(voice_cloning_quality.router, prefix="/api/voice-cloning-quality", tags=["Voice Cloning Quality"])
+logger.success("✓ Voice Cloning API registered (VC-002, VC-003, VC-006)")
 
 # Competitor Research (track and analyze competitor content)
 from api.endpoints import competitor_api
 app.include_router(competitor_api.router, tags=["Competitor Research"])
+
+# Content Sourcing (PIPE-001: Auto-discover and ingest media files)
+from api.endpoints import content_sourcing
+app.include_router(content_sourcing.router, tags=["Content Sourcing"])
+logger.success("✓ Content Sourcing API registered (PIPE-001)")
 
 # Content Analyzer API (AI-powered video analysis)
 from api.endpoints import content_analyzer_api
@@ -1308,6 +1323,12 @@ app.include_router(image_analysis.router, tags=["Image Analysis"])
 from api import content_pipeline
 app.include_router(content_pipeline.router, tags=["Content Pipeline"])
 
+# Smart Scheduling (PIPE-006: 4-hour intervals during daylight hours)
+app.include_router(smart_schedule.router, tags=["Smart Scheduling"])
+
+# Batch Analysis (CUR-001: Batch video analysis, CUR-002: Sentiment analysis)
+app.include_router(batch_analysis.router, tags=["Batch Analysis"])
+
 # RapidAPI Metrics (Multi-API Instagram/LinkedIn with rate limit management)
 from api import rapidapi_metrics
 app.include_router(rapidapi_metrics.router, tags=["RapidAPI Metrics"])
@@ -1324,6 +1345,21 @@ app.include_router(content_mix_api.router, tags=["Content Mix Planner"])
 from api import comment_automation
 app.include_router(comment_automation.router, tags=["Comment Automation"])
 
+# AI Title & Description Generator (PIPE-003)
+from api.endpoints import ai_titles
+app.include_router(ai_titles.router, tags=["AI Title Generator"])
+logger.success("✓ AI Title Generator API registered (PIPE-003)")
+
+# Platform Matching Engine (PIPE-004)
+from api.endpoints import platform_matching
+app.include_router(platform_matching.router, tags=["Platform Matching"])
+logger.success("✓ Platform Matching Engine API registered (PIPE-004)")
+
+# Approval Queue (AUTO-005)
+from api.endpoints import approval_queue
+app.include_router(approval_queue.router, tags=["Approval Queue"])
+logger.success("✓ Approval Queue API registered (AUTO-005)")
+
 # System Health & Metrics (Phase 9)
 from api.endpoints import system
 app.include_router(system.router, prefix="/api/system", tags=["System Health"])
@@ -1338,7 +1374,11 @@ app.include_router(automation.router, tags=["Automation Center"])
 
 # Scheduler (Tick and worker processing)
 from api.endpoints import scheduler
+from api.endpoints import characters
 app.include_router(scheduler.router, tags=["Scheduler"])
+
+# Character Generation (CHAR-001 to CHAR-004)
+app.include_router(characters.router, tags=["Characters"])
 
 # Device Import (iOS/Android media import with duplicate detection)
 # TODO: import_router module not found - commented out for now

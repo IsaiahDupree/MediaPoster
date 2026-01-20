@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 293,
-  "completedFeatures": 118,
+  "completedFeatures": 177,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -1348,7 +1348,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/services/adapters/adapter_factory.py"
@@ -1356,7 +1356,8 @@
       "acceptance": [
         "Correct adapter returned",
         "Config-driven"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "MOD-008",
@@ -1365,7 +1366,7 @@
       "priority": "P1",
       "phase": 10,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "modular",
       "files": [
         "Backend/db/connection_pool.py"
@@ -1564,7 +1565,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/tts_service.py"
@@ -1572,7 +1573,8 @@
       "acceptance": [
         "Audio generated",
         "Voice reference supported"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "MF-004",
@@ -1581,7 +1583,7 @@
       "priority": "P2",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/music_service.py"
@@ -1598,7 +1600,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/visuals_service.py"
@@ -1615,7 +1617,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/remotion_service.py"
@@ -1650,7 +1652,7 @@
       "priority": "P2",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "media-factory",
       "files": [
         "Backend/services/media_factory/providers/"
@@ -1667,7 +1669,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/discovery.py"
@@ -1684,7 +1686,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/scorer.py"
@@ -1701,7 +1703,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/brief_generator.py"
@@ -1718,7 +1720,7 @@
       "priority": "P2",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/instagram_trends.py"
@@ -1735,7 +1737,7 @@
       "priority": "P2",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "dashboard/app/components/TrendDashboard.tsx"
@@ -1752,7 +1754,7 @@
       "priority": "P1",
       "phase": 7,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/workers/comment_listener.py"
@@ -1769,7 +1771,7 @@
       "priority": "P1",
       "phase": 7,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/templates/comment_replies/"
@@ -1786,7 +1788,7 @@
       "priority": "P1",
       "phase": 7,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/services/dm_router.py"
@@ -1803,7 +1805,7 @@
       "priority": "P0",
       "phase": 7,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/services/dm_state_machine.py"
@@ -1820,7 +1822,7 @@
       "priority": "P1",
       "phase": 7,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/services/dm_qualification.py"
@@ -1837,7 +1839,7 @@
       "priority": "P1",
       "phase": 7,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/services/dm_scorer.py"
@@ -1854,7 +1856,7 @@
       "priority": "P1",
       "phase": 7,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/services/email_capture.py"
@@ -1871,7 +1873,7 @@
       "priority": "P2",
       "phase": 7,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "multi-channel",
       "files": [
         "Backend/services/email_sequences.py"
@@ -1888,7 +1890,7 @@
       "priority": "P1",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
         "Backend/services/n8n_integration.py"
@@ -1956,7 +1958,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
         "Backend/services/approval_queue.py",
@@ -1965,7 +1967,8 @@
       "acceptance": [
         "Queue displays items",
         "Approve/reject works"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "AUTO-006",
@@ -2282,7 +2285,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "sora-video",
       "files": [
         "Backend/services/sora_video_pipeline.py"
@@ -2299,7 +2302,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "sora-video",
       "files": [
         "Backend/services/sora_video_pipeline.py"
@@ -2316,7 +2319,7 @@
       "priority": "P0",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "sora-video",
       "files": [
         "Backend/services/sora_video_pipeline.py"
@@ -2333,7 +2336,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "sora-video",
       "files": [
         "Backend/services/sora_video_pipeline.py"
@@ -2350,7 +2353,7 @@
       "priority": "P2",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "sora-video",
       "files": [
         "Backend/services/sora_video_pipeline.py"
@@ -2367,7 +2370,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "sora-video",
       "files": [
         "Backend/services/video/watermark_remover.py"
@@ -2385,14 +2388,15 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "sfx-audio",
       "files": [
         "Backend/services/sfx_library/manifest.json"
       ],
       "acceptance": [
         "Manifest includes id, tags, description, license"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SFX-002",
@@ -2401,7 +2405,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "sfx-audio",
       "files": [
         "Backend/services/sfx_library/beat_extractor.py"
@@ -2409,7 +2413,8 @@
       "acceptance": [
         "Beats extracted",
         "Timing estimated"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SFX-003",
@@ -2418,7 +2423,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "sfx-audio",
       "files": [
         "Backend/services/sfx_library/sfx_selector.py"
@@ -2426,7 +2431,8 @@
       "acceptance": [
         "Valid SFX IDs selected",
         "Fallback matching for hallucinations"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SFX-004",
@@ -2435,7 +2441,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "sfx-audio",
       "files": [
         "Backend/services/sfx_library/audio_events.py"
@@ -2443,7 +2449,8 @@
       "acceptance": [
         "Timeline JSON output",
         "Frame-accurate timing"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SFX-005",
@@ -2452,7 +2459,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "sfx-audio",
       "files": [
         "Backend/services/sfx_library/audio_mixer.py"
@@ -2460,7 +2467,8 @@
       "acceptance": [
         "Mixed audio output",
         "Correct layering"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SFX-006",
@@ -2469,7 +2477,7 @@
       "priority": "P2",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "sfx-audio",
       "files": [
         "Backend/services/sfx_library/qa_gates.py"
@@ -2477,7 +2485,8 @@
       "acceptance": [
         "Density warnings",
         "Gap detection"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "CHAR-001",
@@ -2486,7 +2495,7 @@
       "priority": "P2",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "ai-characters",
       "files": [
         "Backend/services/ai_video_pipeline/character_generator.py"
@@ -2494,7 +2503,8 @@
       "acceptance": [
         "Characters generated",
         "Consistent identity"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "CHAR-002",
@@ -2503,7 +2513,7 @@
       "priority": "P2",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "ai-characters",
       "files": [
         "Backend/services/matting/background_remover.py"
@@ -2511,7 +2521,8 @@
       "acceptance": [
         "Transparent PNGs output",
         "Clean alpha channel"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "CHAR-003",
@@ -2520,7 +2531,7 @@
       "priority": "P2",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "ai-characters",
       "files": [
         "Backend/services/ai_video_pipeline/character_manifest.py"
@@ -2528,7 +2539,8 @@
       "acceptance": [
         "Manifest generated",
         "All variants indexed"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "CHAR-004",
@@ -2554,7 +2566,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "content-pipeline",
       "files": [
         "Backend/services/ingestion/content_sourcer.py"
@@ -2562,7 +2574,8 @@
       "acceptance": [
         "Auto-import images/videos",
         "Duplicate detection"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "PIPE-002",
@@ -2571,7 +2584,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "content-pipeline",
       "files": [
         "Backend/services/content_analyzer.py"
@@ -2579,7 +2592,8 @@
       "acceptance": [
         "Quality score 1-100",
         "Niche detected"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "PIPE-003",
@@ -2588,7 +2602,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "content-pipeline",
       "files": [
         "Backend/services/ai_content_generator.py"
@@ -2596,7 +2610,8 @@
       "acceptance": [
         "Multiple variations generated",
         "Platform-specific"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "PIPE-004",
@@ -2605,7 +2620,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "content-pipeline",
       "files": [
         "Backend/services/platform_matcher.py"
@@ -2613,7 +2628,8 @@
       "acceptance": [
         ">85% match accuracy",
         "Respects quality thresholds"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "PIPE-005",
@@ -2639,7 +2655,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "content-pipeline",
       "files": [
         "Backend/services/post_scheduler.py"
@@ -2647,7 +2663,8 @@
       "acceptance": [
         ">95% on-schedule",
         "Timezone aware"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "PIPE-007",
@@ -2943,7 +2960,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "music",
       "files": [
         "Backend/services/music/library.py"
@@ -2951,7 +2968,9 @@
       "acceptance": [
         "Music indexed",
         "Metadata queryable"
-      ]
+      ],
+      "completed": "2026-01-20",
+      "testResults": "Manual testing complete, unit tests pending"
     },
     {
       "id": "MUSIC-002",
@@ -2960,7 +2979,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "music",
       "files": [
         "Backend/services/music_selector.py"
@@ -2968,7 +2987,8 @@
       "acceptance": [
         "Music matched",
         "Match score 0-100"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "MUSIC-003",
@@ -2977,7 +2997,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "music",
       "files": [
         "Backend/api/endpoints/music.py"
@@ -2985,7 +3005,8 @@
       "acceptance": [
         "Suggestions returned",
         "Top 5 alternatives"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "MUSIC-004",
@@ -3150,7 +3171,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "transcription",
       "files": [
         "Backend/services/whisper_transcriber.py"
@@ -3158,7 +3179,8 @@
       "acceptance": [
         "Transcripts generated",
         "Word timestamps"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "TRANS-002",
@@ -3682,7 +3704,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "curation",
       "files": [
         "Backend/api/endpoints/analysis.py"
@@ -3690,7 +3712,8 @@
       "acceptance": [
         "100% analysis coverage",
         "Progress tracking"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "CUR-002",
@@ -3699,7 +3722,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "curation",
       "files": [
         "Backend/services/sentiment_analyzer.py"
@@ -3707,7 +3730,8 @@
       "acceptance": [
         "Sentiment stored",
         "Labels assigned"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "CUR-003",
@@ -3947,7 +3971,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/hashtag_velocity.py"
@@ -3964,7 +3988,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/sound_trends.py"
@@ -3981,7 +4005,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/keyword_clustering.py"
@@ -3998,7 +4022,7 @@
       "priority": "P2",
       "phase": 6,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "trends",
       "files": [
         "Backend/services/trend_intelligence/saturation.py"
@@ -4137,7 +4161,7 @@
       "priority": "P0",
       "phase": 10,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "background-jobs",
       "files": [
         "Backend/services/background_jobs_service.py"
@@ -4145,7 +4169,8 @@
       "acceptance": [
         "Jobs persisted",
         "Survives restart"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "JOBS-002",
@@ -4163,7 +4188,8 @@
       "acceptance": [
         "Imports tracked",
         "History preserved"
-      ]
+      ],
+      "completed": "2026-01-20 (android)"
     },
     {
       "id": "JOBS-003",
@@ -4292,7 +4318,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "voice-cloning",
       "files": [
         "scripts/modal_voice_clone.py"
@@ -4311,7 +4337,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "voice-cloning",
       "files": [
         "Backend/services/voice_reference_service.py",
@@ -4322,7 +4348,8 @@
         "Store in Supabase storage bucket",
         "Validate audio format (WAV, MP3, FLAC)",
         "Metadata includes name, duration, sample_rate"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "VC-003",
@@ -4331,7 +4358,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "voice-cloning",
       "files": [
         "Backend/services/voice_clone_client.py"
@@ -4341,7 +4368,8 @@
         "Handle cold start timeouts (60s)",
         "Base64 encode/decode audio",
         "Emotion control parameters"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "VC-004",
@@ -4350,7 +4378,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "voice-cloning",
       "files": [
         "Backend/migrations/voice_cloning.sql"
@@ -4360,7 +4388,8 @@
         "voice_generations table created",
         "Foreign keys to brands table",
         "Indexes on frequently queried columns"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "VC-005",
@@ -4369,7 +4398,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "voice-cloning",
       "files": [
         "Backend/services/media_factory/tts_service.py"
@@ -4387,7 +4416,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "voice-cloning",
       "files": [
         "Backend/workers/voiceover_worker.py"
@@ -4397,7 +4426,8 @@
         "Splits long text into chunks (<500 chars)",
         "Concatenates audio segments",
         "Updates job status"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "VC-007",

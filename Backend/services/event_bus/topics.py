@@ -147,6 +147,12 @@ class Topics:
     EMAIL_QUEUED = "email.queued"                         # Email queued for sending
     EMAIL_SENT = "email.sent"                             # Email sent successfully
     EMAIL_FAILED = "email.failed"                         # Email send failed
+
+    # =========================================================================
+    # CONTENT SOURCING (PIPE-001)
+    # =========================================================================
+    CONTENT_DISCOVERED = "content.discovered"             # New content files discovered
+    CONTENT_INGESTED = "content.ingested"                 # Content file ingested to DB
     
     # =========================================================================
     # HYDRATION (State Management)

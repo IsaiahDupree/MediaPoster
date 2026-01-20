@@ -2027,3 +2027,334 @@ class PromptRun(Base):
         Index('idx_prompt_runs_performance_label', 'performance_label'),
         Index('idx_prompt_runs_qa_status', 'qa_status'),
     )
+
+
+# =====================================================
+# VOICE CLONING (VC-001 to VC-012)
+# =====================================================
+
+class VoiceProfile(Base):
+    """Voice profile for voice cloning and TTS generation (VC-002)"""
+    __tablename__ = "voice_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    # Profile metadata
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+
+    # Reference audio URLs (JSON array of S3/storage URLs)
+    reference_urls = Column(JSONB, default=[])
+
+    # Voice embedding (from Modal/external service)
+    embedding_id = Column(String(255))  # External service's voice ID
+    embedding_created_at = Column(TIMESTAMP(timezone=True))
+
+    # Quality metrics
+    quality_score = Column(Float)  # 0.0 to 1.0
+    quality_notes = Column(Text)
+
+    # Default settings
+    default_speed = Column(Float, default=1.0)  # 0.5 to 2.0
+    default_emotion = Column(String(20), default='neutral')
+    default_stability = Column(Float, default=0.5)  # 0.0 to 1.0
+
+    # Status
+    is_default = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    generations = relationship("VoiceGeneration", back_populates="voice_profile")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_voice_profiles_user', 'user_id'),
+        Index('idx_voice_profiles_default', 'user_id', postgresql_where=Column('is_default') == True),
+        Index('idx_voice_profiles_active', 'user_id', postgresql_where=Column('is_active') == True),
+    )
+
+
+class VoiceGeneration(Base):
+    """Voice generation jobs and history (VC-006)"""
+    __tablename__ = "voice_generations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    voice_profile_id = Column(UUID(as_uuid=True), ForeignKey("voice_profiles.id", ondelete="SET NULL"))
+
+    # Input
+    input_text = Column(Text, nullable=False)
+    options = Column(JSONB, default={})  # speed, pitch, emotion, stability
+
+    # Output
+    output_url = Column(Text)
+    duration_seconds = Column(Float)
+    file_size_bytes = Column(BigInteger)
+
+    # Processing status
+    status = Column(String(20), default='pending')  # pending, processing, completed, failed
+    modal_job_id = Column(String(255))  # External service job ID
+    processing_time_ms = Column(Integer)
+    error_message = Column(Text)
+
+    # Cost tracking
+    cost_credits = Column(Float, default=0.0)
+
+    # Usage tracking (where was this audio used?)
+    used_in_clip_id = Column(UUID(as_uuid=True))
+    used_in_post_id = Column(UUID(as_uuid=True))
+    used_in_creative_brief_id = Column(UUID(as_uuid=True))
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    completed_at = Column(TIMESTAMP(timezone=True))
+
+    # Relationships
+    voice_profile = relationship("VoiceProfile", back_populates="generations")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_voice_generations_user', 'user_id', 'created_at'),
+        Index('idx_voice_generations_profile', 'voice_profile_id', 'created_at'),
+        Index('idx_voice_generations_status', 'status', 'created_at'),
+        Index('idx_voice_generations_clip', 'used_in_clip_id'),
+        Index('idx_voice_generations_post', 'used_in_post_id'),
+    )
+
+
+# =====================================================
+# MUSIC LIBRARY (MUSIC-001: Music Library with Metadata)
+# =====================================================
+
+class MusicTrack(Base):
+    """
+    Music track with metadata for background music selection.
+    Supports Suno, SoundCloud, and social platform music sources.
+
+    Features:
+    - Rich metadata (tempo, mood, energy, genre)
+    - Platform trending data
+    - Auto-matching attributes
+    - Licensing information
+    - Usage tracking
+    """
+    __tablename__ = "music_tracks"
+
+    # Primary key
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+
+    # Track identification
+    title = Column(String(500), nullable=False)
+    artist = Column(String(500))
+    source = Column(String(50), nullable=False)  # 'suno', 'soundcloud', 'social_platform', 'local'
+    source_id = Column(Text)  # External ID from source platform
+    source_url = Column(Text)  # URL to original track
+
+    # File information
+    file_path = Column(Text, nullable=False)  # Local path to audio file
+    file_size_bytes = Column(BigInteger)
+    file_format = Column(String(20))  # 'mp3', 'wav', 'ogg', etc.
+    checksum = Column(String(64))  # SHA-256 for deduplication
+
+    # Audio properties
+    duration_seconds = Column(Float, nullable=False)
+    sample_rate = Column(Integer)  # Hz
+    bitrate = Column(Integer)  # kbps
+    channels = Column(Integer, default=2)  # 1=mono, 2=stereo
+
+    # Musical metadata
+    tempo_bpm = Column(Float)  # Beats per minute
+    key = Column(String(10))  # 'C', 'Am', 'F#m', etc.
+    time_signature = Column(String(10))  # '4/4', '3/4', etc.
+    genre = Column(String(100))
+    subgenre = Column(String(100))
+
+    # Mood & Energy (for auto-matching)
+    mood = Column(String(100))  # 'energetic', 'calm', 'upbeat', 'melancholic', etc.
+    energy_level = Column(Float)  # 0.0-1.0 scale
+    valence = Column(Float)  # 0.0-1.0 (negative to positive emotional tone)
+    danceability = Column(Float)  # 0.0-1.0
+    instrumentalness = Column(Float)  # 0.0-1.0 (0=vocals, 1=instrumental)
+
+    # Tagging & categorization
+    tags = Column(ARRAY(String))  # ['viral', 'trending', 'uplifting', 'cinematic']
+    moods = Column(ARRAY(String))  # Multiple moods
+    use_cases = Column(ARRAY(String))  # ['intro', 'background', 'outro', 'transition']
+
+    # Content matching attributes
+    suitable_for_content_types = Column(ARRAY(String))  # ['educational', 'comedy', 'motivational']
+    recommended_video_pacing = Column(String(50))  # 'slow', 'medium', 'fast', 'dynamic'
+
+    # Licensing & usage
+    license_type = Column(String(100))  # 'public_domain', 'royalty_free', 'licensed', 'copyright'
+    attribution_required = Column(Boolean, default=False)
+    commercial_use_allowed = Column(Boolean, default=True)
+    license_url = Column(Text)
+
+    # Platform-specific metadata
+    platform = Column(String(50))  # 'tiktok', 'instagram', 'youtube', etc. (if trending on platform)
+    platform_popularity = Column(Integer)  # View count, usage count, etc.
+    is_trending = Column(Boolean, default=False)
+    trending_rank = Column(Integer)  # Rank in trending charts
+    trending_date = Column(Date)
+
+    # Audio analysis (advanced)
+    audio_features = Column(JSONB)  # Detailed audio analysis from librosa/essentia
+    waveform_peaks = Column(JSONB)  # Peak timestamps for sync
+    beat_timestamps = Column(JSONB)  # Beat detection for video sync
+
+    # Usage tracking
+    times_used = Column(Integer, default=0)
+    last_used_at = Column(TIMESTAMP(timezone=True))
+    avg_match_score = Column(Float)  # Average compatibility score when matched
+
+    # Quality & status
+    quality_rating = Column(Float)  # 1.0-5.0 user/system rating
+    is_active = Column(Boolean, default=True)
+    is_curated = Column(Boolean, default=False)  # Hand-picked by team
+    curation_notes = Column(Text)
+
+    # Import metadata
+    imported_from = Column(String(100))  # 'suno_crawler', 'manual_upload', 'api_import'
+    import_batch_id = Column(UUID(as_uuid=True))
+    imported_at = Column(TIMESTAMP(timezone=True))
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Indexes for fast querying
+    __table_args__ = (
+        Index('idx_music_tracks_source', 'source'),
+        Index('idx_music_tracks_genre', 'genre'),
+        Index('idx_music_tracks_mood', 'mood'),
+        Index('idx_music_tracks_tempo', 'tempo_bpm'),
+        Index('idx_music_tracks_energy', 'energy_level'),
+        Index('idx_music_tracks_is_trending', 'is_trending'),
+        Index('idx_music_tracks_workspace_id', 'workspace_id'),
+        Index('idx_music_tracks_checksum', 'checksum'),  # Deduplication
+    )
+
+
+# =====================================================
+# AI CHARACTER GENERATION (CHAR-001 to CHAR-004)
+# =====================================================
+
+class CharacterAsset(Base):
+    """
+    AI-generated character assets (CHAR-001)
+
+    Stores base character images generated via DALL-E or other image models.
+    Characters can have multiple expression variants.
+    """
+    __tablename__ = "character_assets"
+
+    # Primary key
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+
+    # Character identity
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)  # Character appearance, traits
+    style = Column(String(50), nullable=False)  # 'cartoon', 'realistic', 'mascot', etc.
+    base_expression = Column(String(50), default='neutral')  # Default expression
+
+    # File information
+    file_path = Column(Text, nullable=False)  # Local storage path
+    file_size_bytes = Column(BigInteger)
+    checksum = Column(String(64))  # SHA-256 for deduplication
+    image_url = Column(Text)  # Original generation URL (temporary)
+
+    # Generation metadata
+    original_prompt = Column(Text)  # User's prompt
+    revised_prompt = Column(Text)  # DALL-E's revised prompt
+    generation_params = Column(JSONB)  # Model, size, quality, etc.
+
+    # Character properties (CHAR-003: JSON index)
+    has_transparent_background = Column(Boolean, default=False)  # CHAR-002
+    has_body_layer = Column(Boolean, default=False)  # CHAR-004
+    has_mouth_layer = Column(Boolean, default=False)  # CHAR-004
+    body_layer_path = Column(Text)  # Separate body layer for lip-sync
+    mouth_layer_path = Column(Text)  # Separate mouth layer for lip-sync
+
+    # Additional metadata
+    character_metadata = Column('metadata', JSONB, default={})  # Flexible JSON storage
+
+    # Usage tracking
+    times_used = Column(Integer, default=0)
+    last_used_at = Column(TIMESTAMP(timezone=True))
+
+    # Status
+    is_active = Column(Boolean, default=True)
+    is_approved = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    variants = relationship("CharacterVariant", back_populates="character", cascade="all, delete-orphan")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_character_assets_workspace_id', 'workspace_id'),
+        Index('idx_character_assets_style', 'style'),
+        Index('idx_character_assets_checksum', 'checksum'),
+    )
+
+
+class CharacterVariant(Base):
+    """
+    Character expression variants (CHAR-001)
+
+    Different expressions/poses of the same character (happy, sad, surprised, etc.)
+    Maintains consistency with base character while changing expression.
+    """
+    __tablename__ = "character_variants"
+
+    # Primary key
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    character_id = Column(UUID(as_uuid=True), ForeignKey("character_assets.id", ondelete="CASCADE"), nullable=False)
+
+    # Variant details
+    expression = Column(String(50), nullable=False)  # 'happy', 'sad', 'surprised', etc.
+
+    # File information
+    file_path = Column(Text, nullable=False)
+    file_size_bytes = Column(BigInteger)
+    image_url = Column(Text)  # Original generation URL (temporary)
+
+    # Generation metadata
+    prompt = Column(Text)
+    revised_prompt = Column(Text)
+    generation_params = Column(JSONB)
+
+    # Variant properties (CHAR-004: Separate layers)
+    has_transparent_background = Column(Boolean, default=False)
+    has_body_layer = Column(Boolean, default=False)
+    has_mouth_layer = Column(Boolean, default=False)
+    body_layer_path = Column(Text)
+    mouth_layer_path = Column(Text)
+
+    # Usage tracking
+    times_used = Column(Integer, default=0)
+    last_used_at = Column(TIMESTAMP(timezone=True))
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    character = relationship("CharacterAsset", back_populates="variants")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_character_variants_character_id', 'character_id'),
+        Index('idx_character_variants_expression', 'expression'),
+    )

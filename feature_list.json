@@ -2,7 +2,7 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 293,
+  "totalFeatures": 322,
   "completedFeatures": 177,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
@@ -19,7 +19,10 @@
     "phase12_repurposing": "Long video to shorts content repurposing engine",
     "phase13_asset_discovery": "GIFs, videos, images search (Giphy, Pexels, Unsplash)",
     "phase14_e2e_testing": "Playwright E2E tests with debug logging",
-    "phase15_safari_session": "Safari session manager with health dashboard, multi-account, analytics"
+    "phase15_safari_session": "Safari session manager with health dashboard, multi-account, analytics",
+    "phase16_post_tracking": "Post URL tracking, engagement checkbacks, performance scoring",
+    "phase17_benchmarks": "System benchmarks: ingestion, resource monitoring, automation registry",
+    "phase18_content_ingestion": "Directory ingestion pipeline with safe export and AI analysis"
   },
   "features": [
     {
@@ -5000,7 +5003,7 @@
       "priority": "P0",
       "phase": 15,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "supabase/migrations/safari_accounts.sql"
@@ -5009,7 +5012,8 @@
         "Schema created",
         "Platform enum",
         "Account credentials encrypted"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SSM-003",
@@ -5018,7 +5022,7 @@
       "priority": "P0",
       "phase": 15,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "supabase/migrations/safari_session_logs.sql"
@@ -5027,7 +5031,8 @@
         "Events logged",
         "Timestamps",
         "Failure reasons stored"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SSM-004",
@@ -5036,7 +5041,7 @@
       "priority": "P1",
       "phase": 15,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/services/account_registry.py",
@@ -5046,7 +5051,8 @@
         "Add/remove accounts",
         "Set active account",
         "Switch accounts"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SSM-005",
@@ -5055,7 +5061,7 @@
       "priority": "P1",
       "phase": 15,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/api/endpoints/safari_accounts.py"
@@ -5064,7 +5070,8 @@
         "POST /safari/switch",
         "Account validation",
         "Session transfer"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SSM-006",
@@ -5091,7 +5098,7 @@
       "priority": "P1",
       "phase": 15,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/api/endpoints/safari_analytics.py"
@@ -5100,7 +5107,8 @@
         "Date range filter",
         "Per-platform stats",
         "Aggregated metrics"
-      ]
+      ],
+      "completed": "2026-01-20"
     },
     {
       "id": "SSM-008",
@@ -5235,7 +5243,7 @@
       "priority": "P0",
       "phase": 15,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/api/endpoints/safari_sessions.py"
@@ -5245,6 +5253,543 @@
         "POST /refresh",
         "GET /keeper/status",
         "PATCH /keeper/toggle"
+      ],
+      "completed": "2026-01-20"
+    },
+    {
+      "id": "PTK-001",
+      "name": "Post URL Capture System",
+      "description": "Capture and store the URL of every post made via Safari automation or Blotato API, linking to internal post record",
+      "priority": "P0",
+      "phase": 16,
+      "effort": "4h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/services/post_tracker.py",
+        "Backend/api/endpoints/post_tracking.py"
+      ],
+      "acceptance": [
+        "All Safari posts return URL",
+        "All Blotato posts return URL",
+        "URL stored in posts table"
+      ]
+    },
+    {
+      "id": "PTK-002",
+      "name": "Post Reference Database Schema",
+      "description": "Database schema for posts table with platform, account, format, URL, and performance metrics",
+      "priority": "P0",
+      "phase": 16,
+      "effort": "3h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/supabase/migrations/20260120_post_tracking.sql"
+      ],
+      "acceptance": [
+        "posts table with all required fields",
+        "post_metrics table for checkback data",
+        "Indexes for filtering"
+      ]
+    },
+    {
+      "id": "PTK-003",
+      "name": "Engagement Checkback Scheduler",
+      "description": "Schedule automated checkbacks at 1h, 6h, 24h, 48h, 7d after posting to collect engagement stats",
+      "priority": "P0",
+      "phase": 16,
+      "effort": "4h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/services/checkback_scheduler.py"
+      ],
+      "acceptance": [
+        "Checkbacks scheduled automatically",
+        "Multiple intervals supported",
+        "Wake triggers for checkbacks"
+      ]
+    },
+    {
+      "id": "PTK-004",
+      "name": "Safari Engagement Scraper",
+      "description": "Safari automation to navigate to post URL and scrape engagement metrics (views, likes, comments, shares)",
+      "priority": "P0",
+      "phase": 16,
+      "effort": "6h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/automation/engagement_scraper.py"
+      ],
+      "acceptance": [
+        "Navigate to post URL",
+        "Extract metrics per platform",
+        "Handle deleted/private posts"
+      ]
+    },
+    {
+      "id": "PTK-005",
+      "name": "Blotato Engagement API",
+      "description": "Use Blotato API to fetch engagement stats for posts where available",
+      "priority": "P1",
+      "phase": 16,
+      "effort": "3h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/api/endpoints/blotato.py"
+      ],
+      "acceptance": [
+        "Fetch post metrics via API",
+        "Fallback to Safari if unavailable"
+      ]
+    },
+    {
+      "id": "PTK-006",
+      "name": "Post Performance Scoring",
+      "description": "Calculate performance score (0-100) for each post based on engagement relative to account averages",
+      "priority": "P0",
+      "phase": 16,
+      "effort": "4h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/services/performance_scorer.py"
+      ],
+      "acceptance": [
+        "Score calculated per post",
+        "Account baseline comparison",
+        "Platform-specific normalization"
+      ]
+    },
+    {
+      "id": "PTK-007",
+      "name": "Post Spectrum Classification",
+      "description": "Classify posts as great/good/average/poor/bad based on performance score and percentile ranking",
+      "priority": "P1",
+      "phase": 16,
+      "effort": "3h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/services/performance_scorer.py"
+      ],
+      "acceptance": [
+        "5-tier classification",
+        "Percentile-based ranking",
+        "Update on new metrics"
+      ]
+    },
+    {
+      "id": "PTK-008",
+      "name": "Performance Filters API",
+      "description": "API to filter posts by platform, account, format, date range, and performance tier",
+      "priority": "P1",
+      "phase": 16,
+      "effort": "4h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/api/endpoints/post_analytics.py"
+      ],
+      "acceptance": [
+        "Filter by platform",
+        "Filter by account",
+        "Filter by format (video/image/story)",
+        "Filter by performance tier"
+      ]
+    },
+    {
+      "id": "PTK-009",
+      "name": "Post Analytics Dashboard",
+      "description": "Frontend dashboard showing post performance spectrum, top/bottom performers, trends",
+      "priority": "P1",
+      "phase": 16,
+      "effort": "6h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "frontend/src/pages/PostAnalytics.tsx"
+      ],
+      "acceptance": [
+        "Performance distribution chart",
+        "Top 10 / Bottom 10 posts",
+        "Filter controls"
+      ]
+    },
+    {
+      "id": "PTK-010",
+      "name": "Account Performance Baselines",
+      "description": "Calculate and store rolling averages per account for engagement metrics",
+      "priority": "P1",
+      "phase": 16,
+      "effort": "3h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/services/account_baselines.py"
+      ],
+      "acceptance": [
+        "30-day rolling average",
+        "Per-platform baselines",
+        "Auto-update on new data"
+      ]
+    },
+    {
+      "id": "PTK-011",
+      "name": "Format Performance Analysis",
+      "description": "Track performance by content format (video, image, carousel, story, reel, short)",
+      "priority": "P2",
+      "phase": 16,
+      "effort": "3h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "Backend/services/format_analytics.py"
+      ],
+      "acceptance": [
+        "Format-specific metrics",
+        "Best performing format per account",
+        "Format recommendations"
+      ]
+    },
+    {
+      "id": "PTK-012",
+      "name": "Checkback Status Dashboard",
+      "description": "Dashboard widget showing pending checkbacks, completed, and failed scrapes",
+      "priority": "P2",
+      "phase": 16,
+      "effort": "3h",
+      "passes": false,
+      "category": "post-tracking",
+      "files": [
+        "frontend/src/components/CheckbackStatus.tsx"
+      ],
+      "acceptance": [
+        "Pending count",
+        "Success/failure rates",
+        "Retry failed checkbacks"
+      ]
+    },
+    {
+      "id": "BM-001",
+      "name": "Directory Ingestion Pipeline",
+      "description": "Scan directory, detect video/image files, extract metadata, ingest to database without duplicating files",
+      "priority": "P0",
+      "phase": 18,
+      "effort": "6h",
+      "passes": false,
+      "category": "ingestion",
+      "files": [
+        "Backend/services/ingestion_pipeline.py",
+        "Backend/api/endpoints/ingestion.py"
+      ],
+      "acceptance": [
+        "Scan directory recursively",
+        "Detect all media types",
+        "Extract metadata",
+        "No file duplication"
+      ]
+    },
+    {
+      "id": "BM-002",
+      "name": "Media Deduplication",
+      "description": "SHA256 hash-based deduplication to prevent duplicate media entries",
+      "priority": "P0",
+      "phase": 18,
+      "effort": "3h",
+      "passes": false,
+      "category": "ingestion",
+      "files": [
+        "Backend/services/ingestion_pipeline.py"
+      ],
+      "acceptance": [
+        "Hash all files",
+        "Skip existing hashes",
+        "Log duplicates found"
+      ]
+    },
+    {
+      "id": "BM-003",
+      "name": "AI Analysis Integration",
+      "description": "Run OpenAI Vision analysis on ingested media for titles, descriptions, hashtags, quality scoring",
+      "priority": "P0",
+      "phase": 18,
+      "effort": "4h",
+      "passes": false,
+      "category": "ingestion",
+      "files": [
+        "Backend/services/ai_content_analyzer.py"
+      ],
+      "acceptance": [
+        "5 title variations",
+        "3 description variations",
+        "Platform-specific hashtags",
+        "Quality score 0-100"
+      ]
+    },
+    {
+      "id": "BM-004",
+      "name": "Safe Export System",
+      "description": "Export analysis data, thumbnails, and references to safe location without duplicating media files",
+      "priority": "P0",
+      "phase": 18,
+      "effort": "4h",
+      "passes": false,
+      "category": "ingestion",
+      "files": [
+        "Backend/services/safe_export.py",
+        "Backend/api/endpoints/ingestion.py"
+      ],
+      "acceptance": [
+        "Export manifest JSON",
+        "Analysis data per item",
+        "Thumbnails exported",
+        "No media file duplication"
+      ]
+    },
+    {
+      "id": "BM-005",
+      "name": "Resource Manager Service",
+      "description": "Unified CPU/Memory/GPU monitoring with thresholds, throttling, and alerts",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "resources",
+      "files": [
+        "Backend/services/resource_manager.py"
+      ],
+      "acceptance": [
+        "CPU monitoring with thresholds",
+        "Memory monitoring",
+        "GPU monitoring",
+        "Throttle level calculation"
+      ]
+    },
+    {
+      "id": "BM-006",
+      "name": "Resource Dashboard Widget",
+      "description": "Live dashboard widget showing CPU/Memory/GPU with per-core breakdown and alerts",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "resources",
+      "files": [
+        "frontend/src/components/ResourceMonitor.tsx"
+      ],
+      "acceptance": [
+        "Live updates via WebSocket",
+        "Per-core CPU display",
+        "Warning/critical indicators"
+      ]
+    },
+    {
+      "id": "BM-007",
+      "name": "Automation Registry",
+      "description": "Database table and API for tracking all automations, their status, schedule, and resource needs",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "automation",
+      "files": [
+        "Backend/services/automation_registry.py",
+        "Backend/api/endpoints/automations.py"
+      ],
+      "acceptance": [
+        "CRUD for automations",
+        "Status tracking",
+        "Schedule management"
+      ]
+    },
+    {
+      "id": "BM-008",
+      "name": "Automation Media Constraints",
+      "description": "Track media consumption per automation, calculate days until empty, generate alerts",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "automation",
+      "files": [
+        "Backend/services/media_constraints.py"
+      ],
+      "acceptance": [
+        "Media per automation",
+        "Consumption rate tracking",
+        "Days remaining calculation",
+        "Low media alerts"
+      ]
+    },
+    {
+      "id": "BM-009",
+      "name": "Automation Center Dashboard",
+      "description": "Dashboard showing all automations, their status, media availability, and resource usage",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "6h",
+      "passes": false,
+      "category": "automation",
+      "files": [
+        "frontend/src/pages/AutomationCenter.tsx"
+      ],
+      "acceptance": [
+        "List all automations",
+        "Status indicators",
+        "Media remaining display",
+        "Pause/resume controls"
+      ]
+    },
+    {
+      "id": "BM-010",
+      "name": "Sora Generation Workflow",
+      "description": "End-to-end Sora video generation via Safari automation with prompt, duration, aspect ratio",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "6h",
+      "passes": false,
+      "category": "sora",
+      "files": [
+        "Backend/automation/sora_generator.py",
+        "Backend/api/endpoints/sora.py"
+      ],
+      "acceptance": [
+        "Navigate to sora.com",
+        "Enter prompt and settings",
+        "Poll for completion",
+        "Download video"
+      ]
+    },
+    {
+      "id": "BM-011",
+      "name": "Sora to Twitter Pipeline",
+      "description": "Complete workflow: Sora generate -> AI analyze -> Post to Twitter via Blotato",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "sora",
+      "files": [
+        "Backend/services/sora_twitter_pipeline.py"
+      ],
+      "acceptance": [
+        "Generate video",
+        "Analyze content",
+        "Post to Twitter",
+        "Track post URL"
+      ]
+    },
+    {
+      "id": "BM-012",
+      "name": "DM Sync Automation",
+      "description": "Pull DMs from Instagram, TikTok, Twitter via Safari automation and sync to database",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "6h",
+      "passes": false,
+      "category": "dm-sync",
+      "files": [
+        "Backend/automation/dm_sync.py"
+      ],
+      "acceptance": [
+        "Instagram DM scraping",
+        "TikTok DM scraping",
+        "Twitter DM scraping",
+        "Store in dm_messages table"
+      ]
+    },
+    {
+      "id": "BM-013",
+      "name": "Content Repurposing: Viral Clip Detection",
+      "description": "AI analysis of long-form video to detect viral moments with virality scoring",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "6h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/viral_clip_detector.py"
+      ],
+      "acceptance": [
+        "Transcript analysis",
+        "Virality scoring 0-100",
+        "Top N clips selection"
+      ]
+    },
+    {
+      "id": "BM-014",
+      "name": "Content Repurposing: Smart Reframing",
+      "description": "16:9 to 9:16 reframing with face detection and centering for shorts",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "6h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/smart_reframer.py"
+      ],
+      "acceptance": [
+        "Face detection",
+        "Dynamic centering",
+        "9:16 output"
+      ]
+    },
+    {
+      "id": "BM-015",
+      "name": "Content Repurposing: Caption Generation",
+      "description": "Word-by-word animated captions overlay for shorts using Whisper transcription",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/caption_generator.py"
+      ],
+      "acceptance": [
+        "Whisper transcription",
+        "Word timing",
+        "Styled overlay"
+      ]
+    },
+    {
+      "id": "BM-016",
+      "name": "Content Repurposing: Title Card Overlay",
+      "description": "Add hook text title card to beginning of shorts clips",
+      "priority": "P2",
+      "phase": 17,
+      "effort": "3h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/title_card_generator.py"
+      ],
+      "acceptance": [
+        "Text positioning",
+        "Style templates",
+        "Hook text from AI"
+      ]
+    },
+    {
+      "id": "BM-017",
+      "name": "Dev Vlog to YouTube Shorts Pipeline",
+      "description": "Full pipeline: long video -> viral clips -> reframe -> captions -> YouTube Shorts via Blotato",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "repurposing",
+      "files": [
+        "Backend/services/vlog_to_shorts_pipeline.py"
+      ],
+      "acceptance": [
+        "5-10 shorts per video",
+        "< 30 min total time",
+        "Auto-post to YouTube"
       ]
     }
   ]

@@ -19,6 +19,7 @@
 | **E2E Testing & Debug Framework** | `docs/PRD_E2E_TESTING_DEBUG_FRAMEWORK.md` | Playwright E2E tests with structured console logging for debugging | 2 weeks |
 | **Safari Session Manager** | `docs/PRD_SAFARI_SESSION_MANAGER.md` | Session keep-alive, health dashboard, multi-account support, analytics | 1-2 weeks |
 | **System Benchmarks** | `docs/PRD_SYSTEM_BENCHMARKS.md` | Critical workflows: Ingestion→Export, Sora→Twitter, DM Sync, DevVlog→Shorts | 3-4 weeks |
+| **Frontend Consistency** | `docs/PRD_FRONTEND_CONSISTENCY.md` | UI/UX audit, design system, component library, styling standards | 2-3 weeks |
 
 ### 0.2 Gap Analysis & Roadmap
 

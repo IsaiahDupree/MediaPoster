@@ -2,7 +2,7 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 322,
+  "totalFeatures": 329,
   "completedFeatures": 178,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
@@ -22,7 +22,8 @@
     "phase15_safari_session": "Safari session manager with health dashboard, multi-account, analytics",
     "phase16_post_tracking": "Post URL tracking, engagement checkbacks, performance scoring",
     "phase17_benchmarks": "System benchmarks: ingestion, resource monitoring, automation registry",
-    "phase18_content_ingestion": "Directory ingestion pipeline with safe export and AI analysis"
+    "phase18_content_ingestion": "Directory ingestion pipeline with safe export and AI analysis",
+    "phase19_approval": "Human-in-the-loop approval workflow with notification channels"
   },
   "features": [
     {
@@ -5668,21 +5669,162 @@
     },
     {
       "id": "BM-011",
-      "name": "Sora to Twitter Pipeline",
-      "description": "Complete workflow: Sora generate -> AI analyze -> Post to Twitter via Blotato",
+      "name": "Generated Video Multi-Channel Pipeline",
+      "description": "Platform-agnostic pipeline: Sora/AI video generate -> AI analyze -> Route to any channel (Twitter, Instagram, TikTok, YouTube, etc) via Safari or Blotato with optional human-in-the-loop approval",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "6h",
+      "passes": false,
+      "category": "video-pipeline",
+      "files": [
+        "Backend/services/video_publish_pipeline.py",
+        "Backend/services/channel_router.py"
+      ],
+      "acceptance": [
+        "Generate video from any source (Sora, AI, upload)",
+        "Analyze content with AI",
+        "Route to selected channels",
+        "Support Safari and Blotato publishing",
+        "Optional human approval workflow",
+        "Track all post URLs"
+      ]
+    },
+    {
+      "id": "HITL-001",
+      "name": "Human-in-the-Loop Approval System",
+      "description": "Optional approval workflow for generated content. When enabled, content awaits user approval before publishing. Disabled by default.",
       "priority": "P0",
       "phase": 17,
       "effort": "4h",
       "passes": false,
-      "category": "sora",
+      "category": "approval",
       "files": [
-        "Backend/services/sora_twitter_pipeline.py"
+        "Backend/services/approval_workflow.py",
+        "Backend/api/endpoints/approvals.py"
       ],
       "acceptance": [
-        "Generate video",
-        "Analyze content",
-        "Post to Twitter",
-        "Track post URL"
+        "Toggle approval on/off per automation",
+        "Approval queue in database",
+        "Approval status tracking",
+        "Disabled by default"
+      ]
+    },
+    {
+      "id": "HITL-002",
+      "name": "Unlisted YouTube Preview Upload",
+      "description": "Upload generated video as unlisted YouTube video for preview, providing shareable link for approval notifications",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "3h",
+      "passes": false,
+      "category": "approval",
+      "files": [
+        "Backend/services/youtube_preview.py"
+      ],
+      "acceptance": [
+        "Upload to YouTube as unlisted",
+        "Return shareable preview URL",
+        "Delete after approval/rejection",
+        "Auto-delete after 7 days if unused"
+      ]
+    },
+    {
+      "id": "HITL-003",
+      "name": "Approval Notification Channels",
+      "description": "Send approval requests via user's preferred channel: Gmail, Messenger, or Telegram with preview link and approve/deny buttons",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "6h",
+      "passes": false,
+      "category": "approval",
+      "files": [
+        "Backend/services/approval_notifier.py",
+        "Backend/services/notifications/gmail_notifier.py",
+        "Backend/services/notifications/telegram_notifier.py",
+        "Backend/services/notifications/messenger_notifier.py"
+      ],
+      "acceptance": [
+        "Gmail notification with approve/deny links",
+        "Telegram bot with inline buttons",
+        "Messenger notification support",
+        "User channel preference setting"
+      ]
+    },
+    {
+      "id": "HITL-004",
+      "name": "Approval Response Handler",
+      "description": "Handle approve/deny responses from notification channels, trigger publish or archive accordingly",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "approval",
+      "files": [
+        "Backend/api/endpoints/approval_webhook.py",
+        "Backend/services/approval_workflow.py"
+      ],
+      "acceptance": [
+        "Process approve response -> publish",
+        "Process deny response -> archive",
+        "Log all responses",
+        "Handle duplicate responses"
+      ]
+    },
+    {
+      "id": "HITL-005",
+      "name": "Auto-Approval Timeout",
+      "description": "Automatically approve pending content after configurable timeout (default 5 days) if no response received",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "2h",
+      "passes": false,
+      "category": "approval",
+      "files": [
+        "Backend/services/approval_timeout.py"
+      ],
+      "acceptance": [
+        "Configurable timeout (default 5 days)",
+        "Cron job to check expired approvals",
+        "Auto-publish on timeout",
+        "Notification of auto-approval"
+      ]
+    },
+    {
+      "id": "HITL-006",
+      "name": "Approval Dashboard",
+      "description": "Frontend dashboard showing pending approvals, history, and approval settings",
+      "priority": "P1",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "approval",
+      "files": [
+        "frontend/src/pages/Approvals.tsx"
+      ],
+      "acceptance": [
+        "List pending approvals with previews",
+        "Approve/deny from dashboard",
+        "Approval history",
+        "Settings for notification channel"
+      ]
+    },
+    {
+      "id": "HITL-007",
+      "name": "Channel Router Service",
+      "description": "Route content to multiple platforms simultaneously, selecting Safari or Blotato based on availability and preference",
+      "priority": "P0",
+      "phase": 17,
+      "effort": "4h",
+      "passes": false,
+      "category": "video-pipeline",
+      "files": [
+        "Backend/services/channel_router.py"
+      ],
+      "acceptance": [
+        "Multi-platform targeting",
+        "Safari/Blotato selection logic",
+        "Fallback handling",
+        "Per-platform formatting"
       ]
     },
     {

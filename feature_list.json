@@ -2,8 +2,8 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 359,
-  "completedFeatures": 178,
+  "totalFeatures": 374,
+  "completedFeatures": 179,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -24,7 +24,8 @@
     "phase17_benchmarks": "System benchmarks: ingestion, resource monitoring, automation registry",
     "phase18_content_ingestion": "Directory ingestion pipeline with safe export and AI analysis",
     "phase19_approval": "Human-in-the-loop approval workflow with notification channels",
-    "phase20_design_system": "Frontend consistency, unified components, and design system"
+    "phase20_design_system": "Frontend consistency, unified components, and design system",
+    "phase21_youtube_playlist": "YouTube playlist to content pipeline automation"
   },
   "features": [
     {
@@ -6505,6 +6506,291 @@
         "Color contrast meets standards",
         "Touch targets >= 44px",
         "Screen reader compatible"
+      ]
+    },
+    {
+      "id": "YTP-001",
+      "name": "YouTube Playlist Watcher",
+      "description": "Monitor YouTube playlist for new videos and trigger content pipeline when videos are added",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/automation/youtube_playlist_pipeline.py",
+        "Backend/api/endpoints/youtube_automation.py"
+      ],
+      "acceptance": [
+        "Poll playlist for new videos",
+        "Webhook trigger support",
+        "Google Sheet integration",
+        "Status tracking (ID_Captured)"
+      ]
+    },
+    {
+      "id": "YTP-002",
+      "name": "RapidAPI Transcript Service",
+      "description": "Fetch YouTube video transcripts via RapidAPI youtube-transcriptor endpoint",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "3h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/rapidapi_transcript.py"
+      ],
+      "acceptance": [
+        "GET transcript by video_id",
+        "Language parameter (en)",
+        "Error handling for missing transcripts",
+        "Rate limiting"
+      ]
+    },
+    {
+      "id": "YTP-003",
+      "name": "Transcript AI Analysis",
+      "description": "GPT-4o processing to decode transcript, generate overview, insights, SEO title, and blog HTML",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/transcript_analyzer.py"
+      ],
+      "acceptance": [
+        "Transcript decoding from JSON",
+        "Overview generation (2-3 paragraphs)",
+        "Key insights (5-7 bullet points)",
+        "SEO-optimized title",
+        "Social snippets (280 chars)"
+      ]
+    },
+    {
+      "id": "YTP-004",
+      "name": "Medium Blog Publisher",
+      "description": "Create and publish Medium blog posts with HTML content, images, and tags",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "3h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/medium_publisher.py",
+        "Backend/api/endpoints/publishing.py"
+      ],
+      "acceptance": [
+        "HTML content support",
+        "Image embedding",
+        "Tag assignment",
+        "Return published URL"
+      ]
+    },
+    {
+      "id": "YTP-005",
+      "name": "Multi-Platform Social Distribution",
+      "description": "Distribute content to Bluesky, Threads via Blotato API and Buffer for additional profiles",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/social_distributor.py"
+      ],
+      "acceptance": [
+        "Bluesky via Blotato (accountId: 2)",
+        "Threads via Blotato",
+        "Buffer integration",
+        "Track all post URLs"
+      ]
+    },
+    {
+      "id": "YTP-006",
+      "name": "Google Sheet Sync",
+      "description": "Bidirectional sync with Google Sheet for status tracking and output storage",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "3h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/sheets_sync.py"
+      ],
+      "acceptance": [
+        "Read rows with status ID_Captured",
+        "Update transcript, overview, insights",
+        "Store Medium URL, social URLs",
+        "Update status to Published"
+      ]
+    },
+    {
+      "id": "YTP-007",
+      "name": "YouTube Playlist Pipeline Orchestrator",
+      "description": "Full pipeline: Playlist → Transcript → AI Analysis → Medium → Social → Sheet Update",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/automation/youtube_playlist_pipeline.py"
+      ],
+      "acceptance": [
+        "End-to-end workflow",
+        "Error handling per step",
+        "Status transitions",
+        "Retry logic"
+      ]
+    },
+    {
+      "id": "YTP-008",
+      "name": "Thumbnail Upload to Google Drive",
+      "description": "Download video thumbnail and upload to Google Drive for Medium embedding",
+      "priority": "P1",
+      "phase": 21,
+      "effort": "2h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/drive_uploader.py"
+      ],
+      "acceptance": [
+        "Download YouTube thumbnail",
+        "Upload to Drive folder",
+        "Return public URL",
+        "Store File ID in sheet"
+      ]
+    },
+    {
+      "id": "YTP-009",
+      "name": "Automation Dashboard Card",
+      "description": "Dashboard card showing YouTube Playlist automation status, stats, and controls",
+      "priority": "P1",
+      "phase": 21,
+      "effort": "3h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "dashboard/app/(dashboard)/automation/youtube-playlist/page.tsx"
+      ],
+      "acceptance": [
+        "Status indicator (Active/Paused)",
+        "Videos processed count",
+        "Success rate percentage",
+        "Run Now, View Logs, Settings buttons"
+      ]
+    },
+    {
+      "id": "YTP-010",
+      "name": "Make.com Scenario Backup",
+      "description": "Store Make.com scenario JSON for version control and migration reference",
+      "priority": "P1",
+      "phase": 21,
+      "effort": "1h",
+      "passes": true,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/automation/make_scenarios/youtube_insight_v10.json"
+      ],
+      "acceptance": [
+        "JSON config stored",
+        "Version controlled",
+        "Documentation reference"
+      ],
+      "completedAt": "2026-01-20"
+    },
+    {
+      "id": "YTP-011",
+      "name": "Multi-Language Transcript Support",
+      "description": "Support non-English transcripts with language detection and translation",
+      "priority": "P2",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/rapidapi_transcript.py",
+        "Backend/services/transcript_analyzer.py"
+      ],
+      "acceptance": [
+        "Language detection",
+        "Multiple lang parameter support",
+        "Translation to English if needed"
+      ]
+    },
+    {
+      "id": "YTP-012",
+      "name": "Video Clip Extraction",
+      "description": "Extract highlight clips from long-form YouTube videos for short-form content",
+      "priority": "P2",
+      "phase": 21,
+      "effort": "6h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/video_clipper.py"
+      ],
+      "acceptance": [
+        "AI identifies key moments",
+        "Clip extraction with timestamps",
+        "Ready for short-form platforms"
+      ]
+    },
+    {
+      "id": "YTP-013",
+      "name": "Content Performance Analytics",
+      "description": "Track performance of generated content across Medium and social platforms",
+      "priority": "P2",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/content_analytics.py"
+      ],
+      "acceptance": [
+        "Medium views/claps tracking",
+        "Social engagement metrics",
+        "Performance dashboard"
+      ]
+    },
+    {
+      "id": "YTP-014",
+      "name": "A/B Testing for AI Prompts",
+      "description": "Test different AI prompts for engagement optimization",
+      "priority": "P2",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/prompt_ab_testing.py"
+      ],
+      "acceptance": [
+        "Multiple prompt variants",
+        "Performance comparison",
+        "Auto-select best performer"
+      ]
+    },
+    {
+      "id": "YTP-015",
+      "name": "Error Monitoring & Alerts",
+      "description": "Monitor pipeline for failures and send alerts via Slack/email",
+      "priority": "P1",
+      "phase": 21,
+      "effort": "3h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/pipeline_monitor.py"
+      ],
+      "acceptance": [
+        "Transcript fetch failure alert",
+        "GPT quota exceeded alert",
+        "Medium post failure warning",
+        "Auto-pause after 3+ failures"
       ]
     }
   ]

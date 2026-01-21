@@ -20,6 +20,7 @@
 | **Safari Session Manager** | `docs/PRD_SAFARI_SESSION_MANAGER.md` | Session keep-alive, health dashboard, multi-account support, analytics | 1-2 weeks |
 | **System Benchmarks** | `docs/PRD_SYSTEM_BENCHMARKS.md` | Critical workflows: Ingestion→Export, Sora→Twitter, DM Sync, DevVlog→Shorts | 3-4 weeks |
 | **Frontend Consistency** | `docs/PRD_FRONTEND_CONSISTENCY.md` | UI/UX audit, design system, component library, styling standards | 2-3 weeks |
+| **YouTube Playlist Automation** | `docs/PRD_YOUTUBE_PLAYLIST_AUTOMATION.md` | YouTube playlist → transcript → AI analysis → Medium/social distribution | Active (Make.com) |
 
 ### 0.2 Gap Analysis & Roadmap
 

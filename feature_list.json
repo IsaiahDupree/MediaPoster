@@ -2,7 +2,7 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 329,
+  "totalFeatures": 359,
   "completedFeatures": 178,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
@@ -23,7 +23,8 @@
     "phase16_post_tracking": "Post URL tracking, engagement checkbacks, performance scoring",
     "phase17_benchmarks": "System benchmarks: ingestion, resource monitoring, automation registry",
     "phase18_content_ingestion": "Directory ingestion pipeline with safe export and AI analysis",
-    "phase19_approval": "Human-in-the-loop approval workflow with notification channels"
+    "phase19_approval": "Human-in-the-loop approval workflow with notification channels",
+    "phase20_design_system": "Frontend consistency, unified components, and design system"
   },
   "features": [
     {
@@ -5934,6 +5935,576 @@
         "5-10 shorts per video",
         "< 30 min total time",
         "Auto-post to YouTube"
+      ]
+    },
+    {
+      "id": "DS-001",
+      "name": "Button Component",
+      "description": "Standardized button component with variants (primary, secondary, danger, ghost) and sizes (sm, md, lg)",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Button.tsx"
+      ],
+      "acceptance": [
+        "primary: bg-violet-600 hover:bg-violet-700",
+        "secondary: bg-zinc-800 with border",
+        "danger: bg-red-600",
+        "ghost: hover:bg-zinc-800",
+        "Loading state with spinner",
+        "Disabled state"
+      ]
+    },
+    {
+      "id": "DS-002",
+      "name": "Card Component",
+      "description": "Consistent card container with optional title, subtitle, action, and padding variants",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Card.tsx"
+      ],
+      "acceptance": [
+        "bg-zinc-900 border-zinc-800 rounded-xl",
+        "Padding: sm (p-4), md (p-6), lg (p-8)",
+        "Optional title/subtitle header",
+        "Optional action slot"
+      ]
+    },
+    {
+      "id": "DS-003",
+      "name": "StatusBadge Component",
+      "description": "Unified status indicator with success, warning, error, info, neutral variants",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/StatusBadge.tsx"
+      ],
+      "acceptance": [
+        "Color-coded backgrounds with matching text",
+        "Optional dot indicator",
+        "Consistent sizing across app"
+      ]
+    },
+    {
+      "id": "DS-004",
+      "name": "LoadingState Component",
+      "description": "Unified loading indicators with spinner, skeleton, and text variants",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/LoadingState.tsx"
+      ],
+      "acceptance": [
+        "Spinner variant with sizes",
+        "Skeleton variant with count",
+        "Loading text with animation"
+      ]
+    },
+    {
+      "id": "DS-005",
+      "name": "EmptyState Component",
+      "description": "Consistent empty data state with icon, title, description, and optional action button",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/EmptyState.tsx"
+      ],
+      "acceptance": [
+        "Icon slot",
+        "Title and description",
+        "Optional action button",
+        "Centered layout"
+      ]
+    },
+    {
+      "id": "DS-006",
+      "name": "ErrorState Component",
+      "description": "Consistent error display with title, message, and retry button",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/ErrorState.tsx"
+      ],
+      "acceptance": [
+        "Error icon",
+        "Title and message display",
+        "Retry button with callback",
+        "Red accent color"
+      ]
+    },
+    {
+      "id": "DS-007",
+      "name": "PageHeader Component",
+      "description": "Standardized page header with title, description, breadcrumbs, and action buttons",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/layout/PageHeader.tsx"
+      ],
+      "acceptance": [
+        "text-2xl font-bold title",
+        "Optional description",
+        "Optional breadcrumbs",
+        "Action buttons slot"
+      ]
+    },
+    {
+      "id": "DS-008",
+      "name": "PageContainer Component",
+      "description": "Consistent page wrapper with standard padding and max-width",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/layout/PageContainer.tsx"
+      ],
+      "acceptance": [
+        "Standard p-6 padding",
+        "Consistent max-width",
+        "Responsive adjustments"
+      ]
+    },
+    {
+      "id": "DS-009",
+      "name": "Platform Constants",
+      "description": "Centralized platform configuration with icons, colors, gradients for all social platforms",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/lib/constants/platforms.ts"
+      ],
+      "acceptance": [
+        "YouTube, Instagram, TikTok, Twitter, Threads, LinkedIn, Pinterest",
+        "Lucide icons and emojis",
+        "bg colors, text colors, gradients",
+        "Single source of truth"
+      ]
+    },
+    {
+      "id": "DS-010",
+      "name": "Color Tokens",
+      "description": "CSS custom properties for background levels, text colors, brand colors, status colors",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/lib/constants/colors.ts",
+        "dashboard/app/globals.css"
+      ],
+      "acceptance": [
+        "bg-base, bg-elevated, bg-hover, bg-active",
+        "text-primary, text-secondary, text-muted",
+        "status-success, warning, error, info",
+        "Brand violet/indigo"
+      ]
+    },
+    {
+      "id": "DS-011",
+      "name": "Typography Scale",
+      "description": "Standardized typography classes for headings, body text, labels, captions",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/lib/constants/typography.ts",
+        "dashboard/app/globals.css"
+      ],
+      "acceptance": [
+        "text-page-title: 2xl bold",
+        "text-section-title: lg semibold",
+        "text-card-title: base medium",
+        "text-body, text-label, text-caption"
+      ]
+    },
+    {
+      "id": "DS-012",
+      "name": "DataTable Component",
+      "description": "Standardized table component with sorting, pagination, and consistent styling",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "4h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/DataTable.tsx"
+      ],
+      "acceptance": [
+        "Sortable columns",
+        "Pagination controls",
+        "Loading skeleton",
+        "Empty state integration"
+      ]
+    },
+    {
+      "id": "DS-013",
+      "name": "Modal Component",
+      "description": "Standardized modal dialog with header, body, footer, and backdrop",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "3h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Modal.tsx"
+      ],
+      "acceptance": [
+        "Backdrop with close on click",
+        "Header with title and close button",
+        "Body content slot",
+        "Footer with action buttons"
+      ]
+    },
+    {
+      "id": "DS-014",
+      "name": "Dropdown Component",
+      "description": "Standardized dropdown menu with items, dividers, and keyboard navigation",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "3h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Dropdown.tsx"
+      ],
+      "acceptance": [
+        "Trigger element",
+        "Menu items with icons",
+        "Dividers",
+        "Keyboard navigation"
+      ]
+    },
+    {
+      "id": "DS-015",
+      "name": "Tabs Component",
+      "description": "Standardized tab navigation with active state and content panels",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Tabs.tsx"
+      ],
+      "acceptance": [
+        "Tab list with items",
+        "Active state indicator",
+        "Content panels",
+        "Controlled and uncontrolled modes"
+      ]
+    },
+    {
+      "id": "DS-016",
+      "name": "Input Component",
+      "description": "Standardized form input with label, error state, and variants",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Input.tsx"
+      ],
+      "acceptance": [
+        "Label and helper text",
+        "Error state with message",
+        "Disabled state",
+        "Icon prefix/suffix"
+      ]
+    },
+    {
+      "id": "DS-017",
+      "name": "Select Component",
+      "description": "Standardized form select with options, placeholder, and error state",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Select.tsx"
+      ],
+      "acceptance": [
+        "Options list",
+        "Placeholder",
+        "Error state",
+        "Searchable option"
+      ]
+    },
+    {
+      "id": "DS-018",
+      "name": "Tooltip Component",
+      "description": "Standardized tooltip with positioning and delay options",
+      "priority": "P2",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Tooltip.tsx"
+      ],
+      "acceptance": [
+        "Position: top, bottom, left, right",
+        "Hover delay",
+        "Arrow indicator"
+      ]
+    },
+    {
+      "id": "DS-019",
+      "name": "Avatar Component",
+      "description": "User/account avatar with fallback initials and status indicator",
+      "priority": "P2",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Avatar.tsx"
+      ],
+      "acceptance": [
+        "Image with fallback",
+        "Initials fallback",
+        "Size variants",
+        "Status dot"
+      ]
+    },
+    {
+      "id": "DS-020",
+      "name": "Progress Component",
+      "description": "Progress bar with percentage and label",
+      "priority": "P2",
+      "phase": 20,
+      "effort": "1h",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/Progress.tsx"
+      ],
+      "acceptance": [
+        "Percentage value",
+        "Color variants",
+        "Label display",
+        "Animated fill"
+      ]
+    },
+    {
+      "id": "DS-021",
+      "name": "UI Components Index",
+      "description": "Barrel export file for all UI components",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "30m",
+      "passes": false,
+      "category": "design-system",
+      "files": [
+        "dashboard/components/ui/index.ts"
+      ],
+      "acceptance": [
+        "Export all components",
+        "Named exports",
+        "Type exports"
+      ]
+    },
+    {
+      "id": "DS-022",
+      "name": "Migrate Dashboard Home Page",
+      "description": "Apply design system to main dashboard page",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "2h",
+      "passes": false,
+      "category": "migration",
+      "files": [
+        "dashboard/app/(dashboard)/page.tsx"
+      ],
+      "acceptance": [
+        "Use PageHeader",
+        "Use Card components",
+        "Use StatusBadge",
+        "Consistent typography"
+      ]
+    },
+    {
+      "id": "DS-023",
+      "name": "Migrate Analytics Page",
+      "description": "Apply design system to analytics dashboard",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "3h",
+      "passes": false,
+      "category": "migration",
+      "files": [
+        "dashboard/app/(dashboard)/analytics/page.tsx"
+      ],
+      "acceptance": [
+        "Use platform constants",
+        "Use Card components",
+        "Consistent loading states",
+        "Consistent error states"
+      ]
+    },
+    {
+      "id": "DS-024",
+      "name": "Migrate Media Library Page",
+      "description": "Apply design system to media library",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "3h",
+      "passes": false,
+      "category": "migration",
+      "files": [
+        "dashboard/app/(dashboard)/media/page.tsx"
+      ],
+      "acceptance": [
+        "Use Card components",
+        "Use EmptyState",
+        "Use LoadingState",
+        "Consistent buttons"
+      ]
+    },
+    {
+      "id": "DS-025",
+      "name": "Migrate Schedule Page",
+      "description": "Apply design system to schedule/calendar page",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "3h",
+      "passes": false,
+      "category": "migration",
+      "files": [
+        "dashboard/app/(dashboard)/schedule/page.tsx"
+      ],
+      "acceptance": [
+        "Use platform constants",
+        "Use StatusBadge",
+        "Consistent cards",
+        "Consistent buttons"
+      ]
+    },
+    {
+      "id": "DS-026",
+      "name": "Migrate Automation Page",
+      "description": "Apply design system to automation center",
+      "priority": "P0",
+      "phase": 20,
+      "effort": "3h",
+      "passes": false,
+      "category": "migration",
+      "files": [
+        "dashboard/app/(dashboard)/automation/page.tsx"
+      ],
+      "acceptance": [
+        "Use Card components",
+        "Use StatusBadge",
+        "Consistent typography",
+        "Consistent loading"
+      ]
+    },
+    {
+      "id": "DS-027",
+      "name": "Migrate Secondary Pages (6-15)",
+      "description": "Apply design system to 10 secondary pages",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "8h",
+      "passes": false,
+      "category": "migration",
+      "files": [
+        "dashboard/app/(dashboard)/accounts/page.tsx",
+        "dashboard/app/(dashboard)/content-ops/page.tsx",
+        "dashboard/app/(dashboard)/ai-generations/page.tsx"
+      ],
+      "acceptance": [
+        "All use PageHeader",
+        "All use Card",
+        "All use StatusBadge",
+        "Consistent styling"
+      ]
+    },
+    {
+      "id": "DS-028",
+      "name": "Migrate Remaining Pages (16-50)",
+      "description": "Apply design system to all remaining pages",
+      "priority": "P2",
+      "phase": 20,
+      "effort": "16h",
+      "passes": false,
+      "category": "migration",
+      "files": [
+        "dashboard/app/(dashboard)/"
+      ],
+      "acceptance": [
+        "100% component reuse",
+        "0 inline overrides",
+        "Consistent across all 50+ pages"
+      ]
+    },
+    {
+      "id": "DS-029",
+      "name": "Component Documentation",
+      "description": "Create usage documentation for all design system components",
+      "priority": "P2",
+      "phase": 20,
+      "effort": "4h",
+      "passes": false,
+      "category": "documentation",
+      "files": [
+        "dashboard/docs/DESIGN_SYSTEM.md"
+      ],
+      "acceptance": [
+        "Usage examples for each component",
+        "Props documentation",
+        "Code snippets",
+        "Best practices"
+      ]
+    },
+    {
+      "id": "DS-030",
+      "name": "Accessibility Audit",
+      "description": "Ensure all components meet WCAG 2.1 AA standards",
+      "priority": "P1",
+      "phase": 20,
+      "effort": "4h",
+      "passes": false,
+      "category": "accessibility",
+      "files": [
+        "dashboard/components/ui/"
+      ],
+      "acceptance": [
+        "Focus states visible",
+        "Color contrast meets standards",
+        "Touch targets >= 44px",
+        "Screen reader compatible"
       ]
     }
   ]

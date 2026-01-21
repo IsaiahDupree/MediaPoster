@@ -2,8 +2,8 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 374,
-  "completedFeatures": 179,
+  "totalFeatures": 381,
+  "completedFeatures": 185,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -6791,6 +6791,138 @@
         "GPT quota exceeded alert",
         "Medium post failure warning",
         "Auto-pause after 3+ failures"
+      ]
+    },
+    {
+      "id": "YTP-016",
+      "name": "Video Duration Router",
+      "description": "Check video duration and route to RapidAPI (≤20 min) or local Whisper pipeline (>20 min)",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "2h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/youtube/duration_router.py"
+      ],
+      "acceptance": [
+        "Get duration via yt-dlp",
+        "20 minute threshold check",
+        "Route to appropriate service",
+        "Log routing decision"
+      ]
+    },
+    {
+      "id": "YTP-017",
+      "name": "Local Transcription Service",
+      "description": "Fallback transcription for long videos: yt-dlp download → ffmpeg audio extract → Whisper API",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "4h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/youtube/local_transcription.py"
+      ],
+      "acceptance": [
+        "Download video via yt-dlp",
+        "Extract audio via ffmpeg",
+        "Transcribe via Whisper API",
+        "Cleanup temp files"
+      ]
+    },
+    {
+      "id": "YTP-018",
+      "name": "yt-dlp Video Downloader",
+      "description": "Download YouTube videos to temp directory for local processing",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "2h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/youtube/downloader.py"
+      ],
+      "acceptance": [
+        "Download to /tmp/youtube_downloads",
+        "Format: best[ext=mp4]",
+        "No playlist mode",
+        "Return file path"
+      ]
+    },
+    {
+      "id": "YTP-019",
+      "name": "FFmpeg Audio Extraction",
+      "description": "Extract audio track from video for Whisper transcription",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "1h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/youtube/audio_extractor.py"
+      ],
+      "acceptance": [
+        "Convert mp4 to mp3",
+        "128k bitrate",
+        "Return audio path"
+      ]
+    },
+    {
+      "id": "YTP-020",
+      "name": "Whisper API Integration",
+      "description": "Transcribe audio files using OpenAI Whisper-1 model",
+      "priority": "P0",
+      "phase": 21,
+      "effort": "2h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/youtube/whisper_transcriber.py"
+      ],
+      "acceptance": [
+        "whisper-1 model",
+        "Text response format",
+        "Handle large files",
+        "Return transcript text"
+      ]
+    },
+    {
+      "id": "YTP-021",
+      "name": "Transcript Caching",
+      "description": "Cache transcripts in database to avoid re-processing same videos",
+      "priority": "P1",
+      "phase": 21,
+      "effort": "2h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/youtube/transcript_cache.py"
+      ],
+      "acceptance": [
+        "Store by video_id",
+        "Include method (rapidapi/whisper)",
+        "TTL for cache expiry",
+        "Check cache before processing"
+      ]
+    },
+    {
+      "id": "YTP-022",
+      "name": "Temp File Cleanup Service",
+      "description": "Automatic cleanup of downloaded videos and extracted audio after processing",
+      "priority": "P1",
+      "phase": 21,
+      "effort": "1h",
+      "passes": false,
+      "category": "youtube-automation",
+      "files": [
+        "Backend/services/youtube/cleanup.py"
+      ],
+      "acceptance": [
+        "Delete video after audio extraction",
+        "Delete audio after transcription",
+        "Scheduled cleanup for orphaned files",
+        "Disk space monitoring"
       ]
     }
   ]

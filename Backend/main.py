@@ -20,7 +20,8 @@ from api.endpoints import videos, ingestion, jobs, analytics, analysis, highligh
 from api.endpoints import event_history, video_routing_api
 from api.endpoints import tts, matting, remotion, pipeline, music, visuals
 from api.endpoints import twitter_api
-from api.endpoints import smart_schedule, batch_analysis
+from api.endpoints import smart_schedule
+# from api.endpoints import batch_analysis  # FIXME: Model import errors
 from database.connection import init_db, close_db
 
 # Event Bus imports
@@ -1327,7 +1328,7 @@ app.include_router(content_pipeline.router, tags=["Content Pipeline"])
 app.include_router(smart_schedule.router, tags=["Smart Scheduling"])
 
 # Batch Analysis (CUR-001: Batch video analysis, CUR-002: Sentiment analysis)
-app.include_router(batch_analysis.router, tags=["Batch Analysis"])
+# app.include_router(batch_analysis.router, tags=["Batch Analysis"])  # FIXME: Model import errors
 
 # RapidAPI Metrics (Multi-API Instagram/LinkedIn with rate limit management)
 from api import rapidapi_metrics
@@ -1379,6 +1380,11 @@ app.include_router(scheduler.router, tags=["Scheduler"])
 
 # Character Generation (CHAR-001 to CHAR-004)
 app.include_router(characters.router, tags=["Characters"])
+
+# Safari Session Manager (SSM-001 to SSM-015)
+from api.endpoints import safari_sessions
+app.include_router(safari_sessions.router, tags=["Safari Sessions"])
+logger.success("✓ Safari Session Manager API registered (SSM-001, SSM-002, SSM-003, SSM-004, SSM-005, SSM-007, SSM-015)")
 
 # Device Import (iOS/Android media import with duplicate detection)
 # TODO: import_router module not found - commented out for now

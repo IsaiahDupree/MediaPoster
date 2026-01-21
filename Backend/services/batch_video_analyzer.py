@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 
 from database.connection import get_db_context
-from database.models import MediaLibrary, ContentAnalysis
+from database.models import Video, VideoAnalysis
 from services.event_bus import EventBus, Topics
 from services.ai_content_analyzer import AIContentAnalyzer
 from services.whisper_transcriber import WhisperTranscriber
@@ -106,7 +106,7 @@ class BatchVideoAnalyzer:
         self,
         limit: Optional[int] = None,
         media_type: str = "video"
-    ) -> List[MediaLibrary]:
+    ) -> List[Video]:
         """
         Get list of videos that haven't been analyzed
 
@@ -115,24 +115,20 @@ class BatchVideoAnalyzer:
             media_type: Type of media to analyze (default: video)
 
         Returns:
-            List of MediaLibrary records
+            List of Video records
         """
         async with get_db_context() as db:
-            # Find videos without content analysis
+            # Find videos without analysis
             query = (
-                select(MediaLibrary)
+                select(Video)
                 .outerjoin(
-                    ContentAnalysis,
-                    MediaLibrary.id == ContentAnalysis.media_id
+                    VideoAnalysis,
+                    Video.id == VideoAnalysis.video_id
                 )
                 .where(
-                    and_(
-                        MediaLibrary.media_type == media_type,
-                        MediaLibrary.status == 'ready',
-                        ContentAnalysis.id.is_(None) if self.skip_existing else True
-                    )
+                    VideoAnalysis.video_id.is_(None) if self.skip_existing else True
                 )
-                .order_by(MediaLibrary.created_at.desc())
+                .order_by(Video.created_at.desc())
             )
 
             if limit:
@@ -146,63 +142,59 @@ class BatchVideoAnalyzer:
 
     async def analyze_video(
         self,
-        media: MediaLibrary,
+        media: Video,
         db: AsyncSession
     ) -> Dict[str, Any]:
         """
         Analyze a single video
 
         Args:
-            media: MediaLibrary record
+            media: Video record
             db: Database session
 
         Returns:
             Analysis results dictionary
         """
         try:
-            logger.info(f"Analyzing video: {media.filename}")
+            logger.info(f"Analyzing video: {media.file_name}")
 
             # Emit progress event
             await self.event_bus.publish(
                 Topics.ANALYSIS_STARTED,
                 {
                     'media_id': str(media.id),
-                    'filename': media.filename,
+                    'filename': media.file_name,
                     'batch_id': self.current_batch_id
                 }
             )
 
-            # Step 1: Extract transcript (if video)
+            # Step 1: Extract transcript
             transcript = None
-            if media.media_type == 'video' and media.local_path:
+            if media.source_uri:
                 try:
                     transcript_result = await self.transcriber.transcribe_video(
-                        video_path=media.local_path
+                        video_path=media.source_uri
                     )
                     transcript = transcript_result.get('text', '')
                 except Exception as e:
-                    logger.warning(f"Transcript extraction failed for {media.filename}: {e}")
+                    logger.warning(f"Transcript extraction failed for {media.file_name}: {e}")
 
             # Step 2: Visual content analysis
             visual_analysis = None
-            if media.local_path or media.source_uri:
+            if media.source_uri:
                 try:
                     visual_analysis = await self.content_analyzer.analyze_media(
-                        media_path=media.local_path or media.source_uri,
-                        media_type=media.media_type
+                        media_path=media.source_uri,
+                        media_type='video'
                     )
                 except Exception as e:
-                    logger.warning(f"Visual analysis failed for {media.filename}: {e}")
+                    logger.warning(f"Visual analysis failed for {media.file_name}: {e}")
 
-            # Step 3: Create content analysis record
-            analysis = ContentAnalysis(
-                media_id=media.id,
+            # Step 3: Create analysis record
+            analysis = VideoAnalysis(
+                video_id=media.id,
                 transcript=transcript,
-                scene_description=visual_analysis.get('scene_description') if visual_analysis else None,
-                detected_objects=visual_analysis.get('objects', []) if visual_analysis else [],
-                mood=visual_analysis.get('mood') if visual_analysis else None,
-                niche=visual_analysis.get('niche') if visual_analysis else None,
-                quality_score=visual_analysis.get('quality_score', 0) if visual_analysis else None,
+                visual_analysis=visual_analysis if visual_analysis else None,
                 analyzed_at=datetime.now(timezone.utc)
             )
 
@@ -215,10 +207,10 @@ class BatchVideoAnalyzer:
                 Topics.ANALYSIS_COMPLETED,
                 {
                     'media_id': str(media.id),
-                    'analysis_id': str(analysis.id),
-                    'filename': media.filename,
+                    'analysis_id': str(analysis.video_id),
+                    'filename': media.file_name,
                     'has_transcript': transcript is not None,
-                    'quality_score': analysis.quality_score,
+                    'pre_social_score': analysis.pre_social_score,
                     'batch_id': self.current_batch_id
                 }
             )
@@ -232,14 +224,14 @@ class BatchVideoAnalyzer:
             }
 
         except Exception as e:
-            logger.error(f"Analysis failed for {media.filename}: {e}")
+            logger.error(f"Analysis failed for {media.file_name}: {e}")
 
             # Emit failure event
             await self.event_bus.publish(
                 Topics.ANALYSIS_FAILED,
                 {
                     'media_id': str(media.id),
-                    'filename': media.filename,
+                    'filename': media.file_name,
                     'error': str(e),
                     'batch_id': self.current_batch_id
                 }
@@ -253,7 +245,7 @@ class BatchVideoAnalyzer:
 
     async def process_batch(
         self,
-        videos: List[MediaLibrary],
+        videos: List[Video],
         batch_id: str
     ) -> Dict[str, Any]:
         """
@@ -282,7 +274,7 @@ class BatchVideoAnalyzer:
         # Process videos with concurrency limit
         semaphore = asyncio.Semaphore(self.concurrency)
 
-        async def process_with_semaphore(media: MediaLibrary):
+        async def process_with_semaphore(media: Video):
             async with semaphore:
                 async with get_db_context() as db:
                     self.progress.in_progress += 1
@@ -384,16 +376,13 @@ class BatchVideoAnalyzer:
         async with get_db_context() as db:
             # Total videos
             total_result = await db.execute(
-                select(func.count(MediaLibrary.id))
-                .where(MediaLibrary.media_type == 'video')
+                select(func.count(Video.id))
             )
             total = total_result.scalar() or 0
 
             # Analyzed videos
             analyzed_result = await db.execute(
-                select(func.count(ContentAnalysis.id))
-                .join(MediaLibrary, ContentAnalysis.media_id == MediaLibrary.id)
-                .where(MediaLibrary.media_type == 'video')
+                select(func.count(VideoAnalysis.video_id))
             )
             analyzed = analyzed_result.scalar() or 0
 

@@ -967,6 +967,19 @@ class SafariAutoComment:
         
         print(f'{"="*60}\n', flush=True)
         
+        # Track engagement in Brand Ops system
+        try:
+            from services.auto_engagement_tracker import track_safari_engagement, get_tracker
+            track_safari_engagement(results, platform='instagram')
+            
+            # Show remaining to target
+            tracker = get_tracker()
+            remaining = tracker.get_remaining_to_target('instagram')
+            if remaining.get('total_remaining', 0) > 0:
+                print(f'🎯 Remaining to daily target: {remaining["comments_remaining"]} comments, {remaining["likes_remaining"]} likes', flush=True)
+        except ImportError:
+            pass  # Tracker not available
+        
         return results
     
     def find_comment_box(self) -> CommentBoxResult:

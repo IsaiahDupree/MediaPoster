@@ -160,29 +160,122 @@ class SafariController:
             os.unlink(temp_path)
         return None
     
+    def like_post_in_feed(self, post_index: int = 0) -> str:
+        """Like a post from the feed view (before clicking into it). Returns post URL if successful."""
+        js_code = f'''
+        (function() {{
+            // Find all articles (posts) in the feed
+            var articles = document.querySelectorAll('article');
+            if (articles.length <= {post_index}) return JSON.stringify({{error: 'post not found'}});
+            
+            var article = articles[{post_index}];
+            
+            // Get the post URL
+            var postLink = article.querySelector('a[href*="/p/"], a[href*="/reel/"]');
+            var postUrl = postLink ? postLink.href : '';
+            
+            // Find the like button in THIS article's action bar
+            // The action bar has: Like, Comment, Share, Save icons
+            var sections = article.querySelectorAll('section');
+            for (var i = 0; i < sections.length; i++) {{
+                var section = sections[i];
+                var hasComment = section.querySelector('svg[aria-label="Comment"]');
+                var hasShare = section.querySelector('svg[aria-label="Share Post"], svg[aria-label="Send Post"]');
+                
+                if (hasComment || hasShare) {{
+                    var likeBtn = section.querySelector('svg[aria-label="Like"], svg[aria-label="Unlike"]');
+                    if (likeBtn) {{
+                        var label = likeBtn.getAttribute('aria-label');
+                        if (label === 'Like') {{
+                            var btn = likeBtn.closest('button') || likeBtn.closest('[role="button"]') || likeBtn.parentElement;
+                            if (btn) {{
+                                var evt = new MouseEvent('click', {{bubbles: true, cancelable: true, view: window}});
+                                btn.dispatchEvent(evt);
+                                return JSON.stringify({{status: 'liked', url: postUrl}});
+                            }}
+                        }} else if (label === 'Unlike') {{
+                            return JSON.stringify({{status: 'already_liked', url: postUrl}});
+                        }}
+                    }}
+                }}
+            }}
+            
+            return JSON.stringify({{error: 'like button not found', url: postUrl}});
+        }})();
+        '''
+        result = self.js(js_code)
+        try:
+            data = json.loads(result) if result else {}
+            if data.get('status') in ['liked', 'already_liked']:
+                return data.get('url', '')
+            return ''
+        except:
+            return ''
+    
     def like_post(self) -> bool:
-        """Like the current post."""
+        """Like the current post (when viewing post detail page)."""
         js_code = '''
         (function() {
-            // Find the like button (heart icon that's not filled)
-            var svgs = document.querySelectorAll('svg[aria-label="Like"], svg[aria-label="Unlike"]');
-            for (var i = 0; i < svgs.length; i++) {
-                var label = svgs[i].getAttribute('aria-label');
-                if (label === 'Like') {
-                    var btn = svgs[i].closest('button') || svgs[i].closest('[role="button"]');
-                    if (btn) {
-                        btn.click();
-                        return 'liked';
+            // Find the main post like button - it's near the like count (e.g., "197" likes)
+            // Look for the like button that's next to the like count at the bottom
+            
+            // Method 1: Find by the like count section
+            var spans = document.querySelectorAll('span');
+            for (var i = 0; i < spans.length; i++) {
+                var text = spans[i].innerText;
+                if (text && text.match(/^[\\d,]+ likes?$/i)) {
+                    // Found like count, look for nearby like button
+                    var parent = spans[i].closest('section') || spans[i].parentElement.parentElement.parentElement;
+                    if (parent) {
+                        var likeBtn = parent.querySelector('svg[aria-label="Like"], svg[aria-label="Unlike"]');
+                        if (likeBtn) {
+                            var label = likeBtn.getAttribute('aria-label');
+                            if (label === 'Like') {
+                                var btn = likeBtn.closest('button') || likeBtn.closest('[role="button"]') || likeBtn.parentElement;
+                                if (btn) {
+                                    var evt = new MouseEvent('click', {bubbles: true, cancelable: true, view: window});
+                                    btn.dispatchEvent(evt);
+                                    return 'liked_post';
+                                }
+                            } else {
+                                return 'already_liked';
+                            }
+                        }
                     }
-                } else if (label === 'Unlike') {
-                    return 'already_liked';
                 }
             }
+            
+            // Method 2: Find section with Comment + Share (action bar)
+            var article = document.querySelector('article') || document.querySelector('div[role="dialog"]') || document.body;
+            var sections = article.querySelectorAll('section');
+            for (var i = 0; i < sections.length; i++) {
+                var section = sections[i];
+                var hasComment = section.querySelector('svg[aria-label="Comment"]');
+                var hasShare = section.querySelector('svg[aria-label="Share Post"], svg[aria-label="Send Post"]');
+                
+                if (hasComment || hasShare) {
+                    var likeBtn = section.querySelector('svg[aria-label="Like"], svg[aria-label="Unlike"]');
+                    if (likeBtn) {
+                        var label = likeBtn.getAttribute('aria-label');
+                        if (label === 'Like') {
+                            var btn = likeBtn.closest('button') || likeBtn.closest('[role="button"]') || likeBtn.parentElement;
+                            if (btn) {
+                                var evt = new MouseEvent('click', {bubbles: true, cancelable: true, view: window});
+                                btn.dispatchEvent(evt);
+                                return 'liked_post';
+                            }
+                        } else {
+                            return 'already_liked';
+                        }
+                    }
+                }
+            }
+            
             return 'not_found';
         })();
         '''
         result = self.js(js_code)
-        return result in ['liked', 'already_liked']
+        return result in ['liked_post', 'already_liked']
     
     def focus_comment_input(self) -> bool:
         """Focus the comment input field."""

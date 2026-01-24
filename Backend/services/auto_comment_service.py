@@ -689,45 +689,115 @@ Rules:
         
         return results
     
-    async def _save_to_db(self, records: List[Dict]):
-        """Save comment records to database."""
+    async def _save_to_db(self, records: List[Dict], agent_run_id: str = None):
+        """Save comment records to database with full Brand Ops tracking."""
         if not self.db_pool:
             return
         
         try:
             async with self.db_pool.acquire() as conn:
-                for r in records:
+                # First, create agent_run record if we have the new schema
+                run_id = agent_run_id or f"auto_comment_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+                
+                try:
                     await conn.execute('''
-                        INSERT INTO auto_comments (
-                            platform, post_url, post_username, post_caption,
-                            post_image_context, post_comments_context,
-                            post_engagement_stats, comment_text, ai_prompt_used,
-                            ai_model, ai_response_raw, prompt_tokens,
-                            completion_tokens, total_tokens, estimated_cost_usd,
-                            status, verified, error_message, posted_at
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                        INSERT INTO agent_runs (
+                            agent_type, agent_version, run_id, platform,
+                            input_context, prompt_version,
+                            total_duration_ms, ai_tokens_used, ai_cost_usd,
+                            status, completed_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     ''',
-                        r.get("platform"),
-                        r.get("post_url"),
-                        r.get("post_username"),
-                        r.get("post_caption"),
-                        r.get("post_image_context"),
-                        r.get("post_comments_context"),
-                        json.dumps(r.get("post_engagement_stats", {})),
-                        r.get("comment_text"),
-                        r.get("ai_prompt_used"),
-                        r.get("ai_model"),
-                        r.get("ai_response_raw"),
-                        r.get("prompt_tokens"),
-                        r.get("completion_tokens"),
-                        r.get("total_tokens"),
-                        r.get("estimated_cost_usd"),
-                        r.get("status"),
-                        r.get("verified"),
-                        r.get("error_message"),
-                        datetime.utcnow() if r.get("status") == "posted" else None
+                        'auto_commenter',
+                        '1.0.0',
+                        run_id,
+                        records[0].get("platform") if records else None,
+                        json.dumps({"num_posts": len(records)}),
+                        '1.0.0',
+                        0,
+                        sum(r.get("total_tokens", 0) for r in records),
+                        sum(r.get("estimated_cost_usd", 0) for r in records),
+                        'success' if any(r.get("status") == "posted" for r in records) else 'failed',
+                        datetime.utcnow()
                     )
-            logger.info(f"💾 Saved {len(records)} records to database")
+                except Exception:
+                    pass  # Table may not exist yet
+                
+                # Save to engagement_actions (new Brand Ops schema)
+                for r in records:
+                    try:
+                        await conn.execute('''
+                            INSERT INTO engagement_actions (
+                                action_type, platform, our_username,
+                                target_post_url, target_username,
+                                post_caption, post_image_description,
+                                top_comments, action_content,
+                                ai_prompt_used, ai_model, ai_tokens_input,
+                                ai_tokens_output, ai_cost_usd,
+                                status, verified_at, verification_method,
+                                content_id, posted_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                        ''',
+                            'comment',
+                            r.get("platform"),
+                            r.get("account_id", ""),
+                            r.get("post_url"),
+                            r.get("post_username"),
+                            r.get("post_caption"),
+                            r.get("post_image_context"),
+                            json.dumps(r.get("post_comments_context", "")),
+                            r.get("comment_text"),
+                            r.get("ai_prompt_used"),
+                            r.get("ai_model"),
+                            r.get("prompt_tokens"),
+                            r.get("completion_tokens"),
+                            r.get("estimated_cost_usd"),
+                            r.get("status"),
+                            datetime.utcnow() if r.get("verified") else None,
+                            'page_check' if r.get("verified") else None,
+                            f"{r.get('platform')}_{r.get('post_id', '')}",
+                            datetime.utcnow() if r.get("status") == "posted" else None
+                        )
+                    except Exception as e:
+                        logger.debug(f"engagement_actions insert failed (table may not exist): {e}")
+                
+                # Also save to legacy auto_comments table
+                for r in records:
+                    try:
+                        await conn.execute('''
+                            INSERT INTO auto_comments (
+                                platform, post_url, post_username, post_caption,
+                                post_image_context, post_comments_context,
+                                post_engagement_stats, comment_text, ai_prompt_used,
+                                ai_model, ai_response_raw, prompt_tokens,
+                                completion_tokens, total_tokens, estimated_cost_usd,
+                                status, verified, error_message, posted_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                        ''',
+                            r.get("platform"),
+                            r.get("post_url"),
+                            r.get("post_username"),
+                            r.get("post_caption"),
+                            r.get("post_image_context"),
+                            r.get("post_comments_context"),
+                            json.dumps(r.get("post_engagement_stats", {})),
+                            r.get("comment_text"),
+                            r.get("ai_prompt_used"),
+                            r.get("ai_model"),
+                            r.get("ai_response_raw"),
+                            r.get("prompt_tokens"),
+                            r.get("completion_tokens"),
+                            r.get("total_tokens"),
+                            r.get("estimated_cost_usd"),
+                            r.get("status"),
+                            r.get("verified"),
+                            r.get("error_message"),
+                            datetime.utcnow() if r.get("status") == "posted" else None
+                        )
+                    except Exception as e:
+                        logger.debug(f"auto_comments insert failed: {e}")
+                
+            logger.info(f"💾 Saved {len(records)} records to database (Brand Ops tracking)")
         except Exception as e:
             logger.error(f"Failed to save to DB: {e}")
     

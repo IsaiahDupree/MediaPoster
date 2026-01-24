@@ -88,6 +88,7 @@ class AutoCommentService:
         self.db_url = db_url or os.getenv("DATABASE_URL")
         self.db_pool = None
         self.session_comments: List[CommentRecord] = []
+        self.commented_urls: set = set()  # In-memory dedup cache
         
         # Rate limits per hour
         self.rate_limits = {
@@ -102,8 +103,73 @@ class AutoCommentService:
             try:
                 self.db_pool = await asyncpg.create_pool(self.db_url)
                 logger.info("✅ Database connection initialized")
+                # Load previously commented URLs for dedup
+                await self._load_commented_urls()
             except Exception as e:
                 logger.warning(f"Could not connect to database: {e}")
+    
+    async def _load_commented_urls(self):
+        """Load previously commented URLs from DB for deduplication."""
+        if not self.db_pool:
+            return
+        try:
+            async with self.db_pool.acquire() as conn:
+                # Try engagement_actions table first (Brand Ops schema)
+                try:
+                    rows = await conn.fetch('''
+                        SELECT DISTINCT target_post_url FROM engagement_actions 
+                        WHERE action_type = 'comment' AND status IN ('posted', 'verified')
+                        AND created_at > NOW() - INTERVAL '30 days'
+                    ''')
+                    for row in rows:
+                        if row['target_post_url']:
+                            self.commented_urls.add(self._normalize_url(row['target_post_url']))
+                except Exception:
+                    pass
+                
+                # Also try legacy auto_comments table
+                try:
+                    rows = await conn.fetch('''
+                        SELECT DISTINCT post_url FROM auto_comments 
+                        WHERE status IN ('posted', 'verified', 'unverified')
+                        AND created_at > NOW() - INTERVAL '30 days'
+                    ''')
+                    for row in rows:
+                        if row['post_url']:
+                            self.commented_urls.add(self._normalize_url(row['post_url']))
+                except Exception:
+                    pass
+                
+            logger.info(f"📋 Loaded {len(self.commented_urls)} previously commented URLs")
+        except Exception as e:
+            logger.warning(f"Could not load commented URLs: {e}")
+    
+    def _normalize_url(self, url: str) -> str:
+        """Normalize URL for comparison (remove trailing slashes, query params)."""
+        if not url:
+            return ""
+        # Remove query params and fragments
+        url = url.split('?')[0].split('#')[0]
+        # Remove trailing slash
+        url = url.rstrip('/')
+        # Extract post ID for platform-agnostic matching
+        for pattern in ['/p/', '/post/', '/reel/']:
+            if pattern in url:
+                parts = url.split(pattern)
+                if len(parts) > 1:
+                    post_id = parts[1].split('/')[0]
+                    return f"{pattern}{post_id}"
+        return url
+    
+    def _has_commented(self, url: str) -> bool:
+        """Check if we've already commented on this URL."""
+        normalized = self._normalize_url(url)
+        return normalized in self.commented_urls
+    
+    def _mark_commented(self, url: str):
+        """Mark URL as commented (add to cache)."""
+        normalized = self._normalize_url(url)
+        self.commented_urls.add(normalized)
     
     def _run_applescript(self, script: str) -> tuple:
         """Run AppleScript and return (success, result)."""
@@ -582,6 +648,13 @@ Rules:
             
             record.post_url = posts[post_index].get("url", "")
             
+            # Check for duplicate - skip if already commented
+            if self._has_commented(record.post_url):
+                logger.info(f"   ⏭️ SKIPPING - Already commented on: {record.post_url}")
+                record.status = "skipped_duplicate"
+                results.append(asdict(record))
+                continue
+            
             if not self._click_post(platform, post_index):
                 logger.warning("Failed to click post")
                 continue
@@ -666,6 +739,8 @@ Rules:
             
             if record.verified:
                 logger.success(f"   ✅ Comment posted! Cost: ${record.estimated_cost_usd:.4f}")
+                # Mark as commented to prevent duplicates
+                self._mark_commented(record.post_url)
             else:
                 logger.warning("   ⚠️ Could not verify comment")
             

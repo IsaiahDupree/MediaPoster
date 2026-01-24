@@ -118,28 +118,142 @@ class SafariController:
         return url if success else ""
     
     def capture_screenshot(self) -> Optional[str]:
-        """Capture Safari window screenshot, return base64."""
+        """Capture Safari window screenshot automatically, return base64."""
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
             temp_path = f.name
         
-        # Capture Safari window
+        # Get Safari window ID and capture it directly (no manual click needed)
         script = f'''
-        tell application "Safari" to activate
-        delay 0.5
-        do shell script "screencapture -w -o {temp_path}"
+        tell application "Safari"
+            activate
+            set windowID to id of front window
+        end tell
+        delay 0.3
+        do shell script "screencapture -l " & windowID & " -x {temp_path}"
         '''
         success, _ = self.run_applescript(script, timeout=10)
         
-        if not success or not os.path.exists(temp_path):
-            # Fallback: capture entire screen
+        if not success or not os.path.exists(temp_path) or os.path.getsize(temp_path) < 1000:
+            # Fallback: capture by window name
+            script2 = f'''
+            tell application "System Events"
+                tell process "Safari"
+                    set frontWindow to front window
+                    set windowBounds to position of frontWindow & size of frontWindow
+                end tell
+            end tell
+            do shell script "screencapture -R " & (item 1 of windowBounds) & "," & (item 2 of windowBounds) & "," & (item 3 of windowBounds) & "," & (item 4 of windowBounds) & " -x {temp_path}"
+            '''
+            success, _ = self.run_applescript(script2, timeout=10)
+        
+        if not success or not os.path.exists(temp_path) or os.path.getsize(temp_path) < 1000:
+            # Final fallback: capture entire screen silently
             subprocess.run(['screencapture', '-x', temp_path], timeout=5)
         
-        if os.path.exists(temp_path):
+        if os.path.exists(temp_path) and os.path.getsize(temp_path) > 1000:
             with open(temp_path, 'rb') as f:
                 data = base64.b64encode(f.read()).decode('utf-8')
             os.unlink(temp_path)
             return data
+        
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
         return None
+    
+    def like_post(self) -> bool:
+        """Like the current post."""
+        js_code = '''
+        (function() {
+            // Find the like button (heart icon that's not filled)
+            var svgs = document.querySelectorAll('svg[aria-label="Like"], svg[aria-label="Unlike"]');
+            for (var i = 0; i < svgs.length; i++) {
+                var label = svgs[i].getAttribute('aria-label');
+                if (label === 'Like') {
+                    var btn = svgs[i].closest('button') || svgs[i].closest('[role="button"]');
+                    if (btn) {
+                        btn.click();
+                        return 'liked';
+                    }
+                } else if (label === 'Unlike') {
+                    return 'already_liked';
+                }
+            }
+            return 'not_found';
+        })();
+        '''
+        result = self.js(js_code)
+        return result in ['liked', 'already_liked']
+    
+    def focus_comment_input(self) -> bool:
+        """Focus the comment input field."""
+        js_code = '''
+        (function() {
+            // Try textarea first
+            var textarea = document.querySelector('textarea[placeholder*="comment"], textarea[aria-label*="comment"], textarea');
+            if (textarea) {
+                textarea.focus();
+                textarea.click();
+                return 'focused';
+            }
+            
+            // Try clicking comment icon to open input
+            var commentBtn = document.querySelector('svg[aria-label="Comment"]');
+            if (commentBtn) {
+                var btn = commentBtn.closest('button') || commentBtn.closest('[role="button"]');
+                if (btn) {
+                    btn.click();
+                    return 'clicked_comment';
+                }
+            }
+            
+            return 'not_found';
+        })();
+        '''
+        result = self.js(js_code)
+        return result in ['focused', 'clicked_comment']
+    
+    def submit_comment(self) -> bool:
+        """Submit the comment."""
+        js_code = '''
+        (function() {
+            // Find Post button
+            var buttons = document.querySelectorAll('button, div[role="button"]');
+            for (var i = 0; i < buttons.length; i++) {
+                var text = (buttons[i].innerText || '').trim();
+                if (text === 'Post') {
+                    buttons[i].click();
+                    return 'submitted';
+                }
+            }
+            
+            // Try submit by form
+            var form = document.querySelector('form');
+            if (form) {
+                var submitBtn = form.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.click();
+                    return 'form_submitted';
+                }
+            }
+            
+            return 'not_found';
+        })();
+        '''
+        result = self.js(js_code)
+        return result in ['submitted', 'form_submitted']
+    
+    def type_text(self, text: str) -> bool:
+        """Type text using System Events keystroke."""
+        safe = text.replace('"', '').replace("'", "").replace('\\', '')[:80]
+        script = f'''
+        tell application "Safari" to activate
+        delay 0.3
+        tell application "System Events"
+            keystroke "{safe}"
+        end tell
+        '''
+        success, _ = self.run_applescript(script)
+        return success
 
 
 class InstagramContextExtractor:
@@ -500,6 +614,51 @@ class InstagramContextExtractor:
         
         return context
     
+    def like_and_comment(self, comment_text: str) -> Dict:
+        """Like the post and leave a comment."""
+        result = {"liked": False, "commented": False, "verified": False, "error": ""}
+        
+        print("\n❤️ Liking post...")
+        like_result = self.safari.like_post()
+        result["liked"] = like_result
+        print(f"   {'✅ Liked!' if like_result else '❌ Like failed'}")
+        
+        time.sleep(0.5)
+        
+        print("\n💬 Posting comment...")
+        print(f"   Text: {comment_text}")
+        
+        # Focus comment input
+        if not self.safari.focus_comment_input():
+            print("   ❌ Could not focus comment input")
+            result["error"] = "focus_failed"
+            return result
+        
+        time.sleep(0.5)
+        
+        # Type the comment
+        self.safari.type_text(comment_text)
+        time.sleep(0.5)
+        
+        # Submit
+        if self.safari.submit_comment():
+            print("   ✅ Comment submitted!")
+            result["commented"] = True
+            
+            # Verify comment appears
+            time.sleep(2)
+            page_text = self.safari.js("document.body.innerText")
+            if comment_text[:20] in page_text:
+                print("   ✅ Comment verified on page!")
+                result["verified"] = True
+            else:
+                print("   ⚠️ Comment not verified (may still be posted)")
+        else:
+            print("   ❌ Submit failed")
+            result["error"] = "submit_failed"
+        
+        return result
+    
     def generate_contextual_comment(self, context: PostContext) -> str:
         """Generate an AI comment using the full context."""
         if not self.api_key:
@@ -572,6 +731,7 @@ def main():
     parser.add_argument("--test", "-t", action="store_true", help="Test on current Safari page")
     parser.add_argument("--no-vision", action="store_true", help="Skip AI vision analysis")
     parser.add_argument("--generate", "-g", action="store_true", help="Generate a comment")
+    parser.add_argument("--engage", "-e", action="store_true", help="Like and comment on post")
     parser.add_argument("--output", "-o", type=str, help="Save context to JSON file")
     
     args = parser.parse_args()
@@ -585,9 +745,26 @@ def main():
     )
     
     # Generate comment if requested
-    if args.generate:
+    comment = None
+    if args.generate or args.engage:
         comment = extractor.generate_contextual_comment(context)
-        print(f"\n🎯 FINAL COMMENT: {comment}")
+        print(f"\n🎯 GENERATED COMMENT: {comment}")
+    
+    # Like and comment if requested
+    if args.engage and comment:
+        print(f"\n{'='*60}")
+        print("🚀 ENGAGING WITH POST")
+        print(f"{'='*60}")
+        engage_result = extractor.like_and_comment(comment)
+        
+        print(f"\n{'='*60}")
+        print("📊 ENGAGEMENT RESULT")
+        print(f"{'='*60}")
+        print(f"   Liked:    {'✅' if engage_result['liked'] else '❌'}")
+        print(f"   Commented: {'✅' if engage_result['commented'] else '❌'}")
+        print(f"   Verified:  {'✅' if engage_result['verified'] else '❌'}")
+        if engage_result.get('error'):
+            print(f"   Error:     {engage_result['error']}")
     
     # Save to file if requested
     if args.output:

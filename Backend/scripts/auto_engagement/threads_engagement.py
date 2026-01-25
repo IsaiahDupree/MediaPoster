@@ -177,82 +177,104 @@ class ThreadsEngagement:
     })()
     '''
     
+    JS_CLICK_EXPAND = '''
+    (function() {
+        // Click the expand button to reveal the full Post button
+        // Selector: div:nth-child(3) > div > div:nth-child(1) > div within mount_0_0
+        var expandBtn = document.querySelector('#mount_0_0_EQ > div > div > div:nth-child(3) > div > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div.x1uvtmcs > div > div > div > div.html-div > div > div > div > div > div:nth-child(3) > div > div:nth-child(1) > div');
+        if (expandBtn) {
+            expandBtn.click();
+            return 'clicked_expand';
+        }
+        
+        // Fallback: find expand icon (arrows pointing outward)
+        var svgs = document.querySelectorAll('svg');
+        for (var i = 0; i < svgs.length; i++) {
+            var svg = svgs[i];
+            var label = svg.getAttribute('aria-label') || '';
+            if (label.toLowerCase().includes('expand') || label.toLowerCase().includes('full')) {
+                var btn = svg.closest('div[role="button"]') || svg.parentElement;
+                if (btn) {
+                    btn.click();
+                    return 'clicked_expand_svg';
+                }
+            }
+        }
+        
+        return 'no_expand_found';
+    })()
+    '''
+    
     JS_SUBMIT = '''
     (function() {
-        // Strategy 1: Look for "Post" button text in modal (highest priority)
-        // Search all clickable elements for one that contains exactly "Post" or "Reply"
-        var allElements = document.querySelectorAll('div[role="button"], button, span, div');
+        // Strategy 1: Find any element containing exactly "Post" text and click it
+        var allElements = document.querySelectorAll('div, span, button');
         for (var i = 0; i < allElements.length; i++) {
             var el = allElements[i];
-            var text = el.innerText.trim();
-            // Check for exact match (case insensitive) - the button should just say "Post"
-            if ((text.toLowerCase() === 'post' || text.toLowerCase() === 'reply') && el.offsetParent !== null) {
+            // Get direct text content only
+            var directText = '';
+            for (var c = 0; c < el.childNodes.length; c++) {
+                if (el.childNodes[c].nodeType === 3) { // Text node
+                    directText += el.childNodes[c].textContent;
+                }
+            }
+            directText = directText.trim();
+            
+            if (directText === 'Post' && el.offsetParent !== null) {
                 var rect = el.getBoundingClientRect();
-                // Must be reasonably sized and visible
-                if (rect.width > 20 && rect.height > 15 && rect.bottom > 0 && rect.right > 0) {
+                if (rect.width > 20 && rect.height > 10) {
+                    // Click the element and any clickable parent
                     el.click();
-                    return 'clicked_post_text: ' + text;
+                    var parent = el.parentElement;
+                    while (parent && parent !== document.body) {
+                        if (parent.getAttribute('role') === 'button' || 
+                            parent.onclick || 
+                            parent.className.includes('x1i10hfl')) {
+                            parent.click();
+                            return 'clicked_post_parent';
+                        }
+                        parent = parent.parentElement;
+                    }
+                    return 'clicked_post_direct';
                 }
             }
         }
         
-        // Strategy 1b: Find elements where text INCLUDES "Post" (looser match)
-        for (var i = 0; i < allElements.length; i++) {
-            var el = allElements[i];
-            var text = el.innerText.trim();
-            if (text.length < 10 && text.toLowerCase().includes('post') && el.offsetParent !== null) {
-                var rect = el.getBoundingClientRect();
-                if (rect.width > 20 && rect.height > 15) {
-                    el.click();
-                    return 'clicked_post_includes: ' + text;
-                }
+        // Strategy 2: Find element where innerText is exactly "Post"
+        var candidates = document.querySelectorAll('*');
+        for (var i = 0; i < candidates.length; i++) {
+            var el = candidates[i];
+            if (el.innerText && el.innerText.trim() === 'Post' && 
+                el.children.length === 0 && el.offsetParent !== null) {
+                el.click();
+                if (el.parentElement) el.parentElement.click();
+                return 'clicked_post_leaf';
             }
         }
         
-        // Strategy 2: Find button with "Post" in a modal/dialog context
-        var modals = document.querySelectorAll('[role="dialog"], [aria-modal="true"], div[style*="position"]');
-        for (var m = 0; m < modals.length; m++) {
-            var modal = modals[m];
-            var buttons = modal.querySelectorAll('div[role="button"], button');
-            for (var b = 0; b < buttons.length; b++) {
-                var btn = buttons[b];
-                if (btn.innerText.toLowerCase().includes('post') && btn.offsetParent !== null) {
-                    btn.click();
-                    return 'clicked_modal_post';
-                }
-            }
-        }
-        
-        // Strategy 3: Find the blue circular button to the RIGHT of composer
+        // Strategy 3: Find circular post button near composer
         var composer = null;
         var editables = document.querySelectorAll('[contenteditable="true"]');
-        for (var e = 0; e < editables.length; e++) {
-            if (editables[e].offsetParent !== null && editables[e].offsetHeight > 10) {
-                composer = editables[e];
+        for (var i = 0; i < editables.length; i++) {
+            if (editables[i].offsetParent !== null && editables[i].offsetHeight > 5) {
+                composer = editables[i];
                 break;
             }
         }
         
         if (composer) {
-            var composerRect = composer.getBoundingClientRect();
-            var allButtons = document.querySelectorAll('div[role="button"]');
-            
-            for (var i = 0; i < allButtons.length; i++) {
-                var btn = allButtons[i];
+            var cRect = composer.getBoundingClientRect();
+            var buttons = document.querySelectorAll('div[role="button"]');
+            for (var i = 0; i < buttons.length; i++) {
+                var btn = buttons[i];
                 if (!btn.offsetParent) continue;
-                
                 var rect = btn.getBoundingClientRect();
-                
-                // Skip profile elements
-                if (btn.querySelector('img') || btn.innerText.includes('@')) continue;
-                
-                // Must be to the RIGHT and have SVG
-                if (rect.left > composerRect.right && 
-                    Math.abs(rect.top - composerRect.top) < 100 &&
-                    btn.querySelector('svg') &&
-                    rect.width < 60) {
+                if (btn.querySelector('svg') && 
+                    rect.left > cRect.right - 50 &&
+                    Math.abs(rect.top - cRect.top) < 30 &&
+                    rect.width >= 28 && rect.width <= 50) {
                     btn.click();
-                    return 'clicked_arrow_button';
+                    return 'clicked_inline_button';
                 }
             }
         }
@@ -380,6 +402,11 @@ class ThreadsEngagement:
         # Type comment
         self.safari.type_via_clipboard(result.generated_comment)
         print(f"   ✅ Typed comment")
+        time.sleep(1)
+        
+        # Click expand button to reveal full Post button
+        expand_result = self.safari.execute_js(self.JS_CLICK_EXPAND)
+        print(f"   Expand: {expand_result}")
         time.sleep(1)
         
         # Submit

@@ -2,19 +2,24 @@
 Multi-Platform Safari Auto-Commenter with State Management
 
 Unified auto-commenter for Instagram, Threads, and TikTok with:
-- Robust Safari browser state management
-- AI-powered contextual comment generation (OpenAI)
-- Visual content analysis (OpenAI Vision)
+- Robust Safari browser state management with URL verification
+- Full context extraction (post content + comments)
+- AI-powered contextual comment generation using post AND comments context
 - Like before comment flow
 - Verifiable proof screenshots
 - Brand Ops tracking integration
 - Retry logic and error handling
 
+Flow per platform:
+- THREADS: Navigate → Click post → Extract post + ALL comments → AI summarize → Contextual comment
+- INSTAGRAM: Navigate → Like in feed → Click post → Extract description + comments → Thoughtful comment  
+- TIKTOK: Robust navigation with URL verification → Extract video data + comments → Like → Comment
+
 Usage:
     from multi_platform_auto_comment import MultiPlatformCommenter
     
     commenter = MultiPlatformCommenter(openai_api_key="...")
-    results = commenter.engage_all_platforms(posts_per_platform=1)
+    results = commenter.engage_all_platforms()
 """
 
 import subprocess
@@ -137,6 +142,32 @@ class SafariBrowserController:
         script = 'tell application "Safari" to return URL of front document'
         success, url = self.run_applescript(script)
         return url if success else ""
+    
+    def wait_for_url_contains(self, domain: str, timeout: int = 10) -> bool:
+        """Wait until URL contains the expected domain."""
+        for _ in range(timeout):
+            url = self.get_current_url()
+            if domain in url:
+                return True
+            time.sleep(1)
+        return False
+    
+    def navigate_with_verification(self, url: str, domain: str, max_attempts: int = 3) -> bool:
+        """Navigate to URL with domain verification and retry."""
+        for attempt in range(max_attempts):
+            # Clear page first on retry
+            if attempt > 0:
+                self.navigate_to('about:blank', wait_time=1)
+            
+            self.navigate_to(url, wait_time=2)
+            
+            # Wait for correct domain
+            if self.wait_for_url_contains(domain, timeout=8):
+                return True
+            
+            print(f"      Retry {attempt + 1}/{max_attempts}...")
+        
+        return False
     
     def execute_js(self, code: str) -> Optional[str]:
         """Execute JavaScript in Safari and return result."""
@@ -339,34 +370,47 @@ class MultiPlatformCommenter:
         return "Visual content"
     
     def _generate_comment(self, platform: str, context: PostContext) -> str:
-        """Generate a contextual comment using OpenAI."""
+        """Generate a contextual comment using OpenAI with full post and comments context."""
         try:
             headers = {
                 'Authorization': f'Bearer {self.openai_api_key}',
                 'Content-Type': 'application/json'
             }
             
-            prompt = f"""Generate a short, authentic {platform} comment (max 70 chars) with 1-2 emojis.
-Be positive, natural, and engaging. Reference the content when possible.
+            # Build comments summary
+            comments_summary = ""
+            if context.top_comments:
+                comments_summary = "\n".join(context.top_comments[:5])
+            
+            prompt = f"""You are commenting on a {platform} post. Generate a SHORT, authentic comment (max 80 chars) with 1-2 emojis.
 
-Creator: @{context.username}
-Content: {context.visual_summary or context.caption or 'engaging post'}
-Platform vibe: {'casual/fun' if platform == 'tiktok' else 'professional/engaging'}
+POST BY @{context.username}:
+{context.caption or context.visual_summary or 'engaging content'}
+
+WHAT OTHERS ARE SAYING:
+{comments_summary or 'No comments yet'}
+
+Generate a thoughtful, relatable comment that:
+- Feels natural and human
+- References specific content from the post when possible
+- Adds to the conversation (not just "great post!")
+- Uses appropriate emojis for {platform}
+- Platform vibe: {'casual/fun' if platform == 'tiktok' else 'conversational' if platform == 'threads' else 'supportive/engaging'}
 
 Output ONLY the comment text:"""
 
             payload = {
                 'model': 'gpt-4o',
                 'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 50,
-                'temperature': 0.9
+                'max_tokens': 60,
+                'temperature': 0.85
             }
             
             response = requests.post(
                 'https://api.openai.com/v1/chat/completions',
                 headers=headers,
                 json=payload,
-                timeout=15
+                timeout=20
             )
             
             if response.status_code == 200:
@@ -374,7 +418,7 @@ Output ONLY the comment text:"""
         except Exception as e:
             print(f"   Comment generation error: {e}")
         
-        return "Love this! 🔥"
+        return "This really resonates! 🙌"
     
     # ==================== INSTAGRAM ====================
     

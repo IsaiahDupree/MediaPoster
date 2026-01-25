@@ -154,12 +154,23 @@ class ThreadsEngagement:
     
     JS_FOCUS_INPUT = '''
     (function() {
+        // Wait for reply modal/composer to be visible
         var els = document.querySelectorAll('[contenteditable="true"]');
         for (var i = 0; i < els.length; i++) {
-            if (els[i].offsetParent !== null) { 
-                els[i].click(); 
-                els[i].focus(); 
-                return 'focused'; 
+            var el = els[i];
+            if (el.offsetParent !== null && el.offsetHeight > 10) { 
+                // Scroll into view first
+                el.scrollIntoView({block: 'center'});
+                // Multiple clicks to ensure focus
+                el.click();
+                el.focus();
+                // Set a placeholder to confirm it's active
+                if (el.innerText.trim() === '' || el.innerText.includes('reply') || el.innerText.includes('Reply')) {
+                    el.innerText = '';
+                }
+                el.click();
+                el.focus();
+                return 'focused';
             }
         }
         return 'not_found';
@@ -168,22 +179,84 @@ class ThreadsEngagement:
     
     JS_SUBMIT = '''
     (function() {
-        var btns = document.querySelectorAll('div[role="button"], button');
-        for (var i = 0; i < btns.length; i++) {
-            var text = btns[i].innerText.toLowerCase().trim();
-            if (text === 'post' || text === 'reply') { 
-                btns[i].click(); 
-                return 'submitted'; 
+        // Strategy 1: Look for "Post" button text in modal (highest priority)
+        // Search all clickable elements for one that contains exactly "Post" or "Reply"
+        var allElements = document.querySelectorAll('div[role="button"], button, span, div');
+        for (var i = 0; i < allElements.length; i++) {
+            var el = allElements[i];
+            var text = el.innerText.trim();
+            // Check for exact match (case insensitive) - the button should just say "Post"
+            if ((text.toLowerCase() === 'post' || text.toLowerCase() === 'reply') && el.offsetParent !== null) {
+                var rect = el.getBoundingClientRect();
+                // Must be reasonably sized and visible
+                if (rect.width > 20 && rect.height > 15 && rect.bottom > 0 && rect.right > 0) {
+                    el.click();
+                    return 'clicked_post_text: ' + text;
+                }
             }
         }
-        // Fallback: try clicking any blue/primary button
-        var primaryBtns = document.querySelectorAll('[style*="background"][role="button"]');
-        for (var i = 0; i < primaryBtns.length; i++) {
-            if (primaryBtns[i].offsetParent !== null) {
-                primaryBtns[i].click();
-                return 'clicked_primary';
+        
+        // Strategy 1b: Find elements where text INCLUDES "Post" (looser match)
+        for (var i = 0; i < allElements.length; i++) {
+            var el = allElements[i];
+            var text = el.innerText.trim();
+            if (text.length < 10 && text.toLowerCase().includes('post') && el.offsetParent !== null) {
+                var rect = el.getBoundingClientRect();
+                if (rect.width > 20 && rect.height > 15) {
+                    el.click();
+                    return 'clicked_post_includes: ' + text;
+                }
             }
         }
+        
+        // Strategy 2: Find button with "Post" in a modal/dialog context
+        var modals = document.querySelectorAll('[role="dialog"], [aria-modal="true"], div[style*="position"]');
+        for (var m = 0; m < modals.length; m++) {
+            var modal = modals[m];
+            var buttons = modal.querySelectorAll('div[role="button"], button');
+            for (var b = 0; b < buttons.length; b++) {
+                var btn = buttons[b];
+                if (btn.innerText.toLowerCase().includes('post') && btn.offsetParent !== null) {
+                    btn.click();
+                    return 'clicked_modal_post';
+                }
+            }
+        }
+        
+        // Strategy 3: Find the blue circular button to the RIGHT of composer
+        var composer = null;
+        var editables = document.querySelectorAll('[contenteditable="true"]');
+        for (var e = 0; e < editables.length; e++) {
+            if (editables[e].offsetParent !== null && editables[e].offsetHeight > 10) {
+                composer = editables[e];
+                break;
+            }
+        }
+        
+        if (composer) {
+            var composerRect = composer.getBoundingClientRect();
+            var allButtons = document.querySelectorAll('div[role="button"]');
+            
+            for (var i = 0; i < allButtons.length; i++) {
+                var btn = allButtons[i];
+                if (!btn.offsetParent) continue;
+                
+                var rect = btn.getBoundingClientRect();
+                
+                // Skip profile elements
+                if (btn.querySelector('img') || btn.innerText.includes('@')) continue;
+                
+                // Must be to the RIGHT and have SVG
+                if (rect.left > composerRect.right && 
+                    Math.abs(rect.top - composerRect.top) < 100 &&
+                    btn.querySelector('svg') &&
+                    rect.width < 60) {
+                    btn.click();
+                    return 'clicked_arrow_button';
+                }
+            }
+        }
+        
         return 'not_found';
     })()
     '''
@@ -311,7 +384,8 @@ class ThreadsEngagement:
         
         # Submit
         submit_result = self.safari.execute_js(self.JS_SUBMIT)
-        result.comment_posted = submit_result in ['submitted', 'clicked_primary']
+        # Consider various click results as posted (will verify via screenshot)
+        result.comment_posted = 'clicked' in submit_result or submit_result == 'submitted'
         print(f"   Submit: {submit_result}")
         time.sleep(3)
         

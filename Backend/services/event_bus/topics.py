@@ -191,7 +191,9 @@ class Topics:
     RULE_UPDATED = "mp.rules.evt.rule_updated"                    # Rule confidence updated
     RULE_DEPRECATED = "mp.rules.evt.rule_deprecated"              # Rule no longer valid
     TEMPLATE_CREATED = "mp.rules.evt.template_created"            # New template
+    TEMPLATE_FORKED = "mp.template.forked"                         # Template auto-forked (AUTO-003)
     TEMPLATE_LEADERBOARD_UPDATED = "mp.template.leaderboard.updated"  # Template rankings updated
+    TEMPLATE_RETIRED = "mp.template.retired"                       # Template retired (AUTO-004)
     PLAYBOOK_ACTIVATED = "mp.rules.evt.playbook_activated"        # Playbook in use
     
     # =========================================================================
@@ -344,6 +346,21 @@ class Topics:
     VISUALS_PROGRESS = "visuals.progress"                # Progress update
     VISUALS_COMPLETED = "visuals.completed"              # Visuals ready
     VISUALS_FAILED = "visuals.failed"                    # Visuals error
+    
+    # =========================================================================
+    # AUTO-ENGAGEMENT (Safari Browser Automation)
+    # =========================================================================
+    ENGAGEMENT_REQUESTED = "engagement.requested"              # Request to engage with platform
+    ENGAGEMENT_STARTED = "engagement.started"                  # Worker picked up job
+    ENGAGEMENT_POST_FOUND = "engagement.post_found"            # Found a post to engage with
+    ENGAGEMENT_COMMENT_GENERATED = "engagement.comment_generated"  # AI generated a comment
+    ENGAGEMENT_COMMENT_POSTED = "engagement.comment_posted"    # Comment successfully posted
+    ENGAGEMENT_COMMENT_SKIPPED = "engagement.comment_skipped"  # Post skipped (duplicate/limit)
+    ENGAGEMENT_COMPLETED = "engagement.completed"              # Engagement session completed
+    ENGAGEMENT_FAILED = "engagement.failed"                    # Engagement failed
+    ENGAGEMENT_DAILY_LIMIT_REACHED = "engagement.daily_limit_reached"  # Daily limit hit
+    ENGAGEMENT_PAUSED = "engagement.paused"                    # Engagement paused
+    ENGAGEMENT_RESUMED = "engagement.resumed"                  # Engagement resumed
     
     # =========================================================================
     # SYSTEM

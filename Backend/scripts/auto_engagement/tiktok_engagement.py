@@ -78,40 +78,51 @@ class TikTokEngagement:
     (function() {
         var data = {username: '', description: '', likes: '', comments: '', shares: '', saves: ''};
         
-        // Get username - multiple selectors for different layouts
-        var userSelectors = [
-            '[data-e2e="browse-username"]',
-            '[data-e2e="video-author-uniqueid"]',
-            'a[href*="/@"] span',
-            'h3[data-e2e="video-author-uniqueid"]',
-            '.author-uniqueId'
-        ];
-        for (var i = 0; i < userSelectors.length; i++) {
-            var el = document.querySelector(userSelectors[i]);
-            if (el) {
-                var text = el.innerText || el.textContent || '';
-                text = text.replace('@', '').trim();
+        // Get username from user profile links (most reliable method)
+        var userLinks = document.querySelectorAll('a[href*="/@"]');
+        for (var i = 0; i < userLinks.length; i++) {
+            var link = userLinks[i];
+            var href = link.getAttribute('href') || '';
+            var text = (link.innerText || '').trim();
+            
+            // Extract username from href
+            var match = href.match(/@([^/\\?]+)/);
+            if (match && match[1] && !match[1].includes('video')) {
+                // Prefer link with visible text (creator name)
                 if (text && text.length > 0 && text.length < 50) {
-                    data.username = text;
+                    data.username = match[1];
+                    data.displayName = text;
                     break;
+                } else if (!data.username) {
+                    data.username = match[1];
                 }
             }
         }
         
-        // Fallback: get from URL
+        // Fallback selectors
         if (!data.username) {
-            var userLink = document.querySelector('a[href*="/@"]');
-            if (userLink) {
-                var href = userLink.getAttribute('href');
-                var match = href.match(/@([^/\\?]+)/);
-                if (match) data.username = match[1];
+            var userSelectors = [
+                '[data-e2e="browse-username"]',
+                '[data-e2e="video-author-uniqueid"]',
+                'h3[data-e2e="video-author-uniqueid"]'
+            ];
+            for (var i = 0; i < userSelectors.length; i++) {
+                var el = document.querySelector(userSelectors[i]);
+                if (el) {
+                    var text = (el.innerText || el.textContent || '').replace('@', '').trim();
+                    if (text && text.length > 0 && text.length < 50) {
+                        data.username = text;
+                        break;
+                    }
+                }
             }
         }
         
-        // Get description
+        // Get description from various elements
         var descSelectors = [
             '[data-e2e="browse-video-desc"]',
             '[data-e2e="video-desc"]',
+            'span[data-e2e="new-desc"]',
             '.video-meta-title',
             'h1'
         ];

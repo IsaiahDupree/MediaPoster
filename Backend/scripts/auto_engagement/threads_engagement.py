@@ -207,7 +207,7 @@ class ThreadsEngagement:
     
     JS_SUBMIT = '''
     (function() {
-        // Strategy 1: Find any element containing exactly "Post" text and click it
+        // Strategy 1: Find "Post" text and click its clickable parent (NOT both)
         var allElements = document.querySelectorAll('div, span, button');
         for (var i = 0; i < allElements.length; i++) {
             var el = allElements[i];
@@ -223,31 +223,35 @@ class ThreadsEngagement:
             if (directText === 'Post' && el.offsetParent !== null) {
                 var rect = el.getBoundingClientRect();
                 if (rect.width > 20 && rect.height > 10) {
-                    // Click the element and any clickable parent
-                    el.click();
+                    // Find the clickable parent button - click ONLY that (not both)
                     var parent = el.parentElement;
                     while (parent && parent !== document.body) {
                         if (parent.getAttribute('role') === 'button' || 
-                            parent.onclick || 
                             parent.className.includes('x1i10hfl')) {
                             parent.click();
                             return 'clicked_post_parent';
                         }
                         parent = parent.parentElement;
                     }
+                    // No clickable parent found, click the element itself
+                    el.click();
                     return 'clicked_post_direct';
                 }
             }
         }
         
-        // Strategy 2: Find element where innerText is exactly "Post"
+        // Strategy 2: Find element where innerText is exactly "Post" - click ONCE
         var candidates = document.querySelectorAll('*');
         for (var i = 0; i < candidates.length; i++) {
             var el = candidates[i];
             if (el.innerText && el.innerText.trim() === 'Post' && 
                 el.children.length === 0 && el.offsetParent !== null) {
-                el.click();
-                if (el.parentElement) el.parentElement.click();
+                // Find clickable parent or click element - NOT both
+                var clickTarget = el;
+                if (el.parentElement && el.parentElement.getAttribute('role') === 'button') {
+                    clickTarget = el.parentElement;
+                }
+                clickTarget.click();
                 return 'clicked_post_leaf';
             }
         }
@@ -414,7 +418,7 @@ class ThreadsEngagement:
         # Consider various click results as posted (will verify via screenshot)
         result.comment_posted = 'clicked' in submit_result or submit_result == 'submitted'
         print(f"   Submit: {submit_result}")
-        time.sleep(3)
+        time.sleep(10)  # Wait for comment to fully post and modal to close
         
         # Step 7: Capture proof
         print("\n[7/7] Capturing proof...")

@@ -532,14 +532,81 @@ Output ONLY the comment text:"""
         self.safari.take_screenshot(frame_path)
         result.frame_screenshot = frame_path
         
-        # Analyze with AI Vision
-        print("   🤖 Analyzing content...")
+        # Click to expand comments if available
+        print("   Expanding comments...")
+        expand_js = '''
+        (function() {
+            var links = document.querySelectorAll('span, a, div[role="button"]');
+            for (var i = 0; i < links.length; i++) {
+                var text = links[i].innerText.toLowerCase();
+                if (text.includes('view all') && text.includes('comment')) {
+                    links[i].click();
+                    return 'expanded';
+                }
+            }
+            return 'no_expand_needed';
+        })()
+        '''
+        self.safari.execute_js(expand_js)
+        time.sleep(2)
+        
+        # Extract caption AND comments
+        print("   Extracting caption and comments...")
+        extract_js = '''
+        (function() {
+            var data = {caption: '', comments: []};
+            
+            // Get caption
+            var spans = document.querySelectorAll('span[dir="auto"]');
+            for (var i = 0; i < spans.length; i++) {
+                if (spans[i].innerText.length > 50 && spans[i].innerText.length < 1000) {
+                    data.caption = spans[i].innerText.substring(0, 300);
+                    break;
+                }
+            }
+            
+            // Extract comments using username link pattern
+            var allDivs = document.querySelectorAll('div');
+            for (var d = 0; d < allDivs.length; d++) {
+                var div = allDivs[d];
+                var links = div.querySelectorAll('a[href^="/"]');
+                
+                for (var l = 0; l < links.length; l++) {
+                    var href = links[l].getAttribute('href');
+                    if (href && href.match(/^\\/[a-zA-Z0-9_.]+\\/$/) && 
+                        !href.includes('/p/') && !href.includes('/explore/')) {
+                        
+                        var username = href.replace(/\\//g, '');
+                        var parent = links[l].closest('div');
+                        if (parent) {
+                            var textSpans = parent.querySelectorAll('span');
+                            for (var t = 0; t < textSpans.length; t++) {
+                                var text = textSpans[t].innerText.trim();
+                                if (text.length > 5 && text.length < 300 && 
+                                    text !== username && !text.includes('View') && 
+                                    !text.includes('Reply') && !text.includes('like')) {
+                                    var entry = '@' + username + ': ' + text.substring(0, 80);
+                                    if (data.comments.indexOf(entry) === -1 && data.comments.length < 10) {
+                                        data.comments.push(entry);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return JSON.stringify(data);
+        })()
+        '''
+        context_result = self.safari.execute_js(extract_js)
         context = PostContext(platform='instagram', username=result.username, post_url=result.post_url)
-        context.visual_summary = self._analyze_image_with_openai(
-            frame_path,
-            "Describe this Instagram post in one sentence - what's shown and the vibe."
-        )
-        print(f"      {context.visual_summary[:60]}...")
+        
+        if context_result:
+            ctx_data = json.loads(context_result)
+            context.caption = ctx_data.get('caption', '')
+            context.top_comments = ctx_data.get('comments', [])
+            print(f"      Caption: {context.caption[:50]}...")
+            print(f"      Comments found: {len(context.top_comments)}")
         
         # Find and focus comment box
         print("   Finding comment box...")

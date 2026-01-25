@@ -39,13 +39,14 @@ from .comment_tracker import CommentTracker, PlatformStatus, get_comment_tracker
 logger = logging.getLogger(__name__)
 
 # Supported platforms
-PLATFORMS = ['threads', 'instagram', 'tiktok']
+PLATFORMS = ['threads', 'instagram', 'tiktok', 'twitter']
 
 # Delay configuration (seconds between comments)
 DELAY_CONFIG = {
     'threads': {'min': 30, 'max': 120},
     'instagram': {'min': 45, 'max': 180},
-    'tiktok': {'min': 30, 'max': 120}
+    'tiktok': {'min': 30, 'max': 120},
+    'twitter': {'min': 30, 'max': 90}
 }
 
 

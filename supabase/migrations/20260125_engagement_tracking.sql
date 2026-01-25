@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS engagement_limits (
 INSERT INTO engagement_limits (platform, daily_limit, is_enabled) VALUES
     ('threads', 100, true),
     ('instagram', 100, true),
-    ('tiktok', 100, true)
+    ('tiktok', 100, true),
+    ('twitter', 100, true)
 ON CONFLICT (platform) DO NOTHING;
 
 -- ============================================================================

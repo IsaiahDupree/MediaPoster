@@ -353,6 +353,9 @@ class EngagementWorker(BaseWorker):
         elif platform == 'tiktok':
             from scripts.auto_engagement.tiktok_engagement import TikTokEngagement
             module = TikTokEngagement(openai_api_key=openai_key)
+        elif platform == 'twitter':
+            from scripts.auto_engagement.twitter_engagement import TwitterEngagement
+            module = TwitterEngagement(openai_api_key=openai_key)
         else:
             return None
         

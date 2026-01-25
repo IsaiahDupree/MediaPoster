@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_LIMITS = {
     'threads': 100,
     'instagram': 100,
-    'tiktok': 100
+    'tiktok': 100,
+    'twitter': 100
 }
 
 

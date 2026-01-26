@@ -16,6 +16,7 @@ from loguru import logger
 from services.event_bus import EventBus, Topics
 from services.background_publisher import get_background_publisher
 from config.platform_limits import get_platform_limits, PLATFORM_LIMITS
+from services.user_tracking_service import UserTrackingService, EventName
 from typing import Dict
 
 router = APIRouter()
@@ -355,6 +356,23 @@ async def schedule_post(
             logger.info(f"[PubSub] Emitted SCHEDULE_CREATED for {scheduled_posts[0].id}")
         except Exception as e:
             logger.warning(f"[PubSub] Failed to emit schedule event: {e}")
+
+        # Track post scheduled event (TRACK-004)
+        try:
+            tracking = UserTrackingService.get_instance()
+            await tracking.track_core_value(
+                event_name=EventName.POST_SCHEDULED.value,
+                user_id="system",  # TODO: Get actual user_id from auth
+                properties={
+                    "post_id": str(scheduled_posts[0].id),
+                    "platforms": request.platforms,
+                    "scheduled_time": request.scheduled_time.isoformat(),
+                    "content_source": content_source,
+                    "has_media": bool(media_url)
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track post_scheduled event: {e}")
         
         # Schedule via Blotato in background if media URL available
         # IMPORTANT: Create a background task for EACH platform, not just the first one

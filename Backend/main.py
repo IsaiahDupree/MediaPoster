@@ -158,6 +158,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  CPU Monitor failed to start: {e}")
 
+    # Start the User Tracking Service (TRACK-001)
+    tracking_service = None
+    try:
+        from services.user_tracking_service import UserTrackingService
+        tracking_service = UserTrackingService.get_instance()
+        logger.success("✓ User Tracking Service started")
+    except Exception as e:
+        logger.warning(f"⚠️  User Tracking Service failed to start: {e}")
+
     # Start the Post Scheduler background worker
     post_scheduler = None
     try:
@@ -628,6 +637,10 @@ app.add_middleware(RequestLoggingMiddleware)
 # Wake middleware - wake system on user access
 from middleware.wake_middleware import WakeMiddleware
 app.add_middleware(WakeMiddleware)
+
+# User tracking middleware - track user events
+from middleware.tracking_middleware import UserTrackingMiddleware
+app.add_middleware(UserTrackingMiddleware)
 
 # BUG FIX: Add correlation ID middleware (must be early in the stack)
 from middleware.correlation_id import CorrelationIDMiddleware
@@ -1259,6 +1272,11 @@ app.include_router(sora_pipeline.router, prefix="/api", tags=["Sora Video Pipeli
 from api.endpoints import tiktok_repurpose
 app.include_router(tiktok_repurpose.router, prefix="/api", tags=["TikTok Repurpose"])
 
+# Content Repurposing Engine (REPURPOSE-001, REPURPOSE-002)
+from api.endpoints import repurpose
+app.include_router(repurpose.router, tags=["Content Repurposing"])
+logger.success("✓ Content Repurposing Engine API registered (REPURPOSE-001, REPURPOSE-002)")
+
 # B-Roll Detection (Speech-based B-Roll Classification)
 from api.endpoints import broll
 app.include_router(broll.router, tags=["B-Roll Detection"])
@@ -1367,6 +1385,11 @@ app.include_router(storage.router, prefix="/api", tags=["Storage Management"])
 from api import ai_curation
 app.include_router(ai_curation.router, tags=["AI Curation"])
 
+# Auto-Curator (CUR-005: Rule-based auto-curation)
+from api.endpoints import auto_curator
+app.include_router(auto_curator.router, tags=["Auto-Curator"])
+logger.success("✓ Auto-Curator API registered (CUR-005)")
+
 # Social Data Fetcher (RapidAPI integration for frontend pages)
 from api.endpoints import social_data_fetcher
 app.include_router(social_data_fetcher.router, tags=["Social Data Fetcher"])
@@ -1420,6 +1443,11 @@ from api import posted_media
 # Instagram TrendTok (Instagram analytics and trend discovery)
 from api.endpoints import instagram_api
 app.include_router(instagram_api.router, prefix="/api/instagram", tags=["Instagram TrendTok"])
+
+# Instagram Trends Feed (IG-TREND-001)
+from api.endpoints import instagram_trends
+app.include_router(instagram_trends.router, tags=["Instagram Trends"])
+logger.success("✓ Instagram Trends Feed API registered (IG-TREND-001)")
 
 # Instagram Automation (Comment/DM automation based on Riona-AI-Agent)
 from api.endpoints import instagram_automation
@@ -1544,6 +1572,16 @@ from api.endpoints import ai_titles
 app.include_router(ai_titles.router, tags=["AI Title Generator"])
 logger.success("✓ AI Title Generator API registered (PIPE-003)")
 
+# Content Runway (PIPE-007)
+from api.endpoints import content_runway
+app.include_router(content_runway.router, tags=["Content Runway"])
+logger.success("✓ Content Runway API registered (PIPE-007)")
+
+# Content Variations (PIPE-008)
+from api.endpoints import content_variations
+app.include_router(content_variations.router, tags=["Content Variations"])
+logger.success("✓ Content Variations API registered (PIPE-008)")
+
 # Platform Matching Engine (PIPE-004)
 from api.endpoints import platform_matching
 app.include_router(platform_matching.router, tags=["Platform Matching"])
@@ -1588,6 +1626,31 @@ app.include_router(characters.router, tags=["Characters"])
 from api.endpoints import safari_sessions
 app.include_router(safari_sessions.router, tags=["Safari Sessions"])
 logger.success("✓ Safari Session Manager API registered (SSM-001, SSM-002, SSM-003, SSM-004, SSM-005, SSM-007, SSM-015)")
+
+# Semantic Search (EMBED-001, EMBED-002)
+from api.endpoints import semantic_search
+app.include_router(semantic_search.router, tags=["Semantic Search"])
+logger.success("✓ Semantic Search API registered (EMBED-001: Embedding Service, EMBED-002: Semantic Content Search)")
+
+# Caption/Subtitle Generation (TRANS-002)
+from api.endpoints import captions
+app.include_router(captions.router, tags=["Captions"])
+logger.success("✓ Caption/Subtitle Generation API registered (TRANS-002)")
+
+# Agent Events (AC-005)
+from api.endpoints import agent_events
+app.include_router(agent_events.router, tags=["Agent Events"])
+logger.success("✓ Agent Events API registered (AC-005: Append-only event timeline)")
+
+# Content Ingestion Pipeline (BM-001, BM-002, BM-003, BM-004)
+from api.endpoints import content_ingestion
+app.include_router(content_ingestion.router, tags=["Content Ingestion"])
+logger.success("✓ Content Ingestion API registered (BM-001: Directory Ingestion, BM-002: Deduplication, BM-003: AI Analysis, BM-004: Safe Export)")
+
+# Automation Registry (BM-007)
+from api.endpoints import automations
+app.include_router(automations.router, tags=["Automation Registry"])
+logger.success("✓ Automation Registry API registered (BM-007: CRUD for automations with scheduling and resource tracking)")
 
 # Device Import (iOS/Android media import with duplicate detection)
 # TODO: import_router module not found - commented out for now

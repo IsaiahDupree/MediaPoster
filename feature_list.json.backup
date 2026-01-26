@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 381,
-  "completedFeatures": 276,
+  "completedFeatures": 266,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -2778,7 +2778,7 @@
       "priority": "P2",
       "phase": 6,
       "effort": "3h",
-      "passes": true,
+      "passes": false,
       "category": "competitor",
       "files": [
         "Backend/services/competitor_analysis_service.py"
@@ -2786,8 +2786,7 @@
       "acceptance": [
         "Learnings docs generated",
         "Cross-account insights"
-      ],
-      "completed": "2026-01-26"
+      ]
     },
     {
       "id": "EXP-001",
@@ -3114,16 +3113,15 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": true,
+      "passes": false,
       "category": "instagram-trends",
       "files": [
-        "Backend/services/instagram_format_templates.py"
+        "Backend/services/template_library.py"
       ],
       "acceptance": [
         "Templates categorized",
         "Matchable to content"
-      ],
-      "completed": "2026-01-26"
+      ]
     },
     {
       "id": "IG-TREND-003",
@@ -3132,7 +3130,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": true,
+      "passes": false,
       "category": "instagram-trends",
       "files": [
         "Backend/services/optimal_posting_times.py"
@@ -3140,8 +3138,7 @@
       "acceptance": [
         "Times calculated",
         "Based on real data"
-      ],
-      "completed": "2026-01-26"
+      ]
     },
     {
       "id": "IG-TREND-004",
@@ -3827,18 +3824,15 @@
       "priority": "P1",
       "phase": 6,
       "effort": "2h",
-      "passes": true,
+      "passes": false,
       "category": "curation",
       "files": [
-        "Backend/services/auto_curator.py",
-        "Backend/api/endpoints/auto_curator.py",
-        "Backend/tests/unit/test_auto_curator.py"
+        "Backend/services/auto_curator.py"
       ],
       "acceptance": [
         "40-60% auto-curated",
         "<5s per video"
-      ],
-      "completed": "2026-01-26"
+      ]
     },
     {
       "id": "SAF-001",
@@ -4273,7 +4267,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "4h",
-      "passes": true,
+      "passes": false,
       "category": "import",
       "files": [
         "Backend/services/iphone_direct_import.py"
@@ -4281,8 +4275,7 @@
       "acceptance": [
         "Files imported",
         "Metadata extracted"
-      ],
-      "completed": "2026-01-26"
+      ]
     },
     {
       "id": "IPHONE-002",
@@ -4764,7 +4757,7 @@
       "priority": "P0",
       "phase": 12,
       "effort": "8h",
-      "passes": 1,
+      "passes": false,
       "category": "repurposing",
       "files": [
         "Backend/services/video_analyzer.py"
@@ -4782,7 +4775,7 @@
       "priority": "P0",
       "phase": 12,
       "effort": "8h",
-      "passes": 1,
+      "passes": false,
       "category": "repurposing",
       "files": [
         "Backend/services/clip_extractor.py"
@@ -4800,7 +4793,7 @@
       "priority": "P1",
       "phase": 12,
       "effort": "4h",
-      "passes": 1,
+      "passes": false,
       "category": "repurposing",
       "files": [
         "Backend/services/caption_generator.py"
@@ -4818,7 +4811,7 @@
       "priority": "P0",
       "phase": 12,
       "effort": "6h",
-      "passes": 1,
+      "passes": false,
       "category": "repurposing",
       "files": [
         "dashboard/app/repurpose/page.tsx"
@@ -5677,7 +5670,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "4h",
-      "passes": true,
+      "passes": false,
       "category": "automation",
       "files": [
         "Backend/services/automation_registry.py",
@@ -5687,8 +5680,7 @@
         "CRUD for automations",
         "Status tracking",
         "Schedule management"
-      ],
-      "completed": "2026-01-26"
+      ]
     },
     {
       "id": "BM-008",

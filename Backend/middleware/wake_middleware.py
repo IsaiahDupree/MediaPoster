@@ -30,8 +30,9 @@ class WakeMiddleware(BaseHTTPMiddleware):
         Returns:
             Response from next handler
         """
-        # Skip health checks to avoid constant waking
-        if request.url.path in ["/health", "/api/health", "/api/sleep/health"]:
+        # Skip health checks and sleep status to avoid constant waking
+        # The sleep status endpoint should not wake the system (read-only)
+        if request.url.path in ["/health", "/api/health", "/api/sleep/health", "/api/sleep/status"]:
             return await call_next(request)
 
         # Try to wake the system

@@ -18,6 +18,7 @@ from database.models import OriginalVideo, Clip
 from config import settings
 from services.thumbnail_generator import ThumbnailGenerator
 from services.event_bus import EventBus, Topics
+from services.user_tracking_service import UserTrackingService, EventName
 from loguru import logger
 
 router = APIRouter()
@@ -469,7 +470,25 @@ async def upload_video(
         db.add(video)
         await db.commit()
         await db.refresh(video)
-        
+
+        # Track media uploaded event (TRACK-004)
+        try:
+            tracking = UserTrackingService.get_instance()
+            await tracking.track_core_value(
+                event_name=EventName.MEDIA_UPLOADED.value,
+                user_id="system",  # TODO: Get actual user_id from auth
+                properties={
+                    "video_id": str(video.id),
+                    "file_name": file.filename,
+                    "duration": metadata['duration'],
+                    "resolution": f"{metadata.get('width')}x{metadata.get('height')}",
+                    "source_type": valid_source_type,
+                    "file_size_mb": file_size / (1024*1024) if file_size else None
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to track media_uploaded event: {e}")
+
         return {
             "message": "Video uploaded successfully",
             "video_id": str(video.id),

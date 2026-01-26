@@ -29,11 +29,20 @@ from .workers import (
     start_trend_workers,
     stop_trend_workers,
 )
+from .instagram_trends import (
+    InstagramTrendsService,
+    get_instagram_trends_service,
+    Region,
+    TrendingHashtag,
+    TrendingSound,
+    TrendingFormat,
+    InstagramTrendsFeed
+)
 
 __all__ = [
     # Models
     "PostRaw",
-    "TrendCluster", 
+    "TrendCluster",
     "TrendScore",
     "ClusterLingo",
     "Brief",
@@ -48,6 +57,14 @@ __all__ = [
     "get_cluster_service",
     "get_brief_service",
     "get_trend_render_service",
+    # Instagram Trends
+    "InstagramTrendsService",
+    "get_instagram_trends_service",
+    "Region",
+    "TrendingHashtag",
+    "TrendingSound",
+    "TrendingFormat",
+    "InstagramTrendsFeed",
     # Job Queue
     "JobQueue",
     "QueueType",

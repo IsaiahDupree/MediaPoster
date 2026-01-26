@@ -511,15 +511,189 @@ class TranscriptionAdapter:
         )
 
 
+def generate_srt(transcription: TranscriptionResult, max_chars_per_line: int = 42, max_duration: float = 7.0) -> str:
+    """
+    Generate SRT (SubRip) format captions from transcription
+
+    Args:
+        transcription: TranscriptionResult with segments or words
+        max_chars_per_line: Maximum characters per caption line
+        max_duration: Maximum duration for a single caption (seconds)
+
+    Returns:
+        SRT formatted string
+    """
+    import textwrap
+
+    captions = []
+
+    # Use segments if available, otherwise create from words
+    if transcription.segments:
+        for seg in transcription.segments:
+            # Split long segments into smaller captions
+            text = seg.text.strip()
+            if not text:
+                continue
+
+            # Split by duration if segment is too long
+            duration = seg.end - seg.start
+            if duration > max_duration:
+                # Split into smaller chunks based on words
+                if seg.words:
+                    current_text = ""
+                    current_start = seg.words[0].start
+
+                    for i, word in enumerate(seg.words):
+                        if word.end - current_start > max_duration or len(current_text) + len(word.text) > max_chars_per_line * 2:
+                            if current_text:
+                                captions.append({
+                                    "start": current_start,
+                                    "end": seg.words[i-1].end if i > 0 else word.start,
+                                    "text": current_text.strip()
+                                })
+                            current_text = word.text
+                            current_start = word.start
+                        else:
+                            current_text += " " + word.text if current_text else word.text
+
+                    if current_text:
+                        captions.append({
+                            "start": current_start,
+                            "end": seg.end,
+                            "text": current_text.strip()
+                        })
+                else:
+                    # No words, just split text evenly
+                    lines = textwrap.wrap(text, max_chars_per_line)
+                    num_lines = len(lines)
+                    duration_per_line = duration / num_lines
+
+                    for i, line in enumerate(lines):
+                        captions.append({
+                            "start": seg.start + (i * duration_per_line),
+                            "end": seg.start + ((i + 1) * duration_per_line),
+                            "text": line
+                        })
+            else:
+                # Segment fits within duration, just wrap text
+                lines = textwrap.wrap(text, max_chars_per_line)
+                if len(lines) <= 2:
+                    captions.append({
+                        "start": seg.start,
+                        "end": seg.end,
+                        "text": "\n".join(lines)
+                    })
+                else:
+                    # Split into multiple captions
+                    duration_per_caption = duration / len(lines)
+                    for i, line in enumerate(lines):
+                        captions.append({
+                            "start": seg.start + (i * duration_per_caption),
+                            "end": seg.start + ((i + 1) * duration_per_caption),
+                            "text": line
+                        })
+
+    elif transcription.words:
+        # Create captions from words
+        current_text = ""
+        current_start = transcription.words[0].start
+
+        for i, word in enumerate(transcription.words):
+            # Check if adding this word would exceed limits
+            test_text = (current_text + " " + word.text) if current_text else word.text
+
+            if (word.end - current_start > max_duration or
+                len(test_text) > max_chars_per_line * 2 or
+                "\n" in word.text):  # Sentence boundary
+
+                if current_text:
+                    # Wrap current caption
+                    lines = textwrap.wrap(current_text.strip(), max_chars_per_line)
+                    captions.append({
+                        "start": current_start,
+                        "end": transcription.words[i-1].end if i > 0 else word.start,
+                        "text": "\n".join(lines[:2])  # Max 2 lines per caption
+                    })
+
+                current_text = word.text
+                current_start = word.start
+            else:
+                current_text = test_text
+
+        # Add final caption
+        if current_text:
+            lines = textwrap.wrap(current_text.strip(), max_chars_per_line)
+            captions.append({
+                "start": current_start,
+                "end": transcription.words[-1].end,
+                "text": "\n".join(lines[:2])
+            })
+
+    # Generate SRT output
+    srt_lines = []
+    for i, caption in enumerate(captions, 1):
+        # Format timestamps
+        start_time = _format_srt_timestamp(caption["start"])
+        end_time = _format_srt_timestamp(caption["end"])
+
+        srt_lines.append(f"{i}")
+        srt_lines.append(f"{start_time} --> {end_time}")
+        srt_lines.append(caption["text"])
+        srt_lines.append("")  # Blank line between captions
+
+    return "\n".join(srt_lines)
+
+
+def generate_vtt(transcription: TranscriptionResult, max_chars_per_line: int = 42, max_duration: float = 7.0) -> str:
+    """
+    Generate WebVTT format captions from transcription
+
+    Args:
+        transcription: TranscriptionResult with segments or words
+        max_chars_per_line: Maximum characters per caption line
+        max_duration: Maximum duration for a single caption (seconds)
+
+    Returns:
+        WebVTT formatted string
+    """
+    # Generate SRT content first
+    srt_content = generate_srt(transcription, max_chars_per_line, max_duration)
+
+    # Convert SRT to VTT
+    # VTT uses dots instead of commas in timestamps
+    vtt_content = srt_content.replace(",", ".")
+
+    # Add WebVTT header
+    return f"WEBVTT\n\n{vtt_content}"
+
+
+def _format_srt_timestamp(seconds: float) -> str:
+    """
+    Format seconds as SRT timestamp (HH:MM:SS,mmm)
+
+    Args:
+        seconds: Time in seconds
+
+    Returns:
+        Formatted timestamp string
+    """
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
 # Convenience function
 def adapt_transcription(response: Dict[str, Any], provider: str) -> TranscriptionResult:
     """
     Convenience function to adapt transcription response
-    
+
     Args:
         response: Raw response from provider
         provider: Provider name
-    
+
     Returns:
         TranscriptionResult with unified format
     """

@@ -26,6 +26,7 @@ from loguru import logger
 import httpx
 from dataclasses import dataclass, field
 from enum import Enum
+from services.user_tracking_service import UserTrackingService, EventName
 
 
 def _str(val):
@@ -568,6 +569,23 @@ class BackgroundPublisher:
                 },
                 correlation_id=correlation_id
             )
+
+            # Track post published event (TRACK-004)
+            try:
+                tracking = UserTrackingService.get_instance()
+                await tracking.track_core_value(
+                    event_name=EventName.POST_PUBLISHED.value,
+                    user_id="system",  # TODO: Get actual user_id from auth
+                    properties={
+                        "media_id": _str(request.media_id),
+                        "platform": request.platform,
+                        "post_url": result.platform_url,
+                        "username": request.username,
+                        "scheduled": False  # This is immediate publish
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to track post_published event: {e}")
             
             logger.success(
                 f"[Publish] ✅ Successfully published to {request.platform}! "

@@ -22,6 +22,7 @@ class TrendVelocity(BaseModel):
     acceleration: float = 0.0
     trending_score: float = 0.0
     last_updated: datetime = None
+    metadata: Dict[str, Any] = {}  # Additional metadata (e.g., artist for sounds)
 
 
 class TrendVelocityService:
@@ -301,15 +302,15 @@ class TrendVelocityService:
             ]
     
     def get_top_trending(
-        self, 
-        trend_type: str = None, 
+        self,
+        trend_type: str = None,
         limit: int = 20
     ) -> List[TrendVelocity]:
         """Get trends with highest trending score"""
         with self.engine.connect() as conn:
             query = """
                 SELECT trend_type, trend_id, trend_name, current_count,
-                       velocity_1d, velocity_7d, velocity_30d, acceleration, 
+                       velocity_1d, velocity_7d, velocity_30d, acceleration,
                        trending_score, last_updated
                 FROM trend_velocity_scores
                 WHERE trending_score > 0
@@ -317,9 +318,9 @@ class TrendVelocityService:
             if trend_type:
                 query += f" AND trend_type = '{trend_type}'"
             query += f" ORDER BY trending_score DESC LIMIT {limit}"
-            
+
             rows = conn.execute(text(query)).fetchall()
-            
+
             return [
                 TrendVelocity(
                     trend_type=r[0], trend_id=r[1], trend_name=r[2],
@@ -329,6 +330,14 @@ class TrendVelocityService:
                 )
                 for r in rows
             ]
+
+    def get_trending_hashtags(self, limit: int = 20) -> List[TrendVelocity]:
+        """Get trending hashtags (IG-TREND-001 support)"""
+        return self.get_top_trending(trend_type="hashtag", limit=limit)
+
+    def get_trending_sounds(self, limit: int = 20) -> List[TrendVelocity]:
+        """Get trending sounds (IG-TREND-001 support)"""
+        return self.get_top_trending(trend_type="sound", limit=limit)
 
 
 # Singleton

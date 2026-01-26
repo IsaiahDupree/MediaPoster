@@ -2678,3 +2678,251 @@ class ContentAnalysis(Base):
         Index('idx_content_analysis_media', 'media_id'),
         Index('idx_content_analysis_sentiment', 'sentiment_label'),
     )
+
+# =====================================================
+# GROWTH DATA PLANE (GDP) - Migration 015
+# =====================================================
+
+class EmailMessage(Base):
+    """GDP-004: Email messages sent via Resend"""
+    __tablename__ = "email_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="CASCADE"))
+    email_id = Column(Text, unique=True, nullable=False)  # Resend email_id
+    from_email = Column(Text, nullable=False)
+    to_email = Column(Text, nullable=False)
+    subject = Column(Text)
+    html_body = Column(Text)
+    text_body = Column(Text)
+    tags = Column(JSONB)  # {"person_id": "uuid"}
+    metadata = Column(JSONB)
+
+    # Delivery tracking
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    sent_at = Column(TIMESTAMP(timezone=True))
+    delivered_at = Column(TIMESTAMP(timezone=True))
+    bounced_at = Column(TIMESTAMP(timezone=True))
+    bounce_reason = Column(Text)
+
+    # Relationships
+    person = relationship("Person")
+    events = relationship("EmailEvent", back_populates="email_message", cascade="all, delete-orphan")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_email_messages_person', 'person_id'),
+        Index('idx_email_messages_email_id', 'email_id'),
+        Index('idx_email_messages_to_email', 'to_email'),
+        Index('idx_email_messages_sent', 'sent_at'),
+    )
+
+
+class EmailEvent(Base):
+    """GDP-005: Email engagement events from Resend webhooks"""
+    __tablename__ = "email_events"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    email_message_id = Column(UUID(as_uuid=True), ForeignKey("email_messages.id", ondelete="CASCADE"))
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="CASCADE"))
+    event_type = Column(Text, nullable=False)  # delivered, opened, clicked, bounced, complained, unsubscribed
+    event_data = Column(JSONB)  # Click URL, bounce reason, etc.
+    ip_address = Column(Text)  # Store as text for simplicity
+    user_agent = Column(Text)
+    occurred_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    email_message = relationship("EmailMessage", back_populates="events")
+    person = relationship("Person")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_email_events_message', 'email_message_id', 'occurred_at'),
+        Index('idx_email_events_person', 'person_id', 'occurred_at'),
+        Index('idx_email_events_type', 'event_type', 'occurred_at'),
+        Index('idx_email_events_occurred', 'occurred_at'),
+    )
+
+
+class Subscription(Base):
+    """GDP-007, GDP-008: Stripe subscription tracking"""
+    __tablename__ = "subscriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="CASCADE"))
+    stripe_customer_id = Column(Text, unique=True)
+    stripe_subscription_id = Column(Text, unique=True)
+    status = Column(Text)  # trialing, active, past_due, canceled, unpaid, paused, incomplete
+    plan_id = Column(Text)
+    plan_name = Column(Text)
+    billing_period = Column(Text)  # monthly, yearly, lifetime
+    amount_cents = Column(Integer)
+    currency = Column(Text, default='usd')
+
+    # Billing periods
+    current_period_start = Column(TIMESTAMP(timezone=True))
+    current_period_end = Column(TIMESTAMP(timezone=True))
+    cancel_at = Column(TIMESTAMP(timezone=True))
+    canceled_at = Column(TIMESTAMP(timezone=True))
+    trial_start = Column(TIMESTAMP(timezone=True))
+    trial_end = Column(TIMESTAMP(timezone=True))
+
+    metadata = Column(JSONB)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    person = relationship("Person")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_subscriptions_person', 'person_id'),
+        Index('idx_subscriptions_stripe_customer', 'stripe_customer_id'),
+        Index('idx_subscriptions_stripe_sub', 'stripe_subscription_id'),
+        Index('idx_subscriptions_status', 'status'),
+    )
+
+
+class Deal(Base):
+    """GDP: Revenue attribution and pipeline tracking"""
+    __tablename__ = "deals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="CASCADE"))
+    deal_name = Column(Text)
+    stage = Column(Text)  # lead, qualified, demo_scheduled, demo_completed, proposal, negotiation, closed_won, closed_lost
+    value_cents = Column(Integer)
+    currency = Column(Text, default='usd')
+    probability = Column(Numeric)  # 0.0 to 1.0
+    close_date = Column(Date)
+    source = Column(Text)  # organic, paid, referral, etc.
+    attribution = Column(JSONB)  # First/last touch attribution data
+    metadata = Column(JSONB)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    person = relationship("Person")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_deals_person', 'person_id', 'created_at'),
+        Index('idx_deals_stage', 'stage'),
+        Index('idx_deals_close_date', 'close_date'),
+        Index('idx_deals_source', 'source'),
+    )
+
+
+class PersonFeatures(Base):
+    """GDP-011: Enhanced ML features for segmentation"""
+    __tablename__ = "person_features"
+
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="CASCADE"), primary_key=True)
+
+    # Engagement features
+    total_emails_sent = Column(Integer, default=0)
+    total_emails_opened = Column(Integer, default=0)
+    total_emails_clicked = Column(Integer, default=0)
+    email_open_rate = Column(Numeric)
+    email_click_rate = Column(Numeric)
+    last_email_opened_at = Column(TIMESTAMP(timezone=True))
+    last_email_clicked_at = Column(TIMESTAMP(timezone=True))
+
+    # Product usage features
+    total_posts_created = Column(Integer, default=0)
+    total_posts_published = Column(Integer, default=0)
+    total_platforms_connected = Column(Integer, default=0)
+    platforms_connected = Column(ARRAY(Text))
+    first_post_created_at = Column(TIMESTAMP(timezone=True))
+    last_post_created_at = Column(TIMESTAMP(timezone=True))
+    first_post_published_at = Column(TIMESTAMP(timezone=True))
+    last_post_published_at = Column(TIMESTAMP(timezone=True))
+
+    # Monetization features
+    subscription_status = Column(Text)
+    subscription_mrr_cents = Column(Integer, default=0)
+    lifetime_value_cents = Column(Integer, default=0)
+    days_to_first_purchase = Column(Integer)
+    is_paying = Column(Boolean, default=False)
+
+    # Engagement scores
+    product_usage_score = Column(Numeric)  # 0-1 score based on usage
+    engagement_score = Column(Numeric)     # 0-1 score based on email/content engagement
+    likelihood_to_churn = Column(Numeric)  # 0-1 predicted churn probability
+
+    # Computed at
+    computed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    person = relationship("Person")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_person_features_engagement', 'engagement_score'),
+        Index('idx_person_features_usage', 'product_usage_score'),
+        Index('idx_person_features_churn', 'likelihood_to_churn'),
+    )
+
+
+class AttributionTouchpoint(Base):
+    """GDP-006: Click tracking with cookies for email → conversion attribution"""
+    __tablename__ = "attribution_touchpoints"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="SET NULL"))
+    session_id = Column(UUID(as_uuid=True))  # First-party cookie session ID
+    click_id = Column(Text, unique=True, nullable=False)  # /c/{click_id} redirect
+    email_message_id = Column(UUID(as_uuid=True), ForeignKey("email_messages.id", ondelete="SET NULL"))
+    destination_url = Column(Text, nullable=False)
+
+    # UTM parameters
+    utm_source = Column(Text)
+    utm_medium = Column(Text)
+    utm_campaign = Column(Text)
+    utm_content = Column(Text)
+    utm_term = Column(Text)
+
+    # Tracking
+    referrer = Column(Text)
+    ip_address = Column(Text)
+    user_agent = Column(Text)
+    clicked_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    converted_at = Column(TIMESTAMP(timezone=True))
+    conversion_value_cents = Column(Integer)
+    metadata = Column(JSONB)
+
+    # Relationships
+    person = relationship("Person")
+    email_message = relationship("EmailMessage")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_attribution_person', 'person_id', 'clicked_at'),
+        Index('idx_attribution_session', 'session_id', 'clicked_at'),
+        Index('idx_attribution_click_id', 'click_id'),
+        Index('idx_attribution_email', 'email_message_id'),
+        Index('idx_attribution_clicked', 'clicked_at'),
+    )
+
+
+class ExternalIdentity(Base):
+    """GDP-009, GDP-010: Links person_id to external analytics/payment platforms"""
+    __tablename__ = "external_identities"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="CASCADE"))
+    provider = Column(Text, nullable=False)  # posthog, stripe, meta_pixel, ga4
+    external_id = Column(Text, nullable=False)  # PostHog distinct_id, Stripe customer_id, etc.
+    metadata = Column(JSONB)
+    linked_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    person = relationship("Person")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_external_identities_person', 'person_id'),
+        Index('idx_external_identities_provider', 'provider', 'external_id', unique=True),
+    )

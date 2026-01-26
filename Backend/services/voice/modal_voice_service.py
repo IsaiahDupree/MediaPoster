@@ -313,6 +313,97 @@ class ModalVoiceService:
                 logger.error(f"Voice generation failed: {e}")
                 raise
 
+    async def batch_clone_voices(
+        self,
+        requests: list[Dict[str, Any]],
+        max_concurrent: int = 5
+    ) -> list[Dict[str, Any]]:
+        """
+        Generate multiple voiceovers in parallel (VC-008).
+
+        Args:
+            requests: List of voice generation requests, each with:
+                - text: str - text to synthesize
+                - voice_reference_url: str - reference audio URL
+                - options: Optional[Dict] - generation options
+            max_concurrent: Maximum concurrent API calls
+
+        Returns:
+            List of results in same order as requests
+
+        Example:
+            results = await service.batch_clone_voices([
+                {"text": "Hello", "voice_reference_url": "ref1.mp3"},
+                {"text": "World", "voice_reference_url": "ref2.mp3"}
+            ])
+        """
+        import asyncio
+        from typing import List
+
+        if not requests:
+            return []
+
+        logger.info(f"Batch generating {len(requests)} voiceovers")
+
+        # Process in batches to respect concurrency limits
+        results = []
+        for i in range(0, len(requests), max_concurrent):
+            batch = requests[i:i + max_concurrent]
+
+            # Create tasks for this batch
+            tasks = [
+                self.clone_voice(
+                    text=req["text"],
+                    voice_reference_url=req["voice_reference_url"],
+                    options=req.get("options")
+                )
+                for req in batch
+            ]
+
+            # Execute batch concurrently
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            results.extend(batch_results)
+
+        logger.info(f"Batch generation complete: {len(results)} results")
+        return results
+
+    def set_emotion(
+        self,
+        options: Dict[str, Any],
+        emotion: str,
+        intensity: float = 1.0
+    ) -> Dict[str, Any]:
+        """
+        Helper to set emotion in voice options (VC-009).
+
+        Emotions:
+            - neutral: Neutral, conversational tone
+            - happy: Cheerful, upbeat tone
+            - sad: Melancholic, subdued tone
+            - angry: Frustrated, intense tone
+            - excited: Enthusiastic, high-energy tone
+
+        Args:
+            options: Options dict to modify
+            emotion: Emotion name
+            intensity: Emotion strength (0.0 to 1.0)
+
+        Returns:
+            Modified options dict
+        """
+        valid_emotions = ["neutral", "happy", "sad", "angry", "excited"]
+        if emotion not in valid_emotions:
+            logger.warning(f"Invalid emotion '{emotion}', using 'neutral'")
+            emotion = "neutral"
+
+        intensity = max(0.0, min(1.0, intensity))
+
+        options = options.copy() if options else {}
+        options["emotion"] = emotion
+        options["emotion_weight"] = intensity
+
+        return options
+
 
 # Singleton instance
 _modal_voice_service: Optional[ModalVoiceService] = None

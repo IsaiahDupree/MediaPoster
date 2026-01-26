@@ -814,6 +814,10 @@ from api.endpoints import sleep, cpu_monitor
 app.include_router(sleep.router, tags=["Sleep Mode"])
 app.include_router(cpu_monitor.router, tags=["CPU Monitor"])
 
+# User Tracking (Analytics)
+from api.endpoints import user_tracking
+app.include_router(user_tracking.router, tags=["User Tracking"])
+
 app.include_router(videos.router, prefix="/api/videos", tags=["videos"])
 app.include_router(ingestion.router, prefix="/api/ingestion", tags=["ingestion"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])

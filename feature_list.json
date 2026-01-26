@@ -5366,7 +5366,7 @@
       "priority": "P0",
       "phase": 16,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/automation/engagement_scraper.py"
@@ -5375,7 +5375,8 @@
         "Navigate to post URL",
         "Extract metrics per platform",
         "Handle deleted/private posts"
-      ]
+      ],
+      "completed": "2026-01-26"
     },
     {
       "id": "PTK-005",

@@ -7192,6 +7192,86 @@
       "category": "growth-data-plane",
       "priority": "P1",
       "passes": false
+    },
+    {
+      "id": "GAP-001",
+      "name": "Community Inbox Phase 1",
+      "description": "Message aggregation, unified inbox interface, conversation threading for IG, TikTok, Twitter, YouTube",
+      "category": "gap-analysis",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "GAP-002",
+      "name": "Community Inbox Phase 2-3",
+      "description": "AI reply suggestions, sentiment analysis, saved replies, automation rules",
+      "category": "gap-analysis",
+      "priority": "P2",
+      "passes": false
+    },
+    {
+      "id": "GAP-003",
+      "name": "Content Repurposing Engine",
+      "description": "Video ingestion, highlight detection, aspect ratio conversion, AI captions, virality prediction",
+      "category": "gap-analysis",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "GAP-004",
+      "name": "Meta Ads Programmatic Testing",
+      "description": "Transcript extraction, variation generator, batch rendering, Meta campaign deployment, insights tracking",
+      "category": "gap-analysis",
+      "priority": "P2",
+      "passes": false
+    },
+    {
+      "id": "GAP-005",
+      "name": "DM Automation System",
+      "description": "Relationship health score, pipeline stages, intent ladder, context cards, AI next-best-action",
+      "category": "gap-analysis",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "GAP-006",
+      "name": "Sora Orchestrator Completion",
+      "description": "Multi-provider fallback, quality assessment, timeline assembly, storyboard UI",
+      "category": "gap-analysis",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "GAP-007",
+      "name": "Twitter Worker Completion",
+      "description": "Multi-account switching, session health monitoring, complete pub/sub integration",
+      "category": "gap-analysis",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "GAP-008",
+      "name": "Competitor Background Sync",
+      "description": "Automated discovery, cross-account pattern analysis, hook suggestions in composer",
+      "category": "gap-analysis",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "GAP-009",
+      "name": "Instagram Graph API",
+      "description": "OAuth flow, Graph API adapter, real-time follower activity, Insights API",
+      "category": "gap-analysis",
+      "priority": "P2",
+      "passes": false
+    },
+    {
+      "id": "GAP-010",
+      "name": "Whisper Integration",
+      "description": "Video upload pipeline, auto-transcription, speaker diarization, content analyzer feed",
+      "category": "gap-analysis",
+      "priority": "P0",
+      "passes": false
     }
   ]
 }

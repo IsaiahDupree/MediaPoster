@@ -49,6 +49,12 @@ class SafariTwitterPoster:
         self.min_interval_seconds = 30  # Minimum time between posts
         self.use_x_domain = use_x_domain
         
+        # Initialize session manager if available
+        if HAS_SESSION_MANAGER:
+            self.session_manager = SafariSessionManager()
+        else:
+            self.session_manager = None
+        
         # Select URLs based on domain preference
         if use_x_domain:
             self.compose_url = self.X_COMPOSE_URL
@@ -747,10 +753,11 @@ class SafariTwitterPoster:
         logger.info(f"Posting tweet via Safari: {text[:50]}...")
 
         # Wake system if sleeping (Safari automation requires active UI)
-        self.session_manager.trigger_safari_wake(
-            task_type="twitter_post",
-            metadata={"text": text[:50], "has_media": bool(media_paths)}
-        )
+        if self.session_manager:
+            self.session_manager.trigger_safari_wake(
+                task_type="twitter_post",
+                metadata={"text": text[:50], "has_media": bool(media_paths)}
+            )
 
         # Validate tweet length
         if len(text) > 280:

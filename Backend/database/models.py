@@ -2358,3 +2358,323 @@ class CharacterVariant(Base):
         Index('idx_character_variants_character_id', 'character_id'),
         Index('idx_character_variants_expression', 'expression'),
     )
+
+# =====================================================
+# COMMUNITY INBOX (INBOX-001 to INBOX-008)
+# =====================================================
+
+class CommunityInboxMessage(Base):
+    """INBOX-001: Unified inbox for comments and DMs across all platforms"""
+    __tablename__ = "community_inbox_messages"
+    
+    # Identifiers
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    
+    # Platform-agnostic fields
+    platform = Column(Text, nullable=False)
+    message_type = Column(Text, nullable=False)
+    
+    # Source context
+    source_content_id = Column(Text)
+    source_url = Column(Text)
+    platform_post_id = Column(UUID(as_uuid=True), ForeignKey("platform_posts.id", ondelete="SET NULL"))
+    
+    # Author info
+    author_person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="SET NULL"))
+    author_handle = Column(Text, nullable=False)
+    author_name = Column(Text)
+    author_id_platform = Column(Text)
+    author_profile_url = Column(Text)
+    author_avatar_url = Column(Text)
+    
+    # Message content
+    text = Column(Text, nullable=False)
+    media_urls = Column(ARRAY(Text))
+    
+    # Conversation threading
+    conversation_id = Column(Text)
+    parent_message_id = Column(UUID(as_uuid=True), ForeignKey("community_inbox_messages.id", ondelete="CASCADE"))
+    thread_position = Column(Integer, default=0)
+    is_thread_root = Column(Boolean, default=False)
+    
+    # Analysis/engagement (INBOX-007)
+    sentiment_score = Column(Float)
+    sentiment_label = Column(Text)
+    emotion_tags = Column(ARRAY(Text))
+    intent = Column(Text)
+    theme_tags = Column(ARRAY(Text))
+    is_cta_response = Column(Boolean, default=False)
+    cta_keyword = Column(Text)
+    
+    # Lead qualification
+    is_qualified_lead = Column(Boolean, default=False)
+    qualification_state = Column(Text, default='initial')
+    qualification_score = Column(Float)
+    qualification_notes = Column(Text)
+    
+    # Moderation
+    is_spam = Column(Boolean, default=False)
+    is_hidden = Column(Boolean, default=False)
+    requires_review = Column(Boolean, default=False)
+    moderation_tags = Column(ARRAY(Text))
+    
+    # Response tracking
+    response_status = Column(Text, default='unanswered')
+    responded_at = Column(TIMESTAMP(timezone=True))
+    response_text = Column(Text)
+    response_author_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="SET NULL"))
+    response_method = Column(Text)
+    
+    # Priority & assignment
+    priority = Column(Text, default='medium')
+    assigned_to_user_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="SET NULL"))
+    assigned_at = Column(TIMESTAMP(timezone=True))
+    
+    # Timestamps
+    created_at_platform = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    read_at = Column(TIMESTAMP(timezone=True))
+    closed_at = Column(TIMESTAMP(timezone=True))
+    
+    # Metadata
+    platform_data = Column(JSONB, default={})
+    
+    # Metrics
+    engagement_score = Column(Float, default=0.0)
+    response_time_minutes = Column(Integer)
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    author_person = relationship("Person", foreign_keys=[author_person_id])
+    response_author = relationship("Person", foreign_keys=[response_author_id])
+    assigned_to = relationship("Person", foreign_keys=[assigned_to_user_id])
+    platform_post = relationship("PlatformPost")
+    parent_message = relationship("CommunityInboxMessage", remote_side=[id], backref="replies")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_community_inbox_workspace', 'workspace_id'),
+        Index('idx_community_inbox_platform', 'platform'),
+        Index('idx_community_inbox_message_type', 'message_type'),
+        Index('idx_community_inbox_response_status', 'response_status'),
+        Index('idx_community_inbox_created_at', 'created_at_platform'),
+        Index('idx_community_inbox_author_person', 'author_person_id'),
+        Index('idx_community_inbox_conversation', 'conversation_id'),
+        Index('idx_community_inbox_parent', 'parent_message_id'),
+        Index('idx_community_inbox_source_content', 'source_content_id'),
+        Index('idx_community_inbox_qualification', 'qualification_state', 'is_qualified_lead'),
+        Index('idx_community_inbox_sentiment', 'sentiment_label'),
+        Index('idx_community_inbox_priority', 'priority', 'response_status'),
+    )
+
+
+class InboxConversation(Base):
+    """INBOX-001: Groups related messages into conversations"""
+    __tablename__ = "inbox_conversations"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    conversation_id = Column(Text, unique=True, nullable=False)
+    
+    # Conversation metadata
+    platform = Column(Text, nullable=False)
+    root_message_id = Column(UUID(as_uuid=True), ForeignKey("community_inbox_messages.id", ondelete="CASCADE"))
+    message_count = Column(Integer, default=1)
+    
+    # Participants
+    author_person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="SET NULL"))
+    author_handle = Column(Text, nullable=False)
+    
+    # Status
+    status = Column(Text, default='active')
+    
+    # Timestamps
+    first_message_at = Column(TIMESTAMP(timezone=True))
+    last_message_at = Column(TIMESTAMP(timezone=True))
+    closed_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    author_person = relationship("Person")
+    root_message = relationship("CommunityInboxMessage", foreign_keys=[root_message_id])
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_inbox_conversations_workspace', 'workspace_id'),
+        Index('idx_inbox_conversations_conversation_id', 'conversation_id'),
+        Index('idx_inbox_conversations_author', 'author_person_id'),
+        Index('idx_inbox_conversations_status', 'status'),
+        Index('idx_inbox_conversations_last_message', 'last_message_at'),
+    )
+
+
+class InboxAutoReplyRule(Base):
+    """INBOX-006: Auto-reply rules engine for keyword-based responses"""
+    __tablename__ = "inbox_auto_reply_rules"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    
+    # Rule configuration
+    name = Column(Text, nullable=False)
+    description = Column(Text)
+    is_active = Column(Boolean, default=True)
+    
+    # Trigger conditions
+    platforms = Column(ARRAY(Text), nullable=False)
+    message_types = Column(ARRAY(Text), nullable=False)
+    
+    # Matching criteria
+    keyword_triggers = Column(ARRAY(Text))
+    keyword_match_type = Column(Text, default='contains')
+    sentiment_filter = Column(Text)
+    
+    # Reply configuration
+    reply_template = Column(Text, nullable=False)
+    reply_delay_seconds = Column(Integer, default=0)
+    
+    # Limits
+    max_uses_per_day = Column(Integer)
+    uses_today = Column(Integer, default=0)
+    last_reset_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    
+    # Priority
+    priority = Column(Integer, default=0)
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_triggered_at = Column(TIMESTAMP(timezone=True))
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_inbox_auto_reply_workspace', 'workspace_id'),
+        Index('idx_inbox_auto_reply_active', 'is_active', 'priority'),
+    )
+
+
+class InboxAnalytics(Base):
+    """INBOX-008: Daily inbox analytics aggregated by platform"""
+    __tablename__ = "inbox_analytics"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    
+    # Time period
+    date = Column(Date, nullable=False)
+    platform = Column(Text, nullable=False)
+    
+    # Volume metrics
+    messages_received = Column(Integer, default=0)
+    messages_responded = Column(Integer, default=0)
+    messages_closed = Column(Integer, default=0)
+    messages_ignored = Column(Integer, default=0)
+    
+    # Response metrics
+    avg_response_time_minutes = Column(Float)
+    median_response_time_minutes = Column(Float)
+    response_rate = Column(Float)
+    
+    # Sentiment metrics
+    positive_count = Column(Integer, default=0)
+    neutral_count = Column(Integer, default=0)
+    negative_count = Column(Integer, default=0)
+    avg_sentiment_score = Column(Float)
+    
+    # Qualification metrics
+    qualified_leads_count = Column(Integer, default=0)
+    conversion_count = Column(Integer, default=0)
+    qualification_rate = Column(Float)
+    
+    # AI usage metrics
+    ai_suggestions_used = Column(Integer, default=0)
+    auto_replies_sent = Column(Integer, default=0)
+    manual_replies_sent = Column(Integer, default=0)
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_inbox_analytics_workspace_date', 'workspace_id', 'date'),
+        Index('idx_inbox_analytics_platform', 'platform'),
+    )
+
+
+class InboxResponseTemplate(Base):
+    """INBOX: Saved reply templates for quick responses"""
+    __tablename__ = "inbox_response_templates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+
+    # Template info
+    name = Column(Text, nullable=False)
+    category = Column(Text)
+    template_text = Column(Text, nullable=False)
+
+    # Usage
+    platforms = Column(ARRAY(Text))
+    use_count = Column(Integer, default=0)
+    last_used_at = Column(TIMESTAMP(timezone=True))
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    workspace = relationship("Workspace")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_inbox_templates_workspace', 'workspace_id'),
+        Index('idx_inbox_templates_category', 'category'),
+    )
+
+
+class ContentAnalysis(Base):
+    """CUR-002: Sentiment analysis results for content"""
+    __tablename__ = "content_analysis"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    media_id = Column(UUID(as_uuid=True), nullable=False)
+
+    # Sentiment analysis
+    sentiment_score = Column(Float)  # -1.0 to +1.0
+    sentiment_label = Column(Text)  # negative, neutral, positive
+    confidence = Column(Float)  # 0.0 to 1.0
+
+    # Emotions (JSON)
+    emotions = Column(JSONB)  # {"joy": 0.8, "anger": 0.1, ...}
+    themes = Column(ARRAY(Text))  # Detected themes/topics
+    reasoning = Column(Text)  # AI explanation
+
+    # Processing metadata
+    model_version = Column(Text)
+    processing_time_ms = Column(Integer)
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    workspace = relationship("Workspace")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_content_analysis_workspace', 'workspace_id'),
+        Index('idx_content_analysis_media', 'media_id'),
+        Index('idx_content_analysis_sentiment', 'sentiment_label'),
+    )

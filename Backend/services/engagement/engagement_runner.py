@@ -102,16 +102,20 @@ class EngagementRunner:
         if await self.tracker.is_limit_reached(platform):
             return {'success': False, 'error': 'Daily limit reached'}
         
-        # Get module and run
+        # Get module and run (TikTok uses engage_with_video, others use engage_with_post)
         module = self._get_module(platform)
-        result = module.engage_with_post()
+        if platform == 'tiktok':
+            result = module.engage_with_video()
+        else:
+            result = module.engage_with_post()
         
-        # Track if posted
-        if result.comment_posted and result.post_url:
+        # Track if posted (TikTok doesn't have post_url, use username as identifier)
+        post_url = getattr(result, 'post_url', '') or f"https://tiktok.com/@{result.username}" if platform == 'tiktok' else ''
+        if result.comment_posted and (post_url or result.username):
             try:
                 await self.tracker.record_comment(
                     platform=platform,
-                    post_url=result.post_url,
+                    post_url=post_url or f"https://{platform}.com/@{result.username}",
                     comment_text=result.generated_comment or '',
                     post_username=result.username or '',
                     proof_screenshot=getattr(result, 'proof_screenshot', '')
@@ -123,7 +127,7 @@ class EngagementRunner:
         return {
             'success': result.success,
             'posted': result.comment_posted,
-            'post_url': result.post_url,
+            'post_url': getattr(result, 'post_url', '') or f"https://{platform}.com/@{result.username}",
             'username': result.username,
             'comment': result.generated_comment,
             'error': getattr(result, 'error', '')

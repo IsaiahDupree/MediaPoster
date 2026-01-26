@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 381,
-  "completedFeatures": 185,
+  "completedFeatures": 212,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -1913,7 +1913,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
         "Backend/services/bandit_allocator.py"
@@ -1921,7 +1921,8 @@
       "acceptance": [
         "Allocation automatic",
         "Winners get 70%"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "AUTO-003",
@@ -1930,7 +1931,7 @@
       "priority": "P1",
       "phase": 8,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
         "Backend/services/template_evolution.py"
@@ -1947,7 +1948,7 @@
       "priority": "P1",
       "phase": 8,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
         "Backend/services/template_evolution.py"
@@ -1983,7 +1984,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
         "Backend/workers/slot_executor.py"
@@ -1991,7 +1992,8 @@
       "acceptance": [
         "Slots execute on time",
         "Failures logged"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "AUTO-007",
@@ -2000,15 +2002,18 @@
       "priority": "P2",
       "phase": 8,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
-        "Backend/services/same_day_adjuster.py"
+        "Backend/services/same_day_adjuster.py",
+        "Backend/api/endpoints/autonomy.py",
+        "Backend/tests/unit/test_same_day_adjuster.py"
       ],
       "acceptance": [
         "Adjustments made",
         "Winners prioritized"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "AUTO-008",
@@ -2017,15 +2022,18 @@
       "priority": "P1",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "autonomy",
       "files": [
-        "Backend/services/weekly_planner.py"
+        "Backend/services/weekly_planner.py",
+        "Backend/api/endpoints/autonomy.py",
+        "Backend/tests/unit/test_weekly_planner.py"
       ],
       "acceptance": [
         "Plan generated weekly",
         "Learning incorporated"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ENTITY-001",
@@ -2644,7 +2652,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "content-pipeline",
       "files": [
         "dashboard/app/swipe/page.tsx"
@@ -3021,7 +3029,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "music",
       "files": [
         "Backend/services/remotion/music_overlay.py"
@@ -3029,7 +3037,8 @@
       "acceptance": [
         "Music overlaid",
         "Ducking works"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "STORY-001",
@@ -3246,7 +3255,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "analytics",
       "files": [
         "Backend/services/analytics_aggregator.py"
@@ -3254,7 +3263,8 @@
       "acceptance": [
         "Unified metrics",
         "Cross-platform comparison"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ANALYTICS-002",
@@ -3367,7 +3377,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "video-orchestrator",
       "files": [
         "Backend/services/video_orchestrator/director.py"
@@ -3375,7 +3385,8 @@
       "acceptance": [
         "Script chunking works",
         "Pacing control 150 wpm"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ORCH-002",
@@ -3384,7 +3395,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "video-orchestrator",
       "files": [
         "Backend/services/video_orchestrator/scene_crafter.py"
@@ -3392,7 +3403,8 @@
       "acceptance": [
         "Prompts generated",
         "Style bibles applied"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ORCH-003",
@@ -3401,7 +3413,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "video-orchestrator",
       "files": [
         "Backend/services/video_orchestrator/assessor.py"
@@ -3409,7 +3421,8 @@
       "acceptance": [
         ">70% first-attempt pass rate",
         "Auto-retry failed clips"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ORCH-004",
@@ -3418,7 +3431,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "video-orchestrator",
       "files": [
         "Backend/services/video_providers/"
@@ -3427,7 +3440,8 @@
         "Sora primary",
         "Runway/Kling fallback",
         "Mock for testing"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ORCH-005",
@@ -3436,7 +3450,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "video-orchestrator",
       "files": [
         "Backend/services/video_orchestrator/timeline_assembler.py"
@@ -3444,7 +3458,8 @@
       "acceptance": [
         "Final MP4 rendered",
         "<15 min for 60s video"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ORCH-006",
@@ -3453,7 +3468,7 @@
       "priority": "P1",
       "phase": 5,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "video-orchestrator",
       "files": [
         "Backend/models/style_bible.py",
@@ -3462,7 +3477,8 @@
       "acceptance": [
         "Bibles stored",
         "Consistency across clips"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "ORCH-007",
@@ -3488,7 +3504,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "automation-center",
       "files": [
         "dashboard/app/automation/page.tsx"
@@ -3496,7 +3512,8 @@
       "acceptance": [
         "Tab switching works",
         "Queue depth visible"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "AC-002",
@@ -3505,7 +3522,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "automation-center",
       "files": [
         "Backend/services/agent_scheduler.py"
@@ -3513,7 +3530,8 @@
       "acceptance": [
         "Schedules created",
         "Next run calculated"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "AC-003",
@@ -3522,7 +3540,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "automation-center",
       "files": [
         "Backend/models/agent_run.py"
@@ -3530,7 +3548,8 @@
       "acceptance": [
         "Runs tracked",
         "Progress updated"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "AC-004",
@@ -3539,7 +3558,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "automation-center",
       "files": [
         "Backend/models/agent_step.py"
@@ -3547,7 +3566,8 @@
       "acceptance": [
         "Steps tracked",
         "Timeline stream works"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "AC-005",
@@ -3607,7 +3627,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "narrative",
       "files": [
         "Backend/models/narrative_goal.py",
@@ -3625,7 +3645,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "narrative",
       "files": [
         "Backend/models/narrative_pillar.py"
@@ -3642,7 +3662,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "narrative",
       "files": [
         "Backend/models/narrative_constraint.py"
@@ -4555,7 +4575,7 @@
       "priority": "P1",
       "phase": 11,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "supabase/migrations/community_inbox.sql"
@@ -4564,7 +4584,8 @@
         "Schema created",
         "Platform enum",
         "Indexes added"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "INBOX-002",
@@ -4573,7 +4594,7 @@
       "priority": "P1",
       "phase": 11,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "Backend/services/comment_fetcher.py"
@@ -4582,7 +4603,8 @@
         "Multi-platform fetch",
         "Deduplication",
         "Rate limit handling"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "INBOX-003",
@@ -4609,7 +4631,7 @@
       "priority": "P0",
       "phase": 11,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "Backend/services/reply_suggestions.py"
@@ -4618,7 +4640,8 @@
         "Context-aware replies",
         "Tone matching",
         "3 suggestions per message"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "INBOX-005",
@@ -4627,7 +4650,7 @@
       "priority": "P0",
       "phase": 11,
       "effort": "8h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "dashboard/app/inbox/page.tsx"
@@ -4636,7 +4659,8 @@
         "Filter by platform",
         "Search messages",
         "Reply inline"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "INBOX-006",
@@ -4663,7 +4687,7 @@
       "priority": "P2",
       "phase": 11,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "Backend/services/sentiment_analyzer.py"
@@ -4672,7 +4696,8 @@
         "Sentiment scores",
         "Priority flagging",
         "Filter by sentiment"
-      ]
+      ],
+      "completed": "2026-01-21"
     },
     {
       "id": "INBOX-008",
@@ -6628,7 +6653,7 @@
     {
       "id": "YTP-007",
       "name": "YouTube Playlist Pipeline Orchestrator",
-      "description": "Full pipeline: Playlist → Transcript → AI Analysis → Medium → Social → Sheet Update",
+      "description": "Full pipeline: Playlist \u2192 Transcript \u2192 AI Analysis \u2192 Medium \u2192 Social \u2192 Sheet Update",
       "priority": "P0",
       "phase": 21,
       "effort": "4h",
@@ -6796,7 +6821,7 @@
     {
       "id": "YTP-016",
       "name": "Video Duration Router",
-      "description": "Check video duration and route to RapidAPI (≤20 min) or local Whisper pipeline (>20 min)",
+      "description": "Check video duration and route to RapidAPI (\u226420 min) or local Whisper pipeline (>20 min)",
       "priority": "P0",
       "phase": 21,
       "effort": "2h",
@@ -6815,7 +6840,7 @@
     {
       "id": "YTP-017",
       "name": "Local Transcription Service",
-      "description": "Fallback transcription for long videos: yt-dlp download → ffmpeg audio extract → Whisper API",
+      "description": "Fallback transcription for long videos: yt-dlp download \u2192 ffmpeg audio extract \u2192 Whisper API",
       "priority": "P0",
       "phase": 21,
       "effort": "4h",

@@ -301,3 +301,72 @@ async def liveness_check():
         "timestamp": datetime.utcnow().isoformat(),
         "correlation_id": correlation_id
     }
+
+
+@router.get("/startup")
+async def startup_status():
+    """
+    Get detailed startup status from StartupManager.
+    
+    Returns:
+        - All services initialized at startup
+        - Their status (running/failed/skipped)
+        - Timing information
+        - System resource usage at startup
+    """
+    try:
+        from services.startup_manager import StartupManager
+        
+        manager = StartupManager.get_instance()
+        status = manager.get_health_status()
+        
+        return {
+            "status": "ok",
+            "timestamp": datetime.utcnow().isoformat(),
+            "startup": status
+        }
+    except Exception as e:
+        logger.error(f"Startup status check failed: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.utcnow().isoformat(),
+            "error": str(e)
+        }
+
+
+@router.post("/startup/verify")
+async def verify_startup():
+    """
+    Re-run startup verification to check all services.
+    
+    This will check all registered services and return a full report.
+    Useful for diagnosing issues after the app is running.
+    """
+    try:
+        from services.startup_manager import StartupManager
+        
+        manager = StartupManager.get_instance()
+        report = await manager.run_startup_sequence()
+        
+        from fastapi.responses import JSONResponse
+        status_code = 200 if report.healthy else 503
+        
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "status": "healthy" if report.healthy else "unhealthy",
+                "timestamp": datetime.utcnow().isoformat(),
+                "report": report.to_dict()
+            }
+        )
+    except Exception as e:
+        logger.error(f"Startup verification failed: {e}")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "timestamp": datetime.utcnow().isoformat(),
+                "error": str(e)
+            }
+        )

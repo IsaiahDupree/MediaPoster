@@ -78,39 +78,41 @@ class TikTokEngagement:
     (function() {
         var data = {username: '', description: '', likes: '', comments: '', shares: '', saves: ''};
         
-        // Get username from user profile links (most reliable method)
-        var userLinks = document.querySelectorAll('a[href*="/@"]');
-        for (var i = 0; i < userLinks.length; i++) {
-            var link = userLinks[i];
-            var href = link.getAttribute('href') || '';
-            var text = (link.innerText || '').trim();
-            
-            // Extract username from href
-            var match = href.match(/@([^/\\?]+)/);
-            if (match && match[1] && !match[1].includes('video')) {
-                // Prefer link with visible text (creator name)
-                if (text && text.length > 0 && text.length < 50) {
+        // Strategy 1: Get username from any visible @username text
+        var allText = document.body.innerText;
+        var atMatch = allText.match(/@([a-zA-Z0-9_.]{2,30})\\b/);
+        if (atMatch) {
+            data.username = atMatch[1];
+        }
+        
+        // Strategy 2: Get username from user profile links
+        if (!data.username) {
+            var userLinks = document.querySelectorAll('a[href*="/@"]');
+            for (var i = 0; i < userLinks.length; i++) {
+                var link = userLinks[i];
+                var href = link.getAttribute('href') || '';
+                var match = href.match(/@([a-zA-Z0-9_.]+)/);
+                if (match && match[1] && match[1].length > 2 && !match[1].includes('video')) {
                     data.username = match[1];
-                    data.displayName = text;
                     break;
-                } else if (!data.username) {
-                    data.username = match[1];
                 }
             }
         }
         
-        // Fallback selectors
+        // Strategy 3: Fallback selectors for username
         if (!data.username) {
             var userSelectors = [
                 '[data-e2e="browse-username"]',
                 '[data-e2e="video-author-uniqueid"]',
-                'h3[data-e2e="video-author-uniqueid"]'
+                'h3[data-e2e="video-author-uniqueid"]',
+                'span[class*="SpanUniqueId"]',
+                'a[class*="StyledAuthorAnchor"]'
             ];
             for (var i = 0; i < userSelectors.length; i++) {
                 var el = document.querySelector(userSelectors[i]);
                 if (el) {
                     var text = (el.innerText || el.textContent || '').replace('@', '').trim();
-                    if (text && text.length > 0 && text.length < 50) {
+                    if (text && text.length > 2 && text.length < 50) {
                         data.username = text;
                         break;
                     }
@@ -123,32 +125,40 @@ class TikTokEngagement:
             '[data-e2e="browse-video-desc"]',
             '[data-e2e="video-desc"]',
             'span[data-e2e="new-desc"]',
-            '.video-meta-title',
-            'h1'
+            'div[class*="DivVideoInfoContainer"] span',
+            'h1',
+            '[class*="video-meta"]'
         ];
         for (var i = 0; i < descSelectors.length; i++) {
             var el = document.querySelector(descSelectors[i]);
-            if (el && el.innerText.length > 5) {
+            if (el && el.innerText && el.innerText.length > 5) {
                 data.description = el.innerText.substring(0, 300);
                 break;
             }
         }
         
-        // Get engagement stats from sidebar
-        var sidebar = document.querySelector('[class*="DivActionItemContainer"]') || document.body;
-        var sidebarText = sidebar.innerText;
+        // Fallback: grab any substantial text that looks like a description
+        if (!data.description) {
+            var spans = document.querySelectorAll('span, div');
+            for (var i = 0; i < spans.length; i++) {
+                var txt = (spans[i].innerText || '').trim();
+                if (txt.length > 20 && txt.length < 300 && !txt.includes('Following') && !txt.includes('Log in')) {
+                    data.description = txt;
+                    break;
+                }
+            }
+        }
         
-        // Look for numbers near engagement icons
-        var strongEls = document.querySelectorAll('strong, span[data-e2e*="count"]');
+        // Get engagement stats - look for numbers
+        var strongEls = document.querySelectorAll('strong, span[data-e2e*="count"], button span');
         var counts = [];
         strongEls.forEach(function(el) {
-            var text = el.innerText.trim();
+            var text = (el.innerText || '').trim();
             if (text.match(/^[\\d.]+[KMB]?$/i)) {
                 counts.push(text);
             }
         });
         
-        // Assign counts based on position (typically: likes, comments, saves/bookmarks, shares)
         if (counts.length >= 1) data.likes = counts[0];
         if (counts.length >= 2) data.comments = counts[1];
         if (counts.length >= 3) data.saves = counts[2];
@@ -349,12 +359,13 @@ class TikTokEngagement:
                 return result
             
             print(f"   ✅ On TikTok")
-            time.sleep(3)
+            time.sleep(5)  # Longer wait for TikTok to fully load
         
         # Step 2: Pause video
         print("\n[2/9] Pausing video...")
         pause_result = self.safari.execute_js(self.JS_PAUSE_VIDEO)
         print(f"   {pause_result}")
+        time.sleep(2)  # Wait for video to pause and UI to settle
         
         # Step 3: Extract video data
         print("\n[3/9] Extracting video data...")

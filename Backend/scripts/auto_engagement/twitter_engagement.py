@@ -59,31 +59,47 @@ class TwitterEngagement:
     # JavaScript to find a tweet in the feed
     JS_FIND_TWEET = '''
     (function() {
-        // Find tweets in the timeline
+        // Find tweets in the timeline - try multiple selectors
         var tweets = document.querySelectorAll('article[data-testid="tweet"]');
-        for (var i = 0; i < Math.min(tweets.length, 10); i++) {
+        if (!tweets.length) {
+            tweets = document.querySelectorAll('article[role="article"]');
+        }
+        if (!tweets.length) {
+            tweets = document.querySelectorAll('[data-testid="cellInnerDiv"] article');
+        }
+        
+        for (var i = 0; i < Math.min(tweets.length, 15); i++) {
             var tweet = tweets[i];
             
-            // Get username
-            var userLink = tweet.querySelector('a[href^="/"][role="link"]');
+            // Get username from multiple possible locations
             var username = '';
-            if (userLink) {
-                var href = userLink.getAttribute('href');
-                if (href && href.startsWith('/') && !href.includes('/status/')) {
+            var userLinks = tweet.querySelectorAll('a[href^="/"]');
+            for (var j = 0; j < userLinks.length; j++) {
+                var href = userLinks[j].getAttribute('href') || '';
+                if (href.match(/^\\/[a-zA-Z0-9_]+$/) && !href.includes('/status/')) {
                     username = href.replace('/', '');
+                    break;
                 }
+            }
+            
+            // Fallback: extract from any @username text
+            if (!username) {
+                var allText = tweet.innerText;
+                var atMatch = allText.match(/@([a-zA-Z0-9_]{1,15})/);
+                if (atMatch) username = atMatch[1];
             }
             
             // Get tweet text
             var tweetText = tweet.querySelector('[data-testid="tweetText"]');
+            if (!tweetText) tweetText = tweet.querySelector('[lang]');
             var content = tweetText ? tweetText.innerText : '';
             
             // Get tweet link
             var timeLink = tweet.querySelector('a[href*="/status/"]');
             var tweetUrl = timeLink ? timeLink.href : '';
             
-            // Skip if no content or too short
-            if (username && content.length > 20 && tweetUrl) {
+            // Skip if no content or too short (allow shorter tweets)
+            if (username && content.length > 10 && tweetUrl) {
                 return JSON.stringify({
                     username: username,
                     url: tweetUrl,
@@ -92,7 +108,7 @@ class TwitterEngagement:
                 });
             }
         }
-        return JSON.stringify({error: 'No suitable tweet found'});
+        return JSON.stringify({error: 'No suitable tweet found', debug: 'Found ' + tweets.length + ' articles'});
     })()
     '''
     

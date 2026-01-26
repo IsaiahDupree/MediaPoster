@@ -326,6 +326,29 @@ class Topics:
     PIPELINE_FAILED = "pipeline.failed"                   # Pipeline error
     
     # =========================================================================
+    # SORA (AI Video Generation) SERVICE
+    # =========================================================================
+    SORA_USAGE_CHECK_REQUESTED = "sora.usage.check.requested"    # Request usage check
+    SORA_USAGE_CHECKED = "sora.usage.checked"                    # Usage data retrieved
+    SORA_USAGE_LOW = "sora.usage.low"                            # Video gens running low (<5)
+    
+    SORA_VIDEO_REQUESTED = "sora.video.requested"                # Request video generation
+    SORA_VIDEO_STARTED = "sora.video.started"                    # Video generation started
+    SORA_VIDEO_PROGRESS = "sora.video.progress"                  # Generation progress
+    SORA_VIDEO_COMPLETED = "sora.video.completed"                # Video ready
+    SORA_VIDEO_FAILED = "sora.video.failed"                      # Generation failed
+    SORA_VIDEO_DOWNLOADED = "sora.video.downloaded"              # Video downloaded locally
+    
+    SORA_BATCH_REQUESTED = "sora.batch.requested"                # Batch video request
+    SORA_BATCH_STARTED = "sora.batch.started"                    # Batch processing started
+    SORA_BATCH_PROGRESS = "sora.batch.progress"                  # Batch progress
+    SORA_BATCH_COMPLETED = "sora.batch.completed"                # All videos complete
+    
+    SORA_POLL_STARTED = "sora.poll.started"                      # Polling for completion started
+    SORA_POLL_TICK = "sora.poll.tick"                            # Polling heartbeat
+    SORA_POLL_STOPPED = "sora.poll.stopped"                      # Polling stopped
+    
+    # =========================================================================
     # MUSIC SERVICE
     # =========================================================================
     MUSIC_REQUESTED = "music.requested"                  # New music request

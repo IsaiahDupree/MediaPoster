@@ -289,6 +289,66 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Template Leaderboard failed to start: {e}")
 
+    # Start the Bandit Allocator (AUTO-002)
+    bandit_allocator = None
+    try:
+        from services.bandit_allocator import BanditAllocator
+        bandit_allocator = BanditAllocator.get_instance()
+        await bandit_allocator.start()
+        logger.success("✓ Bandit Allocator started (AUTO-002)")
+    except Exception as e:
+        logger.warning(f"⚠️  Bandit Allocator failed to start: {e}")
+
+    # Start the Template Auto-Forker (AUTO-003)
+    template_auto_forker = None
+    try:
+        from services.template_auto_forker import TemplateAutoForker
+        template_auto_forker = TemplateAutoForker.get_instance()
+        await template_auto_forker.start()
+        logger.success("✓ Template Auto-Forker started (AUTO-003)")
+    except Exception as e:
+        logger.warning(f"⚠️  Template Auto-Forker failed to start: {e}")
+
+    # Start the Template Retiree (AUTO-004)
+    template_retiree = None
+    try:
+        from services.template_retiree import TemplateRetiree
+        template_retiree = TemplateRetiree.get_instance()
+        await template_retiree.start()
+        logger.success("✓ Template Retiree started (AUTO-004)")
+    except Exception as e:
+        logger.warning(f"⚠️  Template Retiree failed to start: {e}")
+
+    # Start the Autonomous Slot Executor (AUTO-006)
+    autonomous_executor = None
+    try:
+        from workers.slot_executor import get_autonomous_slot_executor
+        autonomous_executor = get_autonomous_slot_executor()
+        await autonomous_executor.start()
+        logger.success("✓ Autonomous Slot Executor started (AUTO-006)")
+    except Exception as e:
+        logger.warning(f"⚠️  Autonomous Slot Executor failed to start: {e}")
+
+    # Start Same-Day Adjuster (AUTO-007)
+    same_day_adjuster = None
+    try:
+        from services.same_day_adjuster import SameDayAdjuster
+        same_day_adjuster = SameDayAdjuster.get_instance()
+        await same_day_adjuster.start()
+        logger.success("✓ Same-Day Adjuster started (AUTO-007)")
+    except Exception as e:
+        logger.warning(f"⚠️  Same-Day Adjuster failed to start: {e}")
+
+    # Start Weekly Planner (AUTO-008)
+    weekly_planner = None
+    try:
+        from services.weekly_planner import WeeklyPlanner
+        weekly_planner = WeeklyPlanner.get_instance()
+        await weekly_planner.start()
+        logger.success("✓ Weekly Planner started (AUTO-008)")
+    except Exception as e:
+        logger.warning(f"⚠️  Weekly Planner failed to start: {e}")
+
     # Start Content Ops Workers (OPS-013 to OPS-016)
     slot_executor_worker = None
     learner_worker = None
@@ -423,6 +483,54 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Template Leaderboard stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Template Leaderboard: {e}")
+
+    # Stop the Bandit Allocator on shutdown
+    if bandit_allocator:
+        try:
+            await bandit_allocator.stop()
+            logger.success("✓ Bandit Allocator stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Bandit Allocator: {e}")
+
+    # Stop the Template Auto-Forker on shutdown
+    if template_auto_forker:
+        try:
+            await template_auto_forker.stop()
+            logger.success("✓ Template Auto-Forker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Template Auto-Forker: {e}")
+
+    # Stop the Template Retiree on shutdown
+    if template_retiree:
+        try:
+            await template_retiree.stop()
+            logger.success("✓ Template Retiree stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Template Retiree: {e}")
+
+    # Stop the Autonomous Slot Executor on shutdown
+    if autonomous_executor:
+        try:
+            await autonomous_executor.stop()
+            logger.success("✓ Autonomous Slot Executor stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Autonomous Slot Executor: {e}")
+
+    # Stop Same-Day Adjuster on shutdown
+    if same_day_adjuster:
+        try:
+            await same_day_adjuster.stop()
+            logger.success("✓ Same-Day Adjuster stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Same-Day Adjuster: {e}")
+
+    # Stop Weekly Planner on shutdown
+    if weekly_planner:
+        try:
+            await weekly_planner.stop()
+            logger.success("✓ Weekly Planner stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Weekly Planner: {e}")
 
     # Stop Content Ops Workers on shutdown
     if slot_executor_worker:
@@ -755,6 +863,30 @@ except Exception as e:
 from api.endpoints import comment_engagement
 app.include_router(comment_engagement.router, tags=["Comment Engagement"])
 
+# Engagement Control Panel (Start/Stop, Rate Limiting, Idle Resume)
+try:
+    from api.endpoints import engagement_control
+    app.include_router(engagement_control.router, tags=["Engagement Control"])
+    logger.success("✓ Engagement Control Panel API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Engagement Control API registration failed: {e}")
+
+# Twitter Posting API (Safari Automation with Full Selector Control)
+try:
+    from api.endpoints import twitter_posting
+    app.include_router(twitter_posting.router, tags=["Twitter Posting"])
+    logger.success("✓ Twitter Posting API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Twitter Posting API registration failed: {e}")
+
+# Sora Automation API (Video Generation & Usage Tracking)
+try:
+    from api.endpoints import sora_automation
+    app.include_router(sora_automation.router, tags=["Sora Automation"])
+    logger.success("✓ Sora Automation API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
+
 # Knowledge Base (Rules, Templates, Playbooks)
 from api.endpoints import knowledge_base
 app.include_router(knowledge_base.router, prefix="/api", tags=["Knowledge Base"])
@@ -773,6 +905,11 @@ app.include_router(twitter_api.router, tags=["Twitter"])
 # Content Intelligence - Analytics & Insights
 from api.endpoints import analytics_insights
 app.include_router(analytics_insights.router, prefix="/api/analytics-ci", tags=["Analytics & Insights"])
+
+# Multi-Platform Analytics Aggregator (ANALYTICS-001)
+from api.endpoints import multi_platform_analytics
+app.include_router(multi_platform_analytics.router, tags=["Multi-Platform Analytics"])
+logger.success("✓ Multi-Platform Analytics Aggregator API registered (ANALYTICS-001)")
 
 # Content Intelligence - Trending Content (TikTok)
 from api.endpoints import trending
@@ -821,6 +958,31 @@ logger.success("✓ Content Ops Entities API registered (Brand, Offer, ICP)")
 from api.endpoints import template_leaderboard
 app.include_router(template_leaderboard.router, tags=["Template Leaderboard"])
 logger.success("✓ Template Leaderboard API registered (OPS-007)")
+
+# Bandit Allocator (Phase 8: AUTO-002)
+from api.endpoints import bandit
+app.include_router(bandit.router, tags=["Bandit Allocation"])
+logger.success("✓ Bandit Allocator API registered (AUTO-002)")
+
+# Template Auto-Forker (Phase 8: AUTO-003)
+from api.endpoints import template_auto_forker
+app.include_router(template_auto_forker.router, prefix="/api/template-forker", tags=["Template Auto-Forker"])
+logger.success("✓ Template Auto-Forker API registered (AUTO-003)")
+
+# Template Retiree (Phase 8: AUTO-004)
+from api.endpoints import template_retiree
+app.include_router(template_retiree.router, prefix="/api/template-retiree", tags=["Template Retiree"])
+logger.success("✓ Template Retiree API registered (AUTO-004)")
+
+# Autonomous Slot Executor (Phase 8: AUTO-006)
+from api.endpoints import autonomous_executor
+app.include_router(autonomous_executor.router, tags=["Autonomous Executor"])
+logger.success("✓ Autonomous Slot Executor API registered (AUTO-006)")
+
+# Autonomy (Phase 8: AUTO-007, AUTO-008)
+from api.endpoints import autonomy
+app.include_router(autonomy.router, tags=["Autonomy"])
+logger.success("✓ Autonomy API registered (AUTO-007: Same-Day Adjustment, AUTO-008: Weekly Planner)")
 
 # Content Templates CRUD API (Phase 3: TPL-007)
 from api.endpoints import templates
@@ -1338,6 +1500,10 @@ app.include_router(rapidapi_metrics.router, tags=["RapidAPI Metrics"])
 from api.endpoints import narrative_scheduler
 app.include_router(narrative_scheduler.router, tags=["Narrative Scheduler"])
 
+# Narrative Goals & Pillars (NAR-001, NAR-002, NAR-003)
+from api.endpoints import narrative_goals
+app.include_router(narrative_goals.router, tags=["Narrative Goals"])
+
 # Content Mix Planner (Long-term scheduling with mixed content types)
 from api.endpoints import content_mix_api
 app.include_router(content_mix_api.router, tags=["Content Mix Planner"])
@@ -1360,6 +1526,16 @@ logger.success("✓ Platform Matching Engine API registered (PIPE-004)")
 from api.endpoints import approval_queue
 app.include_router(approval_queue.router, tags=["Approval Queue"])
 logger.success("✓ Approval Queue API registered (AUTO-005)")
+
+# Reply Suggestions (INBOX-004)
+from api.endpoints import reply_suggestions
+app.include_router(reply_suggestions.router, tags=["Reply Suggestions"])
+logger.success("✓ Reply Suggestions API registered (INBOX-004)")
+
+# Community Inbox (INBOX-001, INBOX-002, INBOX-005, INBOX-007)
+from api.endpoints import community_inbox
+app.include_router(community_inbox.router, tags=["Community Inbox"])
+logger.success("✓ Community Inbox API registered (INBOX-001, INBOX-002, INBOX-005, INBOX-007)")
 
 # System Health & Metrics (Phase 9)
 from api.endpoints import system

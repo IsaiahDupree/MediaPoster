@@ -7272,6 +7272,70 @@
       "category": "gap-analysis",
       "priority": "P0",
       "passes": false
+    },
+    {
+      "id": "RF-001",
+      "name": "Relationship Health Score",
+      "description": "0-100 score with 6 weighted factors: recency, resonance, need clarity, value delivered, reliability, consent",
+      "category": "relationship-dm",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "RF-002",
+      "name": "Context Cards",
+      "description": "Rich relationship profiles with building, struggles, values, win_30d, cadence preference fields",
+      "category": "relationship-dm",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "RF-003",
+      "name": "8-Stage Relationship Pipeline",
+      "description": "First touch \u2192 Context \u2192 Micro-win \u2192 Cadence \u2192 Trust signals \u2192 Fit \u2192 Permissioned offer \u2192 Post-win",
+      "category": "relationship-dm",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "RF-004",
+      "name": "Intent Ladder",
+      "description": "Lane A (Friendship), Lane B (Service), Lane C (Offer) classification system",
+      "category": "relationship-dm",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "RF-005",
+      "name": "Next-Best-Action AI",
+      "description": "15+ templates tagged by lane and stage for curiosity, support, celebration prompts",
+      "category": "relationship-dm",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "RF-006",
+      "name": "Fit Signal Detection",
+      "description": "Auto-detect when to offer specific products/services based on pain frequency and trust signals",
+      "category": "relationship-dm",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "RF-007",
+      "name": "Touch Cadences",
+      "description": "Daily/weekly/monthly structured engagement automation with 3:1 rule enforcement",
+      "category": "relationship-dm",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "RF-008",
+      "name": "Relationship Metrics Dashboard",
+      "description": "Track meaningful replies, context cards filled, micro-wins delivered, referrals generated",
+      "category": "relationship-dm",
+      "priority": "P2",
+      "passes": false
     }
   ]
 }

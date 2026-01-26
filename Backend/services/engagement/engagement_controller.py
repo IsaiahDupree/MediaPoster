@@ -397,27 +397,29 @@ class EngagementController:
         logger.info("📢 Engagement loop stopped")
     
     async def _idle_monitor_loop(self):
-        """Monitor Mac idle time for auto-resume."""
-        logger.info("👀 Idle monitor started")
+        """Monitor Mac idle time (for logging only - automation runs regardless of user activity)."""
+        logger.info("👀 Idle monitor started (passive mode - runs even when user active)")
         
         while not self._should_stop:
             try:
                 await asyncio.sleep(self.IDLE_CHECK_INTERVAL)
                 
                 idle_hours = self.get_idle_hours()
-                logger.debug(f"Mac idle time: {idle_hours:.2f} hours")
+                # Just log for info, don't pause based on user activity
+                if idle_hours < 0.01:
+                    logger.debug(f"User active (idle: {idle_hours*60:.0f}s) - automation continues")
+                else:
+                    logger.debug(f"Mac idle time: {idle_hours:.2f} hours")
                 
-                # Auto-resume after idle period
+                # Auto-resume from IDLE_WAITING state (if manually paused)
                 if self.state == EngagementState.IDLE_WAITING:
                     if idle_hours >= self.auto_resume_after_hours:
                         logger.info(f"🔄 Auto-resuming after {idle_hours:.1f}h idle")
                         self.state = EngagementState.RUNNING
                         await self._notify_state_changed()
                 
-                # Enter idle waiting if user returns (idle resets)
-                if self.state == EngagementState.RUNNING and idle_hours < 0.1:
-                    # User is active, could pause if desired
-                    pass
+                # NOTE: We do NOT pause when user is active anymore
+                # Automation runs continuously regardless of user activity
                     
             except asyncio.CancelledError:
                 break

@@ -198,6 +198,16 @@ async def lifespan(app: FastAPI):
         logger.success("✓ Cleanup Worker started")
     except Exception as e:
         logger.warning(f"⚠️  Cleanup Worker failed to start: {e}")
+
+    # Start the Checkback Scheduler Worker (PTK-003)
+    checkback_worker = None
+    try:
+        from services.workers.checkback_scheduler_worker import CheckbackSchedulerWorker
+        checkback_worker = CheckbackSchedulerWorker(event_bus)
+        await checkback_worker.start()
+        logger.success("✓ Checkback Scheduler Worker started (PTK-003)")
+    except Exception as e:
+        logger.warning(f"⚠️  Checkback Scheduler Worker failed to start: {e}")
     
     # Start the Notification Worker (generates notifications for key events)
     notification_worker = None
@@ -403,7 +413,15 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Cleanup Worker stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Cleanup Worker: {e}")
-    
+
+    # Stop the Checkback Scheduler Worker on shutdown
+    if checkback_worker:
+        try:
+            await checkback_worker.stop()
+            logger.success("✓ Checkback Scheduler Worker stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Checkback Scheduler Worker: {e}")
+
     # Stop the Metrics Fetch Worker on shutdown
     if metrics_worker:
         try:
@@ -938,6 +956,11 @@ app.include_router(enhanced_analysis.router, prefix="/api/enhanced-analysis", ta
 # Posted Content Tracking
 from api.endpoints import posted_content
 app.include_router(posted_content.router, prefix="/api", tags=["Posted Content"])
+
+# Post Tracking (PTK-001, PTK-003, PTK-006)
+from api.endpoints import post_tracking
+app.include_router(post_tracking.router, tags=["Post Tracking"])
+logger.success("✓ Post Tracking API registered (PTK-001, PTK-003, PTK-006)")
 
 # Publishing Queue
 from api.endpoints import publishing_queue

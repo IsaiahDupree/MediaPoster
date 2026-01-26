@@ -84,6 +84,14 @@ class Topics:
     METRICS_FETCH_COMPLETED = "metrics.fetch.completed"   # Metrics fetched
     METRICS_UPDATED = "metrics.updated"                   # New metrics available
     METRICS_AGGREGATED = "metrics.aggregated"             # Aggregation complete
+
+    # =========================================================================
+    # POST TRACKING (PTK-001 to PTK-006)
+    # =========================================================================
+    POST_PUBLISHED = "post.published"                     # Post successfully published
+    CHECKBACK_SCHEDULED = "checkback.scheduled"           # Checkback period scheduled
+    CHECKBACK_TRIGGERED = "checkback.triggered"           # Checkback period triggered
+    CHECKBACK_COMPLETED = "checkback.completed"           # Checkback metrics collected
     
     # =========================================================================
     # AI GENERATION

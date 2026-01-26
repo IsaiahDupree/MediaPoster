@@ -2696,7 +2696,7 @@ class EmailMessage(Base):
     html_body = Column(Text)
     text_body = Column(Text)
     tags = Column(JSONB)  # {"person_id": "uuid"}
-    metadata = Column(JSONB)
+    email_metadata = Column(JSONB)  # Renamed from 'metadata' to avoid SQLAlchemy reserved attribute
 
     # Delivery tracking
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
@@ -2768,7 +2768,7 @@ class Subscription(Base):
     trial_start = Column(TIMESTAMP(timezone=True))
     trial_end = Column(TIMESTAMP(timezone=True))
 
-    metadata = Column(JSONB)
+    subscription_metadata = Column(JSONB)  # Renamed from 'metadata' to avoid SQLAlchemy reserved attribute
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -2798,7 +2798,7 @@ class Deal(Base):
     close_date = Column(Date)
     source = Column(Text)  # organic, paid, referral, etc.
     attribution = Column(JSONB)  # First/last touch attribution data
-    metadata = Column(JSONB)
+    deal_metadata = Column(JSONB)  # Renamed from 'metadata' to avoid SQLAlchemy reserved attribute
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -2891,7 +2891,7 @@ class AttributionTouchpoint(Base):
     clicked_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     converted_at = Column(TIMESTAMP(timezone=True))
     conversion_value_cents = Column(Integer)
-    metadata = Column(JSONB)
+    attribution_metadata = Column(JSONB)  # Renamed from 'metadata' to avoid SQLAlchemy reserved attribute
 
     # Relationships
     person = relationship("Person")
@@ -2915,7 +2915,7 @@ class ExternalIdentity(Base):
     person_id = Column(UUID(as_uuid=True), ForeignKey("people.id", ondelete="CASCADE"))
     provider = Column(Text, nullable=False)  # posthog, stripe, meta_pixel, ga4
     external_id = Column(Text, nullable=False)  # PostHog distinct_id, Stripe customer_id, etc.
-    metadata = Column(JSONB)
+    identity_metadata = Column(JSONB)  # Renamed from 'metadata' to avoid SQLAlchemy reserved attribute
     linked_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     # Relationships

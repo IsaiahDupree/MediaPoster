@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 381,
-  "completedFeatures": 231,
+  "completedFeatures": 239,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -3683,7 +3683,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "narrative",
       "files": [
         "Backend/services/narrative_scheduler/weekly_executor.py"
@@ -3691,7 +3691,8 @@
       "acceptance": [
         "Week plan executes",
         "Reflection phase runs"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "NAR-005",
@@ -3700,7 +3701,7 @@
       "priority": "P0",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "narrative",
       "files": [
         "Backend/services/narrative_scheduler/content_selector.py"
@@ -3708,7 +3709,8 @@
       "acceptance": [
         "Content selected",
         "Reasoning logged"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "NAR-006",
@@ -3770,7 +3772,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "curation",
       "files": [
         "Backend/services/duplicate_detector.py"
@@ -3778,7 +3780,8 @@
       "acceptance": [
         "Duplicates grouped",
         "Best version identified"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "CUR-004",
@@ -3787,7 +3790,7 @@
       "priority": "P0",
       "phase": 6,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "curation",
       "files": [
         "Backend/api/endpoints/media.py"
@@ -3795,7 +3798,8 @@
       "acceptance": [
         "Files deleted",
         "Audit log created"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "CUR-005",
@@ -5304,7 +5308,7 @@
       "priority": "P0",
       "phase": 16,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/services/post_tracker.py",
@@ -5314,7 +5318,8 @@
         "All Safari posts return URL",
         "All Blotato posts return URL",
         "URL stored in posts table"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "PTK-002",
@@ -5323,7 +5328,7 @@
       "priority": "P0",
       "phase": 16,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/supabase/migrations/20260120_post_tracking.sql"
@@ -5332,7 +5337,8 @@
         "posts table with all required fields",
         "post_metrics table for checkback data",
         "Indexes for filtering"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "PTK-003",
@@ -5341,7 +5347,7 @@
       "priority": "P0",
       "phase": 16,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/services/checkback_scheduler.py"
@@ -5350,7 +5356,8 @@
         "Checkbacks scheduled automatically",
         "Multiple intervals supported",
         "Wake triggers for checkbacks"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "PTK-004",
@@ -5394,7 +5401,7 @@
       "priority": "P0",
       "phase": 16,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/services/performance_scorer.py"
@@ -5403,7 +5410,8 @@
         "Score calculated per post",
         "Account baseline comparison",
         "Platform-specific normalization"
-      ]
+      ],
+      "completed": "2026-01-25"
     },
     {
       "id": "PTK-007",

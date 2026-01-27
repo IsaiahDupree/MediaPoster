@@ -7379,6 +7379,70 @@
       "category": "relationship-dm",
       "priority": "P2",
       "passes": false
+    },
+    {
+      "id": "ARCH-001",
+      "name": "Master Orchestrator Service",
+      "description": "Unified orchestrator coordinating Sora, stitching, analysis, publishing, tweets via EventBus",
+      "category": "system-architecture",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "ARCH-002",
+      "name": "3-Part Sora Batch Coordination",
+      "description": "generate_multi_part() method for batch video generation with automatic stitching",
+      "category": "system-architecture",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "ARCH-003",
+      "name": "Content Analyzer \u2192 Publisher Integration",
+      "description": "Auto-inject AI-generated titles, descriptions, hashtags into publish payload",
+      "category": "system-architecture",
+      "priority": "P0",
+      "passes": false
+    },
+    {
+      "id": "ARCH-004",
+      "name": "Tweet Scheduler 2-Hour Interval",
+      "description": "Configure TwitterCampaignScheduler for 120-min intervals with offer CTA rotation",
+      "category": "system-architecture",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "ARCH-005",
+      "name": "Offer Traffic Tracking Service",
+      "description": "UTM link generation, click tracking, conversion attribution with offer_links/clicks/conversions tables",
+      "category": "system-architecture",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "ARCH-006",
+      "name": "Analytics \u2192 AI Feedback Loop",
+      "description": "Connect engagement metrics to ContentIdeator for style reinforcement/avoidance",
+      "category": "system-architecture",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "ARCH-007",
+      "name": "Unified Pipeline API Endpoint",
+      "description": "POST /api/pipeline/full endpoint to trigger complete workflow with config",
+      "category": "system-architecture",
+      "priority": "P1",
+      "passes": false
+    },
+    {
+      "id": "ARCH-008",
+      "name": "Pipeline Dashboard Widget",
+      "description": "Frontend widget showing pipeline stage, video preview, publish status, tweet schedule, metrics",
+      "category": "system-architecture",
+      "priority": "P2",
+      "passes": false
     }
   ]
 }

@@ -25,6 +25,14 @@ from dataclasses import dataclass, field
 from .safari_controller import SafariController
 from .ai_comment_generator import AICommentGenerator
 
+# Import comment tracker for duplicate detection
+try:
+    from services.engagement.comment_tracker import get_comment_tracker
+    HAS_TRACKER = True
+except ImportError:
+    HAS_TRACKER = False
+    get_comment_tracker = None
+
 
 @dataclass
 class TikTokEngagementResult:
@@ -315,6 +323,22 @@ class TikTokEngagement:
     })()
     '''
     
+    # Scroll to next video
+    JS_NEXT_VIDEO = '''
+    (function() {
+        // Try clicking the down arrow or scrolling
+        var downBtn = document.querySelector('[data-e2e="arrow-right"]') || 
+                      document.querySelector('button[class*="ButtonBasicButtonContainer"][class*="Down"]');
+        if (downBtn) {
+            downBtn.click();
+            return 'clicked_next';
+        }
+        // Fallback: scroll down
+        window.scrollBy(0, window.innerHeight);
+        return 'scrolled';
+    })()
+    '''
+    
     def __init__(self, openai_api_key: Optional[str] = None):
         """
         Initialize TikTok engagement.
@@ -324,6 +348,40 @@ class TikTokEngagement:
         """
         self.safari = SafariController()
         self.ai = AICommentGenerator(api_key=openai_api_key)
+        self._checked_urls = set()
+    
+    def _check_duplicate_sync(self, identifier: str) -> bool:
+        """Check if we've already commented on this video."""
+        # For TikTok, identifier is username-based URL
+        post_url = f"https://tiktok.com/@{identifier}"
+        
+        if post_url in self._checked_urls:
+            return True
+        
+        if HAS_TRACKER and get_comment_tracker:
+            import asyncio
+            try:
+                tracker = get_comment_tracker()
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, tracker.has_commented_on('tiktok', post_url))
+                        is_dup = future.result(timeout=5)
+                else:
+                    is_dup = loop.run_until_complete(tracker.has_commented_on('tiktok', post_url))
+                if is_dup:
+                    self._checked_urls.add(post_url)
+                return is_dup
+            except Exception as e:
+                print(f"   ⚠️ Duplicate check failed: {e}")
+        return False
+    
+    def _scroll_to_next_video(self) -> bool:
+        """Scroll to next video in feed."""
+        result = self.safari.execute_js(self.JS_NEXT_VIDEO)
+        time.sleep(3)  # Wait for new video to load
+        return result in ['clicked_next', 'scrolled']
     
     def engage_with_video(self, skip_navigation: bool = False) -> TikTokEngagementResult:
         """
@@ -389,6 +447,30 @@ class TikTokEngagement:
         # Validate
         if not result.username and not result.description:
             result.error = "No video data extracted"
+            return result
+        
+        # Check for duplicate - scroll to next if already commented
+        print("\n   🔍 Checking for duplicates...")
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            if not self._check_duplicate_sync(result.username):
+                break
+            
+            print(f"   ⏭️ Skipping duplicate: @{result.username}")
+            if attempt < max_attempts - 1:
+                print(f"   📜 Scrolling to next video... ({attempt + 1}/{max_attempts})")
+                self._scroll_to_next_video()
+                
+                # Re-extract video data
+                video_data = self.safari.execute_js(self.JS_EXTRACT_VIDEO_DATA)
+                if video_data:
+                    vd = json.loads(video_data)
+                    result.username = vd.get('username', '')
+                    result.description = vd.get('description', '')
+                    result.likes = vd.get('likes', '')
+                    result.comments_count = vd.get('comments', '')
+        else:
+            result.error = "All visible videos are duplicates"
             return result
         
         # Step 4: Like video

@@ -169,6 +169,45 @@ class PublishWorker(BaseWorker):
             )
             await self.emit_progress("publish", 50, "blotato_uploaded", correlation_id, media_id=media_id)
             
+            # Step 3.5: Auto-generate metadata if not provided (REQ-PUBLISH-002, ARCH-003)
+            caption = payload.get("caption", "")
+            title = payload.get("title", "")
+            hashtags = payload.get("hashtags", [])
+
+            # ARCH-003: Wire Content Analyzer → Publisher Integration
+            # If analysis was provided by upstream (e.g., from Sora pipeline), use it directly
+            if payload.get("analysis") and not caption:
+                analysis = payload["analysis"]
+                logger.info(f"[{self.worker_id}] Using pre-computed analysis for {media_id}")
+
+                # Build caption from analysis
+                caption = self._build_platform_caption(analysis, platform)
+                if not title:
+                    title = analysis.get("detected_hook", "")
+                if not hashtags:
+                    hashtags = analysis.get("hashtags", [])
+
+                payload["generated_metadata"] = {
+                    "caption": caption,
+                    "title": title,
+                    "hashtags": hashtags,
+                    "viral_score": analysis.get("viral_score", 0),
+                    "source": "pipeline_analysis"
+                }
+                logger.info(f"[{self.worker_id}] Using pipeline analysis: viral_score={analysis.get('viral_score', 0)}")
+
+            # Fallback: Generate metadata if still not provided
+            elif not caption and payload.get("auto_generate_metadata", True):
+                await self.emit_progress("publish", 52, "generating_metadata", correlation_id, media_id=media_id)
+                generated_metadata = await self._generate_ai_metadata(media_id, platform, payload)
+                if generated_metadata:
+                    caption = generated_metadata.get("caption", "")
+                    title = generated_metadata.get("title", title)
+                    hashtags = generated_metadata.get("hashtags", hashtags)
+                    # Store generated metadata for reference
+                    payload["generated_metadata"] = generated_metadata
+                    logger.info(f"[{self.worker_id}] Auto-generated caption for {media_id}: {caption[:50]}...")
+            
             # Step 4: Submit to platform
             await self.emit(
                 Topics.PUBLISH_SUBMITTED,
@@ -179,7 +218,7 @@ class PublishWorker(BaseWorker):
             submission_id = await self._submit_to_platform(
                 blotato_media_id,
                 account_id,
-                payload.get("caption", ""),
+                caption,
                 platform
             )
             await self.emit_progress("publish", 70, "submitted", correlation_id, media_id=media_id)
@@ -486,6 +525,144 @@ class PublishWorker(BaseWorker):
         except Exception as e:
             logger.warning(f"Could not get video transcript: {e}")
             return None
+    
+    async def _generate_ai_metadata(
+        self,
+        media_id: str,
+        platform: str,
+        payload: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate AI-powered titles, descriptions, and hashtags for content.
+        
+        REQ-PUBLISH-002: Auto-inject AI titles/descriptions into publish payload.
+        
+        Uses ContentAnalyzer if transcript is available, otherwise generates
+        from any provided context (theme, title hints, etc.)
+        """
+        try:
+            # First try to get existing analysis from database
+            transcript = await self._get_video_transcript(media_id)
+            
+            if transcript:
+                # Use ContentAnalyzer for full analysis
+                try:
+                    from services.content_analyzer import ContentAnalyzer
+                    analyzer = ContentAnalyzer()
+                    analysis = analyzer.analyze_transcript(transcript)
+                    
+                    # Build platform-specific caption
+                    caption = self._build_platform_caption(analysis, platform)
+                    
+                    return {
+                        "caption": caption,
+                        "title": analysis.get("detected_hook", ""),
+                        "hashtags": analysis.get("hashtags", []),
+                        "hook": analysis.get("detected_hook", ""),
+                        "viral_score": analysis.get("viral_score", 0),
+                        "source": "content_analyzer"
+                    }
+                except Exception as e:
+                    logger.warning(f"ContentAnalyzer failed: {e}")
+            
+            # Fallback: Generate from theme/context if provided
+            theme = payload.get("theme") or payload.get("title") or ""
+            if theme:
+                return await self._generate_metadata_from_theme(theme, platform)
+            
+            # Last resort: Generic caption
+            return {
+                "caption": "Check out this video! 🔥 #viral #trending",
+                "title": "",
+                "hashtags": ["viral", "trending", "fyp"],
+                "source": "fallback"
+            }
+            
+        except Exception as e:
+            logger.warning(f"AI metadata generation failed: {e}")
+            return None
+    
+    def _build_platform_caption(self, analysis: Dict, platform: str) -> str:
+        """Build platform-optimized caption from analysis."""
+        hook = analysis.get("detected_hook", "")
+        description = analysis.get("suggested_description", "")
+        hashtags = analysis.get("hashtags", [])
+        cta = analysis.get("cta", "Follow for more!")
+        
+        # Platform-specific formatting
+        if platform == "tiktok":
+            # TikTok: Short, punchy, hashtag-heavy
+            caption = f"{hook}\n\n{cta}"
+            if hashtags:
+                caption += "\n\n" + " ".join([f"#{h}" for h in hashtags[:10]])
+            return caption[:2200]  # TikTok limit
+            
+        elif platform == "instagram":
+            # Instagram: Longer form okay, structured
+            caption = f"{hook}\n\n{description}\n\n{cta}"
+            if hashtags:
+                caption += "\n\n" + " ".join([f"#{h}" for h in hashtags[:30]])
+            return caption[:2200]
+            
+        elif platform == "youtube":
+            # YouTube: SEO-focused title + description
+            caption = f"{hook}\n\n{description}\n\n{cta}"
+            if hashtags:
+                caption += "\n\n" + " ".join([f"#{h}" for h in hashtags[:15]])
+            return caption[:5000]
+            
+        elif platform == "twitter":
+            # Twitter: Very short
+            caption = f"{hook}"
+            if hashtags:
+                caption += " " + " ".join([f"#{h}" for h in hashtags[:3]])
+            return caption[:280]
+            
+        else:
+            # Default format
+            caption = f"{hook}\n\n{cta}"
+            if hashtags:
+                caption += "\n\n" + " ".join([f"#{h}" for h in hashtags[:10]])
+            return caption[:2000]
+    
+    async def _generate_metadata_from_theme(self, theme: str, platform: str) -> Dict[str, Any]:
+        """Generate metadata from theme using AI."""
+        try:
+            from openai import OpenAI
+            import os
+            import json
+            
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""Generate social media metadata for {platform}.
+Return JSON with: caption, title, hashtags (array), hook, cta"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Create engaging {platform} caption for video about: {theme}"
+                    }
+                ],
+                temperature=0.8,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            result["source"] = "ai_generated"
+            return result
+            
+        except Exception as e:
+            logger.warning(f"Theme-based metadata generation failed: {e}")
+            return {
+                "caption": f"Check out this video about {theme}! 🔥 #viral",
+                "title": theme,
+                "hashtags": ["viral", "trending"],
+                "source": "fallback"
+            }
     
     async def _get_scheduled_post(self, post_id: str) -> Optional[Dict[str, Any]]:
         """Get scheduled post details from database."""

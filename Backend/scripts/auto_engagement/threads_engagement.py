@@ -23,6 +23,14 @@ from dataclasses import dataclass, field
 from .safari_controller import SafariController
 from .ai_comment_generator import AICommentGenerator, PostContext
 
+# Import comment tracker for duplicate detection
+try:
+    from services.engagement.comment_tracker import get_comment_tracker
+    HAS_TRACKER = True
+except ImportError:
+    HAS_TRACKER = False
+    get_comment_tracker = None
+
 
 @dataclass
 class ThreadsEngagementResult:
@@ -56,6 +64,42 @@ class ThreadsEngagement:
     THREADS_URL = "https://www.threads.net/"
     
     # JavaScript selectors for Threads
+    # Find ALL posts (returns array for duplicate checking)
+    JS_FIND_ALL_POSTS = '''
+    (function() {
+        var posts = document.querySelectorAll('div[data-pressable-container="true"]');
+        var results = [];
+        for (var i = 0; i < Math.min(posts.length, 15); i++) {
+            var post = posts[i];
+            var userLink = post.querySelector('a[href^="/@"]');
+            var postLink = post.querySelector('a[href*="/post/"]');
+            
+            var content = '';
+            post.querySelectorAll('span[dir="auto"]').forEach(function(el) {
+                content += el.innerText + ' ';
+            });
+            
+            if (userLink && postLink && content.length > 20) {
+                results.push({
+                    username: userLink.getAttribute('href').replace('/@', '').split('/')[0],
+                    url: postLink.href,
+                    content: content.substring(0, 300),
+                    index: i
+                });
+            }
+        }
+        return JSON.stringify(results);
+    })()
+    '''
+    
+    # Scroll down to load more posts
+    JS_SCROLL_DOWN = '''
+    (function() {
+        window.scrollBy(0, 800);
+        return 'scrolled';
+    })()
+    '''
+    
     JS_FIND_POST = '''
     (function() {
         var posts = document.querySelectorAll('div[data-pressable-container="true"]');
@@ -296,6 +340,76 @@ class ThreadsEngagement:
         """
         self.safari = SafariController()
         self.ai = AICommentGenerator(api_key=openai_api_key)
+        self._tracker = None
+        self._checked_urls = set()  # Track URLs checked this session
+    
+    async def _check_duplicate(self, post_url: str) -> bool:
+        """Check if we've already commented on this post."""
+        if post_url in self._checked_urls:
+            return True
+        
+        if HAS_TRACKER and get_comment_tracker:
+            try:
+                tracker = get_comment_tracker()
+                is_dup = await tracker.has_commented_on('threads', post_url)
+                if is_dup:
+                    self._checked_urls.add(post_url)
+                return is_dup
+            except Exception as e:
+                print(f"   ⚠️ Duplicate check failed: {e}")
+        return False
+    
+    def _check_duplicate_sync(self, post_url: str) -> bool:
+        """Synchronous wrapper for duplicate check."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an async context, create a new task
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, self._check_duplicate(post_url))
+                    return future.result(timeout=5)
+            else:
+                return loop.run_until_complete(self._check_duplicate(post_url))
+        except Exception as e:
+            print(f"   ⚠️ Sync duplicate check failed: {e}")
+            return False
+    
+    def _find_non_duplicate_post(self, max_scrolls: int = 5) -> Optional[dict]:
+        """Find a post we haven't commented on yet, scrolling if needed."""
+        for scroll_attempt in range(max_scrolls):
+            # Get all visible posts
+            posts_data = self.safari.execute_js(self.JS_FIND_ALL_POSTS)
+            if not posts_data:
+                continue
+            
+            try:
+                posts = json.loads(posts_data)
+            except:
+                continue
+            
+            # Check each post for duplicates
+            for post in posts:
+                post_url = post.get('url', '')
+                if not post_url:
+                    continue
+                
+                # Check if duplicate
+                if self._check_duplicate_sync(post_url):
+                    print(f"   ⏭️ Skipping duplicate: @{post.get('username', '?')}")
+                    continue
+                
+                # Found a non-duplicate post!
+                return post
+            
+            # All visible posts are duplicates, scroll for more
+            if scroll_attempt < max_scrolls - 1:
+                print(f"   📜 Scrolling for more posts... ({scroll_attempt + 1}/{max_scrolls})")
+                self.safari.execute_js(self.JS_SCROLL_DOWN)
+                time.sleep(2)
+        
+        return None
     
     def engage_with_post(self, skip_navigation: bool = False) -> ThreadsEngagementResult:
         """
@@ -328,14 +442,21 @@ class ThreadsEngagement:
             print(f"   ✅ On Threads")
             time.sleep(3)
         
-        # Step 2: Find post
+        # Step 2: Find post (with duplicate detection and scroll-to-next)
         print("\n[2/7] Finding post with engagement...")
-        post_data = self.safari.execute_js(self.JS_FIND_POST)
-        if not post_data:
-            result.error = "No post found"
-            return result
+        print("   🔍 Checking for duplicates...")
         
-        post = json.loads(post_data)
+        # Use new duplicate-aware post finder
+        post = self._find_non_duplicate_post(max_scrolls=5)
+        
+        if not post:
+            # Fallback to simple find if duplicate check fails
+            post_data = self.safari.execute_js(self.JS_FIND_POST)
+            if not post_data:
+                result.error = "No post found (all duplicates or empty feed)"
+                return result
+            post = json.loads(post_data)
+        
         result.username = post['username']
         result.post_url = post['url']
         print(f"   ✅ Found: @{result.username}")

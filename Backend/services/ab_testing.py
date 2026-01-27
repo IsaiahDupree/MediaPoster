@@ -492,5 +492,221 @@ class TestTemplates:
         }
 
 
-# Singleton instance
+# =============================================================================
+# OFFER VARIANT A/B TESTING
+# =============================================================================
+
+class OfferABTestingService:
+    """
+    A/B testing specifically for offer variants.
+    Integrates with OfferTracker for conversion tracking.
+    """
+    
+    def __init__(self):
+        self.ab_service = ABTestingService()
+    
+    def create_offer_test(
+        self,
+        offer_url: str,
+        offer_description: str,
+        tweet_variants: List[str],
+        campaign_prefix: str = "ab_test",
+        interval_minutes: int = 120
+    ) -> Dict:
+        """
+        Create an A/B test for offer tweet variants.
+        
+        Each variant gets its own UTM content tag for tracking.
+        
+        Args:
+            offer_url: Base offer URL
+            offer_description: Description of the offer
+            tweet_variants: List of different tweet text variants to test
+            campaign_prefix: Campaign name prefix for UTM
+            interval_minutes: Time between tweets
+            
+        Returns:
+            Dict with test_id, variants, and scheduled_ids
+        """
+        from services.offer_tracker import get_offer_tracker
+        from services.twitter_campaign_service import get_campaign_service
+        
+        tracker = get_offer_tracker()
+        twitter = get_campaign_service()
+        
+        # Create A/B test
+        test = self.ab_service.create_test(
+            name=f"Offer Tweet Test: {offer_description[:50]}",
+            description=f"Testing {len(tweet_variants)} tweet variants for: {offer_description}",
+            variation_type=VariationType.HOOK_TYPE,
+            variations=[
+                {"name": f"Variant {chr(65+i)}", "content": text}
+                for i, text in enumerate(tweet_variants)
+            ],
+            platform="twitter",
+            min_sample_size=50
+        )
+        
+        # Create tracked links for each variant
+        variant_links = []
+        for i, variation in enumerate(test.variations):
+            content_id = f"v{chr(65+i)}"
+            link = tracker.generate_utm_link(
+                base_url=offer_url,
+                campaign=f"{campaign_prefix}_{test.id[:8]}",
+                source="twitter",
+                medium="social",
+                content=content_id
+            )
+            variant_links.append({
+                "variation_id": variation.id,
+                "content_id": content_id,
+                "link_id": link["link_id"],
+                "tracked_url": link["tracked_url"],
+                "tweet_text": variation.content
+            })
+        
+        # Start the test
+        self.ab_service.start_test(test.id, duration_days=7)
+        
+        return {
+            "test_id": test.id,
+            "test_name": test.name,
+            "variants": variant_links,
+            "status": "running",
+            "min_sample_size": test.min_sample_size
+        }
+    
+    def get_offer_test_results(self, test_id: str) -> Dict:
+        """
+        Get results for an offer A/B test, enriched with conversion data.
+        """
+        from services.offer_tracker import get_offer_tracker
+        
+        tracker = get_offer_tracker()
+        
+        # Get base test results
+        summary = self.ab_service.get_test_summary(test_id)
+        
+        # Try to get offer link stats for each variation
+        # (Would need to store the link_id mapping somewhere persistent)
+        
+        # Analyze if we have enough data
+        if summary["progress_percent"] >= 100:
+            analysis = self.ab_service.analyze_test(test_id)
+            summary["analysis"] = {
+                "winner_id": analysis.winner_variation_id,
+                "is_significant": analysis.is_significant,
+                "confidence": analysis.confidence,
+                "lift": analysis.lift,
+                "recommendation": analysis.recommendation
+            }
+        
+        return summary
+    
+    def record_offer_click(self, test_id: str, variation_id: str):
+        """Record a click (impression) for an offer test variant."""
+        self.ab_service.record_impression(test_id, variation_id)
+    
+    def record_offer_conversion(
+        self,
+        test_id: str,
+        variation_id: str,
+        conversion_value: float = 1.0
+    ):
+        """Record a conversion for an offer test variant."""
+        self.ab_service.record_conversion(test_id, variation_id, conversion_value)
+    
+    def get_winning_variant(self, test_id: str) -> Optional[Dict]:
+        """
+        Get the winning variant if test is complete and significant.
+        """
+        if test_id not in self.ab_service.tests:
+            return None
+        
+        test = self.ab_service.tests[test_id]
+        
+        if test.winner_id:
+            for v in test.variations:
+                if v.id == test.winner_id:
+                    return {
+                        "variation_id": v.id,
+                        "name": v.name,
+                        "content": v.content,
+                        "conversion_rate": v.conversion_rate,
+                        "impressions": v.impressions,
+                        "conversions": v.conversions
+                    }
+        
+        return None
+    
+    def auto_optimize_tweets(
+        self,
+        offer_url: str,
+        offer_description: str,
+        num_variants: int = 4
+    ) -> Dict:
+        """
+        Automatically generate and test multiple tweet variants using AI.
+        
+        Args:
+            offer_url: Offer URL to promote
+            offer_description: What the offer is
+            num_variants: Number of variants to test
+            
+        Returns:
+            Created test with AI-generated variants
+        """
+        from openai import OpenAI
+        import os
+        import json
+        
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        # Generate variant tweets with AI
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"""Generate {num_variants} different tweet variants for A/B testing.
+Each should promote the same offer but with different:
+- Hooks (curiosity, urgency, value, story, etc.)
+- Tones (casual, professional, excited, etc.)
+- CTAs (different call-to-action phrases)
+
+Return JSON array of tweet texts only (no links - they'll be added later)."""
+                },
+                {
+                    "role": "user",
+                    "content": f"Create {num_variants} tweet variants for: {offer_description}"
+                }
+            ],
+            temperature=0.9,
+            response_format={"type": "json_object"}
+        )
+        
+        result = json.loads(response.choices[0].message.content)
+        variants = result.get("tweets", result.get("variants", []))
+        
+        if not variants or len(variants) < 2:
+            # Fallback variants
+            variants = [
+                f"🔥 {offer_description} - Check it out!",
+                f"Just discovered something amazing: {offer_description}",
+                f"This changed everything for me: {offer_description}",
+                f"Don't sleep on this: {offer_description}"
+            ][:num_variants]
+        
+        # Create the test
+        return self.create_offer_test(
+            offer_url=offer_url,
+            offer_description=offer_description,
+            tweet_variants=variants[:num_variants],
+            campaign_prefix="auto_ab"
+        )
+
+
+# Singleton instances
 ab_testing_service = ABTestingService()
+offer_ab_testing_service = OfferABTestingService()

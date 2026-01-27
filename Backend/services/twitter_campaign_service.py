@@ -132,17 +132,20 @@ class TwitterCampaignService:
     - Analytics tracking and optimization
     """
     
-    def __init__(self):
+    def __init__(self, interval_minutes: int = 120):
         self.engine = create_engine(DATABASE_URL)
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.blotato_account_id = "4151"  # Twitter account ID from Blotato
+        
+        # REQ-TWITTER-001: Configurable posting interval (default 2 hours)
+        self.interval_minutes = interval_minutes
         
         # Tweets per day configuration
         self.tweets_per_day = 60
         self.products_count = 3  # Everreach, BlankLogo, Apple App Kit
         self.tweets_per_product = self.tweets_per_day // self.products_count  # 20 each
         
-        logger.info(f"TwitterCampaignService initialized - {self.tweets_per_day} tweets/day")
+        logger.info(f"TwitterCampaignService initialized - {self.tweets_per_day} tweets/day, interval={self.interval_minutes}min")
     
     # =========================================================================
     # PRODUCT MANAGEMENT
@@ -803,11 +806,11 @@ Generate ONLY the tweet text, nothing else."""
         # Shuffle to mix products
         random.shuffle(all_tweets)
         
-        # Schedule tweets
+        # Schedule tweets using configured interval (default 2 hours)
         scheduled_ids = self.schedule_tweets(
             tweets=all_tweets,
             start_time=datetime.now(timezone.utc),
-            interval_minutes=24  # ~1 tweet every 24 minutes
+            interval_minutes=self.interval_minutes
         )
         
         logger.info(f"\n✅ Scheduled {len(scheduled_ids)} tweets for today")
@@ -817,6 +820,227 @@ Generate ONLY the tweet text, nothing else."""
             'products': [p.name for p in products],
             'scheduled_ids': scheduled_ids[:10]  # First 10 for reference
         }
+    
+    # =========================================================================
+    # REQ-TWITTER-002: OFFER-FOCUSED TWEET GENERATION WITH UTM
+    # =========================================================================
+    
+    def generate_utm_link(
+        self,
+        base_url: str,
+        campaign: str = "twitter",
+        source: str = "twitter",
+        medium: str = "social",
+        content: Optional[str] = None
+    ) -> str:
+        """
+        Generate a UTM-tracked link for offer tracking.
+        
+        Args:
+            base_url: The offer URL to track
+            campaign: Campaign name (e.g., "jan2026_promo")
+            source: Traffic source (default "twitter")
+            medium: Marketing medium (default "social")
+            content: Optional content identifier for A/B testing
+            
+        Returns:
+            URL with UTM parameters appended
+        """
+        from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+        
+        # Parse existing URL
+        parsed = urlparse(base_url)
+        existing_params = parse_qs(parsed.query)
+        
+        # Add UTM parameters
+        utm_params = {
+            "utm_source": source,
+            "utm_medium": medium,
+            "utm_campaign": campaign
+        }
+        if content:
+            utm_params["utm_content"] = content
+        
+        # Merge with existing params
+        existing_params.update(utm_params)
+        
+        # Flatten the params dict
+        flat_params = {k: v[0] if isinstance(v, list) else v for k, v in existing_params.items()}
+        
+        # Rebuild URL
+        new_query = urlencode(flat_params)
+        return urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment
+        ))
+    
+    def generate_offer_tweet(
+        self,
+        offer_url: str,
+        offer_description: str,
+        cta_text: str = "Check it out",
+        campaign_name: Optional[str] = None,
+        content_id: Optional[str] = None
+    ) -> Dict:
+        """
+        Generate a tweet focused on driving traffic to an offer.
+        
+        REQ-TWITTER-002: Creates engaging tweets with UTM-tracked links.
+        
+        Args:
+            offer_url: The URL to the offer/product
+            offer_description: What the offer is about
+            cta_text: Call-to-action text
+            campaign_name: Campaign identifier for UTM tracking
+            content_id: Optional A/B test identifier
+            
+        Returns:
+            Dict with tweet_text and tracking info
+        """
+        import uuid
+        
+        # Generate campaign name if not provided
+        if not campaign_name:
+            campaign_name = f"offer_{datetime.now().strftime('%Y%m%d')}"
+        
+        # Generate content ID for tracking if not provided
+        if not content_id:
+            content_id = str(uuid.uuid4())[:8]
+        
+        # Create UTM-tracked link
+        tracked_url = self.generate_utm_link(
+            base_url=offer_url,
+            campaign=campaign_name,
+            source="twitter",
+            medium="social",
+            content=content_id
+        )
+        
+        # Generate engaging tweet with AI
+        try:
+            response = self.openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert Twitter copywriter. 
+Create engaging, casual tweets that drive clicks.
+- Keep under 250 chars to leave room for the link
+- Use curiosity, urgency, or value proposition
+- Be conversational, not salesy
+- No hashtags (they reduce engagement on Twitter)"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Write a tweet promoting this offer:
+
+Offer: {offer_description}
+CTA: {cta_text}
+
+Return ONLY the tweet text, no quotes or labels."""
+                    }
+                ],
+                temperature=0.9
+            )
+            
+            tweet_text = response.choices[0].message.content.strip()
+            # Remove quotes if present
+            tweet_text = tweet_text.strip('"\'')
+            
+        except Exception as e:
+            logger.warning(f"AI offer tweet generation failed: {e}")
+            tweet_text = f"{offer_description}\n\n{cta_text} 👇"
+        
+        # Append the tracked URL
+        full_tweet = f"{tweet_text}\n\n{tracked_url}"
+        
+        # Ensure we're within Twitter's limit
+        if len(full_tweet) > 280:
+            # Truncate tweet text to fit
+            max_text_len = 280 - len(tracked_url) - 5  # 5 for newlines and buffer
+            tweet_text = tweet_text[:max_text_len] + "..."
+            full_tweet = f"{tweet_text}\n\n{tracked_url}"
+        
+        return {
+            "tweet_text": full_tweet,
+            "offer_url": offer_url,
+            "tracked_url": tracked_url,
+            "campaign": campaign_name,
+            "content_id": content_id,
+            "awareness_stage": AwarenessStage.MOST_AWARE.value,
+            "content_type": ContentType.CTA.value
+        }
+    
+    def schedule_offer_tweets(
+        self,
+        offer_url: str,
+        offer_description: str,
+        count: int = 12,
+        interval_minutes: int = 120,
+        start_time: Optional[datetime] = None,
+        campaign_name: Optional[str] = None
+    ) -> List[str]:
+        """
+        Generate and schedule multiple offer-focused tweets.
+        
+        Creates varied tweets all driving to the same offer, scheduled
+        at regular intervals (default every 2 hours = 12/day).
+        
+        Args:
+            offer_url: The offer URL
+            offer_description: What the offer is
+            count: Number of tweets to generate
+            interval_minutes: Time between posts (default 2 hours)
+            start_time: When to start posting
+            campaign_name: Campaign identifier
+            
+        Returns:
+            List of scheduled tweet IDs
+        """
+        start_time = start_time or datetime.now(timezone.utc)
+        campaign_name = campaign_name or f"offer_{datetime.now().strftime('%Y%m%d')}"
+        
+        cta_variations = [
+            "Check it out",
+            "See for yourself",
+            "Don't miss this",
+            "Link below",
+            "Grab it now",
+            "Here's the link",
+            "Take a look",
+            "See what I mean",
+            "Try it yourself",
+            "Get started here",
+            "Join the movement",
+            "See the details"
+        ]
+        
+        offer_tweets = []
+        for i in range(count):
+            cta = cta_variations[i % len(cta_variations)]
+            tweet_data = self.generate_offer_tweet(
+                offer_url=offer_url,
+                offer_description=offer_description,
+                cta_text=cta,
+                campaign_name=campaign_name,
+                content_id=f"v{i+1}"  # Version for A/B tracking
+            )
+            tweet_data["product_id"] = "offer"  # Special product ID for offers
+            offer_tweets.append(tweet_data)
+        
+        # Schedule the tweets
+        scheduled_ids = self.schedule_tweets(
+            tweets=offer_tweets,
+            start_time=start_time,
+            interval_minutes=interval_minutes
+        )
+        
+        logger.info(f"📣 Scheduled {len(scheduled_ids)} offer tweets for campaign '{campaign_name}'")
+        return scheduled_ids
     
     async def process_due_tweets(self) -> Dict:
         """Process all tweets that are due for posting."""
@@ -844,6 +1068,95 @@ Generate ONLY the tweet text, nothing else."""
             'success': success_count,
             'failed': failed_count
         }
+
+    # ARCH-004: Schedule campaign with tweet generation
+    def schedule_campaign(
+        self,
+        theme: str,
+        count: int = 12,
+        interval_minutes: Optional[int] = None,
+        start_time: Optional[datetime] = None
+    ) -> str:
+        """
+        Schedule a themed tweet campaign (ARCH-004).
+
+        Generates tweets about the theme and schedules them at specified intervals.
+
+        Args:
+            theme: Campaign theme
+            count: Number of tweets
+            interval_minutes: Time between tweets (uses self.interval_minutes if not specified)
+            start_time: When to start
+
+        Returns:
+            Campaign ID (combination of theme and timestamp)
+        """
+        campaign_id = f"{theme.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        interval = interval_minutes or self.interval_minutes
+
+        # Generate tweets about the theme
+        logger.info(f"[TwitterCampaign] Generating {count} tweets for theme: {theme}")
+
+        try:
+            response = self.openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are a viral Twitter content creator. Generate engaging tweets that:
+- Hook attention in first 3 words
+- Include relevant hashtags (1-3 per tweet)
+- Mix awareness stages: hook, educational, story, emotional, CTA
+- Keep under 280 characters
+- Vary tone and format"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Generate {count} unique tweets about: {theme}
+
+Mix these types:
+- Hook tweets (curiosity-driven)
+- Educational tweets (teach something)
+- Story tweets (personal anecdote)
+- Emotional tweets (inspire/relate)
+- CTA tweets (call to action)
+
+Return ONLY the tweets, one per line, no numbering."""
+                    }
+                ],
+                temperature=0.9
+            )
+
+            tweets_text = response.choices[0].message.content.strip()
+            tweet_texts = [t.strip() for t in tweets_text.split("\n") if t.strip()][:count]
+
+            # Create tweet dicts for scheduling
+            tweets = []
+            for i, text in enumerate(tweet_texts):
+                # Determine awareness stage and content type
+                stage_cycle = ["unaware", "problem_aware", "solution_aware", "product_aware", "most_aware"]
+                type_cycle = ["hook", "authority", "story", "emotional", "cta"]
+
+                tweets.append({
+                    "product_id": None,  # Theme-based, not product-specific
+                    "awareness_stage": stage_cycle[i % len(stage_cycle)],
+                    "content_type": type_cycle[i % len(type_cycle)],
+                    "tweet_text": text[:280]  # Enforce Twitter limit
+                })
+
+            # Schedule the tweets
+            tweet_ids = self.schedule_tweets(
+                tweets=tweets,
+                start_time=start_time,
+                interval_minutes=interval
+            )
+
+            logger.info(f"[TwitterCampaign] Scheduled campaign '{campaign_id}': {len(tweet_ids)} tweets")
+            return campaign_id
+
+        except Exception as e:
+            logger.error(f"[TwitterCampaign] Failed to schedule campaign: {e}")
+            raise
 
 
 # Singleton instance

@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 381,
-  "completedFeatures": 276,
+  "completedFeatures": 284,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -7386,7 +7386,8 @@
       "description": "Unified orchestrator coordinating Sora, stitching, analysis, publishing, tweets via EventBus",
       "category": "system-architecture",
       "priority": "P0",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     },
     {
       "id": "ARCH-002",
@@ -7394,7 +7395,8 @@
       "description": "generate_multi_part() method for batch video generation with automatic stitching",
       "category": "system-architecture",
       "priority": "P0",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     },
     {
       "id": "ARCH-003",
@@ -7402,7 +7404,8 @@
       "description": "Auto-inject AI-generated titles, descriptions, hashtags into publish payload",
       "category": "system-architecture",
       "priority": "P0",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     },
     {
       "id": "ARCH-004",
@@ -7410,7 +7413,8 @@
       "description": "Configure TwitterCampaignScheduler for 120-min intervals with offer CTA rotation",
       "category": "system-architecture",
       "priority": "P1",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     },
     {
       "id": "ARCH-005",
@@ -7418,7 +7422,8 @@
       "description": "UTM link generation, click tracking, conversion attribution with offer_links/clicks/conversions tables",
       "category": "system-architecture",
       "priority": "P1",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     },
     {
       "id": "ARCH-006",
@@ -7426,7 +7431,8 @@
       "description": "Connect engagement metrics to ContentIdeator for style reinforcement/avoidance",
       "category": "system-architecture",
       "priority": "P1",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     },
     {
       "id": "ARCH-007",
@@ -7434,7 +7440,8 @@
       "description": "POST /api/pipeline/full endpoint to trigger complete workflow with config",
       "category": "system-architecture",
       "priority": "P1",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     },
     {
       "id": "ARCH-008",
@@ -7442,7 +7449,8 @@
       "description": "Frontend widget showing pipeline stage, video preview, publish status, tweet schedule, metrics",
       "category": "system-architecture",
       "priority": "P2",
-      "passes": false
+      "passes": true,
+      "completed": "2026-01-26"
     }
   ]
 }

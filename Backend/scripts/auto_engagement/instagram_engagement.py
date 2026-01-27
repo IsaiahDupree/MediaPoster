@@ -24,6 +24,14 @@ from dataclasses import dataclass, field
 from .safari_controller import SafariController
 from .ai_comment_generator import AICommentGenerator
 
+# Import comment tracker for duplicate detection
+try:
+    from services.engagement.comment_tracker import get_comment_tracker
+    HAS_TRACKER = True
+except ImportError:
+    HAS_TRACKER = False
+    get_comment_tracker = None
+
 
 @dataclass
 class InstagramEngagementResult:
@@ -218,6 +226,41 @@ class InstagramEngagement:
     })()
     '''
     
+    # Find ALL posts for duplicate checking
+    JS_FIND_ALL_POSTS = r'''
+    (function() {
+        var articles = document.querySelectorAll('article');
+        var results = [];
+        for (var i = 0; i < articles.length; i++) {
+            var art = articles[i];
+            if (art.getBoundingClientRect().height < 300) continue;
+            
+            var username = '';
+            var links = art.querySelectorAll('a[href^="/"]');
+            for (var j = 0; j < links.length; j++) {
+                var href = links[j].getAttribute('href');
+                if (href && href.match(/^\/[a-zA-Z0-9_.]+\/$/) && !href.includes('/p/')) {
+                    username = href.replace(/\//g, '');
+                    break;
+                }
+            }
+            
+            var postLink = art.querySelector('a[href*="/p/"]');
+            if (username && postLink) {
+                results.push({username: username, url: postLink.href, index: i});
+            }
+        }
+        return JSON.stringify(results);
+    })()
+    '''
+    
+    JS_SCROLL_DOWN = '''
+    (function() {
+        window.scrollBy(0, 600);
+        return 'scrolled';
+    })()
+    '''
+    
     def __init__(self, openai_api_key: Optional[str] = None):
         """
         Initialize Instagram engagement.
@@ -227,6 +270,61 @@ class InstagramEngagement:
         """
         self.safari = SafariController()
         self.ai = AICommentGenerator(api_key=openai_api_key)
+        self._checked_urls = set()
+    
+    def _check_duplicate_sync(self, post_url: str) -> bool:
+        """Check if we've already commented on this post."""
+        if post_url in self._checked_urls:
+            return True
+        
+        if HAS_TRACKER and get_comment_tracker:
+            import asyncio
+            try:
+                tracker = get_comment_tracker()
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, tracker.has_commented_on('instagram', post_url))
+                        is_dup = future.result(timeout=5)
+                else:
+                    is_dup = loop.run_until_complete(tracker.has_commented_on('instagram', post_url))
+                if is_dup:
+                    self._checked_urls.add(post_url)
+                return is_dup
+            except Exception as e:
+                print(f"   ⚠️ Duplicate check failed: {e}")
+        return False
+    
+    def _find_non_duplicate_post(self, max_scrolls: int = 5) -> Optional[dict]:
+        """Find a post we haven't commented on yet, scrolling if needed."""
+        for scroll_attempt in range(max_scrolls):
+            posts_data = self.safari.execute_js(self.JS_FIND_ALL_POSTS)
+            if not posts_data:
+                continue
+            
+            try:
+                posts = json.loads(posts_data)
+            except:
+                continue
+            
+            for post in posts:
+                post_url = post.get('url', '')
+                if not post_url:
+                    continue
+                
+                if self._check_duplicate_sync(post_url):
+                    print(f"   ⏭️ Skipping duplicate: @{post.get('username', '?')}")
+                    continue
+                
+                return post
+            
+            if scroll_attempt < max_scrolls - 1:
+                print(f"   📜 Scrolling for more posts... ({scroll_attempt + 1}/{max_scrolls})")
+                self.safari.execute_js(self.JS_SCROLL_DOWN)
+                time.sleep(2)
+        
+        return None
     
     def engage_with_post(self, skip_navigation: bool = False) -> InstagramEngagementResult:
         """
@@ -263,14 +361,19 @@ class InstagramEngagement:
             self.safari.scroll_down(400)
             time.sleep(2)
         
-        # Step 2: Find post
+        # Step 2: Find post (with duplicate detection)
         print("\n[2/8] Finding post in feed...")
-        post_data = self.safari.execute_js(self.JS_FIND_POST)
-        if not post_data:
-            result.error = "No post found"
-            return result
+        print("   🔍 Checking for duplicates...")
         
-        post = json.loads(post_data)
+        post = self._find_non_duplicate_post(max_scrolls=5)
+        
+        if not post:
+            post_data = self.safari.execute_js(self.JS_FIND_POST)
+            if not post_data:
+                result.error = "No post found (all duplicates or empty feed)"
+                return result
+            post = json.loads(post_data)
+        
         result.username = post['username']
         result.post_url = post['url']
         print(f"   ✅ Found: @{result.username}")

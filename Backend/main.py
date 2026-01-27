@@ -21,6 +21,7 @@ from api.endpoints import event_history, video_routing_api
 from api.endpoints import tts, matting, remotion, pipeline, music, visuals
 from api.endpoints import twitter_api
 from api.endpoints import smart_schedule
+from api.endpoints import orchestrator
 # from api.endpoints import batch_analysis  # FIXME: Model import errors
 from database.connection import init_db, close_db
 
@@ -337,6 +338,36 @@ async def lifespan(app: FastAPI):
         logger.success("✓ Template Retiree started (AUTO-004)")
     except Exception as e:
         logger.warning(f"⚠️  Template Retiree failed to start: {e}")
+
+    # Start the Master Orchestrator (ARCH-001)
+    master_orchestrator = None
+    try:
+        from services.master_orchestrator import get_orchestrator
+        master_orchestrator = get_orchestrator()  # Singleton gets EventBus instance
+        await master_orchestrator.start()
+        logger.success("✓ Master Orchestrator started (ARCH-001)")
+    except Exception as e:
+        logger.warning(f"⚠️  Master Orchestrator failed to start: {e}")
+
+    # Start the Sora Worker (ARCH-002)
+    sora_worker = None
+    try:
+        from services.workers.sora_worker import SoraWorker
+        sora_worker = SoraWorker(event_bus)
+        await sora_worker.start()
+        logger.success("✓ Sora Worker started (ARCH-002)")
+    except Exception as e:
+        logger.warning(f"⚠️  Sora Worker failed to start: {e}")
+
+    # Start the Publish Worker (ARCH-003)
+    publish_worker = None
+    try:
+        from services.workers.publish_worker import PublishWorker
+        publish_worker = PublishWorker(event_bus)
+        await publish_worker.start()
+        logger.success("✓ Publish Worker started (ARCH-003)")
+    except Exception as e:
+        logger.warning(f"⚠️  Publish Worker failed to start: {e}")
 
     # Start the Autonomous Slot Executor (AUTO-006)
     autonomous_executor = None
@@ -870,6 +901,9 @@ app.include_router(workspaces.router, prefix="/api/workspaces", tags=["Workspace
 # Trends & Analytics (Standalone System)
 app.include_router(trends.router, prefix="/api", tags=["Trends & Analytics"])
 
+# Master Orchestrator (ARCH-007: Unified Pipeline API)
+app.include_router(orchestrator.router, tags=["Orchestrator"])
+
 # AI Video Generation
 from api.endpoints import ai_video
 app.include_router(ai_video.router, prefix="/api", tags=["AI Video Generation"])
@@ -1050,6 +1084,62 @@ app.include_router(social_analytics.router, prefix="/api/social-analytics", tags
 # Platform Data Orchestrator (Unified Failover System)
 from api.endpoints import data_orchestrator
 app.include_router(data_orchestrator.router, prefix="/api/orchestrator", tags=["Data Orchestrator"])
+
+# Master Orchestrator (Unified Content Automation Pipeline)
+try:
+    from api.endpoints import orchestrator as master_orchestrator
+    app.include_router(master_orchestrator.router, prefix="/api", tags=["Master Orchestrator"])
+    logger.success("✓ Master Orchestrator API registered (REQ-ORCH-001)")
+except Exception as e:
+    logger.warning(f"⚠️  Master Orchestrator API registration failed: {e}")
+
+# Analytics Feedback Loop (AI-powered insights)
+try:
+    from api.endpoints import analytics_feedback
+    app.include_router(analytics_feedback.router, prefix="/api", tags=["Analytics Feedback"])
+    logger.success("✓ Analytics Feedback API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Analytics Feedback API registration failed: {e}")
+
+# Relationship-First CRM (DM Automation)
+try:
+    from api.endpoints import relationship_crm
+    app.include_router(relationship_crm.router, prefix="/api", tags=["Relationship CRM"])
+    logger.success("✓ Relationship CRM API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Relationship CRM API registration failed: {e}")
+
+# Community Inbox (Unified Message Aggregation)
+try:
+    from api.endpoints import inbox
+    app.include_router(inbox.router, prefix="/api", tags=["Community Inbox"])
+    logger.success("✓ Community Inbox API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Community Inbox API registration failed: {e}")
+
+# Daily Sora Automation (@isaiahdupree character)
+try:
+    from api.endpoints import sora_daily
+    app.include_router(sora_daily.router, prefix="/api", tags=["Sora Daily Automation"])
+    logger.success("✓ Sora Daily Automation API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Sora Daily Automation API registration failed: {e}")
+
+# DM Outreach (Prospect Management)
+try:
+    from api.endpoints import dm_outreach
+    app.include_router(dm_outreach.router, prefix="/api", tags=["DM Outreach"])
+    logger.success("✓ DM Outreach API registered")
+except Exception as e:
+    logger.warning(f"⚠️  DM Outreach API registration failed: {e}")
+
+# Trend Flash (Real-time trend → video pipeline)
+try:
+    from api.endpoints import trend_flash
+    app.include_router(trend_flash.router, prefix="/api", tags=["Trend Flash"])
+    logger.success("✓ Trend Flash API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Trend Flash API registration failed: {e}")
 
 # Data Hydration (Centralized Data for All Pages)
 from api.endpoints import data_hydration

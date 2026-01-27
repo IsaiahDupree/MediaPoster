@@ -332,6 +332,16 @@ class Topics:
     PIPELINE_PROGRESS = "pipeline.progress"               # Progress update
     PIPELINE_COMPLETED = "pipeline.completed"            # Pipeline finished
     PIPELINE_FAILED = "pipeline.failed"                   # Pipeline error
+
+    # =========================================================================
+    # MASTER ORCHESTRATOR (ARCH-001)
+    # =========================================================================
+    ORCHESTRATOR_PIPELINE_STARTED = "orchestrator.pipeline.started"       # Full pipeline execution started
+    ORCHESTRATOR_PIPELINE_COMPLETED = "orchestrator.pipeline.completed"   # Full pipeline execution completed
+    ORCHESTRATOR_PIPELINE_FAILED = "orchestrator.pipeline.failed"         # Full pipeline execution failed
+    ORCHESTRATOR_STEP_STARTED = "orchestrator.step.started"               # Pipeline step started
+    ORCHESTRATOR_STEP_COMPLETED = "orchestrator.step.completed"           # Pipeline step completed
+    ORCHESTRATOR_STEP_FAILED = "orchestrator.step.failed"                 # Pipeline step failed
     
     # =========================================================================
     # SORA (AI Video Generation) SERVICE
@@ -347,10 +357,11 @@ class Topics:
     SORA_VIDEO_FAILED = "sora.video.failed"                      # Generation failed
     SORA_VIDEO_DOWNLOADED = "sora.video.downloaded"              # Video downloaded locally
     
-    SORA_BATCH_REQUESTED = "sora.batch.requested"                # Batch video request
-    SORA_BATCH_STARTED = "sora.batch.started"                    # Batch processing started
-    SORA_BATCH_PROGRESS = "sora.batch.progress"                  # Batch progress
-    SORA_BATCH_COMPLETED = "sora.batch.completed"                # All videos complete
+    SORA_BATCH_REQUESTED = "sora.batch.requested"                # Batch video request (ARCH-002)
+    SORA_BATCH_STARTED = "sora.batch.started"                    # Batch processing started (ARCH-002)
+    SORA_BATCH_PROGRESS = "sora.batch.progress"                  # Batch progress (ARCH-002)
+    SORA_BATCH_COMPLETED = "sora.batch.completed"                # All videos complete (ARCH-002)
+    SORA_BATCH_FAILED = "sora.batch.failed"                      # Batch generation failed (ARCH-002)
     
     SORA_POLL_STARTED = "sora.poll.started"                      # Polling for completion started
     SORA_POLL_TICK = "sora.poll.tick"                            # Polling heartbeat

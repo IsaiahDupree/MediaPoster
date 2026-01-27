@@ -185,37 +185,162 @@ class SoraWorker(BaseWorker):
             )
     
     async def _handle_batch_request(self, event: Event) -> None:
-        """Handle batch video generation request."""
+        """
+        Handle batch video generation request (ARCH-002).
+
+        Supports two modes:
+        1. Multi-part (theme + num_parts): Generates coordinated 3-part series
+        2. Custom prompts: Generates each prompt individually
+
+        Payload:
+            - theme: Overall theme (for multi-part mode)
+            - num_parts: Number of parts (default 3)
+            - prompts: List of custom prompts (alternative to theme)
+            - character: Sora @character
+            - stitch: Whether to stitch parts together
+            - remove_watermark: Whether to remove watermarks
+            - pipeline_id: Optional pipeline correlation ID
+        """
         payload = event.payload
+        theme = payload.get("theme")
+        num_parts = payload.get("num_parts", 3)
         prompts = payload.get("prompts", [])
-        character = payload.get("character", "isaiahdupree")
-        auto_download = payload.get("auto_download", True)
-        
-        if not prompts:
-            logger.error(f"[{self.worker_id}] Batch request missing prompts")
-            return
-        
-        logger.info(f"[{self.worker_id}] Starting batch: {len(prompts)} videos")
-        
-        await self.emit(
-            Topics.SORA_BATCH_STARTED,
-            {"count": len(prompts), "character": character},
-            correlation_id=event.correlation_id
-        )
-        
-        # Process each prompt
-        for i, prompt in enumerate(prompts):
+        character = payload.get("character")
+        stitch = payload.get("stitch", True)
+        remove_watermark = payload.get("remove_watermark", True)
+        pipeline_id = payload.get("pipeline_id", event.correlation_id)
+
+        # Validate input
+        if not theme and not prompts:
+            logger.error(f"[{self.worker_id}] Batch request missing theme or prompts")
             await self.emit(
-                Topics.SORA_VIDEO_REQUESTED,
+                Topics.SORA_BATCH_COMPLETED,
                 {
-                    "prompt": prompt,
-                    "character": character,
-                    "batch_index": i,
-                    "batch_total": len(prompts)
+                    "pipeline_id": pipeline_id,
+                    "status": "failed",
+                    "error": "Missing theme or prompts"
                 },
                 correlation_id=event.correlation_id
             )
-            await asyncio.sleep(3)  # Small delay between requests
+            return
+
+        logger.info(
+            f"[{self.worker_id}] Starting batch: "
+            f"theme='{theme}', parts={num_parts if theme else len(prompts)}"
+        )
+
+        await self.emit(
+            Topics.SORA_BATCH_STARTED,
+            {
+                "pipeline_id": pipeline_id,
+                "theme": theme,
+                "num_parts": num_parts if theme else len(prompts),
+                "character": character
+            },
+            correlation_id=event.correlation_id
+        )
+
+        try:
+            # Use SoraPipeline for coordinated multi-part generation
+            from automation.sora.pipeline import SoraPipeline
+
+            pipeline = SoraPipeline()
+
+            if theme:
+                # Multi-part mode (ARCH-002)
+                logger.info(f"[{self.worker_id}] Generating {num_parts}-part series...")
+
+                result = await pipeline.generate_multi_part(
+                    theme=theme,
+                    num_parts=num_parts,
+                    character=character,
+                    part_prompts=prompts if prompts else None,
+                    auto_stitch=stitch,
+                    auto_analyze=True,
+                    remove_watermarks=remove_watermark,
+                    pipeline_id=pipeline_id  # ARCH-002: Pass pipeline_id for orchestrator integration
+                )
+
+                # Emit batch completed
+                await self.emit(
+                    Topics.SORA_BATCH_COMPLETED,
+                    {
+                        "pipeline_id": pipeline_id,
+                        "job_id": result.get("id"),
+                        "status": result.get("status"),
+                        "theme": theme,
+                        "num_parts": num_parts,
+                        "video_path": result.get("stitched_video") or result.get("video_path"),
+                        "parts": result.get("parts", []),
+                        "analysis": result.get("analysis"),
+                        "generation_time": result.get("total_generation_time"),
+                        "prompts": result.get("prompts", [])
+                    },
+                    correlation_id=event.correlation_id
+                )
+
+                logger.success(
+                    f"[{self.worker_id}] Batch complete: {result.get('status')} - "
+                    f"{result.get('stitched_video') or result.get('video_path')}"
+                )
+
+            else:
+                # Custom prompts mode (legacy)
+                logger.info(f"[{self.worker_id}] Generating {len(prompts)} custom videos...")
+
+                prompt_configs = [
+                    {"prompt": p, "character": character}
+                    for p in prompts
+                ]
+
+                result = await pipeline.generate_batch(
+                    prompts=prompt_configs,
+                    stitch_output=stitch,
+                    add_captions=False,
+                    schedule_to=None
+                )
+
+                # Emit batch completed
+                await self.emit(
+                    Topics.SORA_BATCH_COMPLETED,
+                    {
+                        "pipeline_id": pipeline_id,
+                        "batch_id": result.get("id"),
+                        "status": result.get("status"),
+                        "completed": result.get("completed"),
+                        "failed": result.get("failed"),
+                        "video_path": result.get("stitched_video"),
+                        "jobs": result.get("jobs", [])
+                    },
+                    correlation_id=event.correlation_id
+                )
+
+                logger.success(
+                    f"[{self.worker_id}] Batch complete: "
+                    f"{result.get('completed')}/{result.get('total_prompts')} succeeded"
+                )
+
+        except Exception as e:
+            logger.error(f"[{self.worker_id}] Batch generation failed: {e}")
+            # ARCH-002: Emit both FAILED and COMPLETED events for orchestrator compatibility
+            await self.emit(
+                Topics.SORA_BATCH_FAILED,
+                {
+                    "pipeline_id": pipeline_id,
+                    "theme": theme,
+                    "error": str(e)
+                },
+                correlation_id=event.correlation_id
+            )
+            await self.emit(
+                Topics.SORA_BATCH_COMPLETED,
+                {
+                    "pipeline_id": pipeline_id,
+                    "status": "failed",
+                    "error": str(e)
+                },
+                correlation_id=event.correlation_id
+            )
     
     async def _start_polling(self, correlation_id: str = None) -> None:
         """Start polling for video completion."""

@@ -2,8 +2,8 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 413,
-  "completedFeatures": 288,
+  "totalFeatures": 441,
+  "completedFeatures": 292,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -7738,6 +7738,258 @@
       "category": "dm-outreach",
       "priority": "P1",
       "prd": "PRD_DM_Outreach_System.md",
+      "passes": false
+    },
+    {
+      "id": "TWIT-DM-001",
+      "name": "Twitter DM Navigation & Auth",
+      "description": "Navigate to x.com/messages, detect login state, handle 2FA/encryption codes, detect rate limits",
+      "category": "twitter-dm-control",
+      "priority": "P0",
+      "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TWIT-DM-002",
+      "name": "Twitter DM Inbox Management",
+      "description": "List conversations, get unread count, scroll to load more, search and filter conversations",
+      "category": "twitter-dm-control",
+      "priority": "P0",
+      "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TWIT-DM-003",
+      "name": "Twitter DM Message Send/Read",
+      "description": "Find DraftJS input, type messages, send via Enter/button, read thread messages with timestamps",
+      "category": "twitter-dm-control",
+      "priority": "P0",
+      "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TWIT-DM-004",
+      "name": "Twitter DM New Conversation",
+      "description": "Click new message, search users, select from results, handle DMs disabled restriction",
+      "category": "twitter-dm-control",
+      "priority": "P1",
+      "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TWIT-DM-005",
+      "name": "Twitter DM Media & Requests",
+      "description": "Send images/videos/GIFs/emoji, handle message requests accept/decline, group messages",
+      "category": "twitter-dm-control",
+      "priority": "P2",
+      "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TIKTOK-DM-001",
+      "name": "TikTok DM Navigation & Auth",
+      "description": "Navigate to tiktok.com/messages, detect login, handle CAPTCHA, detect rate limits",
+      "category": "tiktok-dm-control",
+      "priority": "P0",
+      "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TIKTOK-DM-002",
+      "name": "TikTok DM Inbox Management",
+      "description": "List conversations, get unread count, scroll to load more, search and filter",
+      "category": "tiktok-dm-control",
+      "priority": "P0",
+      "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TIKTOK-DM-003",
+      "name": "TikTok DM Message Send/Read",
+      "description": "Find contenteditable input, type messages, send via Enter/button, read thread with timestamps",
+      "category": "tiktok-dm-control",
+      "priority": "P0",
+      "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TIKTOK-DM-004",
+      "name": "TikTok DM New Conversation",
+      "description": "Click new message, search users, select from results, handle following-only restriction",
+      "category": "tiktok-dm-control",
+      "priority": "P1",
+      "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "TIKTOK-DM-005",
+      "name": "TikTok DM Media & Stickers",
+      "description": "Send images/videos/stickers/GIFs, handle message requests, conversation management",
+      "category": "tiktok-dm-control",
+      "priority": "P2",
+      "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "IG-DM-001",
+      "name": "Instagram DM Navigation & Auth",
+      "description": "Navigate to instagram.com/direct/inbox, detect login, handle 2FA, detect rate limits",
+      "category": "instagram-dm-control",
+      "priority": "P0",
+      "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "IG-DM-002",
+      "name": "Instagram DM Inbox Management",
+      "description": "List conversations, get unread count, scroll to load, filter by Primary/General/Requests",
+      "category": "instagram-dm-control",
+      "priority": "P0",
+      "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "IG-DM-003",
+      "name": "Instagram DM Message Send/Read",
+      "description": "Find message textarea, type messages, send via Enter/button, read thread with timestamps",
+      "category": "instagram-dm-control",
+      "priority": "P0",
+      "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "IG-DM-004",
+      "name": "Instagram DM New Conversation",
+      "description": "Click new message, search users, select from results, start conversation",
+      "category": "instagram-dm-control",
+      "priority": "P1",
+      "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "IG-DM-005",
+      "name": "Instagram DM Media & Requests",
+      "description": "Attach images/videos/voice/GIF/emoji, handle message requests, warmth score integration",
+      "category": "instagram-dm-control",
+      "priority": "P2",
+      "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-CTRL-001",
+      "name": "Sora Navigation & Auth",
+      "description": "Navigate to explore/drafts/activity/library, detect login state, handle session expiry",
+      "category": "sora-control",
+      "priority": "P0",
+      "prd": "PRD_SORA_FULL_CONTROL.md",
+      "passes": true
+    },
+    {
+      "id": "SORA-CTRL-002",
+      "name": "Sora Prompt & Character Input",
+      "description": "Find textarea, set prompt with React compatibility, type @character for selection",
+      "category": "sora-control",
+      "priority": "P0",
+      "prd": "PRD_SORA_FULL_CONTROL.md",
+      "passes": true
+    },
+    {
+      "id": "SORA-CTRL-003",
+      "name": "Sora Video Generation",
+      "description": "Click Create video button, detect generation started, set duration/aspect ratio",
+      "category": "sora-control",
+      "priority": "P0",
+      "prd": "PRD_SORA_FULL_CONTROL.md",
+      "passes": true
+    },
+    {
+      "id": "SORA-CTRL-004",
+      "name": "Sora Usage/Credits Tracking",
+      "description": "Extract video_gens_left, free/paid counts, reset date from Settings dialog",
+      "category": "sora-control",
+      "priority": "P0",
+      "prd": "PRD_SORA_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-CTRL-005",
+      "name": "Sora Drafts & Downloads",
+      "description": "Navigate to drafts, list completed videos, get video URLs, download via curl, scroll to load",
+      "category": "sora-control",
+      "priority": "P0",
+      "prd": "PRD_SORA_FULL_CONTROL.md",
+      "passes": true
+    },
+    {
+      "id": "SORA-CTRL-006",
+      "name": "Sora Activity/Queue Monitoring",
+      "description": "Navigate to activity, list generating videos, get progress, detect completion, count queue",
+      "category": "sora-control",
+      "priority": "P1",
+      "prd": "PRD_SORA_FULL_CONTROL.md",
+      "passes": false
+    },
+    {
+      "id": "SAFARI-001",
+      "name": "Browser Queue Manager",
+      "description": "Central queue serializing all Safari operations with priority: Sora poll > Tweet > Comment > Stats",
+      "category": "safari-automation",
+      "priority": "P0",
+      "prd": "PRD_Safari_Automation_Management.md",
+      "passes": false
+    },
+    {
+      "id": "SAFARI-002",
+      "name": "Unified Comment Engine",
+      "description": "Comment across Twitter/TikTok/Instagram/Threads at 30/hour with AI generation and rotation",
+      "category": "safari-automation",
+      "priority": "P0",
+      "prd": "PRD_Safari_Automation_Management.md",
+      "passes": false
+    },
+    {
+      "id": "SAFARI-003",
+      "name": "Sora Generation Pipeline",
+      "description": "Generate 30 videos/day based on trends, poll every 30s, auto-download, trigger watermark removal",
+      "category": "safari-automation",
+      "priority": "P0",
+      "prd": "PRD_Safari_Automation_Management.md",
+      "passes": false
+    },
+    {
+      "id": "SAFARI-004",
+      "name": "Watermark Removal Pipeline",
+      "description": "Watch sora_downloads, send to BlankLogo API, validate removal, queue for distribution",
+      "category": "safari-automation",
+      "priority": "P0",
+      "prd": "PRD_Safari_Automation_Management.md",
+      "passes": false
+    },
+    {
+      "id": "SAFARI-005",
+      "name": "Twitter Posting Schedule",
+      "description": "Post to Twitter every 2 hours (12/day) rotating: offer, value, engagement, video, story",
+      "category": "safari-automation",
+      "priority": "P0",
+      "prd": "PRD_Safari_Automation_Management.md",
+      "passes": false
+    },
+    {
+      "id": "SAFARI-006",
+      "name": "Blotato Multi-Platform Distribution",
+      "description": "Distribute processed videos to all Blotato accounts with staggered posts and custom captions",
+      "category": "safari-automation",
+      "priority": "P1",
+      "prd": "PRD_Safari_Automation_Management.md",
+      "passes": false
+    },
+    {
+      "id": "SAFARI-007",
+      "name": "Stats & Analytics Polling",
+      "description": "Collect engagement stats during idle time: impressions, engagement rates, follower changes",
+      "category": "safari-automation",
+      "priority": "P2",
+      "prd": "PRD_Safari_Automation_Management.md",
       "passes": false
     }
   ]

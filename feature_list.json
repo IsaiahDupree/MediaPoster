@@ -2,8 +2,8 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 381,
-  "completedFeatures": 284,
+  "totalFeatures": 413,
+  "completedFeatures": 288,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -7451,6 +7451,294 @@
       "priority": "P2",
       "passes": true,
       "completed": "2026-01-26"
+    },
+    {
+      "id": "AD-001",
+      "name": "Transcript Element Extraction",
+      "description": "Extract hooks, pain points, benefits, CTAs, social proofs from video transcripts using AI",
+      "category": "meta-ads-testing",
+      "priority": "P0",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "AD-002",
+      "name": "Ad Variation Generator",
+      "description": "Generate ad variations by combining elements with hook swap, CTA swap, matrix, and AI remix strategies",
+      "category": "meta-ads-testing",
+      "priority": "P0",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "AD-003",
+      "name": "Batch Video Rendering",
+      "description": "Render ad variations at scale using Remotion with text overlays, voiceover swap, and parallel rendering",
+      "category": "meta-ads-testing",
+      "priority": "P0",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "AD-004",
+      "name": "Meta Ads Campaign Deployment",
+      "description": "Deploy ad variations via Meta Marketing API - video upload, campaign, ad set, creative, and ad creation",
+      "category": "meta-ads-testing",
+      "priority": "P0",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "AD-005",
+      "name": "Meta Ads Performance Tracking",
+      "description": "Track metrics via Meta Insights API - impressions, CPM, CPC, CTR, hook rate, hold rate, ROAS",
+      "category": "meta-ads-testing",
+      "priority": "P0",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "AD-006",
+      "name": "AI Learning & Recommendations",
+      "description": "Learn from test results to identify winning patterns, audience insights, and generate next test suggestions",
+      "category": "meta-ads-testing",
+      "priority": "P1",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "AD-007",
+      "name": "Meta Ads Campaign Management",
+      "description": "Manage campaigns via Meta API - pause underperformers, scale winners, duplicate ad sets, update bids",
+      "category": "meta-ads-testing",
+      "priority": "P1",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "AD-008",
+      "name": "Dynamic Creative Optimization",
+      "description": "Use Meta DCO to auto-test combinations of videos, texts, headlines, and CTAs",
+      "category": "meta-ads-testing",
+      "priority": "P1",
+      "prd": "PRD_Programmatic_Ad_Testing.md",
+      "passes": false
+    },
+    {
+      "id": "TWIT-001",
+      "name": "Safari Twitter Session Management",
+      "description": "Manage authenticated Twitter sessions in Safari with login detection, persistence, multi-account",
+      "category": "twitter-automation",
+      "priority": "P0",
+      "prd": "PRD_Twitter_Video_Automation.md",
+      "passes": true
+    },
+    {
+      "id": "TWIT-002",
+      "name": "Twitter Video Upload Automation",
+      "description": "Upload videos via Safari automation with file selection, progress monitoring, format validation",
+      "category": "twitter-automation",
+      "priority": "P0",
+      "prd": "PRD_Twitter_Video_Automation.md",
+      "passes": true
+    },
+    {
+      "id": "TWIT-003",
+      "name": "Twitter Tweet Composition",
+      "description": "Compose and post tweets with media via JS injection, character validation, and success verification",
+      "category": "twitter-automation",
+      "priority": "P0",
+      "prd": "PRD_Twitter_Video_Automation.md",
+      "passes": true
+    },
+    {
+      "id": "TWIT-004",
+      "name": "Twitter Post Verification",
+      "description": "Verify successful post, extract tweet URL and ID, detect errors, implement retry logic",
+      "category": "twitter-automation",
+      "priority": "P1",
+      "prd": "PRD_Twitter_Video_Automation.md",
+      "passes": true
+    },
+    {
+      "id": "TWIT-005",
+      "name": "Twitter Scheduling Integration",
+      "description": "Integrate with MediaPoster scheduling via pub/sub events for queue processing and failure handling",
+      "category": "twitter-automation",
+      "priority": "P1",
+      "prd": "PRD_Twitter_Video_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "TWIT-006",
+      "name": "Twitter Rate Limit Management",
+      "description": "Respect Twitter posting limits with daily tracking, hourly spacing, and cool-down detection",
+      "category": "twitter-automation",
+      "priority": "P1",
+      "prd": "PRD_Twitter_Video_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-AUTO-001",
+      "name": "Daily Sora Usage Optimization",
+      "description": "Automatically use all 30 daily Sora generations with batch planning and retry logic",
+      "category": "daily-sora",
+      "priority": "P0",
+      "prd": "PRD_Daily_Sora_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-AUTO-002",
+      "name": "BlankLogo Watermark Removal",
+      "description": "Process all Sora videos through local BlankLogo watermark remover with quality check",
+      "category": "daily-sora",
+      "priority": "P0",
+      "prd": "PRD_Daily_Sora_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-AUTO-003",
+      "name": "Trend-Based Story Generation",
+      "description": "Generate stories from trending topics collected from comments, DMs, Twitter, TikTok",
+      "category": "daily-sora",
+      "priority": "P0",
+      "prd": "PRD_Daily_Sora_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-AUTO-004",
+      "name": "@isaiahdupree Character Stories",
+      "description": "Create 3-part narrative videos featuring the Sora character with themed story arcs",
+      "category": "daily-sora",
+      "priority": "P0",
+      "prd": "PRD_Daily_Sora_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-AUTO-005",
+      "name": "YouTube Daily Publishing",
+      "description": "Publish processed videos to YouTube daily with AI metadata, thumbnails, and playlist management",
+      "category": "daily-sora",
+      "priority": "P0",
+      "prd": "PRD_Daily_Sora_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "SORA-AUTO-006",
+      "name": "Daily Sora Pub/Sub Integration",
+      "description": "Integrate with EventBus for sora.daily.*, sora.generation.*, sora.watermark.*, sora.youtube.* events",
+      "category": "daily-sora",
+      "priority": "P0",
+      "prd": "PRD_Daily_Sora_Automation.md",
+      "passes": false
+    },
+    {
+      "id": "TF-001",
+      "name": "Trend Detection",
+      "description": "Detect trending topics every 15-60 min from comments, mentions, hashtags with embedding clustering",
+      "category": "trend-flash",
+      "priority": "P0",
+      "prd": "PRD_Trend_Flash_Video_System.md",
+      "passes": false
+    },
+    {
+      "id": "TF-002",
+      "name": "Trend Scoring",
+      "description": "Auto-score topics with velocity × cross-platform × intent multipliers to select top 1-3",
+      "category": "trend-flash",
+      "priority": "P0",
+      "prd": "PRD_Trend_Flash_Video_System.md",
+      "passes": false
+    },
+    {
+      "id": "TF-003",
+      "name": "Trend Flash Content Generation",
+      "description": "Generate video script, platform titles, captions, comment replies, and follow-up prompts per trend",
+      "category": "trend-flash",
+      "priority": "P0",
+      "prd": "PRD_Trend_Flash_Video_System.md",
+      "passes": false
+    },
+    {
+      "id": "TF-004",
+      "name": "Trend Flash Video Production",
+      "description": "Two production paths: Remotion fast ship (10-30min) and Sora hero (1-2hr) for high-score trends",
+      "category": "trend-flash",
+      "priority": "P0",
+      "prd": "PRD_Trend_Flash_Video_System.md",
+      "passes": false
+    },
+    {
+      "id": "TF-005",
+      "name": "Multi-Platform Trend Posting",
+      "description": "Post trend videos with platform-specific captions, hashtags, and CTAs for TikTok, IG, YT, Twitter",
+      "category": "trend-flash",
+      "priority": "P1",
+      "prd": "PRD_Trend_Flash_Video_System.md",
+      "passes": false
+    },
+    {
+      "id": "TF-006",
+      "name": "Trend Learning Loop",
+      "description": "Feed performance metrics (saves, shares, profile taps, purchase intent) back into scoring",
+      "category": "trend-flash",
+      "priority": "P1",
+      "prd": "PRD_Trend_Flash_Video_System.md",
+      "passes": false
+    },
+    {
+      "id": "DM-OUT-001",
+      "name": "DM Prospect Discovery",
+      "description": "Find DM targets from comment engagers, post likers, followers, competitor followers, hashtag users",
+      "category": "dm-outreach",
+      "priority": "P0",
+      "prd": "PRD_DM_Outreach_System.md",
+      "passes": false
+    },
+    {
+      "id": "DM-OUT-002",
+      "name": "Prospect Qualification",
+      "description": "Score prospects by engagement quality, profile alignment, follower count, activity, offer fit",
+      "category": "dm-outreach",
+      "priority": "P0",
+      "prd": "PRD_DM_Outreach_System.md",
+      "passes": false
+    },
+    {
+      "id": "DM-OUT-003",
+      "name": "DM List Management",
+      "description": "Organize prospects into actionable lists with status tracking, next action dates, and notes",
+      "category": "dm-outreach",
+      "priority": "P0",
+      "prd": "PRD_DM_Outreach_System.md",
+      "passes": false
+    },
+    {
+      "id": "DM-OUT-004",
+      "name": "Outreach Sequencing",
+      "description": "4-phase trust building: introduction, value delivery, relationship deepening, offer introduction",
+      "category": "dm-outreach",
+      "priority": "P0",
+      "prd": "PRD_DM_Outreach_System.md",
+      "passes": false
+    },
+    {
+      "id": "DM-OUT-005",
+      "name": "Experience Life Together",
+      "description": "Track and participate in prospects life events - birthdays, achievements, launches, milestones",
+      "category": "dm-outreach",
+      "priority": "P1",
+      "prd": "PRD_DM_Outreach_System.md",
+      "passes": false
+    },
+    {
+      "id": "DM-OUT-006",
+      "name": "Offer Timing Intelligence",
+      "description": "Detect optimal moments to introduce offers based on help requests, frustration, buying intent signals",
+      "category": "dm-outreach",
+      "priority": "P1",
+      "prd": "PRD_DM_Outreach_System.md",
+      "passes": false
     }
   ]
 }

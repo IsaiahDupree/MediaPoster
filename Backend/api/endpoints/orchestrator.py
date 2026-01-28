@@ -144,7 +144,7 @@ async def start_pipeline(
 
 
 @router.get("/pipeline/{pipeline_id}")
-async def get_pipeline_status(pipeline_id: str) -> PipelineStatusResponse:
+async def get_pipeline_status(pipeline_id: str) -> Dict[str, Any]:
     """
     Get status of a running or completed pipeline.
 
@@ -161,7 +161,7 @@ async def get_pipeline_status(pipeline_id: str) -> PipelineStatusResponse:
         if "error" in status and status["error"] == "Pipeline not found":
             raise HTTPException(status_code=404, detail="Pipeline not found")
 
-        return PipelineStatusResponse(**status)
+        return {"success": True, **status}
 
     except HTTPException:
         raise

@@ -7644,7 +7644,7 @@
     {
       "id": "TF-002",
       "name": "Trend Scoring",
-      "description": "Auto-score topics with velocity × cross-platform × intent multipliers to select top 1-3",
+      "description": "Auto-score topics with velocity \u00d7 cross-platform \u00d7 intent multipliers to select top 1-3",
       "category": "trend-flash",
       "priority": "P0",
       "prd": "PRD_Trend_Flash_Video_System.md",

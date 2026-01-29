@@ -36,6 +36,14 @@ except ImportError:
         HAS_SELECTORS = False
         logger.warning("Instagram selectors not available")
 
+# Import comment tracker for duplicate detection
+try:
+    from services.engagement.comment_tracker import get_comment_tracker
+    HAS_TRACKER = True
+except ImportError:
+    HAS_TRACKER = False
+    get_comment_tracker = None
+
 
 class InstagramFeedAutoCommenter:
     """
@@ -51,6 +59,7 @@ class InstagramFeedAutoCommenter:
     
     def __init__(self, openai_api_key: str = None):
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        self._checked_urls = set()  # Track checked URLs in session
         
     def _run_applescript(self, script: str) -> tuple:
         """Run AppleScript and return (success, result)."""
@@ -93,6 +102,93 @@ class InstagramFeedAutoCommenter:
         '''
         success, _ = self._run_applescript(script)
         return success
+    
+    def _check_duplicate(self, post_url: str) -> bool:
+        """Check if we've already commented on this post."""
+        if post_url in self._checked_urls:
+            return True
+        
+        if HAS_TRACKER and get_comment_tracker:
+            import asyncio
+            try:
+                tracker = get_comment_tracker()
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        future = pool.submit(asyncio.run, tracker.has_commented_on('instagram', post_url))
+                        is_dup = future.result(timeout=5)
+                else:
+                    is_dup = loop.run_until_complete(tracker.has_commented_on('instagram', post_url))
+                if is_dup:
+                    self._checked_urls.add(post_url)
+                return is_dup
+            except Exception as e:
+                logger.warning(f"Duplicate check failed: {e}")
+        return False
+    
+    def _find_non_duplicate_post(self, max_scrolls: int = 10, batch_size: int = 3) -> Optional[Dict]:
+        """
+        Find a post we haven't commented on yet, scrolling if needed.
+        
+        Strategy:
+        1. Collect batch_size (3) posts at a time
+        2. Check all posts in batch for duplicates
+        3. If all are duplicates, scroll to next batch
+        4. Return first non-duplicate found
+        """
+        checked_in_session = set()
+        
+        for scroll_attempt in range(max_scrolls):
+            posts = self.get_feed_posts(limit=10)
+            if not posts:
+                logger.warning(f"No posts found, scrolling...")
+                self._js(JS.scroll_feed() if HAS_SELECTORS else "window.scrollBy(0, 600);")
+                time.sleep(2)
+                continue
+            
+            # Filter to posts we haven't checked this session
+            new_posts = [p for p in posts if p.get('postUrl', '') not in checked_in_session]
+            
+            if not new_posts:
+                logger.info(f"📜 All visible posts already checked, scrolling... ({scroll_attempt + 1}/{max_scrolls})")
+                self._js(JS.scroll_feed() if HAS_SELECTORS else "window.scrollBy(0, 600);")
+                time.sleep(2)
+                continue
+            
+            # Check batch of posts
+            batch = new_posts[:batch_size]
+            logger.info(f"🔍 Checking batch of {len(batch)} posts for duplicates...")
+            
+            non_duplicates = []
+            for post in batch:
+                post_url = post.get('postUrl', '')
+                if not post_url:
+                    continue
+                
+                checked_in_session.add(post_url)
+                
+                if self._check_duplicate(post_url):
+                    logger.info(f"   ⏭️ Duplicate: {post_url[:50]}... - scrolling past")
+                else:
+                    logger.info(f"   ✅ Fresh post found: {post_url[:50]}...")
+                    non_duplicates.append(post)
+            
+            # Return first non-duplicate
+            if non_duplicates:
+                selected = non_duplicates[0]
+                logger.info(f"🎯 Selected post ({len(non_duplicates)} non-duplicates in batch)")
+                return selected
+            
+            # All posts in batch were duplicates - scroll
+            logger.info(f"📜 All {len(batch)} posts in batch were duplicates, scrolling... ({scroll_attempt + 1}/{max_scrolls})")
+            self._js(JS.scroll_feed() if HAS_SELECTORS else "window.scrollBy(0, 600);")
+            time.sleep(2)
+            self._js(JS.scroll_feed() if HAS_SELECTORS else "window.scrollBy(0, 600);")
+            time.sleep(1)
+        
+        logger.warning(f"❌ No non-duplicate posts found after {max_scrolls} scroll attempts")
+        return None
     
     def navigate_to_feed(self) -> bool:
         """Navigate Safari to Instagram feed."""
@@ -369,27 +465,23 @@ CAPTION: "{caption[:300]}"
         logger.info("✅ Logged into Instagram")
         
         for i in range(num_posts):
-            post_index = start_index + i
-            post_result = {"index": post_index, "url": "", "comment": "", "success": False}
+            post_result = {"index": i, "url": "", "comment": "", "success": False}
             
-            logger.info(f"\n📝 Processing post {i+1}/{num_posts} (index {post_index})")
+            logger.info(f"\n📝 Processing post {i+1}/{num_posts}")
             
-            # Get feed posts
-            posts = self.get_feed_posts(post_index + 1)
-            if len(posts) <= post_index:
-                logger.warning(f"Post at index {post_index} not found, scrolling...")
-                self._js(JS.scroll_feed() if HAS_SELECTORS else "window.scrollBy(0, 500);")
-                time.sleep(2)
-                posts = self.get_feed_posts(post_index + 1)
+            # Find non-duplicate post (checks batch of 3, scrolls if all duplicates)
+            post = self._find_non_duplicate_post(max_scrolls=10, batch_size=3)
             
-            if len(posts) <= post_index:
-                logger.warning(f"Still can't find post at index {post_index}")
+            if not post:
+                logger.warning(f"No non-duplicate posts found")
                 continue
             
-            post_result["url"] = posts[post_index].get("postUrl", "")
-            logger.info(f"   URL: {post_result['url'][:60]}")
+            post_url = post.get("postUrl", "")
+            post_index = post.get("index", 0)
+            post_result["url"] = post_url
+            logger.info(f"   URL: {post_url[:60]}")
             
-            # Step 2: Click on post to open modal
+            # Click on post to open modal
             if not self.click_post(post_index):
                 logger.warning("   Failed to click post")
                 continue

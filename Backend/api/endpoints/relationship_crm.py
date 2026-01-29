@@ -473,3 +473,277 @@ async def analyze_message(message: str):
     except Exception as e:
         logger.error(f"Failed to analyze message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# RF-006: FIT SIGNAL DETECTION
+# =============================================================================
+
+@router.post("/contacts/{contact_id}/detect-fit")
+async def detect_fit_signals(contact_id: str, messages: List[str]):
+    """Detect fit signals in conversation to identify offer opportunities."""
+    try:
+        from services.relationship_crm import get_relationship_crm
+        from services.relationship_fit_signals import FitSignalDetector
+        
+        crm = get_relationship_crm()
+        detector = FitSignalDetector()
+        
+        contact = crm.get_contact(contact_id)
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        
+        context = {
+            "building": contact.context.building if contact.context else "",
+            "struggles": contact.context.struggles if contact.context else "",
+            "values": contact.context.values if contact.context else ""
+        }
+        
+        matches = await detector.detect_signals_ai(messages, context)
+        golden_ready, best_match = detector.check_golden_trigger(contact.to_dict(), matches)
+        
+        return {
+            "contact_id": contact_id,
+            "fit_signals": [
+                {
+                    "offer_type": m.offer_type,
+                    "offer_name": m.offer_name,
+                    "confidence": m.confidence,
+                    "matched_signals": m.matched_signals,
+                    "offer_line": m.offer_line
+                }
+                for m in matches
+            ],
+            "golden_trigger_ready": golden_ready,
+            "recommended_offer": {
+                "offer_type": best_match.offer_type,
+                "offer_line": best_match.offer_line
+            } if best_match else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to detect fit signals: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/contacts/{contact_id}/offer-timing")
+async def get_offer_timing(contact_id: str):
+    """Get recommendation on when/how to make an offer."""
+    try:
+        from services.relationship_crm import get_relationship_crm
+        from services.relationship_fit_signals import FitSignalDetector, FitSignalMatch
+        
+        crm = get_relationship_crm()
+        detector = FitSignalDetector()
+        
+        contact = crm.get_contact(contact_id)
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        
+        # Create a placeholder fit match for timing check
+        fit_match = FitSignalMatch(
+            offer_type="general",
+            offer_name="General Offer",
+            matched_signals=[],
+            confidence=0.5,
+            offer_line="",
+            context="",
+            detected_at=None
+        )
+        
+        timing = detector.get_offer_timing_recommendation(contact.to_dict(), fit_match)
+        
+        return {
+            "contact_id": contact_id,
+            "health_score": contact.scores.relationship_health if contact.scores else 50,
+            "pipeline_stage": contact.pipeline_stage,
+            **timing
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get offer timing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# RF-007: TOUCH CADENCES
+# =============================================================================
+
+@router.get("/cadence/today")
+async def get_today_cadence(user_id: str = "default"):
+    """Get today's touch cadence summary."""
+    try:
+        from services.relationship_cadence import TouchCadenceManager
+        
+        manager = TouchCadenceManager()
+        summary = manager.get_today_summary(user_id)
+        
+        return {"success": True, **summary}
+        
+    except Exception as e:
+        logger.error(f"Failed to get today's cadence: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/cadence/daily")
+async def get_daily_cadence(user_id: str = "default"):
+    """Get detailed daily cadence tasks."""
+    try:
+        from services.relationship_cadence import TouchCadenceManager
+        
+        manager = TouchCadenceManager()
+        cadence = manager.generate_daily_cadence(user_id)
+        
+        return {
+            "date": str(cadence.date),
+            "story_replies": [
+                {"contact": t.contact_name, "platform": t.platform, "health": t.health_score}
+                for t in cadence.story_replies
+            ],
+            "hot_check_ins": [
+                {"contact": t.contact_name, "platform": t.platform, "health": t.health_score, "message": t.suggested_message}
+                for t in cadence.hot_check_ins
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get daily cadence: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/cadence/weekly")
+async def get_weekly_cadence(user_id: str = "default"):
+    """Get detailed weekly cadence tasks."""
+    try:
+        from services.relationship_cadence import TouchCadenceManager
+        
+        manager = TouchCadenceManager()
+        cadence = manager.generate_weekly_cadence(user_id)
+        
+        return {
+            "week_start": str(cadence.week_start),
+            "micro_wins": [
+                {"contact": t.contact_name, "platform": t.platform, "context": t.context, "message": t.suggested_message}
+                for t in cadence.micro_wins
+            ],
+            "curiosity_questions": [
+                {"contact": t.contact_name, "platform": t.platform, "message": t.suggested_message}
+                for t in cadence.curiosity_questions
+            ],
+            "permissioned_offers": [
+                {"contact": t.contact_name, "platform": t.platform, "context": t.context, "message": t.suggested_message}
+                for t in cadence.permissioned_offers
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get weekly cadence: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cadence/complete")
+async def complete_cadence_task(user_id: str, contact_id: str, task_type: str):
+    """Mark a cadence task as complete."""
+    try:
+        from services.relationship_cadence import TouchCadenceManager
+        
+        manager = TouchCadenceManager()
+        success = manager.mark_task_complete(user_id, contact_id, task_type)
+        
+        return {"success": success, "message": "Task marked complete" if success else "Failed to mark complete"}
+        
+    except Exception as e:
+        logger.error(f"Failed to complete cadence task: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# RF-008: SUCCESS METRICS
+# =============================================================================
+
+@router.get("/metrics/dashboard")
+async def get_metrics_dashboard(user_id: str = "default"):
+    """Get full relationship metrics dashboard."""
+    try:
+        from services.relationship_metrics import RelationshipMetricsService
+        
+        service = RelationshipMetricsService()
+        dashboard = service.get_full_dashboard(user_id)
+        
+        return {"success": True, **dashboard}
+        
+    except Exception as e:
+        logger.error(f"Failed to get metrics dashboard: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/metrics/pipeline")
+async def get_pipeline_funnel(user_id: str = "default"):
+    """Get pipeline stage distribution."""
+    try:
+        from services.relationship_metrics import RelationshipMetricsService
+        
+        service = RelationshipMetricsService()
+        funnel = service.get_pipeline_funnel(user_id)
+        
+        return {
+            "success": True,
+            "funnel": {
+                "first_touch": funnel.first_touch,
+                "context_captured": funnel.context_captured,
+                "micro_win": funnel.micro_win,
+                "cadence": funnel.cadence,
+                "trust_signals": funnel.trust_signals,
+                "fit_identified": funnel.fit_identified,
+                "offer": funnel.offer,
+                "post_win": funnel.post_win
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get pipeline funnel: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/metrics/health-distribution")
+async def get_health_distribution(user_id: str = "default"):
+    """Get relationship health score distribution."""
+    try:
+        from services.relationship_metrics import RelationshipMetricsService
+        
+        service = RelationshipMetricsService()
+        dist = service.get_health_distribution(user_id)
+        
+        return {
+            "success": True,
+            "distribution": {
+                "excellent_80_100": dist.excellent,
+                "good_60_79": dist.good,
+                "needs_attention_40_59": dist.needs_attention,
+                "cold_below_40": dist.cold
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get health distribution: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/contacts/{contact_id}/3-1-rule")
+async def check_3_1_rule(contact_id: str, user_id: str = "default"):
+    """Check 3:1 rule compliance for a contact."""
+    try:
+        from services.relationship_metrics import RelationshipMetricsService
+        
+        service = RelationshipMetricsService()
+        result = service.check_3_1_rule_compliance(user_id, contact_id)
+        
+        return {"success": True, "contact_id": contact_id, **result}
+        
+    except Exception as e:
+        logger.error(f"Failed to check 3:1 rule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -296,34 +296,88 @@ class InstagramEngagement:
                 print(f"   ⚠️ Duplicate check failed: {e}")
         return False
     
-    def _find_non_duplicate_post(self, max_scrolls: int = 5) -> Optional[dict]:
-        """Find a post we haven't commented on yet, scrolling if needed."""
+    def _find_non_duplicate_post(self, max_scrolls: int = 10, batch_size: int = 3) -> Optional[dict]:
+        """
+        Find a post we haven't commented on yet, scrolling if needed.
+        
+        Strategy:
+        1. Collect batch_size (3) posts at a time
+        2. Check all posts in batch for duplicates
+        3. If all are duplicates, scroll to next batch
+        4. Return first non-duplicate found
+        
+        Args:
+            max_scrolls: Maximum scroll attempts
+            batch_size: Number of posts to check per batch (default 3)
+        """
+        checked_in_session = set()  # Track what we've checked this session
+        
         for scroll_attempt in range(max_scrolls):
             posts_data = self.safari.execute_js(self.JS_FIND_ALL_POSTS)
             if not posts_data:
+                print(f"   ⚠️ No posts data returned, scrolling...")
+                self.safari.execute_js(self.JS_SCROLL_DOWN)
+                time.sleep(2)
                 continue
             
             try:
                 posts = json.loads(posts_data)
             except:
+                print(f"   ⚠️ Failed to parse posts, scrolling...")
+                self.safari.execute_js(self.JS_SCROLL_DOWN)
+                time.sleep(2)
                 continue
             
-            for post in posts:
+            if not posts:
+                print(f"   ⚠️ Empty posts list, scrolling...")
+                self.safari.execute_js(self.JS_SCROLL_DOWN)
+                time.sleep(2)
+                continue
+            
+            # Filter to posts we haven't checked this session
+            new_posts = [p for p in posts if p.get('url', '') not in checked_in_session]
+            
+            if not new_posts:
+                print(f"   📜 All visible posts already checked, scrolling... ({scroll_attempt + 1}/{max_scrolls})")
+                self.safari.execute_js(self.JS_SCROLL_DOWN)
+                time.sleep(2)
+                continue
+            
+            # Check batch of posts (up to batch_size)
+            batch = new_posts[:batch_size]
+            print(f"   🔍 Checking batch of {len(batch)} posts...")
+            
+            non_duplicates = []
+            for post in batch:
                 post_url = post.get('url', '')
                 if not post_url:
                     continue
                 
-                if self._check_duplicate_sync(post_url):
-                    print(f"   ⏭️ Skipping duplicate: @{post.get('username', '?')}")
-                    continue
+                checked_in_session.add(post_url)
+                username = post.get('username', '?')
                 
-                return post
+                if self._check_duplicate_sync(post_url):
+                    print(f"   ⏭️ Duplicate: @{username} - scrolling past")
+                else:
+                    print(f"   ✅ Fresh post found: @{username}")
+                    non_duplicates.append(post)
             
-            if scroll_attempt < max_scrolls - 1:
-                print(f"   📜 Scrolling for more posts... ({scroll_attempt + 1}/{max_scrolls})")
-                self.safari.execute_js(self.JS_SCROLL_DOWN)
-                time.sleep(2)
+            # Return first non-duplicate from batch
+            if non_duplicates:
+                selected = non_duplicates[0]
+                print(f"   🎯 Selected: @{selected.get('username', '?')} ({len(non_duplicates)} non-duplicates in batch)")
+                return selected
+            
+            # All posts in batch were duplicates - scroll to get new posts
+            print(f"   📜 All {len(batch)} posts in batch were duplicates, scrolling... ({scroll_attempt + 1}/{max_scrolls})")
+            self.safari.execute_js(self.JS_SCROLL_DOWN)
+            time.sleep(2)
+            
+            # Extra scroll to ensure we get past duplicates
+            self.safari.execute_js(self.JS_SCROLL_DOWN)
+            time.sleep(1)
         
+        print(f"   ❌ No non-duplicate posts found after {max_scrolls} scroll attempts")
         return None
     
     def engage_with_post(self, skip_navigation: bool = False) -> InstagramEngagementResult:

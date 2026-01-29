@@ -143,6 +143,20 @@ async def start_pipeline(
         raise HTTPException(status_code=500, detail=f"Failed to start pipeline: {str(e)}")
 
 
+@router.post("/pipeline/run")
+async def run_pipeline(
+    request: StartPipelineRequest,
+    background_tasks: BackgroundTasks
+) -> Dict[str, Any]:
+    """
+    Alias for /pipeline/start - runs a new orchestrated pipeline (ARCH-007).
+
+    This is an alternative endpoint name for better API discoverability.
+    Internally calls the same start_pipeline logic.
+    """
+    return await start_pipeline(request, background_tasks)
+
+
 @router.get("/pipeline/{pipeline_id}")
 async def get_pipeline_status(pipeline_id: str) -> Dict[str, Any]:
     """
@@ -156,7 +170,7 @@ async def get_pipeline_status(pipeline_id: str) -> Dict[str, Any]:
     """
     try:
         orchestrator = MasterOrchestrator.get_instance()
-        status = await orchestrator.get_pipeline_status(pipeline_id)
+        status = orchestrator.get_pipeline_status(pipeline_id)
 
         if "error" in status and status["error"] == "Pipeline not found":
             raise HTTPException(status_code=404, detail="Pipeline not found")
@@ -312,3 +326,222 @@ async def health_check() -> Dict[str, Any]:
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+
+
+# ============================================================================
+# Analytics Endpoints (ARCH-006)
+# ============================================================================
+
+@router.get("/pipeline/{pipeline_id}/analytics")
+async def get_pipeline_analytics(pipeline_id: str) -> Dict[str, Any]:
+    """
+    Get AI-powered analytics for a pipeline (ARCH-006).
+
+    Analyzes content performance and provides optimization suggestions.
+
+    Args:
+        pipeline_id: Pipeline identifier
+
+    Returns:
+        Analytics feedback with AI insights and suggestions
+    """
+    try:
+        from services.analytics_feedback_loop import AnalyticsFeedbackLoop
+
+        feedback_loop = AnalyticsFeedbackLoop.get_instance()
+        analysis = await feedback_loop.analyze_pipeline_performance(pipeline_id)
+
+        if "error" in analysis:
+            raise HTTPException(status_code=404, detail=analysis["error"])
+
+        if "status" in analysis and analysis["status"] == "waiting":
+            return {
+                "success": False,
+                "status": "waiting",
+                "message": analysis["message"]
+            }
+
+        return {
+            "success": True,
+            "pipeline_id": pipeline_id,
+            **analysis
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get analytics: {str(e)}")
+
+
+@router.get("/analytics/top-themes")
+async def get_top_performing_themes(limit: int = 10) -> Dict[str, Any]:
+    """
+    Get top performing themes for content ideas (ARCH-006).
+
+    Returns themes with best engagement and views.
+
+    Args:
+        limit: Number of themes to return (default 10)
+
+    Returns:
+        List of top themes with performance metrics
+    """
+    try:
+        from services.analytics_feedback_loop import AnalyticsFeedbackLoop
+
+        feedback_loop = AnalyticsFeedbackLoop.get_instance()
+        themes = feedback_loop.get_top_performing_themes(limit=limit)
+
+        return {
+            "success": True,
+            "count": len(themes),
+            "themes": themes
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get top themes: {str(e)}")
+
+
+@router.get("/analytics/historical")
+async def get_historical_insights(
+    days: int = 30,
+    min_rating: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get historical performance insights (ARCH-006).
+
+    Returns past feedback for learning and pattern identification.
+
+    Args:
+        days: Number of days to look back (default 30)
+        min_rating: Minimum rating filter (excellent, good, average, poor)
+
+    Returns:
+        Historical analytics insights
+    """
+    try:
+        from services.analytics_feedback_loop import AnalyticsFeedbackLoop
+
+        feedback_loop = AnalyticsFeedbackLoop.get_instance()
+        insights = feedback_loop.get_historical_insights(
+            days=days,
+            min_rating=min_rating
+        )
+
+        return {
+            "success": True,
+            "count": len(insights),
+            "period_days": days,
+            "insights": insights
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get historical insights: {str(e)}")
+
+
+# ============================================================================
+# Traffic Tracking Endpoints (ARCH-005)
+# ============================================================================
+
+@router.get("/pipeline/{pipeline_id}/traffic")
+async def get_pipeline_traffic(pipeline_id: str) -> Dict[str, Any]:
+    """
+    Get traffic report for a pipeline (ARCH-005).
+
+    Shows clicks, conversions, and revenue from offer links.
+
+    Args:
+        pipeline_id: Pipeline identifier
+
+    Returns:
+        Traffic metrics and conversion data
+    """
+    try:
+        from services.offer_traffic_tracker import OfferTrafficTracker
+
+        tracker = OfferTrafficTracker.get_instance()
+        report = tracker.get_pipeline_traffic_report(pipeline_id)
+
+        return {
+            "success": True,
+            **report
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get traffic report: {str(e)}")
+
+
+@router.get("/traffic/platform-performance")
+async def get_platform_performance(days: int = 30) -> Dict[str, Any]:
+    """
+    Get performance metrics by platform (ARCH-005).
+
+    Shows which platforms drive the most traffic and conversions.
+
+    Args:
+        days: Number of days to analyze (default 30)
+
+    Returns:
+        Platform performance metrics
+    """
+    try:
+        from services.offer_traffic_tracker import OfferTrafficTracker
+        from datetime import timezone, timedelta
+
+        tracker = OfferTrafficTracker.get_instance()
+
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+        end_date = datetime.now(timezone.utc)
+
+        platforms = tracker.get_platform_performance(
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        return {
+            "success": True,
+            "period_days": days,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "platforms": platforms
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get platform performance: {str(e)}")
+
+
+@router.get("/traffic/top-campaigns")
+async def get_top_campaigns(
+    limit: int = 10,
+    metric: str = "clicks"
+) -> Dict[str, Any]:
+    """
+    Get top performing campaigns (ARCH-005).
+
+    Returns campaigns with best traffic or conversions.
+
+    Args:
+        limit: Number of campaigns to return (default 10)
+        metric: Sort by clicks, conversions, or revenue_usd (default clicks)
+
+    Returns:
+        Top performing campaigns
+    """
+    try:
+        from services.offer_traffic_tracker import OfferTrafficTracker
+
+        tracker = OfferTrafficTracker.get_instance()
+        campaigns = tracker.get_top_performing_campaigns(
+            limit=limit,
+            metric=metric
+        )
+
+        return {
+            "success": True,
+            "count": len(campaigns),
+            "sorted_by": metric,
+            "campaigns": campaigns
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get top campaigns: {str(e)}")

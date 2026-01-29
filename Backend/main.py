@@ -349,6 +349,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️  Master Orchestrator failed to start: {e}")
 
+    # Start the Publish Integrator (ARCH-003)
+    publish_integrator = None
+    try:
+        from services.publish_integrator import get_publish_integrator
+        publish_integrator = get_publish_integrator(event_bus)
+        logger.success("✓ Publish Integrator started (ARCH-003)")
+    except Exception as e:
+        logger.warning(f"⚠️  Master Orchestrator failed to start: {e}")
+
     # Start the Sora Worker (ARCH-002)
     sora_worker = None
     try:
@@ -427,6 +436,16 @@ async def lifespan(app: FastAPI):
         logger.success("✓ Responder Worker started (OPS-016)")
     except Exception as e:
         logger.warning(f"⚠️  Content Ops Workers failed to start: {e}")
+
+    # Start Daily Automation Manager (AUTO-009: Sora + Twitter scheduling)
+    daily_automation = None
+    try:
+        from services.daily_automation import DailyAutomationManager
+        daily_automation = DailyAutomationManager.get_instance(event_bus)
+        await daily_automation.initialize()
+        logger.success("✓ Daily Automation Manager started (AUTO-009)")
+    except Exception as e:
+        logger.warning(f"⚠️  Daily Automation Manager failed to start: {e}")
 
     yield
     
@@ -565,6 +584,14 @@ async def lifespan(app: FastAPI):
             logger.success("✓ Template Retiree stopped")
         except Exception as e:
             logger.warning(f"⚠️  Error stopping Template Retiree: {e}")
+
+    # Stop the Daily Automation Manager on shutdown
+    if daily_automation:
+        try:
+            await daily_automation.shutdown()
+            logger.success("✓ Daily Automation Manager stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Daily Automation Manager: {e}")
 
     # Stop the Autonomous Slot Executor on shutdown
     if autonomous_executor:
@@ -955,6 +982,22 @@ try:
     logger.success("✓ Sora Automation API registered")
 except Exception as e:
     logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
+
+# Daily Automation (AUTO-009: Sora + Twitter scheduling)
+try:
+    from api.endpoints import daily_automation
+    app.include_router(daily_automation.router, tags=["Daily Automation"])
+    logger.success("✓ Daily Automation API registered (AUTO-009)")
+except Exception as e:
+    logger.warning(f"⚠️  Daily Automation API registration failed: {e}")
+
+# Safari Automation Orchestrator (Unified browser automation)
+try:
+    from api.endpoints import safari_automation
+    app.include_router(safari_automation.router, prefix="/api", tags=["Safari Automation"])
+    logger.success("✓ Safari Automation Orchestrator API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Safari Automation API registration failed: {e}")
 
 # Knowledge Base (Rules, Templates, Playbooks)
 from api.endpoints import knowledge_base

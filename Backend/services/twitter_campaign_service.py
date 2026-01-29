@@ -136,17 +136,106 @@ class TwitterCampaignService:
         self.engine = create_engine(DATABASE_URL)
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.blotato_account_id = "4151"  # Twitter account ID from Blotato
-        
+
         # REQ-TWITTER-001: Configurable posting interval (default 2 hours)
         self.interval_minutes = interval_minutes
-        
+
         # Tweets per day configuration
         self.tweets_per_day = 60
         self.products_count = 3  # Everreach, BlankLogo, Apple App Kit
         self.tweets_per_product = self.tweets_per_day // self.products_count  # 20 each
-        
+
+        # Setup event subscriptions for orchestrator integration
+        self._setup_event_subscriptions()
+
         logger.info(f"TwitterCampaignService initialized - {self.tweets_per_day} tweets/day, interval={self.interval_minutes}min")
-    
+
+    def _setup_event_subscriptions(self) -> None:
+        """Subscribe to orchestrator events for campaign scheduling."""
+        try:
+            from services.event_bus import EventBus
+            event_bus = EventBus.get_instance()
+            event_bus.subscribe("twitter.campaign.schedule_requested", self._handle_schedule_request)
+            logger.info("📫 TwitterCampaignService subscribed to twitter.campaign.schedule_requested")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not setup event subscriptions: {e}")
+
+    async def _handle_schedule_request(self, event) -> None:
+        """
+        Handle twitter.campaign.schedule_requested from orchestrator.
+
+        Expected payload:
+        {
+            "pipeline_id": str,
+            "theme": str,
+            "count": int (default 12),
+            "interval_minutes": int (default 120),
+            "offer_url": Optional[str]
+        }
+        """
+        try:
+            from services.event_bus import EventBus
+
+            payload = event.payload
+            pipeline_id = payload.get("pipeline_id")
+            theme = payload.get("theme")
+            count = payload.get("count", 12)
+            interval_minutes = payload.get("interval_minutes", self.interval_minutes)
+            offer_url = payload.get("offer_url")
+
+            logger.info(f"🐦 [TwitterCampaign] Scheduling {count} tweets for pipeline {pipeline_id}")
+
+            # Schedule tweets
+            if offer_url:
+                # Use offer-focused tweet generation
+                scheduled_ids = self.schedule_offer_tweets(
+                    offer_url=offer_url,
+                    offer_description=theme,
+                    count=count,
+                    interval_minutes=interval_minutes,
+                    campaign_name=pipeline_id
+                )
+            else:
+                # Use theme-based campaign
+                campaign_id = self.schedule_campaign(
+                    theme=theme,
+                    count=count,
+                    interval_minutes=interval_minutes
+                )
+                scheduled_ids = [campaign_id]
+
+            logger.info(f"✅ [TwitterCampaign] Scheduled {len(scheduled_ids)} tweets")
+
+            # Emit completion event
+            event_bus = EventBus.get_instance()
+            await event_bus.publish(
+                "twitter.campaign.scheduled",
+                {
+                    "pipeline_id": pipeline_id,
+                    "tweets_scheduled": count,
+                    "scheduled_ids": scheduled_ids
+                },
+                correlation_id=getattr(event, 'correlation_id', None),
+                source="TwitterCampaignService"
+            )
+
+        except Exception as e:
+            logger.error(f"❌ [TwitterCampaign] Error handling schedule request: {e}")
+            # Emit failure event
+            try:
+                from services.event_bus import EventBus
+                event_bus = EventBus.get_instance()
+                await event_bus.publish(
+                    "twitter.campaign.failed",
+                    {
+                        "pipeline_id": payload.get("pipeline_id"),
+                        "error": str(e)
+                    },
+                    source="TwitterCampaignService"
+                )
+            except:
+                pass
+
     # =========================================================================
     # PRODUCT MANAGEMENT
     # =========================================================================

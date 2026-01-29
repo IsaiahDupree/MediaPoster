@@ -306,3 +306,301 @@ async def poll_and_download_now(timeout_minutes: int = 15):
     except Exception as e:
         logger.error(f"Failed to poll/download: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# 3-PART MOVIE PIPELINE (ARCH-002)
+# =============================================================================
+
+class MultiPartRequest(BaseModel):
+    """Request model for 3-part video generation."""
+    theme: str
+    num_parts: int = 3
+    character: Optional[str] = "isaiahdupree"
+    part_prompts: Optional[List[str]] = None
+    auto_stitch: bool = True
+    auto_analyze: bool = True
+    remove_watermarks: bool = True
+    post_to_platforms: Optional[List[str]] = None  # e.g., ["tiktok", "instagram"]
+
+
+class FullPipelineRequest(BaseModel):
+    """Request model for full automation pipeline."""
+    theme: str
+    character: Optional[str] = "isaiahdupree"
+    num_parts: int = 3
+    post_to_platforms: List[str] = ["tiktok", "instagram", "youtube"]
+    schedule_delay_minutes: int = 0  # 0 = post immediately
+
+
+@router.post("/pipeline/multi-part")
+async def generate_multi_part_video(request: MultiPartRequest, background_tasks: BackgroundTasks):
+    """
+    Generate a 3-part video series with stitching.
+    
+    Full pipeline:
+    1. Generate AI prompts for each part (or use provided)
+    2. Generate 3 videos with @character
+    3. Remove watermarks
+    4. Stitch into single video
+    5. AI analysis for titles/hashtags
+    6. Optionally post to platforms
+    
+    Returns job_id for status tracking.
+    """
+    try:
+        from automation.sora.pipeline import SoraPipeline
+        import uuid
+        
+        job_id = str(uuid.uuid4())[:8]
+        
+        # Run pipeline in background
+        async def run_pipeline():
+            pipeline = SoraPipeline()
+            result = await pipeline.generate_multi_part(
+                theme=request.theme,
+                num_parts=request.num_parts,
+                character=f"@{request.character}" if request.character and not request.character.startswith("@") else request.character,
+                part_prompts=request.part_prompts,
+                auto_stitch=request.auto_stitch,
+                auto_analyze=request.auto_analyze,
+                remove_watermarks=request.remove_watermarks,
+                pipeline_id=job_id
+            )
+            
+            # Post to platforms if requested
+            if request.post_to_platforms and result.get("stitched_video"):
+                await _post_video_to_platforms(
+                    result["stitched_video"],
+                    result.get("analysis", {}),
+                    request.post_to_platforms
+                )
+            
+            return result
+        
+        background_tasks.add_task(run_pipeline)
+        
+        return {
+            "success": True,
+            "message": f"Started {request.num_parts}-part video pipeline",
+            "job_id": job_id,
+            "theme": request.theme,
+            "character": request.character,
+            "will_post_to": request.post_to_platforms
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to start multi-part pipeline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/pipeline/full")
+async def run_full_pipeline(request: FullPipelineRequest, background_tasks: BackgroundTasks):
+    """
+    Full automation pipeline: Generate → Watermark → Analyze → Post
+    
+    This is the main endpoint for complete automation.
+    """
+    try:
+        import uuid
+        job_id = str(uuid.uuid4())[:8]
+        
+        async def execute_full_pipeline():
+            from automation.sora.pipeline import SoraPipeline
+            
+            logger.info(f"[Pipeline {job_id}] Starting full pipeline: {request.theme}")
+            
+            # Step 1: Generate multi-part video
+            pipeline = SoraPipeline()
+            result = await pipeline.generate_multi_part(
+                theme=request.theme,
+                num_parts=request.num_parts,
+                character=f"@{request.character}" if request.character else None,
+                auto_stitch=True,
+                auto_analyze=True,
+                remove_watermarks=True,
+                pipeline_id=job_id
+            )
+            
+            if result.get("status") not in ["completed", "partial"]:
+                logger.error(f"[Pipeline {job_id}] Generation failed: {result.get('error')}")
+                return result
+            
+            # Step 2: Post to platforms
+            final_video = result.get("stitched_video")
+            if final_video and request.post_to_platforms:
+                logger.info(f"[Pipeline {job_id}] Posting to {request.post_to_platforms}")
+                
+                post_results = await _post_video_to_platforms(
+                    final_video,
+                    result.get("analysis", {}),
+                    request.post_to_platforms,
+                    delay_minutes=request.schedule_delay_minutes
+                )
+                result["post_results"] = post_results
+            
+            logger.info(f"[Pipeline {job_id}] Pipeline complete!")
+            return result
+        
+        background_tasks.add_task(execute_full_pipeline)
+        
+        return {
+            "success": True,
+            "message": "Full pipeline started",
+            "job_id": job_id,
+            "theme": request.theme,
+            "num_parts": request.num_parts,
+            "will_post_to": request.post_to_platforms
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to start full pipeline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pipeline/jobs")
+async def list_pipeline_jobs():
+    """List all pipeline jobs and their status."""
+    try:
+        from automation.sora.pipeline import SoraPipeline
+        
+        pipeline = SoraPipeline()
+        jobs = pipeline.list_jobs()
+        
+        return {
+            "success": True,
+            "jobs_count": len(jobs),
+            "jobs": jobs
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to list jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pipeline/job/{job_id}")
+async def get_pipeline_job(job_id: str):
+    """Get status of a specific pipeline job."""
+    try:
+        from automation.sora.pipeline import SoraPipeline
+        
+        pipeline = SoraPipeline()
+        job = pipeline.get_job_status(job_id)
+        
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
+        return {
+            "success": True,
+            "job": job
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get job: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# POSTING INTEGRATION
+# =============================================================================
+
+async def _post_video_to_platforms(
+    video_path: str,
+    analysis: dict,
+    platforms: List[str],
+    delay_minutes: int = 0
+) -> dict:
+    """
+    Post video to specified platforms via Blotato.
+    
+    Uses AI analysis for platform-specific titles and hashtags.
+    """
+    results = {}
+    
+    try:
+        from services.blotato_connector import BlotatoConnector
+        
+        connector = BlotatoConnector()
+        
+        for platform in platforms:
+            try:
+                # Get platform-specific title
+                title_key = f"title_{platform}"
+                title = analysis.get(title_key) or analysis.get("title_tiktok") or "New video"
+                
+                description = analysis.get("description", "")
+                hashtags = analysis.get("hashtags", [])
+                
+                # Format caption with hashtags
+                caption = f"{title}\n\n{description}\n\n" + " ".join([f"#{h}" for h in hashtags])
+                
+                logger.info(f"Posting to {platform}: {title[:50]}...")
+                
+                # Post via Blotato
+                result = await connector.post_video(
+                    video_path=video_path,
+                    platform=platform,
+                    caption=caption,
+                    title=title
+                )
+                
+                results[platform] = {
+                    "success": result.get("success", False),
+                    "post_id": result.get("post_id"),
+                    "url": result.get("url")
+                }
+                
+            except Exception as e:
+                logger.error(f"Failed to post to {platform}: {e}")
+                results[platform] = {
+                    "success": False,
+                    "error": str(e)
+                }
+        
+    except ImportError:
+        logger.warning("BlotatoConnector not available, skipping posting")
+        for platform in platforms:
+            results[platform] = {"success": False, "error": "BlotatoConnector not available"}
+    
+    return results
+
+
+@router.post("/post")
+async def post_existing_video(
+    video_path: str,
+    platforms: List[str],
+    title: Optional[str] = None,
+    description: Optional[str] = None
+):
+    """
+    Post an existing video to platforms.
+    
+    Use this for videos already downloaded/processed.
+    """
+    try:
+        from pathlib import Path
+        
+        if not Path(video_path).exists():
+            raise HTTPException(status_code=404, detail=f"Video not found: {video_path}")
+        
+        analysis = {
+            "title_tiktok": title or "New video",
+            "description": description or "",
+            "hashtags": ["fyp", "viral", "ai", "sora"]
+        }
+        
+        results = await _post_video_to_platforms(video_path, analysis, platforms)
+        
+        return {
+            "success": True,
+            "video_path": video_path,
+            "post_results": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to post video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

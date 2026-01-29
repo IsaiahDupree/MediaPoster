@@ -229,7 +229,15 @@ class EngagementController:
         if self.state == EngagementState.RUNNING:
             return {"success": False, "error": "Already running"}
         
-        logger.info("🚀 Starting engagement automation...")
+        logger.info("="*60)
+        logger.info("🚀 STARTING ENGAGEMENT AUTOMATION")
+        logger.info("="*60)
+        logger.info(f"   Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"   Platforms: {', '.join(self.PLATFORMS)}")
+        logger.info(f"   Rate limit: {self.COMMENTS_PER_HOUR_PER_PLATFORM} comments/hr/platform")
+        logger.info(f"   Delay range: {self.MIN_DELAY_BETWEEN_COMMENTS}-{self.MAX_DELAY_BETWEEN_COMMENTS}s")
+        logger.info(f"   Auto-resume: {self.auto_resume_enabled} (after {self.auto_resume_after_hours}h idle)")
+        logger.info("="*60)
         
         self.state = EngagementState.RUNNING
         self.started_at = datetime.now(timezone.utc)
@@ -353,21 +361,33 @@ class EngagementController:
     
     async def _engagement_loop(self):
         """Main engagement loop - posts comments with rate limiting."""
-        logger.info("📢 Engagement loop started")
+        logger.info("="*60)
+        logger.info("📢 ENGAGEMENT LOOP STARTED")
+        logger.info("="*60)
         
         current_hour = datetime.now().hour
+        loop_iteration = 0
         
         while not self._should_stop:
             try:
-                # Check for new hour (reset counts)
+                loop_iteration += 1
                 now = datetime.now()
+                
+                # Log status every 10 iterations
+                if loop_iteration % 10 == 1:
+                    self._log_status_summary()
+                
+                # Check for new hour (reset counts)
                 if now.hour != current_hour:
                     self._reset_hourly_counts()
                     current_hour = now.hour
-                    logger.info(f"⏰ New hour ({current_hour}:00) - Reset hourly counts")
+                    logger.info("="*60)
+                    logger.info(f"⏰ NEW HOUR: {current_hour}:00 - Hourly counts reset")
+                    logger.info("="*60)
                 
                 # Skip if paused
                 if self.state == EngagementState.PAUSED:
+                    logger.debug(f"[{now.strftime('%H:%M:%S')}] ⏸️ Paused - waiting...")
                     await asyncio.sleep(10)
                     continue
                 
@@ -375,17 +395,20 @@ class EngagementController:
                 platform = self._select_next_platform()
                 
                 if platform:
+                    logger.info(f"[{now.strftime('%H:%M:%S')}] 🎯 Selected platform: {platform}")
                     await self._post_comment(platform)
                     
                     # Calculate next comment time
                     delay = self._get_next_delay()
                     self._next_comment_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
+                    next_time = (datetime.now() + timedelta(seconds=delay)).strftime('%H:%M:%S')
                     
-                    logger.info(f"⏳ Next comment in {delay}s")
+                    logger.info(f"[{now.strftime('%H:%M:%S')}] ⏳ Next comment in {delay}s (at {next_time})")
                     await asyncio.sleep(delay)
                 else:
                     # All platforms at limit, wait and check again
-                    logger.info("⏸️ All platforms at hourly limit, waiting...")
+                    logger.info(f"[{now.strftime('%H:%M:%S')}] ⏸️ All platforms at hourly limit")
+                    self._log_platform_limits()
                     await asyncio.sleep(60)
                     
             except asyncio.CancelledError:
@@ -398,7 +421,11 @@ class EngagementController:
     
     async def _idle_monitor_loop(self):
         """Monitor Mac idle time (for logging only - automation runs regardless of user activity)."""
-        logger.info("👀 Idle monitor started (passive mode - runs even when user active)")
+        logger.info("="*60)
+        logger.info("👀 IDLE MONITOR STARTED")
+        logger.info(f"   Mode: Passive (runs regardless of user activity)")
+        logger.info(f"   Check interval: {self.IDLE_CHECK_INTERVAL}s")
+        logger.info("="*60)
         
         while not self._should_stop:
             try:
@@ -444,11 +471,36 @@ class EngagementController:
         available.sort(key=lambda x: x[1])
         return available[0][0]
     
+    def _log_status_summary(self):
+        """Log a summary of current status."""
+        now = datetime.now()
+        total_today = sum(s.comments_today for s in self.platform_stats.values())
+        total_this_hour = sum(s.comments_this_hour for s in self.platform_stats.values())
+        
+        logger.info("-"*60)
+        logger.info(f"📊 STATUS SUMMARY @ {now.strftime('%H:%M:%S')}")
+        logger.info(f"   State: {self.state.value}")
+        logger.info(f"   Total today: {total_today} | This hour: {total_this_hour}")
+        logger.info(f"   Mac idle: {self.get_idle_minutes():.1f} minutes")
+        for p, s in self.platform_stats.items():
+            status = "✅" if s.is_enabled else "❌"
+            logger.info(f"   {status} {p}: {s.comments_this_hour}/{self.COMMENTS_PER_HOUR_PER_PLATFORM}/hr | {s.comments_today} today")
+        logger.info("-"*60)
+    
+    def _log_platform_limits(self):
+        """Log platform limit details."""
+        for p, s in self.platform_stats.items():
+            if s.is_enabled:
+                remaining = self.COMMENTS_PER_HOUR_PER_PLATFORM - s.comments_this_hour
+                logger.debug(f"   {p}: {s.comments_this_hour}/{self.COMMENTS_PER_HOUR_PER_PLATFORM} (remaining: {remaining})")
+    
     async def _post_comment(self, platform: str):
         """Post a single comment on a platform."""
-        logger.info(f"💬 Posting comment on {platform}...")
-        
+        now = datetime.now()
         stats = self.platform_stats[platform]
+        
+        logger.info(f"[{now.strftime('%H:%M:%S')}] 💬 POSTING TO {platform.upper()}")
+        logger.info(f"   Platform stats: {stats.comments_this_hour}/{self.COMMENTS_PER_HOUR_PER_PLATFORM} this hour, {stats.comments_today} today")
         
         try:
             # Note: Safari session check disabled - let engagement modules handle login
@@ -466,7 +518,10 @@ class EngagementController:
                 stats.comments_today += 1
                 stats.last_comment_at = datetime.now(timezone.utc)
                 
-                logger.success(f"✅ Posted on {platform}: {result.get('comment', '')[:50]}...")
+                logger.success(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ SUCCESS on {platform.upper()}")
+                logger.info(f"   Comment: {result.get('comment', '')[:80]}...")
+                logger.info(f"   Post URL: {result.get('post_url', 'N/A')}")
+                logger.info(f"   Platform total: {stats.comments_this_hour}/{self.COMMENTS_PER_HOUR_PER_PLATFORM} this hour")
                 
                 # Notify callbacks
                 for callback in self._on_comment_posted:
@@ -477,11 +532,16 @@ class EngagementController:
             else:
                 error = result.get('error', 'Unknown error')
                 stats.errors.append(error)
-                logger.warning(f"⚠️ Failed on {platform}: {error}")
+                logger.warning(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ FAILED on {platform.upper()}")
+                logger.warning(f"   Error: {error}")
+                logger.warning(f"   Total errors: {len(stats.errors)}")
                 
         except Exception as e:
             stats.errors.append(str(e))
-            logger.error(f"❌ Error posting on {platform}: {e}")
+            logger.error(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ EXCEPTION on {platform.upper()}")
+            logger.error(f"   Error: {e}")
+            import traceback
+            logger.error(f"   Traceback: {traceback.format_exc()[:500]}")
     
     async def _notify_state_changed(self):
         """Notify state change callbacks."""

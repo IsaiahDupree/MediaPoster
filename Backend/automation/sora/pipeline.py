@@ -22,10 +22,11 @@ from .video_downloader import VideoDownloader
 
 # ARCH-002: EventBus integration
 try:
-    from services.event_bus import EventBus, Topics
+    from services.event_bus import EventBus, Topics, Event
     EVENT_BUS_AVAILABLE = True
 except ImportError:
     EVENT_BUS_AVAILABLE = False
+    Event = None  # type: ignore
     logger.warning("EventBus not available, running in standalone mode")
 
 
@@ -66,9 +67,75 @@ class SoraPipeline:
         # ARCH-002: EventBus integration
         if EVENT_BUS_AVAILABLE:
             self.event_bus = event_bus or EventBus.get_instance()
+            self._setup_event_subscriptions()
         else:
             self.event_bus = None
-    
+
+    def _setup_event_subscriptions(self) -> None:
+        """
+        Subscribe to EventBus topics for event-driven orchestration (ARCH-002).
+
+        Listens for:
+        - SORA_BATCH_REQUESTED: Triggered by MasterOrchestrator to start video generation
+        """
+        if not self.event_bus or not EVENT_BUS_AVAILABLE:
+            return
+
+        self.event_bus.subscribe(Topics.SORA_BATCH_REQUESTED, self._handle_batch_request)
+        logger.info("📫 SoraPipeline subscribed to SORA_BATCH_REQUESTED events")
+
+    async def _handle_batch_request(self, event: 'Event') -> None:
+        """
+        Handle SORA_BATCH_REQUESTED event from orchestrator (ARCH-002).
+
+        Event payload should contain:
+        - pipeline_id: Orchestrator pipeline ID
+        - theme: Video theme/topic
+        - num_parts: Number of video parts (default 3)
+        - character: Optional @character
+        - stitch: Whether to stitch parts (default True)
+        - remove_watermark: Whether to remove watermarks (default True)
+        """
+        try:
+            payload = event.payload
+            pipeline_id = payload.get("pipeline_id")
+            theme = payload.get("theme")
+            num_parts = payload.get("num_parts", 3)
+            character = payload.get("character")
+            stitch = payload.get("stitch", True)
+            remove_watermark = payload.get("remove_watermark", True)
+
+            logger.info(f"🎬 [ARCH-002] Received batch request for pipeline {pipeline_id}: {theme}")
+
+            # Run multi-part generation with orchestrator integration
+            result = await self.generate_multi_part(
+                theme=theme,
+                num_parts=num_parts,
+                character=character,
+                auto_stitch=stitch,
+                auto_analyze=True,
+                remove_watermarks=remove_watermark,
+                pipeline_id=pipeline_id
+            )
+
+            logger.info(f"✅ [ARCH-002] Batch request completed for pipeline {pipeline_id}: {result.get('status')}")
+
+        except Exception as e:
+            logger.error(f"❌ [ARCH-002] Error handling batch request: {e}")
+
+            # Publish failure event
+            if self.event_bus and EVENT_BUS_AVAILABLE:
+                await self.event_bus.publish(
+                    Topics.SORA_BATCH_FAILED,
+                    {
+                        "pipeline_id": payload.get("pipeline_id"),
+                        "theme": payload.get("theme"),
+                        "error": str(e)
+                    },
+                    correlation_id=event.correlation_id,
+                    source="sora_pipeline"
+                )
+
     async def generate_single(
         self,
         prompt: str,

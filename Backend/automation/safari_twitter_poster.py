@@ -63,20 +63,48 @@ class SafariTwitterPoster:
             self.compose_url = self.TWITTER_COMPOSE_URL
             self.home_url = self.TWITTER_HOME_URL
         
-    def _run_applescript(self, script: str) -> tuple[bool, str]:
+    def _run_applescript(self, script: str, timeout: int = 60) -> tuple[bool, str]:
         """Run AppleScript and return success status and output."""
         try:
             result = subprocess.run(
                 ['osascript', '-e', script],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=timeout
             )
             return result.returncode == 0, result.stdout.strip() or result.stderr.strip()
         except subprocess.TimeoutExpired:
             return False, "AppleScript timeout"
         except Exception as e:
             return False, str(e)
+    
+    def simple_login_check(self) -> Dict:
+        """Simple login check - just verifies we're on x.com/twitter.com home."""
+        script = '''
+        tell application "Safari"
+            if not running then return "not_running"
+            if (count of windows) = 0 then return "no_windows"
+            tell window 1
+                set currentURL to URL of current tab
+                return currentURL
+            end tell
+        end tell
+        '''
+        success, url = self._run_applescript(script)
+        if not success:
+            return {'logged_in': False, 'reason': 'safari_error', 'error': url}
+        
+        # If we're on x.com or twitter.com home/feed, we're likely logged in
+        if ('x.com/home' in url or 'twitter.com/home' in url or 
+            'x.com/compose' in url or 'twitter.com/compose' in url):
+            return {'logged_in': True, 'url': url}
+        
+        # If we're on login page, not logged in
+        if '/login' in url or '/i/flow' in url:
+            return {'logged_in': False, 'reason': 'on_login_page', 'url': url}
+        
+        # Otherwise, try the detailed check
+        return {'logged_in': None, 'reason': 'needs_detailed_check', 'url': url}
     
     def is_logged_in(self) -> bool:
         """Check if user is logged into Twitter in Safari."""

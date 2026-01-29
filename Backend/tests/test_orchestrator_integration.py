@@ -102,9 +102,9 @@ async def test_pipeline_status_tracking(orchestrator, event_bus):
     )
     
     pipeline_id = await orchestrator.start_pipeline(config)
-    
-    # Get status
-    status = await orchestrator.get_pipeline_status(pipeline_id)
+
+    # Get status (synchronous method)
+    status = orchestrator.get_pipeline_status(pipeline_id)
     
     assert status is not None
     assert status["pipeline_id"] == pipeline_id
@@ -183,16 +183,16 @@ async def test_sora_batch_completed_handler(orchestrator, event_bus):
     
     # Give time for handler to process
     await asyncio.sleep(0.1)
-    
+
     # Check pipeline was updated
-    status = await orchestrator.get_pipeline_status(pipeline_id)
+    status = orchestrator.get_pipeline_status(pipeline_id)
     assert status.get("outputs", {}).get("sora", {}).get("stitched_video") == "/test/video.mp4"
 
 
 @pytest.mark.asyncio
 async def test_pipeline_not_found(orchestrator):
     """Test ARCH-001: Non-existent pipeline returns error."""
-    status = await orchestrator.get_pipeline_status("nonexistent-id")
+    status = orchestrator.get_pipeline_status("nonexistent-id")
     assert "error" in status
 
 

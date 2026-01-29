@@ -16,11 +16,12 @@
 | RF-003: Pipeline Stages | ✅ Complete | `Backend/services/relationship_crm.py` |
 | RF-004: Intent Lanes | ✅ Complete | `Backend/services/relationship_ai.py` |
 | RF-005: Next-Best-Action AI | ✅ Complete | `Backend/services/relationship_ai.py` |
-| RF-006: Fit Signal Detection | ⏳ Planned | - |
-| RF-007: Touch Cadences | ⏳ Planned | - |
-| RF-008: Success Metrics | ⏳ Planned | - |
+| RF-006: Fit Signal Detection | ✅ Complete | `Backend/services/relationship_fit_signals.py` |
+| RF-007: Touch Cadences | ✅ Complete | `Backend/services/relationship_cadence.py` |
+| RF-008: Success Metrics | ✅ Complete | `Backend/services/relationship_metrics.py` |
 | Dashboard UI | ✅ Complete | `dashboard/app/(dashboard)/relationships/page.tsx` |
 | API Endpoints | ✅ Complete | `Backend/api/endpoints/relationship_crm.py` |
+| Tests | ✅ 19 Passing | `Backend/tests/test_relationship_features.py` |
 
 ---
 

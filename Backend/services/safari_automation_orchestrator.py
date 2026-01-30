@@ -43,6 +43,7 @@ class OrchestratorConfig:
     
     # Feature toggles
     twitter_posting_enabled: bool = False  # Disabled for testing
+    sora_enabled: bool = False  # Disabled - enable when ready
     
     # Platform distribution for comments (should sum to comments_per_hour)
     twitter_comments_per_hour: int = 8
@@ -414,6 +415,10 @@ class SafariAutomationOrchestrator:
             
     async def _handle_sora_generate(self, task: SafariTask):
         """Handle Sora video generation."""
+        if not self.config.sora_enabled:
+            logger.info("🎬 Sora generation disabled - skipping")
+            return
+            
         prompt = task.payload.get("prompt", "")
         logger.info(f"🎬 Starting Sora generation: {prompt[:50]}...")
         
@@ -609,6 +614,10 @@ class SafariAutomationOrchestrator:
     
     async def queue_sora_generation(self, prompt: str, trend_source: Optional[str] = None):
         """Queue a new Sora video generation based on trends/offers."""
+        if not self.config.sora_enabled:
+            logger.info("🎬 Sora generation disabled - not queueing")
+            return False
+            
         if self.sora_generations_today >= self.config.sora_generations_per_day:
             logger.warning("Daily Sora limit reached (30)")
             return False

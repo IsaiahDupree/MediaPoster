@@ -8,6 +8,7 @@ Features:
 - Start/Stop control via API
 - Auto-resume after 2-3 hours of Mac idle time
 - Real-time status updates
+- **Database persistence for state survival across uvicorn reloads**
 
 Usage:
     controller = EngagementController.get_instance()
@@ -18,11 +19,22 @@ import asyncio
 import time
 import random
 import subprocess
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, field
 from enum import Enum
 from loguru import logger
+
+# Supabase for state persistence
+try:
+    from supabase import create_client, Client
+    SUPABASE_URL = os.environ.get('SUPABASE_URL', 'http://127.0.0.1:54321')
+    SUPABASE_KEY = os.environ.get('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0')
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+    logger.warning("Supabase not available - state persistence disabled")
 
 
 class EngagementState(Enum):
@@ -126,6 +138,100 @@ class EngagementController:
         # Event callbacks
         self._on_comment_posted: List[callable] = []
         self._on_state_changed: List[callable] = []
+        
+        # Supabase client for persistence
+        self._supabase: Optional[Any] = None
+        
+        # Load persisted state on init
+        self._load_persisted_state()
+    
+    def _get_supabase(self):
+        """Get or create Supabase client."""
+        if self._supabase is None and HAS_SUPABASE:
+            try:
+                self._supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+            except Exception as e:
+                logger.warning(f"Failed to create Supabase client: {e}")
+        return self._supabase
+    
+    def _load_persisted_state(self):
+        """Load state from database on startup (survives uvicorn reload)."""
+        try:
+            supabase = self._get_supabase()
+            if not supabase:
+                return
+            
+            result = supabase.table('engagement_state').select('*').eq('id', 'singleton').execute()
+            
+            if result.data and len(result.data) > 0:
+                data = result.data[0]
+                persisted_state = data.get('state', 'stopped')
+                started_at_str = data.get('started_at')
+                
+                # Only restore RUNNING state if it was running
+                if persisted_state == 'running' and started_at_str:
+                    self.state = EngagementState.RUNNING
+                    self.started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+                    self._should_stop = False
+                    
+                    # Restore platform enabled states
+                    platforms_data = data.get('platforms', {})
+                    for p, stats in platforms_data.items():
+                        if p in self.platform_stats:
+                            self.platform_stats[p].is_enabled = stats.get('is_enabled', True)
+                    
+                    logger.info(f"🔄 Restored RUNNING state from DB (started at {self.started_at})")
+                    
+                    # Auto-restart the engagement loop
+                    asyncio.create_task(self._restart_after_reload())
+                else:
+                    logger.debug("Persisted state was stopped, starting fresh")
+                    
+        except Exception as e:
+            logger.warning(f"Failed to load persisted state: {e}")
+    
+    async def _restart_after_reload(self):
+        """Restart engagement loop after uvicorn reload."""
+        await asyncio.sleep(1)  # Brief delay to let startup complete
+        
+        if self.state == EngagementState.RUNNING and not self._engagement_task:
+            logger.info("🔄 Restarting engagement loop after reload...")
+            self._engagement_task = asyncio.create_task(self._engagement_loop())
+            
+            if self.auto_resume_enabled and not self._idle_monitor_task:
+                self._idle_monitor_task = asyncio.create_task(self._idle_monitor_loop())
+    
+    def _save_state(self):
+        """Persist current state to database."""
+        try:
+            supabase = self._get_supabase()
+            if not supabase:
+                return
+            
+            # Build platforms data
+            platforms_data = {}
+            for p, stats in self.platform_stats.items():
+                platforms_data[p] = {
+                    'is_enabled': stats.is_enabled,
+                    'comments_this_hour': stats.comments_this_hour,
+                    'comments_today': stats.comments_today
+                }
+            
+            data = {
+                'id': 'singleton',
+                'state': self.state.value,
+                'started_at': self.started_at.isoformat() if self.started_at else None,
+                'stopped_at': self.stopped_at.isoformat() if self.stopped_at else None,
+                'platforms': platforms_data,
+                'auto_resume_enabled': self.auto_resume_enabled,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+            
+            supabase.table('engagement_state').upsert(data).execute()
+            logger.debug(f"Saved state to DB: {self.state.value}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to save state: {e}")
     
     @classmethod
     def get_instance(cls) -> "EngagementController":
@@ -254,6 +360,9 @@ class EngagementController:
         # Notify state change
         await self._notify_state_changed()
         
+        # Persist state to DB (survives uvicorn reload)
+        self._save_state()
+        
         logger.success("✅ Engagement automation started")
         
         return {
@@ -296,6 +405,9 @@ class EngagementController:
         # Notify state change
         await self._notify_state_changed()
         
+        # Persist state to DB (survives uvicorn reload)
+        self._save_state()
+        
         logger.success("✅ Engagement automation stopped")
         
         return {
@@ -328,6 +440,7 @@ class EngagementController:
         """Enable or disable a platform."""
         if platform in self.platform_stats:
             self.platform_stats[platform].is_enabled = enabled
+            self._save_state()  # Persist platform enable state
     
     def set_auto_resume(self, enabled: bool, hours: float = 2.5):
         """Configure auto-resume settings."""

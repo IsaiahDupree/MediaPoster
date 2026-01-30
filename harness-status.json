@@ -1,16 +1,16 @@
 {
   "projectId": "mediaposter",
   "projectRoot": "/Users/isaiahdupree/Documents/Software/MediaPoster",
-  "lastUpdated": "2026-01-30T01:04:41.447Z",
-  "sessionType": "error",
-  "status": "max_errors",
+  "lastUpdated": "2026-01-30T02:56:10.605Z",
+  "sessionType": "CODING",
+  "status": "running",
   "stats": {
     "total": 495,
     "passing": 292,
     "pending": 203,
     "percentComplete": "59.0"
   },
-  "pid": 53358,
-  "message": "Stopped after 5 consecutive errors",
-  "lastError": "rate_limit"
+  "pid": 76929,
+  "currentSession": 2,
+  "model": "claude-3-5-sonnet-20241022"
 }

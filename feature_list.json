@@ -2,8 +2,8 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 441,
-  "completedFeatures": 292,
+  "totalFeatures": 495,
+  "completedFeatures": 295,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -4653,7 +4653,7 @@
       "priority": "P1",
       "phase": 11,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "Backend/services/dm_fetcher.py"
@@ -4662,7 +4662,8 @@
         "X DMs",
         "Instagram DMs",
         "Thread grouping"
-      ]
+      ],
+      "completed": "2026-01-30"
     },
     {
       "id": "INBOX-004",
@@ -4709,7 +4710,7 @@
       "priority": "P2",
       "phase": 11,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "Backend/services/auto_reply_rules.py"
@@ -4718,7 +4719,8 @@
         "Rule configuration UI",
         "Keyword matching",
         "Pattern actions"
-      ]
+      ],
+      "completed": "2026-01-30"
     },
     {
       "id": "INBOX-007",
@@ -4746,7 +4748,7 @@
       "priority": "P2",
       "phase": 11,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "community",
       "files": [
         "dashboard/app/inbox/analytics/page.tsx"
@@ -4755,7 +4757,8 @@
         "Response time metrics",
         "Sentiment charts",
         "Platform breakdown"
-      ]
+      ],
+      "completed": "2026-01-30"
     },
     {
       "id": "REPURPOSE-001",

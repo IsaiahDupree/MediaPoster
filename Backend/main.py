@@ -940,12 +940,13 @@ from api.endpoints import ai_video_generation
 app.include_router(ai_video_generation.router, tags=["AI Video Generation Pub/Sub"])
 
 # Sora Browser Automation (Safari-based video generation)
-try:
-    from api.endpoints import sora
-    app.include_router(sora.router, tags=["Sora Automation"])
-    logger.success("✓ Sora Automation API registered")
-except Exception as e:
-    logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
+# DISABLED: Safari automations disabled per user request
+# try:
+#     from api.endpoints import sora
+#     app.include_router(sora.router, tags=["Sora Automation"])
+#     logger.success("✓ Sora Automation API registered")
+# except Exception as e:
+#     logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
 
 # Format-Agnostic Video Rendering API
 try:
@@ -968,36 +969,40 @@ except Exception as e:
     logger.warning(f"⚠️  Engagement Control API registration failed: {e}")
 
 # Twitter Posting API (Safari Automation with Full Selector Control)
-try:
-    from api.endpoints import twitter_posting
-    app.include_router(twitter_posting.router, tags=["Twitter Posting"])
-    logger.success("✓ Twitter Posting API registered")
-except Exception as e:
-    logger.warning(f"⚠️  Twitter Posting API registration failed: {e}")
+# DISABLED: Safari automations disabled per user request
+# try:
+#     from api.endpoints import twitter_posting
+#     app.include_router(twitter_posting.router, tags=["Twitter Posting"])
+#     logger.success("✓ Twitter Posting API registered")
+# except Exception as e:
+#     logger.warning(f"⚠️  Twitter Posting API registration failed: {e}")
 
 # Sora Automation API (Video Generation & Usage Tracking)
-try:
-    from api.endpoints import sora_automation
-    app.include_router(sora_automation.router, tags=["Sora Automation"])
-    logger.success("✓ Sora Automation API registered")
-except Exception as e:
-    logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
+# DISABLED: Safari automations disabled per user request
+# try:
+#     from api.endpoints import sora_automation
+#     app.include_router(sora_automation.router, tags=["Sora Automation"])
+#     logger.success("✓ Sora Automation API registered")
+# except Exception as e:
+#     logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
 
 # Daily Automation (AUTO-009: Sora + Twitter scheduling)
-try:
-    from api.endpoints import daily_automation
-    app.include_router(daily_automation.router, tags=["Daily Automation"])
-    logger.success("✓ Daily Automation API registered (AUTO-009)")
-except Exception as e:
-    logger.warning(f"⚠️  Daily Automation API registration failed: {e}")
+# DISABLED: Safari automations disabled per user request
+# try:
+#     from api.endpoints import daily_automation
+#     app.include_router(daily_automation.router, tags=["Daily Automation"])
+#     logger.success("✓ Daily Automation API registered (AUTO-009)")
+# except Exception as e:
+#     logger.warning(f"⚠️  Daily Automation API registration failed: {e}")
 
 # Safari Automation Orchestrator (Unified browser automation)
-try:
-    from api.endpoints import safari_automation
-    app.include_router(safari_automation.router, prefix="/api", tags=["Safari Automation"])
-    logger.success("✓ Safari Automation Orchestrator API registered")
-except Exception as e:
-    logger.warning(f"⚠️  Safari Automation API registration failed: {e}")
+# DISABLED: Safari automations disabled per user request
+# try:
+#     from api.endpoints import safari_automation
+#     app.include_router(safari_automation.router, prefix="/api", tags=["Safari Automation"])
+#     logger.success("✓ Safari Automation Orchestrator API registered")
+# except Exception as e:
+#     logger.warning(f"⚠️  Safari Automation API registration failed: {e}")
 
 # Knowledge Base (Rules, Templates, Playbooks)
 from api.endpoints import knowledge_base
@@ -1215,8 +1220,9 @@ from api.endpoints import youtube_analytics
 app.include_router(youtube_analytics.router, prefix="/api/youtube-analytics", tags=["YouTube Analytics"])
 
 # TikTok Analytics (Safari Automation)
-from api.endpoints import tiktok_analytics
-app.include_router(tiktok_analytics.router, prefix="/api/tiktok-analytics", tags=["TikTok Analytics"])
+# DISABLED: Safari automations disabled per user request
+# from api.endpoints import tiktok_analytics
+# app.include_router(tiktok_analytics.router, prefix="/api/tiktok-analytics", tags=["TikTok Analytics"])
 
 # RapidAPI Comments (TikTok, Instagram, Threads, Facebook)
 from api.endpoints import rapidapi_comments
@@ -1499,12 +1505,13 @@ except Exception as e:
     logger.warning(f"⚠️  Video Formats API registration failed: {e}")
 
 # Sora Browser Automation (Safari automation for video generation)
-try:
-    from api.routes import sora_automation
-    app.include_router(sora_automation.router, tags=["Sora Automation"])
-    logger.success("✓ Sora Automation API registered")
-except Exception as e:
-    logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
+# DISABLED: Safari automations disabled per user request
+# try:
+#     from api.routes import sora_automation
+#     app.include_router(sora_automation.router, tags=["Sora Automation"])
+#     logger.success("✓ Sora Automation API registered")
+# except Exception as e:
+#     logger.warning(f"⚠️  Sora Automation API registration failed: {e}")
 
 # Publishing endpoints
 from api.endpoints import publishing
@@ -1756,9 +1763,10 @@ app.include_router(scheduler.router, tags=["Scheduler"])
 app.include_router(characters.router, tags=["Characters"])
 
 # Safari Session Manager (SSM-001 to SSM-015)
-from api.endpoints import safari_sessions
-app.include_router(safari_sessions.router, tags=["Safari Sessions"])
-logger.success("✓ Safari Session Manager API registered (SSM-001, SSM-002, SSM-003, SSM-004, SSM-005, SSM-007, SSM-015)")
+# DISABLED: Safari automations disabled per user request
+# from api.endpoints import safari_sessions
+# app.include_router(safari_sessions.router, tags=["Safari Sessions"])
+# logger.success("✓ Safari Session Manager API registered (SSM-001, SSM-002, SSM-003, SSM-004, SSM-005, SSM-007, SSM-015)")
 
 # Semantic Search (EMBED-001, EMBED-002)
 from api.endpoints import semantic_search

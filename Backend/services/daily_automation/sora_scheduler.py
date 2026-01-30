@@ -44,6 +44,7 @@ class SoraScheduler:
     MAX_CONCURRENT = 3
     DAILY_CREDITS = 30
     GENERATION_INTERVAL_MINUTES = 30  # Generate every 30 min
+    ENABLED = False  # DISABLED - Set to True to enable Sora automation
     
     def __init__(self, event_bus: Optional[EventBus] = None):
         self.event_bus = event_bus or EventBus.get_instance()
@@ -65,6 +66,9 @@ class SoraScheduler:
         
     async def start(self):
         """Start the scheduler."""
+        if not self.ENABLED:
+            logger.info("⏸️ Sora Scheduler DISABLED - skipping start")
+            return
         if self.running:
             return
         self.running = True

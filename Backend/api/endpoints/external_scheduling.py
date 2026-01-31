@@ -269,6 +269,12 @@ def create_scheduled_post(
     """Create a scheduled post in the database"""
     engine = get_engine()
     
+    # Convert hashtags list to PostgreSQL array format
+    hashtags_array = hashtags if hashtags else []
+    
+    # Format hashtags as PostgreSQL array literal
+    hashtags_pg = "{" + ",".join(f'"{h}"' for h in hashtags_array) + "}" if hashtags_array else "{}"
+    
     with engine.connect() as conn:
         result = conn.execute(text("""
             INSERT INTO scheduled_posts 
@@ -276,7 +282,7 @@ def create_scheduled_post(
              account_id, account_username, platform_account_id, blotato_account_id,
              scheduled_time, scheduled_at, status, source)
             VALUES 
-            (:content_id, :clip_id, :title, :caption, :hashtags, :thumbnail_url, :platform,
+            (:content_id, :clip_id, :title, :caption, CAST(:hashtags AS text[]), :thumbnail_url, :platform,
              :account_id, :account_username, :platform_account_id, :blotato_account_id,
              :scheduled_time, :scheduled_at, 'scheduled', :source)
             RETURNING id
@@ -285,7 +291,7 @@ def create_scheduled_post(
             "clip_id": content_id if is_valid_uuid(content_id) else None,
             "title": title,
             "caption": caption,
-            "hashtags": json.dumps(hashtags) if hashtags else '[]',
+            "hashtags": hashtags_pg,
             "thumbnail_url": thumbnail_url,
             "platform": platform,
             "account_id": account_id,

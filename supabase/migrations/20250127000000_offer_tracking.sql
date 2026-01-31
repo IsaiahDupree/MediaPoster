@@ -48,15 +48,15 @@ CREATE TABLE IF NOT EXISTS offer_traffic (
     clicked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
     -- Additional metadata
-    metadata JSONB DEFAULT '{}',
-
-    -- Indexes for performance
-    INDEX idx_offer_traffic_campaign (utm_campaign),
-    INDEX idx_offer_traffic_clicked_at (clicked_at),
-    INDEX idx_offer_traffic_source (utm_source),
-    INDEX idx_offer_traffic_content (utm_content),
-    INDEX idx_offer_traffic_ip (ip_address)
+    metadata JSONB DEFAULT '{}'
 );
+
+-- Indexes for offer_traffic
+CREATE INDEX IF NOT EXISTS idx_offer_traffic_campaign ON offer_traffic(utm_campaign);
+CREATE INDEX IF NOT EXISTS idx_offer_traffic_clicked_at ON offer_traffic(clicked_at);
+CREATE INDEX IF NOT EXISTS idx_offer_traffic_source ON offer_traffic(utm_source);
+CREATE INDEX IF NOT EXISTS idx_offer_traffic_content ON offer_traffic(utm_content);
+CREATE INDEX IF NOT EXISTS idx_offer_traffic_ip ON offer_traffic(ip_address);
 
 -- Conversions table: Track conversion events (purchases, signups, etc.)
 CREATE TABLE IF NOT EXISTS offer_conversions (
@@ -81,14 +81,14 @@ CREATE TABLE IF NOT EXISTS offer_conversions (
     converted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
     -- Additional conversion data
-    conversion_data JSONB DEFAULT '{}',
-
-    -- Indexes
-    INDEX idx_offer_conversions_campaign (utm_campaign),
-    INDEX idx_offer_conversions_converted_at (converted_at),
-    INDEX idx_offer_conversions_type (conversion_type),
-    INDEX idx_offer_conversions_traffic_id (traffic_id)
+    conversion_data JSONB DEFAULT '{}'
 );
+
+-- Indexes for offer_conversions
+CREATE INDEX IF NOT EXISTS idx_offer_conversions_campaign ON offer_conversions(utm_campaign);
+CREATE INDEX IF NOT EXISTS idx_offer_conversions_converted_at ON offer_conversions(converted_at);
+CREATE INDEX IF NOT EXISTS idx_offer_conversions_type ON offer_conversions(conversion_type);
+CREATE INDEX IF NOT EXISTS idx_offer_conversions_traffic_id ON offer_conversions(traffic_id);
 
 -- Campaign Analytics: Pre-aggregated campaign metrics (updated periodically)
 CREATE TABLE IF NOT EXISTS campaign_analytics (
@@ -122,11 +122,12 @@ CREATE TABLE IF NOT EXISTS campaign_analytics (
     -- Updated timestamp
     calculated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-    -- Indexes
-    INDEX idx_campaign_analytics_campaign (utm_campaign),
-    INDEX idx_campaign_analytics_period (period_start, period_end),
     UNIQUE (utm_campaign, period_start, period_end)
 );
+
+-- Indexes for campaign_analytics
+CREATE INDEX IF NOT EXISTS idx_campaign_analytics_campaign ON campaign_analytics(utm_campaign);
+CREATE INDEX IF NOT EXISTS idx_campaign_analytics_period ON campaign_analytics(period_start, period_end);
 
 -- Function to calculate attribution for conversions
 CREATE OR REPLACE FUNCTION calculate_conversion_attribution()

@@ -238,17 +238,16 @@ async def ingest_video_to_db(video_path: Path, title: str, source_system: str = 
     """Ingest video into MediaPoster database, return video ID"""
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
+            # file_path must be a query parameter, not in JSON body
             response = await client.post(
                 "http://localhost:5555/api/media-db/ingest/file",
-                json={
-                    "file_path": str(video_path),
-                    "title": title,
-                    "source": source_system or "external_api"
-                }
+                params={"file_path": str(video_path)}
             )
             if response.status_code == 200:
                 data = response.json()
                 return data.get("video_id") or data.get("id")
+            else:
+                logger.warning(f"Ingest returned {response.status_code}: {response.text[:200]}")
     except Exception as e:
         logger.error(f"Failed to ingest video: {e}")
     
@@ -264,7 +263,8 @@ def create_scheduled_post(
     caption: str,
     hashtags: List[str],
     source: str = "external_api",
-    thumbnail_url: str = None
+    thumbnail_url: str = None,
+    video_path: str = None
 ) -> dict:
     """Create a scheduled post in the database"""
     engine = get_engine()
@@ -280,11 +280,11 @@ def create_scheduled_post(
             INSERT INTO scheduled_posts 
             (content_id, clip_id, title, caption, hashtags, thumbnail_url, platform,
              account_id, account_username, platform_account_id, blotato_account_id,
-             scheduled_time, scheduled_at, status, source)
+             scheduled_time, scheduled_at, status, source, video_path)
             VALUES 
             (:content_id, :clip_id, :title, :caption, CAST(:hashtags AS text[]), :thumbnail_url, :platform,
              :account_id, :account_username, :platform_account_id, :blotato_account_id,
-             :scheduled_time, :scheduled_at, 'scheduled', :source)
+             :scheduled_time, :scheduled_at, 'scheduled', :source, :video_path)
             RETURNING id
         """), {
             "content_id": content_id,
@@ -301,6 +301,7 @@ def create_scheduled_post(
             "scheduled_time": scheduled_at,
             "scheduled_at": scheduled_at,
             "source": source,
+            "video_path": video_path,
         })
         conn.commit()
         post_id = result.fetchone()[0]
@@ -390,7 +391,8 @@ async def submit_video(
                 caption=target.caption or submission.caption,
                 hashtags=submission.hashtags,
                 source=submission.source_system or "external_api",
-                thumbnail_url=submission.thumbnail_url
+                thumbnail_url=submission.thumbnail_url,
+                video_path=str(video_path)
             )
             scheduled_posts.append(post)
             logger.info(f"Scheduled {target.platform} post for {target.scheduled_at}")
@@ -457,7 +459,8 @@ async def bulk_schedule_videos(request: BulkScheduleRequest):
                 title=title,
                 caption=caption,
                 hashtags=request.hashtags,
-                source=request.source_system or "external_bulk"
+                source=request.source_system or "external_bulk",
+                video_path=str(video_path)
             )
             scheduled_posts.append(post)
             logger.info(f"Scheduled video {i+1}/{len(request.video_urls)} for {post_time}")
@@ -667,7 +670,8 @@ async def smart_schedule_video(request: SmartScheduleRequest):
                 caption=request.caption,
                 hashtags=request.hashtags,
                 source=request.source_system or "smart_schedule",
-                thumbnail_url=None
+                thumbnail_url=None,
+                video_path=str(video_path)
             )
             post["allocated_time"] = optimal_time.isoformat()
             scheduled_posts.append(post)
@@ -758,7 +762,8 @@ async def smart_bulk_schedule(request: SmartBulkRequest):
                     title=video["title"],
                     caption=video.get("caption", "") + " " + " ".join(request.hashtags),
                     hashtags=request.hashtags,
-                    source=request.source_system or "smart_bulk"
+                    source=request.source_system or "smart_bulk",
+                    video_path=str(video_path)
                 )
                 post["allocated_time"] = allocated_time.isoformat()
                 scheduled_posts.append(post)

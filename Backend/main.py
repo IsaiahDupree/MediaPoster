@@ -1206,6 +1206,10 @@ app.include_router(data_hydration.router, prefix="/api/hydration", tags=["Data H
 from api.endpoints import schedule
 app.include_router(schedule.router, prefix="/api/schedule", tags=["Content Schedule"])
 
+# External Scheduling API (for external servers to submit videos)
+from api.endpoints import external_scheduling
+app.include_router(external_scheduling.router, tags=["External Scheduling"])
+
 # Post Scheduler (Background Worker)
 from api.endpoints import post_scheduler_api
 app.include_router(post_scheduler_api.router, prefix="/api/scheduler", tags=["Post Scheduler"])

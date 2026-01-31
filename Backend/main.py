@@ -1189,6 +1189,14 @@ try:
 except Exception as e:
     logger.warning(f"⚠️  Trend Flash API registration failed: {e}")
 
+# Video Ready Webhooks (AI analyze + publish to YouTube/TikTok)
+try:
+    from services.video_ready_pipeline import create_webhook_router
+    app.include_router(create_webhook_router(), prefix="/api", tags=["Video Ready Webhooks"])
+    logger.success("✓ Video Ready Webhook API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Video Ready Webhook API registration failed: {e}")
+
 # Data Hydration (Centralized Data for All Pages)
 from api.endpoints import data_hydration
 app.include_router(data_hydration.router, prefix="/api/hydration", tags=["Data Hydration"])

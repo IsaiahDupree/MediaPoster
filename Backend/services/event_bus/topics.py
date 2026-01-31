@@ -420,6 +420,8 @@ class Topics:
     SYSTEM_HEALTH_CHECK = "system.health.check"           # Health check event
     WORKER_STARTED = "worker.started"                     # Worker came online
     WORKER_STOPPED = "worker.stopped"                     # Worker went offline
+    SERVICE_STARTED = "service.started"                   # Generic service started
+    SERVICE_STOPPED = "service.stopped"                   # Generic service stopped
 
     # =========================================================================
     # SLEEP/WAKE MODE (CPU Efficiency)

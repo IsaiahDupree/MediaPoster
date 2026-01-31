@@ -80,7 +80,7 @@ class ContentGenerationPipeline:
     Maintains complete attribution chain: content → prompt → template → offer → ICP.
 
     Usage:
-        pipeline = ContentGenerationPipeline()
+        pipeline = ContentGenerationPipeline.get_instance()
         request = GenerationRequest(
             template_id="tpl_problem_aware_001",
             offer_id="offer_keyword_radar",
@@ -92,6 +92,15 @@ class ContentGenerationPipeline:
         )
         result = await pipeline.generate(request)
     """
+    
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls) -> "ContentGenerationPipeline":
+        """Get singleton instance of ContentGenerationPipeline"""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
     def __init__(self):
         """Initialize the content generation pipeline"""

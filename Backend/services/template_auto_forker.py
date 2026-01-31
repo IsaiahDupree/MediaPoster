@@ -503,6 +503,10 @@ class TemplateAutoForker:
         """Identify and fork winning templates"""
         logger.info("🔍 Checking for templates to auto-fork...")
 
+        if async_session_maker is None:
+            logger.warning("Database not initialized, skipping auto-fork check")
+            return
+
         async with async_session_maker() as session:
             # Get all active templates with sufficient usage
             result = await session.execute(

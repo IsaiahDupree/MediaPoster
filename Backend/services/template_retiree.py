@@ -134,6 +134,10 @@ class TemplateRetiree:
         """
         candidates = []
 
+        if async_session_maker is None:
+            logger.warning("Database not initialized, skipping retirement check")
+            return candidates
+
         async with async_session_maker() as session:
             # Get all active templates with sufficient usage
             result = await session.execute(
@@ -192,6 +196,10 @@ class TemplateRetiree:
         Returns:
             True if retired successfully, False otherwise
         """
+        if async_session_maker is None:
+            logger.warning("Database not initialized, cannot retire template")
+            return False
+
         async with async_session_maker() as session:
             try:
                 # Load template
@@ -337,6 +345,10 @@ class TemplateRetiree:
 
             # Get current allocations
             allocations = await self.bandit_allocator.compute_allocations()
+
+            if async_session_maker is None:
+                logger.warning("Database not initialized, skipping leaderboard handler")
+                return
 
             async with async_session_maker() as session:
                 # Get all active templates

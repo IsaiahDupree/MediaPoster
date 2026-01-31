@@ -189,6 +189,10 @@ class BanditAllocator:
 
         logger.info("🎰 Computing Thompson Sampling allocations...")
 
+        if async_session_maker is None:
+            logger.warning("Database not initialized, skipping allocation compute")
+            return {}
+
         async with async_session_maker() as session:
             # Build query for active templates
             query = select(ContentTemplate).where(ContentTemplate.is_active == True)

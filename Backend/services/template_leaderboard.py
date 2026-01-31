@@ -144,6 +144,10 @@ class TemplateLeaderboard:
         """
         logger.info("🔄 Recomputing template rankings...")
 
+        if async_session_maker is None:
+            logger.warning("Database not initialized, skipping recompute")
+            return {"updated": 0, "templates": [], "error": "db_not_initialized"}
+
         async with async_session_maker() as session:
             # Get all active templates
             result = await session.execute(

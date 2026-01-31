@@ -438,14 +438,15 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️  Content Ops Workers failed to start: {e}")
 
     # Start Daily Automation Manager (AUTO-009: Sora + Twitter scheduling)
+    # DISABLED: Safari automations disabled on backend port 5555 per user request
     daily_automation = None
-    try:
-        from services.daily_automation import DailyAutomationManager
-        daily_automation = DailyAutomationManager.get_instance(event_bus)
-        await daily_automation.initialize()
-        logger.success("✓ Daily Automation Manager started (AUTO-009)")
-    except Exception as e:
-        logger.warning(f"⚠️  Daily Automation Manager failed to start: {e}")
+    # try:
+    #     from services.daily_automation import DailyAutomationManager
+    #     daily_automation = DailyAutomationManager.get_instance(event_bus)
+    #     await daily_automation.initialize()
+    #     logger.success("✓ Daily Automation Manager started (AUTO-009)")
+    # except Exception as e:
+    #     logger.warning(f"⚠️  Daily Automation Manager failed to start: {e}")
 
     yield
     

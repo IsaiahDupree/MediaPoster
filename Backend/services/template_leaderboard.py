@@ -32,7 +32,7 @@ from loguru import logger
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.connection import async_session_maker
+import database.connection as db_conn
 from database.models import ContentTemplate, Touchpoint
 from services.event_bus import EventBus, Topics
 
@@ -144,11 +144,11 @@ class TemplateLeaderboard:
         """
         logger.info("🔄 Recomputing template rankings...")
 
-        if async_session_maker is None:
+        if db_conn.async_session_maker is None:
             logger.warning("Database not initialized, skipping recompute")
             return {"updated": 0, "templates": [], "error": "db_not_initialized"}
 
-        async with async_session_maker() as session:
+        async with db_conn.async_session_maker() as session:
             # Get all active templates
             result = await session.execute(
                 select(ContentTemplate).where(ContentTemplate.is_active == True)

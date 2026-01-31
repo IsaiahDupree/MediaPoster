@@ -25,7 +25,7 @@ from loguru import logger
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.connection import async_session_maker
+import database.connection as db_conn
 from database.models import ContentTemplate
 from services.event_bus import EventBus, Topics
 from services.bandit_allocator import BanditAllocator
@@ -134,11 +134,11 @@ class TemplateRetiree:
         """
         candidates = []
 
-        if async_session_maker is None:
+        if db_conn.async_session_maker is None:
             logger.warning("Database not initialized, skipping retirement check")
             return candidates
 
-        async with async_session_maker() as session:
+        async with db_conn.async_session_maker() as session:
             # Get all active templates with sufficient usage
             result = await session.execute(
                 select(ContentTemplate).where(
@@ -196,11 +196,11 @@ class TemplateRetiree:
         Returns:
             True if retired successfully, False otherwise
         """
-        if async_session_maker is None:
+        if db_conn.async_session_maker is None:
             logger.warning("Database not initialized, cannot retire template")
             return False
 
-        async with async_session_maker() as session:
+        async with db_conn.async_session_maker() as session:
             try:
                 # Load template
                 result = await session.execute(
@@ -346,11 +346,11 @@ class TemplateRetiree:
             # Get current allocations
             allocations = await self.bandit_allocator.compute_allocations()
 
-            if async_session_maker is None:
+            if db_conn.async_session_maker is None:
                 logger.warning("Database not initialized, skipping leaderboard handler")
                 return
 
-            async with async_session_maker() as session:
+            async with db_conn.async_session_maker() as session:
                 # Get all active templates
                 result = await session.execute(
                     select(ContentTemplate).where(

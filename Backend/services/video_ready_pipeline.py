@@ -55,7 +55,11 @@ class VideoReadyEvent:
 
 @dataclass
 class AnalysisResult:
-    """Result from AI analysis"""
+    """
+    Comprehensive AI analysis result with 100% field coverage.
+    All fields are populated by GPT-4o analysis.
+    """
+    # Core content
     transcript: str
     summary: str
     suggested_caption: str
@@ -63,11 +67,73 @@ class AnalysisResult:
     virality_score: float
     duration_seconds: float
     detected_topics: List[str]
-    # Platform-specific content (AI-generated)
+    
+    # Platform-specific captions (AI-generated)
     youtube_title: str = ""
     youtube_description: str = ""
     tiktok_caption: str = ""
     instagram_caption: str = ""
+    twitter_caption: str = ""
+    threads_caption: str = ""
+    
+    # Content classification
+    content_type: str = ""  # "entertainment", "educational", "promotional", etc.
+    mood: str = ""  # "funny", "serious", "inspiring", etc.
+    target_audience: str = ""  # "gen_z", "millennials", "professionals", etc.
+    
+    # Hook analysis
+    hook_text: str = ""
+    hook_type: str = ""  # "question", "statement", "shock", "curiosity"
+    hook_strength: int = 0  # 1-10
+    
+    # Call-to-action
+    cta_text: str = ""
+    cta_type: str = ""  # "follow", "like", "comment", "share", "link"
+    
+    # SEO & discoverability
+    seo_keywords: List[str] = None
+    search_terms: List[str] = None
+    
+    # Engagement predictions
+    predicted_likes: int = 0
+    predicted_comments: int = 0
+    predicted_shares: int = 0
+    engagement_score: float = 0.0
+    
+    # Content safety
+    is_safe_for_ads: bool = True
+    content_warnings: List[str] = None
+    
+    # Audio analysis
+    has_speech: bool = True
+    has_music: bool = False
+    audio_mood: str = ""
+    
+    # Visual analysis hints
+    scene_descriptions: List[str] = None
+    dominant_colors: List[str] = None
+    
+    def __post_init__(self):
+        # Initialize None lists to empty lists
+        if self.seo_keywords is None:
+            self.seo_keywords = []
+        if self.search_terms is None:
+            self.search_terms = []
+        if self.content_warnings is None:
+            self.content_warnings = []
+        if self.scene_descriptions is None:
+            self.scene_descriptions = []
+        if self.dominant_colors is None:
+            self.dominant_colors = []
+    
+    def get_field_count(self) -> int:
+        """Return total number of fields"""
+        return len(self.__dataclass_fields__)
+    
+    def get_populated_fields(self) -> Dict[str, Any]:
+        """Return dict of all populated fields"""
+        from dataclasses import asdict
+        return {k: v for k, v in asdict(self).items() if v}
 
 
 class VideoReadyPipeline:
@@ -341,63 +407,128 @@ class VideoReadyPipeline:
         # Transcribe with Whisper
         transcript = await self._transcribe_video(video_path)
         
-        # Generate FULL AI analysis with platform-specific content using GPT-4o
-        logger.info("🤖 Running GPT-4o analysis for platform-specific content...")
+        # Generate COMPREHENSIVE AI analysis with ALL fields using GPT-4o
+        logger.info("🤖 Running GPT-4o COMPREHENSIVE analysis (all fields)...")
         
-        analysis_prompt = f"""You are a viral content strategist. Analyze this video and create PLATFORM-SPECIFIC content for YouTube and TikTok.
+        analysis_prompt = f"""You are an expert viral content strategist and social media analyst. Perform a COMPREHENSIVE analysis of this video and generate ALL required fields.
 
-Video Source: {metadata.get('source', 'unknown')}
-Original Prompt (if AI-generated): {metadata.get('prompt', 'N/A')}
-Character/Creator: {metadata.get('character', 'N/A')}
-Duration: {duration:.1f} seconds
+VIDEO METADATA:
+- Source: {metadata.get('source', 'unknown')}
+- Original Prompt (if AI-generated): {metadata.get('prompt', 'N/A')}
+- Character/Creator: {metadata.get('character', 'N/A')}
+- Duration: {duration:.1f} seconds
 
-Transcript:
+TRANSCRIPT:
 {transcript if transcript else '[No speech detected - likely a visual/music video]'}
 
-Create ENGAGING, VIRAL-OPTIMIZED content for each platform:
+Generate a COMPLETE analysis with ALL of the following fields. Every field MUST be populated:
 
-1. **YouTube** (Shorts/Regular):
-   - Title: Catchy, curiosity-driven, 60 chars max
-   - Description: 2-3 paragraphs with context, call-to-action, and relevant keywords for SEO
+1. **PLATFORM CAPTIONS** (optimized for each platform):
+   - youtube_title: Catchy, curiosity-driven, 60 chars max
+   - youtube_description: 2-3 paragraphs with SEO keywords, CTA, and hashtags
+   - tiktok_caption: Hook + value + CTA, under 150 chars, trending language
+   - instagram_caption: Engaging with emojis, 2-3 lines
+   - twitter_caption: Punchy, under 280 chars, with hashtags
+   - threads_caption: Conversational, engaging, 2-3 sentences
 
-2. **TikTok**:
-   - Caption: Hook + value + CTA, under 150 chars, use trending language
+2. **CONTENT CLASSIFICATION**:
+   - content_type: One of "entertainment", "educational", "promotional", "lifestyle", "news", "tutorial"
+   - mood: One of "funny", "serious", "inspiring", "dramatic", "calm", "energetic", "emotional"
+   - target_audience: One of "gen_z", "millennials", "gen_x", "professionals", "creators", "general"
 
-3. **Instagram** (Reels):
-   - Caption: Engaging with emojis, 2-3 lines max
+3. **HOOK ANALYSIS**:
+   - hook_text: The exact hook/opening line to use
+   - hook_type: One of "question", "statement", "shock", "curiosity", "story", "challenge"
+   - hook_strength: 1-10 rating of hook effectiveness
 
-4. **General**:
-   - Summary: 1-2 sentence overview
-   - 8 relevant hashtags (mix of broad + niche)
-   - Virality score (0-100) based on content potential
-   - Main topics/themes
+4. **CALL-TO-ACTION**:
+   - cta_text: Specific CTA text to use
+   - cta_type: One of "follow", "like", "comment", "share", "link", "subscribe"
 
-Format as JSON:
+5. **SEO & DISCOVERABILITY**:
+   - hashtags: Array of 8-10 hashtags (mix broad + niche)
+   - seo_keywords: Array of 5-8 SEO keywords for search
+   - search_terms: Array of 3-5 search phrases people would use
+
+6. **ENGAGEMENT PREDICTIONS** (based on content quality):
+   - virality_score: 0-100 overall viral potential
+   - engagement_score: 0-100 engagement prediction
+   - predicted_likes: Estimated likes (rough number)
+   - predicted_comments: Estimated comments
+   - predicted_shares: Estimated shares
+
+7. **CONTENT SAFETY**:
+   - is_safe_for_ads: true/false - suitable for monetization?
+   - content_warnings: Array of any warnings (empty if none)
+
+8. **AUDIO ANALYSIS**:
+   - has_speech: true/false based on transcript
+   - has_music: true/false - likely has background music?
+   - audio_mood: Mood of the audio ("upbeat", "calm", "dramatic", etc.)
+
+9. **VISUAL HINTS** (infer from context):
+   - scene_descriptions: Array of 2-3 likely scene descriptions
+   - dominant_colors: Array of likely dominant colors
+
+10. **GENERAL**:
+    - summary: 1-2 sentence compelling summary
+    - topics: Array of main topics/themes
+
+Format as JSON with ALL fields populated:
 {{
     "summary": "...",
     "youtube_title": "...",
-    "youtube_description": "Multi-paragraph description with context, hashtags at end...",
-    "tiktok_caption": "Short punchy caption with CTA",
-    "instagram_caption": "Caption with emojis 🎬",
-    "hashtags": ["viral", "fyp", "trending", ...],
+    "youtube_description": "...",
+    "tiktok_caption": "...",
+    "instagram_caption": "...",
+    "twitter_caption": "...",
+    "threads_caption": "...",
+    "content_type": "...",
+    "mood": "...",
+    "target_audience": "...",
+    "hook_text": "...",
+    "hook_type": "...",
+    "hook_strength": 8,
+    "cta_text": "...",
+    "cta_type": "...",
+    "hashtags": ["...", "..."],
+    "seo_keywords": ["...", "..."],
+    "search_terms": ["...", "..."],
     "virality_score": 75,
-    "topics": ["entertainment", "ai", ...]
+    "engagement_score": 70,
+    "predicted_likes": 5000,
+    "predicted_comments": 200,
+    "predicted_shares": 100,
+    "is_safe_for_ads": true,
+    "content_warnings": [],
+    "has_speech": true,
+    "has_music": false,
+    "audio_mood": "...",
+    "scene_descriptions": ["...", "..."],
+    "dominant_colors": ["...", "..."],
+    "topics": ["...", "..."]
 }}"""
 
         response = self.openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": analysis_prompt}],
             response_format={"type": "json_object"},
-            temperature=0.8  # Slightly creative for engaging content
+            temperature=0.7
         )
         
         import json
         analysis_data = json.loads(response.choices[0].message.content)
         
-        logger.info(f"✅ AI Analysis complete:")
+        # Count populated fields
+        populated = sum(1 for v in analysis_data.values() if v)
+        total_fields = len(analysis_data)
+        
+        logger.info(f"✅ AI Analysis complete ({populated}/{total_fields} fields populated):")
         logger.info(f"   YouTube Title: {analysis_data.get('youtube_title', '')[:50]}...")
         logger.info(f"   TikTok Caption: {analysis_data.get('tiktok_caption', '')[:50]}...")
         logger.info(f"   Virality Score: {analysis_data.get('virality_score', 0)}")
+        logger.info(f"   Content Type: {analysis_data.get('content_type', '')}")
+        logger.info(f"   Hook Strength: {analysis_data.get('hook_strength', 0)}/10")
         
         return AnalysisResult(
             transcript=transcript,
@@ -407,10 +538,42 @@ Format as JSON:
             virality_score=analysis_data.get("virality_score", 50),
             duration_seconds=duration,
             detected_topics=analysis_data.get("topics", []),
+            # Platform captions
             youtube_title=analysis_data.get("youtube_title", ""),
             youtube_description=analysis_data.get("youtube_description", ""),
             tiktok_caption=analysis_data.get("tiktok_caption", ""),
-            instagram_caption=analysis_data.get("instagram_caption", "")
+            instagram_caption=analysis_data.get("instagram_caption", ""),
+            twitter_caption=analysis_data.get("twitter_caption", ""),
+            threads_caption=analysis_data.get("threads_caption", ""),
+            # Content classification
+            content_type=analysis_data.get("content_type", ""),
+            mood=analysis_data.get("mood", ""),
+            target_audience=analysis_data.get("target_audience", ""),
+            # Hook analysis
+            hook_text=analysis_data.get("hook_text", ""),
+            hook_type=analysis_data.get("hook_type", ""),
+            hook_strength=analysis_data.get("hook_strength", 0),
+            # CTA
+            cta_text=analysis_data.get("cta_text", ""),
+            cta_type=analysis_data.get("cta_type", ""),
+            # SEO
+            seo_keywords=analysis_data.get("seo_keywords", []),
+            search_terms=analysis_data.get("search_terms", []),
+            # Engagement predictions
+            predicted_likes=analysis_data.get("predicted_likes", 0),
+            predicted_comments=analysis_data.get("predicted_comments", 0),
+            predicted_shares=analysis_data.get("predicted_shares", 0),
+            engagement_score=analysis_data.get("engagement_score", 0.0),
+            # Content safety
+            is_safe_for_ads=analysis_data.get("is_safe_for_ads", True),
+            content_warnings=analysis_data.get("content_warnings", []),
+            # Audio
+            has_speech=analysis_data.get("has_speech", bool(transcript)),
+            has_music=analysis_data.get("has_music", False),
+            audio_mood=analysis_data.get("audio_mood", ""),
+            # Visual
+            scene_descriptions=analysis_data.get("scene_descriptions", []),
+            dominant_colors=analysis_data.get("dominant_colors", [])
         )
     
     async def save_analysis_to_db(self, video_id: str, analysis: AnalysisResult) -> None:

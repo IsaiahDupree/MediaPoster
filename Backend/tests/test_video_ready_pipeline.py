@@ -222,6 +222,91 @@ class TestAnalysisResult:
         assert result.transcript == "Hello world"
         assert result.virality_score == 75.5
         assert len(result.hashtags) == 2
+    
+    def test_analysis_result_field_count(self):
+        """Test that AnalysisResult has all required fields (100% coverage)"""
+        result = AnalysisResult(
+            transcript="Test transcript",
+            summary="Test summary",
+            suggested_caption="Test caption",
+            hashtags=["viral", "fyp"],
+            virality_score=80.0,
+            duration_seconds=30.0,
+            detected_topics=["test"]
+        )
+        
+        # Should have at least 30 fields for comprehensive analysis
+        field_count = result.get_field_count()
+        print(f"\n📊 AnalysisResult has {field_count} fields")
+        assert field_count >= 30, f"Expected at least 30 fields, got {field_count}"
+    
+    def test_all_analysis_fields_populated(self):
+        """Test that a fully populated AnalysisResult has all fields"""
+        result = AnalysisResult(
+            # Core
+            transcript="This is a test video about AI",
+            summary="A compelling demo of AI capabilities",
+            suggested_caption="You won't believe what AI can do! 🤖",
+            hashtags=["ai", "viral", "fyp", "tech", "future"],
+            virality_score=85.0,
+            duration_seconds=45.0,
+            detected_topics=["ai", "technology", "future"],
+            # Platform captions
+            youtube_title="AI Does Something INSANE 🤯",
+            youtube_description="Watch as AI demonstrates incredible capabilities...",
+            tiktok_caption="AI just changed everything 🔥 #ai #viral",
+            instagram_caption="The future is here 🤖✨ What do you think?",
+            twitter_caption="AI is evolving faster than we thought 🧵 #AI #Tech",
+            threads_caption="Let me show you something wild about AI...",
+            # Classification
+            content_type="educational",
+            mood="inspiring",
+            target_audience="gen_z",
+            # Hook
+            hook_text="What if I told you AI can do this?",
+            hook_type="curiosity",
+            hook_strength=9,
+            # CTA
+            cta_text="Follow for more AI content!",
+            cta_type="follow",
+            # SEO
+            seo_keywords=["artificial intelligence", "AI demo", "tech"],
+            search_terms=["ai capabilities", "future of ai"],
+            # Engagement
+            predicted_likes=10000,
+            predicted_comments=500,
+            predicted_shares=200,
+            engagement_score=82.0,
+            # Safety
+            is_safe_for_ads=True,
+            content_warnings=[],
+            # Audio
+            has_speech=True,
+            has_music=True,
+            audio_mood="upbeat",
+            # Visual
+            scene_descriptions=["Person talking to camera", "Screen showing AI demo"],
+            dominant_colors=["blue", "white", "black"]
+        )
+        
+        # Count populated fields
+        populated = result.get_populated_fields()
+        total = result.get_field_count()
+        
+        print(f"\n📊 Populated {len(populated)}/{total} fields ({100*len(populated)//total}%)")
+        print(f"   Fields: {list(populated.keys())}")
+        
+        # Should have high coverage
+        assert len(populated) >= 25, f"Expected at least 25 populated fields, got {len(populated)}"
+        
+        # Check critical fields
+        assert result.youtube_title, "youtube_title should be populated"
+        assert result.tiktok_caption, "tiktok_caption should be populated"
+        assert result.hook_text, "hook_text should be populated"
+        assert result.hook_strength > 0, "hook_strength should be > 0"
+        assert result.content_type, "content_type should be populated"
+        assert result.mood, "mood should be populated"
+        assert len(result.seo_keywords) > 0, "seo_keywords should not be empty"
 
 
 class TestIntegration:

@@ -131,9 +131,14 @@ class AnalysisResult:
         return len(self.__dataclass_fields__)
     
     def get_populated_fields(self) -> Dict[str, Any]:
-        """Return dict of all populated fields"""
+        """Return dict of all populated fields (includes empty lists as 'populated')"""
         from dataclasses import asdict
-        return {k: v for k, v in asdict(self).items() if v}
+        result = {}
+        for k, v in asdict(self).items():
+            # Count as populated if: truthy, zero, False, or empty list (intentional)
+            if v or v == 0 or v is False or isinstance(v, list):
+                result[k] = v
+        return result
 
 
 class VideoReadyPipeline:

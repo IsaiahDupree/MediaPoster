@@ -86,6 +86,58 @@ async def check_blotato() -> dict:
         return {"status": "error", "error": str(e)}
 
 
+async def check_safari_automation() -> dict:
+    """Check Safari Automation service availability (ports 7070/7071)."""
+    import time
+    try:
+        start_time = time.time()
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # Check Control API health
+            response = await client.get("http://localhost:7070/health")
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            if response.status_code == 200:
+                health_data = response.json()
+                
+                # Also check readiness
+                ready_response = await client.get("http://localhost:7070/ready")
+                ready_data = ready_response.json() if ready_response.status_code == 200 else {}
+                
+                # Get telemetry stats
+                stats_response = await client.get("http://localhost:7070/v1/telemetry/stats")
+                stats_data = stats_response.json() if stats_response.status_code == 200 else {}
+                
+                return {
+                    "status": "healthy",
+                    "latency_ms": latency_ms,
+                    "control_port": 7070,
+                    "telemetry_port": 7071,
+                    "ready": ready_data.get("ready", False),
+                    "checks": ready_data.get("checks", {}),
+                    "telemetry": {
+                        "subscribers": stats_data.get("subscribers", 0),
+                        "events_stored": stats_data.get("events_stored", 0)
+                    }
+                }
+            else:
+                return {
+                    "status": "unhealthy",
+                    "error": f"Status {response.status_code}",
+                    "latency_ms": latency_ms
+                }
+    except httpx.ConnectError:
+        return {
+            "status": "offline",
+            "error": "Safari Automation service not running (port 7070)",
+            "help": "Start with: cd 'Safari Automation/packages/protocol' && npm start"
+        }
+    except asyncio.TimeoutError:
+        return {"status": "unhealthy", "error": "Timeout connecting to Safari Automation"}
+    except Exception as e:
+        logger.warning(f"Safari Automation health check failed: {e}")
+        return {"status": "unhealthy", "error": str(e)}
+
+
 @router.get("")
 async def health_check():
     """Basic health check - returns 200 if server is running."""
@@ -217,13 +269,14 @@ async def detailed_health_check():
     - Event Bus
     - Storage
     - Workers (Post Scheduler, Sleep Mode, CPU Monitor, etc.)
+    - Safari Automation Service (ports 7070/7071)
     """
     # Correlation ID will be in response headers from middleware
     correlation_id = str(uuid.uuid4())
     checks = {}
 
     # Run checks in parallel
-    db_check, openai_check, rapidapi_check, blotato_check, event_bus_check, storage_check, workers_check = await asyncio.gather(
+    db_check, openai_check, rapidapi_check, blotato_check, event_bus_check, storage_check, workers_check, safari_check = await asyncio.gather(
         check_database(),
         check_openai(),
         check_rapidapi(),
@@ -231,6 +284,7 @@ async def detailed_health_check():
         check_event_bus(),
         check_storage(),
         check_workers(),
+        check_safari_automation(),
         return_exceptions=True
     )
     
@@ -242,6 +296,7 @@ async def detailed_health_check():
     checks["event_bus"] = event_bus_check if isinstance(event_bus_check, dict) else {"status": "error", "error": str(event_bus_check)}
     checks["storage"] = storage_check if isinstance(storage_check, dict) else {"status": "error", "error": str(storage_check)}
     checks["workers"] = workers_check if isinstance(workers_check, dict) else {"status": "error", "error": str(workers_check)}
+    checks["safari_automation"] = safari_check if isinstance(safari_check, dict) else {"status": "error", "error": str(safari_check)}
 
     # Determine overall status
     critical_services = ["database", "event_bus", "workers"]
@@ -370,3 +425,76 @@ async def verify_startup():
                 "error": str(e)
             }
         )
+
+
+@router.get("/safari-automation")
+async def safari_automation_health():
+    """
+    Check Safari Automation service status.
+    
+    The Safari Automation service runs on:
+    - Port 7070: Control API (HTTP/REST)
+    - Port 7071: Telemetry Stream (WebSocket)
+    
+    Returns detailed status including:
+    - Service health and latency
+    - Readiness checks (database, safari, selectors)
+    - Telemetry stats (subscribers, events)
+    """
+    check = await check_safari_automation()
+    
+    return {
+        "service": "safari_automation",
+        "timestamp": datetime.utcnow().isoformat(),
+        "control_url": "http://localhost:7070",
+        "telemetry_url": "ws://localhost:7071",
+        **check
+    }
+
+
+@router.get("/safari-automation/commands")
+async def safari_automation_commands():
+    """
+    List recent Safari Automation commands.
+    
+    Returns the status of commands submitted to the Safari Automation service,
+    including Sora video generation and watermark removal.
+    """
+    try:
+        from services.safari_automation_client import SafariAutomationClient
+        
+        client = SafariAutomationClient()
+        
+        if not client.is_healthy():
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "service_unavailable",
+                    "error": "Safari Automation service is not running",
+                    "help": "Start with: cd 'Safari Automation/packages/protocol' && npm start"
+                }
+            )
+        
+        commands = client.list_commands()
+        clean_videos = client.list_clean_videos()
+        
+        return {
+            "status": "ok",
+            "timestamp": datetime.utcnow().isoformat(),
+            "commands": {
+                "total": len(commands),
+                "recent": commands[:10]
+            },
+            "watermark_free_videos": {
+                "total": len(clean_videos),
+                "videos": clean_videos[:10]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Safari Automation commands check failed: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.utcnow().isoformat(),
+            "error": str(e)
+        }

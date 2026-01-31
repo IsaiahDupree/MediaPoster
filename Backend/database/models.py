@@ -2446,7 +2446,7 @@ class CommunityInboxMessage(Base):
     response_time_minutes = Column(Integer)
     
     # Relationships
-    workspace = relationship("Workspace")
+    # workspace = relationship("Workspace")  # TODO: Create Workspace model when needed
     author_person = relationship("Person", foreign_keys=[author_person_id])
     response_author = relationship("Person", foreign_keys=[response_author_id])
     assigned_to = relationship("Person", foreign_keys=[assigned_to_user_id])
@@ -2498,7 +2498,7 @@ class InboxConversation(Base):
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
-    workspace = relationship("Workspace")
+    # workspace = relationship("Workspace")  # TODO: Create Workspace model when needed
     author_person = relationship("Person")
     root_message = relationship("CommunityInboxMessage", foreign_keys=[root_message_id])
     
@@ -2551,7 +2551,7 @@ class InboxAutoReplyRule(Base):
     last_triggered_at = Column(TIMESTAMP(timezone=True))
     
     # Relationships
-    workspace = relationship("Workspace")
+    # workspace = relationship("Workspace")  # TODO: Create Workspace model when needed
     
     # Indexes
     __table_args__ = (
@@ -2603,7 +2603,7 @@ class InboxAnalytics(Base):
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
-    workspace = relationship("Workspace")
+    # workspace = relationship("Workspace")  # TODO: Create Workspace model when needed
     
     # Indexes
     __table_args__ = (
@@ -2634,7 +2634,7 @@ class InboxResponseTemplate(Base):
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    workspace = relationship("Workspace")
+    # workspace = relationship("Workspace")  # TODO: Create Workspace model when needed
 
     # Indexes
     __table_args__ = (
@@ -2670,7 +2670,7 @@ class ContentAnalysis(Base):
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    workspace = relationship("Workspace")
+    # workspace = relationship("Workspace")  # TODO: Create Workspace model when needed
 
     # Indexes
     __table_args__ = (

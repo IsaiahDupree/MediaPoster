@@ -53,6 +53,10 @@ class StartPipelineRequest(BaseModel):
         }
 
 
+# Alias for backwards compatibility
+RunPipelineRequest = StartPipelineRequest
+
+
 class PipelineStatusResponse(BaseModel):
     """Pipeline status response."""
 

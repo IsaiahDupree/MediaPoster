@@ -22,11 +22,23 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from uuid import uuid4
 import os
+from enum import Enum
 
 from services.event_bus import EventBus, Event, Topics
 from services.content_analyzer import ContentAnalyzer
 
 logger = logging.getLogger(__name__)
+
+
+class PipelineStatus(Enum):
+    """Enum for pipeline status values."""
+    INITIALIZING = "initializing"
+    GENERATING_VIDEO = "generating_video"
+    ANALYZING = "analyzing"
+    PUBLISHING = "publishing"
+    SCHEDULING_TWEETS = "scheduling_tweets"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class PipelineConfig:

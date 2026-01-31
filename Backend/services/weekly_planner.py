@@ -299,24 +299,23 @@ class WeeklyPlanner:
                 # Get all posts from last N days with metrics
                 result = conn.execute(text("""
                     SELECT
-                        sp.template_id,
-                        sp.topic,
-                        sp.content_type,
-                        sp.awareness_level,
-                        EXTRACT(HOUR FROM sp.scheduled_at) as post_hour,
+                        pc.id as template_id,
+                        pc.title as topic,
+                        pc.platform as content_type,
+                        'general' as awareness_level,
+                        EXTRACT(HOUR FROM pc.posted_at) as post_hour,
                         pc.views,
                         pc.likes,
                         pc.comments,
                         pc.shares,
                         pc.engagement_rate,
                         pc.platform
-                    FROM scheduled_posts sp
-                    JOIN posted_content pc ON pc.platform_post_id = sp.platform_post_id
+                    FROM posted_content pc
                     WHERE
-                        sp.scheduled_at >= NOW() - INTERVAL ':days days'
+                        pc.posted_at >= NOW() - INTERVAL :days DAY
                         AND pc.views > 0
-                    ORDER BY pc.engagement_rate DESC
-                """), {"days": lookback_days})
+                    ORDER BY pc.engagement_rate DESC NULLS LAST
+                """), {"days": f"{lookback_days} days"})
 
                 posts = list(result)
 

@@ -201,15 +201,11 @@ class SameDayAdjuster:
                         pc.likes,
                         pc.comments,
                         pc.shares,
-                        pc.saves,
                         pc.engagement_rate,
-                        sp.template_id,
-                        sp.topic,
-                        sp.content_type,
-                        sp.awareness_level,
+                        pc.platform,
+                        pc.title,
                         EXTRACT(EPOCH FROM (NOW() - pc.posted_at)) / 3600 as hours_since_posted
                     FROM posted_content pc
-                    LEFT JOIN scheduled_posts sp ON sp.platform_post_id = pc.platform_post_id
                     WHERE
                         pc.posted_at >= CURRENT_DATE
                         AND pc.posted_at <= NOW() - INTERVAL '1 hour'
@@ -228,13 +224,13 @@ class SameDayAdjuster:
                         "likes": row[4] or 0,
                         "comments": row[5] or 0,
                         "shares": row[6] or 0,
-                        "saves": row[7] or 0,
-                        "engagement_rate": float(row[8]) if row[8] else 0.0,
-                        "template_id": str(row[9]) if row[9] else None,
-                        "topic": row[10],
-                        "content_type": row[11],
-                        "awareness_level": row[12],
-                        "hours_since_posted": float(row[13]) if row[13] else 0
+                        "saves": 0,
+                        "engagement_rate": float(row[7]) if row[7] else 0.0,
+                        "template_id": None,
+                        "topic": row[9],
+                        "content_type": row[8],
+                        "awareness_level": "general",
+                        "hours_since_posted": float(row[10]) if row[10] else 0
                     })
 
                 return posts

@@ -161,6 +161,14 @@ class Topics:
     # =========================================================================
     CONTENT_DISCOVERED = "content.discovered"             # New content files discovered
     CONTENT_INGESTED = "content.ingested"                 # Content file ingested to DB
+    CONTENT_ANALYSIS_COMPLETED = "content.analysis.completed"  # AI analysis completed
+    
+    # =========================================================================
+    # VIDEO READY PIPELINE
+    # =========================================================================
+    VIDEO_READY = "video.ready"                           # Video is ready for processing
+    VIDEO_READY_PROCESSED = "video.ready.processed"       # Video ready pipeline completed
+    VIDEO_READY_PUBLISHED = "video.ready.published"       # Video published to platforms
     
     # =========================================================================
     # HYDRATION (State Management)

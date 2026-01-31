@@ -1808,9 +1808,9 @@ async def global_exception_handler(request, exc):
     # Get the origin from the request
     origin = request.headers.get("origin")
     allowed_origins = [
+        "http://localhost:5555",
         "http://localhost:5557",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5555",
         "http://127.0.0.1:5557",
         "https://mediaposter.vercel.app",
     ]

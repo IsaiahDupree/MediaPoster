@@ -32,14 +32,14 @@ The Command & Control (C2) API provides a stable "remote control" surface for Me
 │  │ Event Listener    │◀─┼─────┼──────────────┤                  │
 │  │                   │  │     │              │                  │
 │  └───────────────────┘  │     │  ┌───────────▼───────────────┐  │
-│                         │     │  │ Core API (:8000)          │  │
+│                         │     │  │ Core API (:5555)          │  │
 └─────────────────────────┘     │  │ - FastAPI                 │  │
                                 │  │ - Celery Workers          │  │
                                 │  │ - Redis + PostgreSQL      │  │
                                 │  └───────────────────────────┘  │
                                 │                                 │
                                 │  ┌───────────────────────────┐  │
-                                │  │ Dashboard (:3000)         │  │
+                                │  │ Dashboard (:5557)         │  │
                                 │  │ - Next.js                 │  │
                                 │  └───────────────────────────┘  │
                                 └─────────────────────────────────┘
@@ -51,8 +51,8 @@ The Command & Control (C2) API provides a stable "remote control" surface for Me
 
 | Service | Port | Protocol | Purpose |
 |---------|------|----------|---------|
-| Core API (existing) | 8000 | HTTP | FastAPI internal endpoints |
-| Dashboard (existing) | 3000 | HTTP | Next.js frontend |
+| Core API (existing) | 5555 | HTTP | FastAPI internal endpoints |
+| Dashboard (existing) | 5557 | HTTP | Next.js frontend |
 | **Control API (new)** | **9100** | HTTP/SSE | External command interface |
 | Event Stream (optional) | 9101 | WebSocket | Real-time events (or use SSE on 9100) |
 

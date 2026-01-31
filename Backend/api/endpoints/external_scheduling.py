@@ -54,7 +54,10 @@ class ScheduleTarget(BaseModel):
 
 class ExternalVideoSubmission(BaseModel):
     """Request to submit a video from external source for scheduled posting"""
-    video_url: str = Field(..., description="Public URL to download the video from")
+    # Accept EITHER video_url OR video_path (flexible for remote URLs or local files)
+    video_url: Optional[str] = Field(None, description="Public URL to download the video from")
+    video_path: Optional[str] = Field(None, description="Local file path (will be uploaded to storage)")
+    
     title: str = Field(..., description="Video title")
     caption: str = Field(..., description="Default caption for all platforms")
     hashtags: List[str] = Field(default=[], description="Hashtags to append")
@@ -98,8 +101,15 @@ class SmartScheduleRequest(BaseModel):
     - Find optimal posting times
     - Respect rate limits
     - Maintain consistent cadence
+    
+    Accepts EITHER:
+    - video_url: Remote URL to download from
+    - video_path: Local file path (will be uploaded to storage automatically)
     """
-    video_url: str = Field(..., description="Public URL to download the video from")
+    # Flexible video input - accept URL or local path
+    video_url: Optional[str] = Field(None, description="Public URL to download the video from")
+    video_path: Optional[str] = Field(None, description="Local file path (will be uploaded to storage)")
+    
     title: str = Field(..., description="Video title")
     caption: str = Field(..., description="Default caption for all platforms")
     hashtags: List[str] = Field(default=[])
@@ -186,6 +196,42 @@ async def download_video(url: str, dest_dir: Path) -> Path:
     
     logger.info(f"Downloaded video to {dest_path}")
     return dest_path
+
+
+async def resolve_video_path(
+    video_url: Optional[str] = None,
+    video_path: Optional[str] = None,
+    dest_dir: Path = None
+) -> Path:
+    """
+    Resolve video input to a local path.
+    
+    Accepts EITHER:
+    - video_url: Downloads from URL
+    - video_path: Uses local file directly (copies to staging if needed)
+    
+    Returns: Path to local video file
+    """
+    if dest_dir is None:
+        dest_dir = Path("/tmp/mediaposter_external")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    
+    if video_path:
+        # Local file - verify it exists
+        local_path = Path(video_path)
+        if not local_path.exists():
+            raise ValueError(f"Local video file not found: {video_path}")
+        
+        logger.info(f"📁 Using local video: {local_path}")
+        return local_path
+    
+    elif video_url:
+        # Remote URL - download it
+        logger.info(f"🌐 Downloading video from URL: {video_url[:50]}...")
+        return await download_video(video_url, dest_dir)
+    
+    else:
+        raise ValueError("Either video_url or video_path must be provided")
 
 
 async def ingest_video_to_db(video_path: Path, title: str, source_system: str = None) -> str:
@@ -283,28 +329,36 @@ async def submit_video(
     Submit a video from external source for scheduled posting.
     
     This endpoint:
-    1. Downloads the video from the provided URL
+    1. Downloads the video from URL OR uses local file path
     2. Ingests it into MediaPoster's media database
     3. Creates scheduled posts for each target platform/time
     
-    Example:
+    Example with URL:
     ```json
     {
         "video_url": "https://example.com/my-video.mp4",
         "title": "My Awesome Video",
         "caption": "Check this out! #trending",
-        "hashtags": ["#ai", "#automation"],
-        "targets": [
-            {"platform": "tiktok", "account_id": "710", "scheduled_at": "2026-01-31T15:00:00Z"},
-            {"platform": "youtube", "account_id": "228", "scheduled_at": "2026-01-31T16:00:00Z", "title": "YouTube Title"}
-        ]
+        "targets": [...]
+    }
+    ```
+    
+    Example with local path (for Safari Automation):
+    ```json
+    {
+        "video_path": "/Users/user/sora-videos/cleaned/video.mp4",
+        "title": "My Awesome Video",
+        "caption": "Check this out! #trending",
+        "targets": [...]
     }
     ```
     """
     try:
-        # Step 1: Download video
-        download_dir = Path("/tmp/mediaposter_external")
-        video_path = await download_video(submission.video_url, download_dir)
+        # Step 1: Resolve video (download from URL or use local path)
+        video_path = await resolve_video_path(
+            video_url=submission.video_url,
+            video_path=submission.video_path
+        )
         
         # Step 2: Ingest to database
         video_id = await ingest_video_to_db(
@@ -533,14 +587,23 @@ async def smart_schedule_video(request: SmartScheduleRequest):
     - Respect platform rate limits
     - Avoid overwhelming any single account
     
-    Example:
+    Example with URL:
     ```json
     {
         "video_url": "https://example.com/video.mp4",
         "title": "My Video",
         "caption": "Check this out!",
-        "platforms": ["tiktok", "youtube", "instagram"],
-        "spread_across_days": true
+        "platforms": ["tiktok", "youtube", "instagram"]
+    }
+    ```
+    
+    Example with local path (Safari Automation):
+    ```json
+    {
+        "video_path": "/path/to/local/video.mp4",
+        "title": "My Video",
+        "caption": "Check this out!",
+        "platforms": ["tiktok", "youtube"]
     }
     ```
     
@@ -548,10 +611,12 @@ async def smart_schedule_video(request: SmartScheduleRequest):
     """
     try:
         queue_manager = get_queue_manager()
-        download_dir = Path("/tmp/mediaposter_external")
         
-        # Step 1: Download video
-        video_path = await download_video(request.video_url, download_dir)
+        # Step 1: Resolve video (URL or local path)
+        video_path = await resolve_video_path(
+            video_url=request.video_url,
+            video_path=request.video_path
+        )
         
         # Step 2: Ingest to database
         video_id = await ingest_video_to_db(

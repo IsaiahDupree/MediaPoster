@@ -9,22 +9,31 @@ to send videos directly to MediaPoster for scheduled publishing.
 Flow:
 1. External server POSTs video URL + schedule details
 2. MediaPoster downloads/ingests the video
-3. Video is scheduled for posting at specified time(s)
-4. Post Scheduler handles automatic publishing via Blotato
+3. **Smart Queue Manager analyzes schedule & allocates optimal slots**
+4. Video is scheduled for posting at optimal time(s)
+5. Post Scheduler handles automatic publishing via Blotato
+
+Smart Scheduling Features:
+- Automatic rate limiting per account/platform
+- Consistent posting cadence maintenance
+- Conflict resolution with existing posts
+- Platform-specific spacing rules
 """
 
 import os
 import uuid
 import httpx
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 from loguru import logger
 from sqlalchemy import create_engine, text
 import json
+
+from services.external_queue_manager import get_queue_manager, ExternalQueueManager
 
 router = APIRouter(prefix="/api/external", tags=["External Scheduling"])
 
@@ -79,12 +88,59 @@ class BulkScheduleRequest(BaseModel):
     source_system: Optional[str] = Field(None)
 
 
+class SmartScheduleRequest(BaseModel):
+    """
+    Request for SMART scheduling - let MediaPoster decide optimal times.
+    
+    Instead of specifying exact times, you just say which platforms/accounts
+    to target, and MediaPoster will:
+    - Analyze current schedule
+    - Find optimal posting times
+    - Respect rate limits
+    - Maintain consistent cadence
+    """
+    video_url: str = Field(..., description="Public URL to download the video from")
+    title: str = Field(..., description="Video title")
+    caption: str = Field(..., description="Default caption for all platforms")
+    hashtags: List[str] = Field(default=[])
+    
+    # Target platforms (MediaPoster decides when)
+    platforms: List[str] = Field(..., description="Platforms to post to: tiktok, instagram, youtube, etc.")
+    account_ids: Optional[dict] = Field(None, description="Optional account IDs per platform, e.g. {'tiktok': '710'}")
+    
+    # Smart scheduling preferences
+    spread_across_days: bool = Field(default=True, description="Spread posts across multiple days if needed")
+    max_days_ahead: int = Field(default=7, description="Maximum days ahead to schedule")
+    priority: str = Field(default="normal", description="Priority: low, normal, high (affects slot selection)")
+    
+    source_id: Optional[str] = Field(None)
+    source_system: Optional[str] = Field(None)
+
+
+class SmartBulkRequest(BaseModel):
+    """
+    Smart bulk scheduling - submit many videos, MediaPoster allocates all optimally.
+    """
+    videos: List[dict] = Field(..., description="List of {video_url, title, caption}")
+    platforms: List[str] = Field(..., description="Target platforms")
+    account_ids: Optional[dict] = Field(None, description="Account IDs per platform")
+    hashtags: List[str] = Field(default=[])
+    
+    # MediaPoster will optimally distribute these across time
+    spread_evenly: bool = Field(default=True, description="Distribute evenly across days")
+    max_per_day: Optional[int] = Field(None, description="Override max posts per day (uses platform defaults if None)")
+    start_after: Optional[str] = Field(None, description="Don't schedule before this time (ISO8601)")
+    
+    source_system: Optional[str] = Field(None)
+
+
 class ScheduleResponse(BaseModel):
     """Response after scheduling"""
     success: bool
     scheduled_posts: List[dict]
     video_id: Optional[str] = None
     message: str
+    queue_analysis: Optional[dict] = None  # Info about current queue state
 
 
 # =============================================================================
@@ -433,11 +489,262 @@ async def external_api_health():
     """Health check for external API"""
     return {
         "status": "healthy",
-        "api_version": "1.0.0",
+        "api_version": "2.0.0",
         "endpoints": [
-            "POST /api/external/submit - Submit single video",
-            "POST /api/external/bulk-schedule - Schedule multiple videos",
+            "POST /api/external/submit - Submit single video with explicit times",
+            "POST /api/external/bulk-schedule - Schedule multiple videos with interval",
+            "POST /api/external/smart-schedule - Let MediaPoster decide optimal times",
+            "POST /api/external/smart-bulk - Smart bulk scheduling",
+            "GET /api/external/queue-analysis - Analyze queue for platform/account",
+            "GET /api/external/capacity - Get posting capacity summary",
             "GET /api/external/status/{source_id} - Check submission status",
             "GET /api/external/accounts - List available accounts"
         ]
     }
+
+
+# =============================================================================
+# SMART SCHEDULING ENDPOINTS
+# =============================================================================
+
+# Default account IDs per platform (first account is default)
+DEFAULT_ACCOUNTS = {
+    "tiktok": "710",
+    "instagram": "807",
+    "youtube": "228",
+    "twitter": "4151",
+    "threads": "173",
+    "pinterest": "173",
+    "linkedin": "571",
+    "facebook": "786",
+    "bluesky": "201"
+}
+
+
+@router.post("/smart-schedule", response_model=ScheduleResponse)
+async def smart_schedule_video(request: SmartScheduleRequest):
+    """
+    SMART scheduling - let MediaPoster decide optimal posting times.
+    
+    Instead of specifying exact times, you just say which platforms to target.
+    MediaPoster will:
+    - Analyze current schedule for each platform/account
+    - Find optimal posting times that maintain consistent cadence
+    - Respect platform rate limits
+    - Avoid overwhelming any single account
+    
+    Example:
+    ```json
+    {
+        "video_url": "https://example.com/video.mp4",
+        "title": "My Video",
+        "caption": "Check this out!",
+        "platforms": ["tiktok", "youtube", "instagram"],
+        "spread_across_days": true
+    }
+    ```
+    
+    MediaPoster responds with the optimally allocated times.
+    """
+    try:
+        queue_manager = get_queue_manager()
+        download_dir = Path("/tmp/mediaposter_external")
+        
+        # Step 1: Download video
+        video_path = await download_video(request.video_url, download_dir)
+        
+        # Step 2: Ingest to database
+        video_id = await ingest_video_to_db(
+            video_path, 
+            request.title,
+            request.source_system
+        )
+        
+        if not video_id:
+            video_id = f"ext_{uuid.uuid4().hex[:12]}"
+        
+        # Step 3: For each platform, find optimal slot
+        scheduled_posts = []
+        queue_analyses = {}
+        
+        for platform in request.platforms:
+            # Get account ID (from request or default)
+            account_id = (request.account_ids or {}).get(platform, DEFAULT_ACCOUNTS.get(platform))
+            
+            if not account_id:
+                logger.warning(f"No account ID for platform {platform}, skipping")
+                continue
+            
+            # Analyze queue and find optimal slot
+            analysis = queue_manager.analyze_queue(platform, account_id)
+            queue_analyses[platform] = {
+                "posts_today": analysis.posts_today,
+                "daily_capacity_remaining": analysis.daily_capacity_remaining,
+                "next_available_slot": analysis.next_available_slot.isoformat()
+            }
+            
+            # Use the next available slot from analysis
+            optimal_time = analysis.next_available_slot
+            
+            # Create scheduled post
+            post = create_scheduled_post(
+                content_id=video_id,
+                platform=platform,
+                account_id=account_id,
+                scheduled_at=optimal_time.isoformat(),
+                title=request.title,
+                caption=request.caption,
+                hashtags=request.hashtags,
+                source=request.source_system or "smart_schedule",
+                thumbnail_url=None
+            )
+            post["allocated_time"] = optimal_time.isoformat()
+            scheduled_posts.append(post)
+            
+            logger.info(f"🧠 Smart scheduled {platform} post for {optimal_time}")
+        
+        return ScheduleResponse(
+            success=True,
+            video_id=video_id,
+            scheduled_posts=scheduled_posts,
+            message=f"Smart scheduled to {len(scheduled_posts)} platform(s) at optimal times",
+            queue_analysis=queue_analyses
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in smart schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/smart-bulk", response_model=ScheduleResponse)
+async def smart_bulk_schedule(request: SmartBulkRequest):
+    """
+    SMART bulk scheduling - submit many videos, MediaPoster allocates all optimally.
+    
+    MediaPoster will distribute the videos across optimal time slots,
+    respecting rate limits and maintaining consistent posting cadence.
+    
+    Example:
+    ```json
+    {
+        "videos": [
+            {"video_url": "url1", "title": "Video 1", "caption": "Caption 1"},
+            {"video_url": "url2", "title": "Video 2", "caption": "Caption 2"}
+        ],
+        "platforms": ["tiktok", "instagram"],
+        "spread_evenly": true
+    }
+    ```
+    """
+    try:
+        queue_manager = get_queue_manager()
+        download_dir = Path("/tmp/mediaposter_external")
+        scheduled_posts = []
+        
+        start_after = None
+        if request.start_after:
+            start_after = datetime.fromisoformat(request.start_after.replace('Z', '+00:00'))
+        
+        for platform in request.platforms:
+            account_id = (request.account_ids or {}).get(platform, DEFAULT_ACCOUNTS.get(platform))
+            
+            if not account_id:
+                continue
+            
+            # Prepare video list for allocation
+            video_dicts = []
+            for v in request.videos:
+                video_dicts.append({
+                    "video_url": v.get("video_url"),
+                    "title": v.get("title", "Untitled"),
+                    "caption": v.get("caption", "")
+                })
+            
+            # Let queue manager allocate optimal slots
+            allocations = queue_manager.allocate_slots(
+                videos=video_dicts,
+                platform=platform,
+                account_id=account_id,
+                start_after=start_after,
+                respect_requested_times=False  # Let MediaPoster decide
+            )
+            
+            # Process each allocation
+            for video, allocated_time in allocations:
+                # Download and ingest
+                video_path = await download_video(video["video_url"], download_dir)
+                video_id = await ingest_video_to_db(video_path, video["title"], request.source_system)
+                
+                if not video_id:
+                    video_id = f"ext_{uuid.uuid4().hex[:12]}"
+                
+                # Create scheduled post
+                post = create_scheduled_post(
+                    content_id=video_id,
+                    platform=platform,
+                    account_id=account_id,
+                    scheduled_at=allocated_time.isoformat(),
+                    title=video["title"],
+                    caption=video.get("caption", "") + " " + " ".join(request.hashtags),
+                    hashtags=request.hashtags,
+                    source=request.source_system or "smart_bulk"
+                )
+                post["allocated_time"] = allocated_time.isoformat()
+                scheduled_posts.append(post)
+                
+                logger.info(f"🧠 Smart bulk: {platform} post scheduled for {allocated_time}")
+        
+        return ScheduleResponse(
+            success=True,
+            scheduled_posts=scheduled_posts,
+            message=f"Smart scheduled {len(scheduled_posts)} posts across {len(request.platforms)} platform(s)"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in smart bulk schedule: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/queue-analysis")
+async def get_queue_analysis(
+    platform: str = Query(..., description="Platform to analyze"),
+    account_id: str = Query(..., description="Account ID to analyze"),
+    days_ahead: int = Query(7, description="Days to look ahead")
+):
+    """
+    Analyze the current queue state for a specific platform/account.
+    
+    Returns:
+    - Current posting activity (today, this week)
+    - Remaining daily capacity
+    - Next available posting slot
+    - Recommended posting times
+    """
+    queue_manager = get_queue_manager()
+    analysis = queue_manager.analyze_queue(platform, account_id, days_ahead)
+    
+    return {
+        "platform": analysis.platform,
+        "account_id": analysis.account_id,
+        "posts_today": analysis.posts_today,
+        "posts_this_week": analysis.posts_this_week,
+        "daily_capacity_remaining": analysis.daily_capacity_remaining,
+        "next_available_slot": analysis.next_available_slot.isoformat(),
+        "existing_slots": [s.isoformat() for s in analysis.existing_slots],
+        "recommended_slots": [s.isoformat() for s in analysis.recommended_slots[:10]]  # Top 10
+    }
+
+
+@router.get("/capacity")
+async def get_posting_capacity(
+    platform: Optional[str] = Query(None, description="Filter by platform"),
+    account_id: Optional[str] = Query(None, description="Filter by account")
+):
+    """
+    Get a summary of posting capacity across all accounts.
+    
+    Useful for external systems to know how much capacity is available
+    before submitting videos.
+    """
+    queue_manager = get_queue_manager()
+    return queue_manager.get_posting_summary(platform, account_id)

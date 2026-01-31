@@ -6,6 +6,28 @@ The External Scheduling API allows **external servers** (video generation pipeli
 
 **Base URL:** `http://localhost:5555/api/external`
 
+## 🧠 Smart Scheduling (NEW)
+
+MediaPoster can now **intelligently decide** when to post, instead of you specifying exact times:
+
+```python
+# Just tell MediaPoster which platforms - it decides optimal times
+requests.post("http://localhost:5555/api/external/smart-schedule", json={
+    "video_url": "https://example.com/video.mp4",
+    "title": "My Video",
+    "caption": "Check this out!",
+    "platforms": ["tiktok", "youtube", "instagram"]
+    # No scheduled_at needed! MediaPoster figures it out.
+})
+```
+
+**Smart Scheduling Features:**
+- ✅ Automatic rate limiting per account/platform
+- ✅ Maintains consistent posting cadence
+- ✅ Respects platform-specific limits (TikTok: 8/day, Instagram: 5/day, etc.)
+- ✅ Spreads posts to avoid overwhelming accounts
+- ✅ Conflict resolution with existing scheduled posts
+
 ---
 
 ## Flow

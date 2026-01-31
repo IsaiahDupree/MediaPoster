@@ -192,12 +192,15 @@ class VideoReadyPipeline:
             self._content_analyzer = ContentAnalyzer()
         return self._content_analyzer
     
-    async def get_db_session(self):
-        """Get async database session"""
-        if self._db_session is None:
-            from database.connection import get_async_session
-            self._db_session = await anext(get_async_session())
-        return self._db_session
+    async def _get_fresh_db_session(self):
+        """Get a fresh database session (creates new connection each time)"""
+        from database.connection import init_db, async_session_maker
+        import database.connection as db_conn
+        
+        if db_conn.async_session_maker is None:
+            await init_db()
+        
+        return db_conn.async_session_maker()
     
     async def ingest_video_to_db(self, video_path: str, source: str, metadata: Dict[str, Any]) -> str:
         """
@@ -205,32 +208,45 @@ class VideoReadyPipeline:
         Creates a Video record and returns the video_id.
         """
         from sqlalchemy import text
+        import json
         
         video_id = str(uuid4())
         file_name = Path(video_path).name
         file_size = Path(video_path).stat().st_size
         
         try:
-            db = await self.get_db_session()
-            
-            # Insert into original_videos table (existing schema)
-            await db.execute(
-                text("""
-                    INSERT INTO original_videos (id, filename, file_path, file_size, status, source, metadata, created_at)
-                    VALUES (:id, :filename, :file_path, :file_size, 'pending', :source, :metadata, NOW())
-                    ON CONFLICT (file_path) DO UPDATE SET status = 'pending', updated_at = NOW()
-                    RETURNING id
-                """),
-                {
-                    "id": video_id,
-                    "filename": file_name,
-                    "file_path": video_path,
-                    "file_size": file_size,
-                    "source": source,
-                    "metadata": str(metadata)
-                }
-            )
-            await db.commit()
+            async with await self._get_fresh_db_session() as db:
+                # Check if video already exists by file_path
+                result = await db.execute(
+                    text("SELECT id FROM original_videos WHERE file_path = :file_path"),
+                    {"file_path": video_path}
+                )
+                existing = result.fetchone()
+                
+                if existing:
+                    # Use existing video_id
+                    video_id = str(existing[0])
+                    await db.execute(
+                        text("UPDATE original_videos SET status = 'pending', updated_at = NOW() WHERE id = :id"),
+                        {"id": video_id}
+                    )
+                else:
+                    # Insert new record (cast metadata to jsonb in SQL)
+                    await db.execute(
+                        text("""
+                            INSERT INTO original_videos (id, filename, file_path, file_size, status, source, metadata, created_at)
+                            VALUES (:id, :filename, :file_path, :file_size, 'pending', :source, CAST(:meta AS jsonb), NOW())
+                        """),
+                        {
+                            "id": video_id,
+                            "filename": file_name,
+                            "file_path": video_path,
+                            "file_size": file_size,
+                            "source": source,
+                            "meta": json.dumps(metadata)
+                        }
+                    )
+                await db.commit()
             
             logger.info(f"   📥 Ingested to DB: {video_id}")
             
@@ -590,70 +606,69 @@ Format as JSON with ALL fields populated:
         import json
         
         try:
-            db = await self.get_db_session()
-            
-            # Update original_videos with analysis status
-            await db.execute(
-                text("""
-                    UPDATE original_videos 
-                    SET status = 'analyzed',
-                        ai_title = :title,
-                        ai_description = :description,
-                        transcript = :transcript,
-                        updated_at = NOW()
-                    WHERE id = :video_id
-                """),
-                {
-                    "video_id": video_id,
-                    "title": analysis.youtube_title,
-                    "description": analysis.youtube_description,
-                    "transcript": analysis.transcript
-                }
-            )
-            
-            # Insert into analyzed_videos table (existing schema)
-            await db.execute(
-                text("""
-                    INSERT INTO analyzed_videos (
-                        id, original_video_id, transcript, 
-                        ai_title, ai_description, ai_hashtags,
-                        virality_score, duration_seconds, topics,
-                        platform_captions, created_at
-                    ) VALUES (
-                        :id, :original_video_id, :transcript,
-                        :ai_title, :ai_description, :ai_hashtags,
-                        :virality_score, :duration_seconds, :topics,
-                        :platform_captions, NOW()
-                    )
-                    ON CONFLICT (original_video_id) DO UPDATE SET
-                        transcript = EXCLUDED.transcript,
-                        ai_title = EXCLUDED.ai_title,
-                        ai_description = EXCLUDED.ai_description,
-                        ai_hashtags = EXCLUDED.ai_hashtags,
-                        virality_score = EXCLUDED.virality_score,
-                        platform_captions = EXCLUDED.platform_captions,
-                        updated_at = NOW()
-                """),
-                {
-                    "id": str(uuid4()),
-                    "original_video_id": video_id,
-                    "transcript": analysis.transcript,
-                    "ai_title": analysis.youtube_title,
-                    "ai_description": analysis.youtube_description,
-                    "ai_hashtags": json.dumps(analysis.hashtags),
-                    "virality_score": analysis.virality_score,
-                    "duration_seconds": analysis.duration_seconds,
-                    "topics": json.dumps(analysis.detected_topics),
-                    "platform_captions": json.dumps({
-                        "youtube_title": analysis.youtube_title,
-                        "youtube_description": analysis.youtube_description,
-                        "tiktok_caption": analysis.tiktok_caption,
-                        "instagram_caption": analysis.instagram_caption
-                    })
-                }
-            )
-            
-            await db.commit()
+            async with await self._get_fresh_db_session() as db:
+                # Update original_videos with analysis status
+                await db.execute(
+                    text("""
+                        UPDATE original_videos 
+                        SET status = 'analyzed',
+                            ai_title = :title,
+                            ai_description = :description,
+                            transcript = :transcript,
+                            updated_at = NOW()
+                        WHERE id = :video_id
+                    """),
+                    {
+                        "video_id": video_id,
+                        "title": analysis.youtube_title,
+                        "description": analysis.youtube_description,
+                        "transcript": analysis.transcript
+                    }
+                )
+                
+                # Insert into analyzed_videos table (existing schema)
+                await db.execute(
+                    text("""
+                        INSERT INTO analyzed_videos (
+                            id, original_video_id, transcript, 
+                            ai_title, ai_description, ai_hashtags,
+                            virality_score, duration_seconds, topics,
+                            platform_captions, created_at
+                        ) VALUES (
+                            :id, :original_video_id, :transcript,
+                            :ai_title, :ai_description, :ai_hashtags,
+                            :virality_score, :duration_seconds, :topics,
+                            :platform_captions, NOW()
+                        )
+                        ON CONFLICT (original_video_id) DO UPDATE SET
+                            transcript = EXCLUDED.transcript,
+                            ai_title = EXCLUDED.ai_title,
+                            ai_description = EXCLUDED.ai_description,
+                            ai_hashtags = EXCLUDED.ai_hashtags,
+                            virality_score = EXCLUDED.virality_score,
+                            platform_captions = EXCLUDED.platform_captions,
+                            updated_at = NOW()
+                    """),
+                    {
+                        "id": str(uuid4()),
+                        "original_video_id": video_id,
+                        "transcript": analysis.transcript,
+                        "ai_title": analysis.youtube_title,
+                        "ai_description": analysis.youtube_description,
+                        "ai_hashtags": json.dumps(analysis.hashtags),
+                        "virality_score": analysis.virality_score,
+                        "duration_seconds": analysis.duration_seconds,
+                        "topics": json.dumps(analysis.detected_topics),
+                        "platform_captions": json.dumps({
+                            "youtube_title": analysis.youtube_title,
+                            "youtube_description": analysis.youtube_description,
+                            "tiktok_caption": analysis.tiktok_caption,
+                            "instagram_caption": analysis.instagram_caption
+                        })
+                    }
+                )
+                
+                await db.commit()
             logger.info(f"   ✅ Analysis saved to DB for video {video_id}")
             
             # Emit analysis complete event for existing infrastructure

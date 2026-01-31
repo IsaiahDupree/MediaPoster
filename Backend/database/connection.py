@@ -174,6 +174,31 @@ def get_db_session_factory() -> async_sessionmaker:
     return async_session_maker
 
 
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Get async database session for use in services/pipelines.
+    Initializes DB connection if not already initialized.
+    
+    Usage:
+        async for session in get_async_session():
+            await session.execute(...)
+    
+    Or with anext:
+        session = await anext(get_async_session())
+    """
+    global async_session_maker
+    
+    if not async_session_maker:
+        await init_db()
+    
+    async with async_session_maker() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+
+
 # CRUD base class
 class CRUDBase:
     """Base class for CRUD operations"""

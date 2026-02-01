@@ -488,7 +488,7 @@ Two new microservices have been extracted and deployed:
 ### media-pipeline (Port 6004)
 **Repository:** https://github.com/IsaiahDupree/media-pipeline
 **Local Path:** `/Users/isaiahdupree/Documents/Software/media-pipeline/`
-**Total Code:** 12,913 lines moved from MediaPoster
+**Total Code:** 46,781 lines moved from MediaPoster
 
 | Endpoint | Implementation | Status |
 |----------|---------------|--------|
@@ -510,7 +510,7 @@ Two new microservices have been extracted and deployed:
 ### content-intelligence (Port 6006)
 **Repository:** https://github.com/IsaiahDupree/content-intelligence
 **Local Path:** `/Users/isaiahdupree/Documents/Software/content-intelligence/`
-**Total Code:** 7,959 lines moved from MediaPoster
+**Total Code:** 39,420 lines moved from MediaPoster
 
 | Endpoint | Implementation | Status |
 |----------|---------------|--------|

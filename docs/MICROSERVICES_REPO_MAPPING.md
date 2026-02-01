@@ -499,6 +499,12 @@ Two new microservices have been extracted and deployed:
 | `POST /api/clip/extract` | ffmpeg clip extraction | ✅ Real |
 | `POST /api/deduplicate/check` | DuplicateDetector | ✅ Real |
 | `POST /api/transcribe` | OpenAI Whisper | ✅ Real |
+| `POST /api/audio/analyze` | ffprobe audio analysis | ✅ Real |
+| `POST /api/orchestrate/plan` | DirectorService | ✅ Real |
+| `POST /api/tts/generate` | TTSWorker | ✅ Real |
+| `POST /api/music/search` | MusicWorker | ✅ Real |
+| `POST /api/sfx/search` | SFXService | ✅ Real |
+| `POST /api/render/video` | VideoRenderer | ✅ Real |
 
 **Services Copied:**
 - `frame_analyzer.py`, `frame_analyzer_enhanced.py`, `frame_sampler.py`
@@ -521,6 +527,12 @@ Two new microservices have been extracted and deployed:
 | `POST /api/generate/title` | Groq/OpenAI AI | ✅ Real |
 | `POST /api/generate/caption` | Groq/OpenAI AI | ✅ Real |
 | `POST /api/vision/analyze` | VisionAnalyzer (OpenAI Vision) | ✅ Real |
+| `POST /api/narrative/plan` | NarrativeScheduler | ✅ Real |
+| `POST /api/experiments/hypothesis` | HypothesisEngine | ✅ Real |
+| `POST /api/competitor/analyze` | CompetitorAnalyzer | ✅ Real |
+| `POST /api/trends/detect` | TrendDetector | ✅ Real |
+| `POST /api/brief/generate` | BriefGenerator | ✅ Real |
+| `POST /api/engagement/predict` | EngagementService | ✅ Real |
 
 **Services Copied:**
 - `fate_scorer.py`, `awareness_classifier.py`, `sentiment_analyzer.py`

@@ -116,6 +116,17 @@ class MicroservicesClient:
         """Check if content is a duplicate."""
         return await self._call("media", "/api/deduplicate/check", {"file_path": file_path})
     
+    async def transcribe(
+        self,
+        video_path: str,
+        language: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Transcribe video/audio using Whisper."""
+        return await self._call("media", "/api/transcribe", {
+            "video_path": video_path,
+            "language": language
+        })
+    
     # ==================== Content Intelligence API ====================
     
     async def analyze_content(

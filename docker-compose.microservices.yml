@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Redis for job queues
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Media Pipeline Service
+  media-pipeline:
+    build:
+      context: ../media-pipeline
+      dockerfile: Dockerfile
+    ports:
+      - "6004:6004"
+    environment:
+      - PORT=6004
+      - REDIS_URL=redis://redis:6379
+      - MEDIAPOSTER_URL=http://mediaposter:5555
+      - CONTENT_INTEL_URL=http://content-intelligence:6006
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Content Intelligence Service
+  content-intelligence:
+    build:
+      context: ../content-intelligence
+      dockerfile: Dockerfile
+    ports:
+      - "6006:6006"
+    environment:
+      - PORT=6006
+      - REDIS_URL=redis://redis:6379
+      - MEDIAPOSTER_URL=http://mediaposter:5555
+      - MEDIA_PIPELINE_URL=http://media-pipeline:6004
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis_data:

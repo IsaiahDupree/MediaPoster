@@ -473,8 +473,105 @@ export const SERVICES = {
 
 ## Next Steps
 
-1. [ ] Review this mapping with stakeholders
-2. [ ] Prioritize Phase 1 (Safari Automation)
-3. [ ] Create API contracts between services
+1. [x] Review this mapping with stakeholders
+2. [x] Prioritize Phase 1 (Safari Automation)
+3. [x] Create API contracts between services
 4. [ ] Set up shared Redis instance
-5. [ ] Begin incremental migration
+5. [x] Begin incremental migration
+
+---
+
+## NEW: Microservices Created (2026-02-01)
+
+Two new microservices have been extracted and deployed:
+
+### media-pipeline (Port 6004)
+**Repository:** https://github.com/IsaiahDupree/media-pipeline
+**Local Path:** `/Users/isaiahdupree/Documents/Software/media-pipeline/`
+
+| Endpoint | Implementation | Status |
+|----------|---------------|--------|
+| `GET /health` | Health check | ✅ Real |
+| `POST /api/analyze` | ffprobe video analysis | ✅ Real |
+| `POST /api/thumbnail/generate` | ffmpeg frame extraction | ✅ Real |
+| `POST /api/format/detect` | FormatDetector (15 types) | ✅ Real |
+| `POST /api/clip/extract` | ffmpeg clip extraction | ✅ Real |
+| `POST /api/deduplicate/check` | DuplicateDetector | ✅ Real |
+
+### content-intelligence (Port 6006)
+**Repository:** https://github.com/IsaiahDupree/content-intelligence
+**Local Path:** `/Users/isaiahdupree/Documents/Software/content-intelligence/`
+
+| Endpoint | Implementation | Status |
+|----------|---------------|--------|
+| `GET /health` | Health check | ✅ Real |
+| `POST /api/score/fate` | FATEScorer (F/A/T/E) | ✅ Real |
+| `POST /api/classify/awareness` | AwarenessClassifier (5 levels) | ✅ Real |
+| `POST /api/analyze/sentiment` | SentimentAnalyzer | ✅ Real |
+| `POST /api/generate/title` | Groq/OpenAI AI | ✅ Real |
+| `POST /api/generate/caption` | Groq/OpenAI AI | ✅ Real |
+| `POST /api/vision/analyze` | Vision analysis | 🔄 Placeholder |
+
+---
+
+## Connectivity from MediaPoster
+
+```python
+# Backend/services/microservices_client.py
+from services.microservices_client import get_microservices_client
+
+client = get_microservices_client()
+
+# Media Pipeline
+await client.analyze_video("/path/to/video.mp4")
+await client.generate_thumbnails("/path/to/video.mp4", count=5)
+await client.detect_format("/path/to/video.mp4", transcript="...")
+await client.extract_clip("/path/to/video.mp4", start_time=10, end_time=30)
+
+# Content Intelligence
+await client.score_fate("Your content text here...")
+await client.classify_awareness("Are you struggling with...")
+await client.analyze_sentiment("This is amazing!")
+await client.generate_titles("How to grow TikTok", platform="tiktok")
+await client.generate_caption("Video about tips", platform="instagram")
+```
+
+---
+
+## Updated Service Registry
+
+```python
+# Environment variables
+MEDIA_PIPELINE_URL=http://localhost:6004
+CONTENT_INTEL_URL=http://localhost:6006
+SAFARI_URL=http://localhost:6001
+REMOTION_URL=http://localhost:6002
+```
+
+| Service | Port | Status |
+|---------|------|--------|
+| MediaPoster Core | 5555 | ✅ Active |
+| Safari Automation | 6001 | ⏸️ Optional |
+| Remotion | 6002 | ⏸️ Optional |
+| **media-pipeline** | 6004 | ✅ **Active** |
+| **content-intelligence** | 6006 | ✅ **Active** |
+
+---
+
+## Quick Start Commands
+
+```bash
+# Start media-pipeline
+cd ~/Documents/Software/media-pipeline
+source venv/bin/activate
+python app.py
+
+# Start content-intelligence
+cd ~/Documents/Software/content-intelligence
+source venv/bin/activate
+python app.py
+
+# Test connectivity
+curl http://localhost:6004/health
+curl http://localhost:6006/health
+```

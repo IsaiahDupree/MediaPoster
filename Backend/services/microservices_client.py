@@ -86,9 +86,18 @@ class MicroservicesClient:
             "count": count
         })
     
-    async def detect_format(self, file_path: str) -> Dict[str, Any]:
-        """Detect media format."""
-        return await self._call("media", "/api/format/detect", {"file_path": file_path})
+    async def detect_format(
+        self, 
+        file_path: str,
+        transcript: str = "",
+        visual_analysis: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Detect media format using FormatDetector."""
+        return await self._call("media", "/api/format/detect", {
+            "file_path": file_path,
+            "transcript": transcript,
+            "visual_analysis": visual_analysis or {}
+        })
     
     async def extract_clip(
         self,
@@ -153,12 +162,14 @@ class MicroservicesClient:
     
     async def score_fate(
         self,
-        content_id: str,
+        content: str,
+        content_id: Optional[str] = None,
         metrics: Optional[Dict[str, Any]] = None
     ) -> Dict[str, float]:
-        """Calculate FATE score for content."""
+        """Calculate FATE score for content text."""
         result = await self._call("ai", "/api/score/fate", {
-            "content_id": content_id,
+            "content": content,
+            "content_id": content_id or "",
             "metrics": metrics or {}
         })
         return result.get("fate_score", {})

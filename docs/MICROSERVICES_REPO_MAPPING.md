@@ -488,6 +488,7 @@ Two new microservices have been extracted and deployed:
 ### media-pipeline (Port 6004)
 **Repository:** https://github.com/IsaiahDupree/media-pipeline
 **Local Path:** `/Users/isaiahdupree/Documents/Software/media-pipeline/`
+**Total Code:** 12,913 lines moved from MediaPoster
 
 | Endpoint | Implementation | Status |
 |----------|---------------|--------|
@@ -497,10 +498,19 @@ Two new microservices have been extracted and deployed:
 | `POST /api/format/detect` | FormatDetector (15 types) | ✅ Real |
 | `POST /api/clip/extract` | ffmpeg clip extraction | ✅ Real |
 | `POST /api/deduplicate/check` | DuplicateDetector | ✅ Real |
+| `POST /api/transcribe` | OpenAI Whisper | ✅ Real |
+
+**Services Copied:**
+- `frame_analyzer.py`, `frame_analyzer_enhanced.py`, `frame_sampler.py`
+- `video_analyzer.py`, `batch_video_analyzer.py`, `video_analysis.py`
+- `thumbnail_generator.py`, `thumbnail_service.py`, `ai_thumbnail_selector.py`
+- `transcription.py`, `whisper_transcriber.py`, `transcription_adapter.py`
+- `broll_detector.py`, `duplicate_detector.py`
 
 ### content-intelligence (Port 6006)
 **Repository:** https://github.com/IsaiahDupree/content-intelligence
 **Local Path:** `/Users/isaiahdupree/Documents/Software/content-intelligence/`
+**Total Code:** 7,959 lines moved from MediaPoster
 
 | Endpoint | Implementation | Status |
 |----------|---------------|--------|
@@ -510,7 +520,13 @@ Two new microservices have been extracted and deployed:
 | `POST /api/analyze/sentiment` | SentimentAnalyzer | ✅ Real |
 | `POST /api/generate/title` | Groq/OpenAI AI | ✅ Real |
 | `POST /api/generate/caption` | Groq/OpenAI AI | ✅ Real |
-| `POST /api/vision/analyze` | Vision analysis | 🔄 Placeholder |
+| `POST /api/vision/analyze` | VisionAnalyzer (OpenAI Vision) | ✅ Real |
+
+**Services Copied:**
+- `fate_scorer.py`, `awareness_classifier.py`, `sentiment_analyzer.py`
+- `vision_analyzer_standalone.py`, `ai_content_analyzer.py`
+- `ai_title_generator.py`, `ai_content_generator.py`, `hook_generator.py`
+- `ai_recommendation_service.py`
 
 ---
 

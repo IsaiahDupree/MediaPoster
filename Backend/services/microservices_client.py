@@ -210,6 +210,157 @@ class MicroservicesClient:
             "count": count
         })
         return result.get("recommendations", [])
+    
+    # ==================== New Media Pipeline Endpoints ====================
+    
+    async def orchestrate_plan(
+        self,
+        script: str,
+        title: str = "Untitled",
+        target_duration: int = 60
+    ) -> Dict[str, Any]:
+        """Create a clip plan from a script."""
+        return await self._call("media", "/api/orchestrate/plan", {
+            "script": script,
+            "title": title,
+            "target_duration": target_duration
+        })
+    
+    async def generate_tts(
+        self,
+        text: str,
+        voice: str = "default",
+        output_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Generate text-to-speech audio."""
+        return await self._call("media", "/api/tts/generate", {
+            "text": text,
+            "voice": voice,
+            "output_path": output_path
+        })
+    
+    async def search_music(
+        self,
+        query: str = "",
+        mood: str = "",
+        genre: str = "",
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """Search for music tracks."""
+        return await self._call("media", "/api/music/search", {
+            "query": query,
+            "mood": mood,
+            "genre": genre,
+            "limit": limit
+        })
+    
+    async def search_sfx(
+        self,
+        query: str,
+        category: str = "",
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """Search for sound effects."""
+        return await self._call("media", "/api/sfx/search", {
+            "query": query,
+            "category": category,
+            "limit": limit
+        })
+    
+    async def render_video(
+        self,
+        timeline: Dict[str, Any],
+        output_path: str,
+        format: str = "mp4"
+    ) -> Dict[str, Any]:
+        """Render a video from a timeline."""
+        return await self._call("media", "/api/render/video", {
+            "timeline": timeline,
+            "output_path": output_path,
+            "format": format
+        })
+    
+    async def analyze_audio(self, video_path: str) -> Dict[str, Any]:
+        """Analyze audio from a video file."""
+        return await self._call("media", "/api/audio/analyze", {"video_path": video_path})
+    
+    # ==================== New Content Intelligence Endpoints ====================
+    
+    async def create_narrative_plan(
+        self,
+        goal: str,
+        duration_days: int = 30,
+        platforms: List[str] = None
+    ) -> Dict[str, Any]:
+        """Create a narrative content plan."""
+        return await self._call("ai", "/api/narrative/plan", {
+            "goal": goal,
+            "duration_days": duration_days,
+            "platforms": platforms or ["instagram", "tiktok"]
+        })
+    
+    async def generate_hypothesis(
+        self,
+        content_type: str,
+        metric: str = "engagement",
+        historical_data: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """Generate a content experiment hypothesis."""
+        return await self._call("ai", "/api/experiments/hypothesis", {
+            "content_type": content_type,
+            "metric": metric,
+            "historical_data": historical_data or {}
+        })
+    
+    async def analyze_competitor(
+        self,
+        handle: str,
+        platform: str = "instagram"
+    ) -> Dict[str, Any]:
+        """Analyze competitor content."""
+        return await self._call("ai", "/api/competitor/analyze", {
+            "handle": handle,
+            "platform": platform
+        })
+    
+    async def detect_trends(
+        self,
+        platform: str = "tiktok",
+        category: str = "",
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """Detect current trends."""
+        return await self._call("ai", "/api/trends/detect", {
+            "platform": platform,
+            "category": category,
+            "limit": limit
+        })
+    
+    async def generate_brief(
+        self,
+        topic: str,
+        format: str = "short_video",
+        platform: str = "instagram"
+    ) -> Dict[str, Any]:
+        """Generate a content brief."""
+        return await self._call("ai", "/api/brief/generate", {
+            "topic": topic,
+            "format": format,
+            "platform": platform
+        })
+    
+    async def predict_engagement(
+        self,
+        title: str,
+        description: str = "",
+        platform: str = "instagram"
+    ) -> Dict[str, Any]:
+        """Predict engagement for content."""
+        return await self._call("ai", "/api/engagement/predict", {
+            "title": title,
+            "description": description,
+            "platform": platform
+        })
 
 
 # Singleton instance

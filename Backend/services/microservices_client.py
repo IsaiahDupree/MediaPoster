@@ -423,6 +423,92 @@ class MicroservicesClient:
             "platform": platform,
             "count": count
         })
+    
+    # ==================== External Repo Integrations ====================
+    
+    # Media Pipeline - TTS & Remotion
+    async def generate_indextts2(
+        self,
+        text: str,
+        voice_reference: Optional[str] = None,
+        emotion: str = "neutral"
+    ) -> Dict[str, Any]:
+        """Generate TTS using IndexTTS2."""
+        return await self._call("media", "/api/tts/indextts2", {
+            "text": text,
+            "voice_reference": voice_reference,
+            "emotion": emotion
+        })
+    
+    async def render_remotion(
+        self,
+        brief: Dict[str, Any],
+        template: str = "BriefComposition"
+    ) -> Dict[str, Any]:
+        """Render video using Remotion."""
+        return await self._call("media", "/api/remotion/render", {
+            "brief": brief,
+            "template": template
+        })
+    
+    async def generate_remotion_brief(
+        self,
+        script: str,
+        title: str = "Untitled",
+        style: str = "default"
+    ) -> Dict[str, Any]:
+        """Generate a video brief for Remotion."""
+        return await self._call("media", "/api/remotion/brief", {
+            "script": script,
+            "title": title,
+            "style": style
+        })
+    
+    # Content Intelligence - CRM & Safari
+    async def create_crm_lead(
+        self,
+        username: str,
+        platform: str = "instagram",
+        source: str = "dm"
+    ) -> Dict[str, Any]:
+        """Create a lead in Local EverReach CRM."""
+        return await self._call("ai", "/api/crm/leads", {
+            "username": username,
+            "platform": platform,
+            "source": source
+        })
+    
+    async def get_relationship_score(self, username: str) -> Dict[str, Any]:
+        """Get relationship score for a lead."""
+        return await self._call("ai", "/api/crm/relationship-score", {
+            "username": username
+        })
+    
+    async def safari_publish(
+        self,
+        platform: str,
+        content: str,
+        media_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Publish content via Safari Automation."""
+        return await self._call("ai", "/api/safari/publish", {
+            "platform": platform,
+            "content": content,
+            "media_path": media_path
+        })
+    
+    async def safari_dm(
+        self,
+        recipient: str,
+        message: str,
+        platform: str = "instagram"
+    ) -> Dict[str, Any]:
+        """Send DM via Safari Automation."""
+        return await self._call("ai", "/api/safari/dm", {
+            "platform": platform,
+            "recipient": recipient,
+            "message": message
+        })
 
 
 # Singleton instance

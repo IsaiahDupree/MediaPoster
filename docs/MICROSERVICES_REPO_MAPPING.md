@@ -505,6 +505,9 @@ Two new microservices have been extracted and deployed:
 | `POST /api/music/search` | MusicWorker | ✅ Real |
 | `POST /api/sfx/search` | SFXService | ✅ Real |
 | `POST /api/render/video` | VideoRenderer | ✅ Real |
+| `POST /api/scrape/instagram` | InstagramScraper | ✅ Real |
+| `GET /api/workers/status` | WorkerStatus | ✅ Real |
+| `POST /api/matting/remove-bg` | MattingWorker | ✅ Real |
 
 **Services Copied:**
 - `frame_analyzer.py`, `frame_analyzer_enhanced.py`, `frame_sampler.py`
@@ -533,6 +536,9 @@ Two new microservices have been extracted and deployed:
 | `POST /api/trends/detect` | TrendDetector | ✅ Real |
 | `POST /api/brief/generate` | BriefGenerator | ✅ Real |
 | `POST /api/engagement/predict` | EngagementService | ✅ Real |
+| `POST /api/dm/outreach` | OutreachSequencer | ✅ Real |
+| `POST /api/inbox/auto-reply` | AutoReplyEngine | ✅ Real |
+| `POST /api/hashtags/generate` | HashtagGenerator | ✅ Real |
 
 **Services Copied:**
 - `fate_scorer.py`, `awareness_classifier.py`, `sentiment_analyzer.py`

@@ -361,6 +361,68 @@ class MicroservicesClient:
             "description": description,
             "platform": platform
         })
+    
+    # ==================== Latest Media Pipeline Endpoints ====================
+    
+    async def scrape_instagram(self, username: str) -> Dict[str, Any]:
+        """Scrape Instagram profile/posts data."""
+        return await self._call("media", "/api/scrape/instagram", {"username": username})
+    
+    async def get_workers_status(self) -> Dict[str, Any]:
+        """Get status of background workers."""
+        return await self._call("media", "/api/workers/status", method="GET")
+    
+    async def remove_background(
+        self,
+        file_path: str,
+        output_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Remove background from video/image."""
+        return await self._call("media", "/api/matting/remove-bg", {
+            "file_path": file_path,
+            "output_path": output_path
+        })
+    
+    # ==================== Latest Content Intelligence Endpoints ====================
+    
+    async def dm_outreach(
+        self,
+        prospects: List[str],
+        message_template: str,
+        platform: str = "instagram"
+    ) -> Dict[str, Any]:
+        """Send DM outreach campaign."""
+        return await self._call("ai", "/api/dm/outreach", {
+            "prospects": prospects,
+            "message_template": message_template,
+            "platform": platform
+        })
+    
+    async def configure_auto_reply(
+        self,
+        platform: str = "instagram",
+        rules: List[Dict[str, Any]] = None,
+        enabled: bool = True
+    ) -> Dict[str, Any]:
+        """Configure auto-reply for inbox."""
+        return await self._call("ai", "/api/inbox/auto-reply", {
+            "platform": platform,
+            "rules": rules or [],
+            "enabled": enabled
+        })
+    
+    async def generate_hashtags(
+        self,
+        content: str,
+        platform: str = "instagram",
+        count: int = 30
+    ) -> Dict[str, Any]:
+        """Generate relevant hashtags for content."""
+        return await self._call("ai", "/api/hashtags/generate", {
+            "content": content,
+            "platform": platform,
+            "count": count
+        })
 
 
 # Singleton instance

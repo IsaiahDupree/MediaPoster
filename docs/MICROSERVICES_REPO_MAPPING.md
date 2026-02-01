@@ -546,6 +546,14 @@ Two new microservices have been extracted and deployed:
 | `POST /api/dm/outreach` | OutreachSequencer | ✅ Real |
 | `POST /api/inbox/auto-reply` | AutoReplyEngine | ✅ Real |
 | `POST /api/hashtags/generate` | HashtagGenerator | ✅ Real |
+| `POST /api/crm/leads` | CRM (external) | ✅ Real |
+| `POST /api/crm/relationship-score` | CRM (external) | ✅ Real |
+| `POST /api/safari/publish` | Safari Automation (external) | ✅ Real |
+| `POST /api/safari/dm` | Safari Automation (external) | ✅ Real |
+
+**External Repo Integrations:**
+- **Safari Automation** → `/Users/isaiahdupree/Documents/Software/Safari Automation/` - Browser automation
+- **Local EverReach CRM** → `/Users/isaiahdupree/Documents/Software/Local EverReach CRM/` - Lead management
 
 **Services Copied:**
 - `fate_scorer.py`, `awareness_classifier.py`, `sentiment_analyzer.py`

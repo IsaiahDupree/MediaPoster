@@ -508,6 +508,13 @@ Two new microservices have been extracted and deployed:
 | `POST /api/scrape/instagram` | InstagramScraper | ✅ Real |
 | `GET /api/workers/status` | WorkerStatus | ✅ Real |
 | `POST /api/matting/remove-bg` | MattingWorker | ✅ Real |
+| `POST /api/tts/indextts2` | IndexTTS2 (external) | ✅ Real |
+| `POST /api/remotion/render` | Remotion (external) | ✅ Real |
+| `POST /api/remotion/brief` | BriefGenerator | ✅ Real |
+
+**External Repo Integrations:**
+- **TTS** → `/Users/isaiahdupree/Documents/Software/TTS/` - IndexTTS2, ElevenLabs voice synthesis
+- **Remotion** → `/Users/isaiahdupree/Documents/Software/Remotion/` - Video rendering with React
 
 **Services Copied:**
 - `frame_analyzer.py`, `frame_analyzer_enhanced.py`, `frame_sampler.py`

@@ -270,23 +270,28 @@ class MasterOrchestrator:
         # Update step: sora_generation -> running
         await self._db_update_pipeline_step(pipeline_id, "sora_generation", "running")
 
-        # Start Sora video generation
-        await self.event_bus.publish(
-            Topics.SORA_BATCH_REQUESTED,
-            {
-                "pipeline_id": pipeline_id,
-                "theme": config.theme,
-                "num_parts": config.num_parts,
-                "character": config.character,
-                "stitch": True,
-                "remove_watermark": True
-            },
-            correlation_id=correlation_id,
-            source="MasterOrchestrator"
-        )
-
         pipeline["status"] = "generating_video"
         await self._db_update_pipeline_status(pipeline_id, "generating_video")
+
+        # Start Sora video generation asynchronously.
+        # We use create_task so start_pipeline returns immediately with the
+        # pipeline still in active_pipelines.  The SoraWorker will pick up
+        # the event and drive the pipeline forward through its event handlers.
+        asyncio.create_task(
+            self.event_bus.publish(
+                Topics.SORA_BATCH_REQUESTED,
+                {
+                    "pipeline_id": pipeline_id,
+                    "theme": config.theme,
+                    "num_parts": config.num_parts,
+                    "character": config.character,
+                    "stitch": True,
+                    "remove_watermark": True
+                },
+                correlation_id=correlation_id,
+                source="MasterOrchestrator"
+            )
+        )
 
         return pipeline_id
 
@@ -297,9 +302,23 @@ class MasterOrchestrator:
         if not pipeline_id or pipeline_id not in self.active_pipelines:
             return
 
+        # If the batch status is "failed", treat it as a pipeline failure
+        batch_status = payload.get("status")
+        if batch_status == "failed":
+            error = payload.get("error", "Sora batch generation failed")
+            pipeline = self.active_pipelines[pipeline_id]
+            pipeline["status"] = "failed"
+            pipeline["error"] = error
+            logger.error(f"[{pipeline_id}] ❌ Sora batch failed: {error}")
+            await self._db_update_pipeline_status(pipeline_id, "failed", {"error": error})
+            await self._db_update_pipeline_step(pipeline_id, "sora_generation", "failed", error=error)
+            self.completed_pipelines[pipeline_id] = pipeline
+            del self.active_pipelines[pipeline_id]
+            return
+
         pipeline = self.active_pipelines[pipeline_id]
         pipeline["outputs"]["sora"] = {
-            "stitched_video": payload.get("stitched_video"),
+            "stitched_video": payload.get("stitched_video") or payload.get("video_path"),
             "analysis": payload.get("analysis")
         }
 
@@ -309,7 +328,7 @@ class MasterOrchestrator:
             "sora_generation",
             "completed",
             output={
-                "stitched_video": payload.get("stitched_video"),
+                "stitched_video": payload.get("stitched_video") or payload.get("video_path"),
                 "successful_parts": payload.get("successful_parts", 0),
                 "failed_parts": payload.get("failed_parts", 0)
             }
@@ -320,7 +339,7 @@ class MasterOrchestrator:
             pipeline_id,
             "content_analysis",
             "completed",
-            output=payload.get("analysis", {})
+            output=payload.get("analysis") or {}
         )
 
         pipeline["status"] = "analyzing"
@@ -366,11 +385,14 @@ class MasterOrchestrator:
                     "video_path": video_path,
                     "analysis": analysis,
                     "offer_url": config.offer_url,
-                    # ARCH-003: Auto-filled metadata
+                    # ARCH-003: Auto-filled metadata from content analysis
                     "title": platform_metadata.get("title"),
                     "description": platform_metadata.get("description"),
                     "hashtags": platform_metadata.get("hashtags"),
-                    "hook": platform_metadata.get("hook")
+                    "hook": platform_metadata.get("hook"),
+                    "cta": platform_metadata.get("cta"),
+                    "viral_score": platform_metadata.get("viral_score"),
+                    "content_type": platform_metadata.get("content_type"),
                 },
                 correlation_id=pipeline["correlation_id"],
                 source="MasterOrchestrator"
@@ -606,58 +628,118 @@ class MasterOrchestrator:
         """
         return list(self.active_pipelines.values())
 
-    def _extract_platform_metadata(self, analysis: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    def get_pipeline_metrics(self) -> Dict[str, Any]:
+        """
+        Get aggregate metrics for all pipelines (ARCH-008).
+
+        Returns:
+            Dict with pipeline counts, status breakdown, and timing.
+        """
+        active = list(self.active_pipelines.values())
+        completed = list(self.completed_pipelines.values())
+        all_pipelines = active + completed
+
+        status_counts: Dict[str, int] = {}
+        for p in all_pipelines:
+            status = p.get("status", "unknown")
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        return {
+            "total_pipelines": len(all_pipelines),
+            "active_pipelines": len(active),
+            "completed_pipelines": len(completed),
+            "status_breakdown": status_counts,
+        }
+
+    def _extract_platform_metadata(self, analysis: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """
         Extract platform-specific metadata from content analysis (ARCH-003).
 
-        Converts AI analysis into platform-optimized titles, descriptions, and hashtags.
+        Converts AI analysis into platform-optimized titles, descriptions,
+        hashtags, and engagement metadata. Uses the full ContentAnalyzer
+        output including pain_points, emotional_journey, CTA, viral_score,
+        and target_audience to produce richer publishing payloads.
 
         Args:
-            analysis: Content analysis dict from ContentAnalyzer
+            analysis: Content analysis dict from ContentAnalyzer (may be None)
 
         Returns:
             Dict mapping platform names to metadata dicts
         """
-        metadata = {
-            "default": {
-                "title": analysis.get("title_instagram") or analysis.get("title_tiktok") or "Untitled",
-                "description": analysis.get("description") or "",
-                "hashtags": analysis.get("hashtags") or [],
-                "hook": analysis.get("detected_hook") or analysis.get("hook") or ""
-            }
+        if not analysis:
+            analysis = {}
+
+        # Extract common fields from analysis
+        hook = analysis.get("detected_hook") or analysis.get("hook") or ""
+        topics = analysis.get("topics", [])
+        hashtags = analysis.get("hashtags", [])
+        viral_score = analysis.get("viral_score") or analysis.get("pre_social_score", 0)
+        cta_data = analysis.get("call_to_action", {})
+        cta_text = cta_data.get("text", "") if isinstance(cta_data, dict) else ""
+        suggestions = analysis.get("suggestions", [])
+        content_type = analysis.get("content_type", "general")
+        tone = analysis.get("tone", "")
+        description = analysis.get("description") or analysis.get("viral_analysis") or ""
+
+        # Build base metadata shared across platforms
+        base = {
+            "title": hook or "Untitled",
+            "description": description,
+            "hashtags": hashtags,
+            "hook": hook,
+            "viral_score": viral_score,
+            "cta": cta_text,
+            "content_type": content_type,
+            "tone": tone,
+            "topics": topics,
         }
 
-        # Platform-specific optimizations
-        if "title_tiktok" in analysis:
-            metadata["tiktok"] = {
-                "title": analysis["title_tiktok"],
-                "description": analysis.get("description") or "",
-                "hashtags": analysis.get("hashtags") or [],
-                "hook": analysis.get("detected_hook") or analysis.get("hook") or ""
-            }
+        metadata = {"default": base.copy()}
 
-        if "title_instagram" in analysis:
-            metadata["instagram"] = {
-                "title": analysis["title_instagram"],
-                "description": analysis.get("description") or "",
-                "hashtags": analysis.get("hashtags") or [],
-                "hook": analysis.get("detected_hook") or analysis.get("hook") or ""
-            }
+        # TikTok: Short hook + heavy hashtags (max 10)
+        metadata["tiktok"] = {
+            **base,
+            "title": analysis.get("title_tiktok") or hook,
+            "hashtags": hashtags[:10],
+        }
 
-        if "title_youtube" in analysis:
-            metadata["youtube"] = {
-                "title": analysis["title_youtube"],
-                "description": analysis.get("description") or "",
-                "hashtags": analysis.get("hashtags") or [],
-                "hook": analysis.get("detected_hook") or analysis.get("hook") or ""
-            }
+        # Instagram: Longer caption, up to 30 hashtags
+        metadata["instagram"] = {
+            **base,
+            "title": analysis.get("title_instagram") or hook,
+            "hashtags": hashtags[:30],
+        }
 
-        # Other platforms use default metadata
-        for platform in ["threads", "pinterest", "linkedin", "facebook", "bluesky", "twitter"]:
+        # YouTube: SEO-focused title + description
+        metadata["youtube"] = {
+            **base,
+            "title": analysis.get("title_youtube") or hook,
+            "hashtags": hashtags[:15],
+        }
+
+        # Twitter/X: Very short, 3 hashtags max
+        metadata["twitter"] = {
+            **base,
+            "title": hook[:200] if hook else "",
+            "hashtags": hashtags[:3],
+        }
+
+        # Threads: Similar to Instagram
+        metadata["threads"] = {
+            **base,
+            "title": analysis.get("title_instagram") or hook,
+            "hashtags": hashtags[:10],
+        }
+
+        # Remaining platforms use default
+        for platform in ["pinterest", "linkedin", "facebook", "bluesky"]:
             if platform not in metadata:
-                metadata[platform] = metadata["default"]
+                metadata[platform] = base.copy()
 
-        logger.debug(f"[ARCH-003] Extracted metadata for {len(metadata)} platforms")
+        logger.debug(
+            f"[ARCH-003] Extracted metadata for {len(metadata)} platforms "
+            f"(viral_score={viral_score}, hook='{hook[:40]}...')"
+        )
         return metadata
 
     # Database persistence methods (ARCH-001)

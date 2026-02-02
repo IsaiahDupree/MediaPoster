@@ -80,59 +80,35 @@ async def test_arch_001_orchestrator_subscribes_to_events():
 @pytest.mark.asyncio
 async def test_arch_001_orchestrator_tracks_pipeline_state():
     """ARCH-001: Verify orchestrator tracks active pipeline states."""
-    orchestrator = MasterOrchestrator()
+    # Use fresh EventBus and disable DB to avoid singleton/DB pollution
+    event_bus = EventBus()
+    orchestrator = MasterOrchestrator(event_bus=event_bus, use_db=False)
 
     # Initially no pipelines
     assert len(orchestrator.active_pipelines) == 0
 
-    # After starting a pipeline, it should be tracked
-    # (We'll mock the actual execution to keep test fast)
-    with patch.object(orchestrator.sora_pipeline, 'generate_multi_part', new_callable=AsyncMock) as mock_sora:
-        with patch.object(orchestrator, '_step_publish_to_platforms', new_callable=AsyncMock) as mock_publish:
-            mock_sora.return_value = {
-                "status": "completed",
-                "stitched_video": "/tmp/test.mp4",
-                "analysis": {"title": "Test", "hashtags": ["test"]}
-            }
-            mock_publish.return_value = {
-                "results": [{"account_id": 1, "platform": "tiktok", "status": "queued"}],
-                "total": 1
-            }
+    await orchestrator.start()
 
-            await orchestrator.start()
+    # run_full_pipeline returns a pipeline_id string (event-driven architecture)
+    pipeline_id = await orchestrator.run_full_pipeline(
+        theme="Test pipeline tracking",
+        num_parts=1,
+        schedule_tweets=False
+    )
 
-            # Start a pipeline (but don't await - we just want to check tracking)
-            pipeline_task = asyncio.create_task(
-                orchestrator.run_full_pipeline(
-                    theme="Test pipeline tracking",
-                    num_parts=1,
-                    schedule_tweets=False
-                )
-            )
+    # Should now have an active pipeline
+    assert len(orchestrator.active_pipelines) > 0
 
-            # Give it a moment to initialize
-            await asyncio.sleep(0.1)
+    # Get the pipeline
+    pipeline = orchestrator.get_pipeline_status(pipeline_id)
 
-            # Should now have an active pipeline
-            assert len(orchestrator.active_pipelines) > 0
+    assert pipeline is not None
+    assert pipeline["theme"] == "Test pipeline tracking"
+    assert "id" in pipeline
+    assert "status" in pipeline
+    assert pipeline["status"] == "generating_video"
 
-            # Get the pipeline
-            pipeline_id = list(orchestrator.active_pipelines.keys())[0]
-            pipeline = orchestrator.get_pipeline_status(pipeline_id)
-
-            assert pipeline is not None
-            assert pipeline["theme"] == "Test pipeline tracking"
-            assert "id" in pipeline
-            assert "status" in pipeline
-
-            # Cleanup
-            pipeline_task.cancel()
-            try:
-                await pipeline_task
-            except asyncio.CancelledError:
-                pass
-
-            await orchestrator.stop()
+    await orchestrator.stop()
 
 
 # =========================================================================
@@ -161,50 +137,67 @@ async def test_arch_002_sora_pipeline_has_multi_part_method():
 
 @pytest.mark.asyncio
 async def test_arch_002_sora_emits_batch_events():
-    """ARCH-002: Verify SoraPipeline emits SORA_BATCH_* events."""
-    event_bus = EventBus.get_instance()
-    pipeline = SoraPipeline(event_bus=event_bus)
+    """ARCH-002: Verify SoraWorker emits SORA_BATCH_* events via EventBus."""
+    from services.workers.sora_worker import SoraWorker
+
+    # Use a fresh EventBus to avoid polluting the singleton with test subscriptions
+    event_bus = EventBus()
 
     # Track emitted events
     emitted_events = []
 
-    def capture_event(event):
+    async def capture_event(event):
         emitted_events.append(event.topic)
 
     event_bus.subscribe(Topics.SORA_BATCH_STARTED, capture_event)
     event_bus.subscribe(Topics.SORA_BATCH_COMPLETED, capture_event)
 
-    # Mock the actual generation to avoid real Safari automation
-    with patch.object(pipeline, 'generate_single', new_callable=AsyncMock) as mock_gen:
-        mock_gen.return_value = {
-            "status": "completed",
-            "video_path": "/tmp/test_part.mp4",
-            "cleaned_video_path": "/tmp/test_part_clean.mp4"
-        }
+    # Create mock SoraPipeline
+    mock_pipeline = AsyncMock()
+    mock_pipeline.generate_multi_part.return_value = {
+        "id": "test-batch-001",
+        "status": "completed",
+        "theme": "Test batch coordination",
+        "num_parts": 3,
+        "successful_parts": 3,
+        "failed_parts": 0,
+        "parts": [],
+        "prompts": ["Prompt 1", "Prompt 2", "Prompt 3"],
+        "stitched_video": "/tmp/stitched.mp4",
+        "video_path": "/tmp/stitched.mp4",
+        "analysis": {
+            "detected_hook": "Test Video",
+            "hashtags": ["test", "video"],
+            "viral_score": 75,
+        },
+        "total_generation_time": 10.5,
+    }
 
-        with patch.object(pipeline, 'stitch_videos', new_callable=AsyncMock) as mock_stitch:
-            mock_stitch.return_value = "/tmp/stitched.mp4"
+    # Patch at the import location inside sora_worker's _handle_batch_request
+    with patch("automation.sora.pipeline.SoraPipeline", return_value=mock_pipeline):
+        # Create SoraWorker (subscriptions are set up in __init__)
+        worker = SoraWorker(event_bus=event_bus)
 
-            with patch.object(pipeline, '_generate_part_prompts', new_callable=AsyncMock) as mock_prompts:
-                mock_prompts.return_value = ["Prompt 1", "Prompt 2", "Prompt 3"]
+        # Publish a batch request and let SoraWorker handle it
+        await event_bus.publish(
+            Topics.SORA_BATCH_REQUESTED,
+            {
+                "pipeline_id": "test-pipeline",
+                "theme": "Test batch coordination",
+                "num_parts": 3,
+                "character": None,
+                "stitch": True,
+                "remove_watermark": True,
+            },
+            source="test",
+        )
 
-                with patch.object(pipeline, '_analyze_video_content', new_callable=AsyncMock) as mock_analyze:
-                    mock_analyze.return_value = {
-                        "title_tiktok": "Test Video",
-                        "hashtags": ["test", "video"]
-                    }
-
-                    # Execute multi-part generation
-                    result = await pipeline.generate_multi_part(
-                        theme="Test batch coordination",
-                        num_parts=3,
-                        auto_stitch=True,
-                        auto_analyze=True
-                    )
+        # Give event bus time to dispatch
+        await asyncio.sleep(0.2)
 
     # Verify events were emitted
-    assert Topics.SORA_BATCH_STARTED in emitted_events
-    assert Topics.SORA_BATCH_COMPLETED in emitted_events
+    assert Topics.SORA_BATCH_STARTED in emitted_events, f"Expected SORA_BATCH_STARTED, got: {emitted_events}"
+    assert Topics.SORA_BATCH_COMPLETED in emitted_events, f"Expected SORA_BATCH_COMPLETED, got: {emitted_events}"
 
 
 # =========================================================================

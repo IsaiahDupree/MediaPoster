@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import statistics
 
 # Import services
-from services.feedback_loop.scorer import ScoringService, ScoringMode
+from services.feedback_loop.scorer import PostScorer as ScoringService, ScoringMode
 from services.template_leaderboard import TemplateLeaderboard
 
 
@@ -28,13 +28,13 @@ def mock_db_session():
 @pytest.fixture
 def scoring_service(mock_db_session):
     """Scoring service instance"""
-    return ScoringService(db=mock_db_session)
+    return ScoringService()
 
 
 @pytest.fixture
 def template_leaderboard(mock_db_session):
     """Template leaderboard instance"""
-    return TemplateLeaderboard(db=mock_db_session)
+    return TemplateLeaderboard()
 
 
 @pytest.fixture

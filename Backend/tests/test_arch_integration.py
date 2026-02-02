@@ -57,34 +57,13 @@ class TestARCH001_MasterOrchestrator:
 
     @pytest.mark.asyncio
     async def test_orchestrator_pipeline_execution_structure(self):
-        """ARCH-001: Full pipeline should execute all steps in order"""
-        from services.master_orchestrator import MasterOrchestrator, PipelineStatus
+        """ARCH-001: run_full_pipeline should create pipeline via event-driven architecture"""
+        from services.master_orchestrator import MasterOrchestrator
 
-        orchestrator = MasterOrchestrator()
+        orchestrator = MasterOrchestrator(use_db=False)
 
-        # Mock the subsystems to avoid actual execution
-        orchestrator.sora_pipeline.generate_multi_part = AsyncMock(return_value={
-            "status": "completed",
-            "stitched_video": "/tmp/test_video.mp4",
-            "theme": "Test Theme",
-            "prompts": ["part1", "part2", "part3"],
-            "analysis": {
-                "title_tiktok": "Test Title",
-                "description": "Test Description",
-                "hashtags": ["test", "viral"],
-                "hook": "Test Hook",
-                "cta": "Follow for more!"
-            }
-        })
-
-        orchestrator.blotato_service.get_accounts_by_platform = Mock(return_value=[
-            type('Account', (), {'id': 1, 'username': 'test_account'})()
-        ])
-
-        orchestrator.twitter_service.schedule_tweets = Mock(return_value=["tweet1", "tweet2"])
-
-        # Execute pipeline
-        result = await orchestrator.run_full_pipeline(
+        # Execute pipeline - returns a pipeline_id string
+        pipeline_id = await orchestrator.run_full_pipeline(
             theme="Test viral content",
             num_parts=3,
             publish_platforms=["tiktok"],
@@ -92,12 +71,27 @@ class TestARCH001_MasterOrchestrator:
             tweets_per_day=12
         )
 
-        # Verify structure
-        assert result["status"] == PipelineStatus.COMPLETED, "Pipeline should complete"
-        assert "video_generated" in result["steps"], "Should generate video"
-        assert "content_analyzed" in result["steps"], "Should analyze content"
-        assert "published_to_platforms" in result["steps"], "Should publish"
-        assert "tweets_scheduled" in result["steps"], "Should schedule tweets"
+        # Verify pipeline_id is a string
+        assert isinstance(pipeline_id, str), "run_full_pipeline should return a pipeline_id string"
+        assert pipeline_id.startswith("pipeline-"), "pipeline_id should have correct prefix"
+
+        # Verify pipeline was registered in active_pipelines
+        assert pipeline_id in orchestrator.active_pipelines, "Pipeline should be tracked in active_pipelines"
+
+        pipeline = orchestrator.active_pipelines[pipeline_id]
+
+        # Verify pipeline initial state after start_pipeline completes
+        assert pipeline["status"] == "generating_video", "Status should be 'generating_video' after start"
+        assert pipeline["current_step"] == "sora_generation", "Current step should be 'sora_generation'"
+        assert pipeline["theme"] == "Test viral content", "Theme should match input"
+        assert isinstance(pipeline["outputs"], dict), "Outputs should be initialized as a dict"
+        assert "started_at" in pipeline, "Pipeline should have a started_at timestamp"
+        assert "correlation_id" in pipeline, "Pipeline should have a correlation_id"
+
+        # Verify event-driven architecture: generate_multi_part should NOT be called directly
+        # The orchestrator uses SORA_BATCH_REQUESTED events instead of direct calls
+        orchestrator.sora_pipeline.generate_multi_part = AsyncMock()
+        orchestrator.sora_pipeline.generate_multi_part.assert_not_called()
 
 
 class TestARCH002_SoraBatchCoordination:

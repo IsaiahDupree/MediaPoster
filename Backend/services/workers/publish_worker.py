@@ -583,12 +583,27 @@ class PublishWorker(BaseWorker):
             return None
     
     def _build_platform_caption(self, analysis: Dict, platform: str) -> str:
-        """Build platform-optimized caption from analysis."""
+        """
+        Build platform-optimized caption from content analysis (ARCH-003).
+
+        Uses the full analysis output including detected_hook, CTA,
+        viral_analysis description, and hashtags to produce platform-tuned captions.
+        """
         hook = analysis.get("detected_hook", "")
-        description = analysis.get("suggested_description", "")
+        description = (
+            analysis.get("suggested_description")
+            or analysis.get("viral_analysis")
+            or ""
+        )
         hashtags = analysis.get("hashtags", [])
-        cta = analysis.get("cta", "Follow for more!")
-        
+
+        # ARCH-003: Use structured CTA from ContentAnalyzer if available
+        cta_data = analysis.get("call_to_action", {})
+        if isinstance(cta_data, dict) and cta_data.get("text"):
+            cta = cta_data["text"]
+        else:
+            cta = analysis.get("cta", "Follow for more!")
+
         # Platform-specific formatting
         if platform == "tiktok":
             # TikTok: Short, punchy, hashtag-heavy
@@ -596,28 +611,28 @@ class PublishWorker(BaseWorker):
             if hashtags:
                 caption += "\n\n" + " ".join([f"#{h}" for h in hashtags[:10]])
             return caption[:2200]  # TikTok limit
-            
+
         elif platform == "instagram":
             # Instagram: Longer form okay, structured
             caption = f"{hook}\n\n{description}\n\n{cta}"
             if hashtags:
                 caption += "\n\n" + " ".join([f"#{h}" for h in hashtags[:30]])
             return caption[:2200]
-            
+
         elif platform == "youtube":
             # YouTube: SEO-focused title + description
             caption = f"{hook}\n\n{description}\n\n{cta}"
             if hashtags:
                 caption += "\n\n" + " ".join([f"#{h}" for h in hashtags[:15]])
             return caption[:5000]
-            
+
         elif platform == "twitter":
             # Twitter: Very short
             caption = f"{hook}"
             if hashtags:
                 caption += " " + " ".join([f"#{h}" for h in hashtags[:3]])
             return caption[:280]
-            
+
         else:
             # Default format
             caption = f"{hook}\n\n{cta}"

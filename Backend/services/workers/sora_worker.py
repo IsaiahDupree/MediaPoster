@@ -279,7 +279,7 @@ class SoraWorker(BaseWorker):
                     correlation_id=event.correlation_id
                 )
 
-                logger.success(
+                logger.info(
                     f"[{self.worker_id}] Batch complete: {result.get('status')} - "
                     f"{result.get('stitched_video') or result.get('video_path')}"
                 )
@@ -315,7 +315,7 @@ class SoraWorker(BaseWorker):
                     correlation_id=event.correlation_id
                 )
 
-                logger.success(
+                logger.info(
                     f"[{self.worker_id}] Batch complete: "
                     f"{result.get('completed')}/{result.get('total_prompts')} succeeded"
                 )

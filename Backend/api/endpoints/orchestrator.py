@@ -307,6 +307,21 @@ async def get_orchestrator_stats() -> Dict[str, Any]:
 
 
 # ============================================================================
+# Metrics (ARCH-008)
+# ============================================================================
+
+@router.get("/metrics")
+async def get_metrics() -> Dict[str, Any]:
+    """Get aggregate pipeline metrics for dashboard widget (ARCH-008)."""
+    try:
+        orchestrator = MasterOrchestrator.get_instance()
+        metrics = orchestrator.get_pipeline_metrics()
+        return {"success": True, **metrics}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")
+
+
+# ============================================================================
 # Health Check
 # ============================================================================
 

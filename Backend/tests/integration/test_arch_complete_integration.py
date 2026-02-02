@@ -386,14 +386,14 @@ class TestArchitectureIntegration:
         """
         from api.endpoints.orchestrator import router, StartPipelineRequest
 
-        # Verify endpoints are registered
+        # Verify endpoints are registered (routes include the router prefix)
         routes = [route.path for route in router.routes]
 
-        assert "/pipeline/start" in routes
-        assert "/pipeline/{pipeline_id}" in routes
-        assert "/pipelines" in routes
-        assert "/pipeline/{pipeline_id}/analytics" in routes
-        assert "/pipeline/{pipeline_id}/traffic" in routes
+        assert "/api/orchestrator/pipeline/start" in routes
+        assert "/api/orchestrator/pipeline/{pipeline_id}" in routes
+        assert "/api/orchestrator/pipelines" in routes
+        assert any("analytics" in r for r in routes)
+        assert any("traffic" in r for r in routes)
 
         # Verify request model
         request = StartPipelineRequest(

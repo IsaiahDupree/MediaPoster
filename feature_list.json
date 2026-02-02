@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 538,
-  "completedFeatures": 502,
+  "completedFeatures": 504,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -5029,16 +5029,17 @@
       "priority": "P1",
       "phase": 14,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
-        "tests/e2e/publishing.spec.ts"
+        "tests/e2e/test_publishing_e2e.py"
       ],
       "acceptance": [
         "Platform selection",
         "Publish success",
         "Error handling"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "E2E-006",
@@ -5047,16 +5048,17 @@
       "priority": "P2",
       "phase": 14,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "testing",
       "files": [
-        "tests/e2e/analytics.spec.ts"
+        "tests/e2e/test_analytics_e2e.py"
       ],
       "acceptance": [
         "Dashboard loads",
         "Charts render",
         "Date filtering"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "SSM-001",

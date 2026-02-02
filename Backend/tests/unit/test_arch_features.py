@@ -229,6 +229,11 @@ class TestSoraPipelineARCH002:
 class TestAnalyzerIntegrationARCH003:
     """Test ARCH-003: Content analyzer → publisher integration."""
 
+    @pytest.fixture
+    def orchestrator(self):
+        """Create orchestrator instance for testing."""
+        return MasterOrchestrator(use_db=False)
+
     def test_content_analyzer_output_structure(self):
         """Test that ContentAnalyzer returns expected fields."""
         try:
@@ -323,8 +328,9 @@ class TestOfferTrackerARCH005:
     def tracker(self):
         """Create tracker instance for testing."""
         tracker = OfferTracker()
-        # Disable DB for unit tests
-        tracker._engine = None
+        # Mock engine for unit tests (don't disable it, mock the DB calls)
+        from unittest.mock import MagicMock
+        tracker._engine = MagicMock()
         return tracker
 
     def test_offer_tracker_singleton(self):

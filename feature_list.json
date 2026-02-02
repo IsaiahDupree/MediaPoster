@@ -2,7 +2,7 @@
   "project": "MediaPoster",
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
-  "totalFeatures": 495,
+  "totalFeatures": 538,
   "completedFeatures": 295,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
@@ -25,7 +25,13 @@
     "phase18_content_ingestion": "Directory ingestion pipeline with safe export and AI analysis",
     "phase19_approval": "Human-in-the-loop approval workflow with notification channels",
     "phase20_design_system": "Frontend consistency, unified components, and design system",
-    "phase21_youtube_playlist": "YouTube playlist to content pipeline automation"
+    "phase21_youtube_playlist": "YouTube playlist to content pipeline automation",
+    "phase22_analytics_dashboard": "Unified analytics dashboard with cross-platform metrics and AI insights",
+    "phase23_lead_forms": "Lead forms, scoring, and waitlist management",
+    "phase24_whisper": "Whisper transcription integration for video analysis",
+    "phase25_email_sequences": "Email sequences with Resend integration",
+    "phase26_instagram_graph": "Instagram Graph API for official metrics and publishing",
+    "phase27_meta_ads": "Meta Ads Autopilot for programmatic ad testing"
   },
   "features": [
     {
@@ -7993,6 +7999,436 @@
       "category": "safari-automation",
       "priority": "P2",
       "prd": "PRD_Safari_Automation_Management.md",
+      "passes": false
+    },
+    {
+      "id": "ANLY-001",
+      "name": "Analytics Aggregation Service",
+      "description": "Aggregate metrics from all platforms (Instagram, TikTok, YouTube, Twitter via Blotato) into normalized daily stats",
+      "category": "analytics-dashboard",
+      "priority": "P1",
+      "phase": 22,
+      "prd": "PRD_ANALYTICS_DASHBOARD.md",
+      "passes": false
+    },
+    {
+      "id": "ANLY-002",
+      "name": "Analytics Overview Dashboard",
+      "description": "Dashboard showing total reach, engagement, followers, posts with period comparison",
+      "category": "analytics-dashboard",
+      "priority": "P1",
+      "phase": 22,
+      "prd": "PRD_ANALYTICS_DASHBOARD.md",
+      "passes": false
+    },
+    {
+      "id": "ANLY-003",
+      "name": "Content Performance Rankings",
+      "description": "Top performing content sorted by engagement, reach, and virality score",
+      "category": "analytics-dashboard",
+      "priority": "P1",
+      "phase": 22,
+      "prd": "PRD_ANALYTICS_DASHBOARD.md",
+      "passes": false
+    },
+    {
+      "id": "ANLY-004",
+      "name": "Best Posting Times Heatmap",
+      "description": "Calculate and display optimal posting times by platform based on historical engagement",
+      "category": "analytics-dashboard",
+      "priority": "P2",
+      "phase": 22,
+      "prd": "PRD_ANALYTICS_DASHBOARD.md",
+      "passes": false
+    },
+    {
+      "id": "ANLY-005",
+      "name": "AI Analytics Insights",
+      "description": "GPT-4 generated recommendations based on performance patterns and anomalies",
+      "category": "analytics-dashboard",
+      "priority": "P2",
+      "phase": 22,
+      "prd": "PRD_ANALYTICS_DASHBOARD.md",
+      "passes": false
+    },
+    {
+      "id": "ANLY-006",
+      "name": "Analytics Reports Export",
+      "description": "Generate weekly/monthly PDF reports with charts and insights",
+      "category": "analytics-dashboard",
+      "priority": "P2",
+      "phase": 22,
+      "prd": "PRD_ANALYTICS_DASHBOARD.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-001",
+      "name": "Lead Form Builder",
+      "description": "Drag-and-drop form builder with custom questions, field types, and validation",
+      "category": "lead-forms",
+      "priority": "P1",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-002",
+      "name": "Lead Form Submission Handler",
+      "description": "Process form submissions, validate data, create lead records, trigger automations",
+      "category": "lead-forms",
+      "priority": "P0",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-003",
+      "name": "Lead Scoring with FATE",
+      "description": "Calculate lead scores using form rules + FATE scoring, assign tiers (hot/warm/cold)",
+      "category": "lead-forms",
+      "priority": "P0",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-004",
+      "name": "Lead Management Dashboard",
+      "description": "View, filter, and manage leads with status updates, tags, and scoring breakdown",
+      "category": "lead-forms",
+      "priority": "P1",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-005",
+      "name": "Public Waitlist API",
+      "description": "Public endpoint for waitlist submissions with position tracking",
+      "category": "lead-forms",
+      "priority": "P1",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-006",
+      "name": "Lead CSV Import/Export",
+      "description": "Bulk import leads from CSV, export lead data for external tools",
+      "category": "lead-forms",
+      "priority": "P2",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-007",
+      "name": "Lead Webhook Integration",
+      "description": "Send lead data to external webhooks on submission and status changes",
+      "category": "lead-forms",
+      "priority": "P2",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "LEAD-008",
+      "name": "Lead Email Sequence Trigger",
+      "description": "Automatically enroll leads in email sequences based on tier and form",
+      "category": "lead-forms",
+      "priority": "P1",
+      "phase": 23,
+      "prd": "PRD_LEAD_FORMS.md",
+      "passes": false
+    },
+    {
+      "id": "WHSP-001",
+      "name": "Whisper Transcription Service",
+      "description": "OpenAI Whisper API integration for audio/video transcription with timestamps",
+      "category": "whisper",
+      "priority": "P0",
+      "phase": 24,
+      "prd": "PRD_WHISPER_INTEGRATION.md",
+      "passes": false
+    },
+    {
+      "id": "WHSP-002",
+      "name": "FFmpeg Audio Extraction",
+      "description": "Extract audio from video files using FFmpeg before transcription",
+      "category": "whisper",
+      "priority": "P0",
+      "phase": 24,
+      "prd": "PRD_WHISPER_INTEGRATION.md",
+      "passes": false
+    },
+    {
+      "id": "WHSP-003",
+      "name": "Transcript Storage and Search",
+      "description": "Store transcripts in database with full-text search across all content",
+      "category": "whisper",
+      "priority": "P1",
+      "phase": 24,
+      "prd": "PRD_WHISPER_INTEGRATION.md",
+      "passes": false
+    },
+    {
+      "id": "WHSP-004",
+      "name": "Auto-Transcribe on Upload",
+      "description": "Automatically trigger transcription job when video is uploaded",
+      "category": "whisper",
+      "priority": "P1",
+      "phase": 24,
+      "prd": "PRD_WHISPER_INTEGRATION.md",
+      "passes": false
+    },
+    {
+      "id": "WHSP-005",
+      "name": "Transcript to Content Analyzer",
+      "description": "Feed transcripts to AI content analyzer for hook detection, CTA extraction, sentiment",
+      "category": "whisper",
+      "priority": "P1",
+      "phase": 24,
+      "prd": "PRD_WHISPER_INTEGRATION.md",
+      "passes": false
+    },
+    {
+      "id": "WHSP-006",
+      "name": "Transcript Viewer UI",
+      "description": "Display transcript with timestamps, segment navigation, and search within content detail",
+      "category": "whisper",
+      "priority": "P2",
+      "phase": 24,
+      "prd": "PRD_WHISPER_INTEGRATION.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-001",
+      "name": "Resend Email Client",
+      "description": "Integrate Resend API for email delivery with tracking (opens, clicks, bounces)",
+      "category": "email-sequences",
+      "priority": "P0",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-002",
+      "name": "Email Sequence Builder",
+      "description": "Create multi-step email sequences with delays, conditions, and templates",
+      "category": "email-sequences",
+      "priority": "P0",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-003",
+      "name": "Email Template Editor",
+      "description": "WYSIWYG email template editor with variables ({{first_name}}, etc)",
+      "category": "email-sequences",
+      "priority": "P1",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-004",
+      "name": "Email Queue Processor",
+      "description": "Background job to process scheduled emails with rate limiting and retries",
+      "category": "email-sequences",
+      "priority": "P0",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-005",
+      "name": "Email Webhook Receiver",
+      "description": "Handle Resend webhooks for delivery status, opens, clicks, bounces",
+      "category": "email-sequences",
+      "priority": "P1",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-006",
+      "name": "Unified Outreach Service",
+      "description": "Combine DM and Email outreach into single service with channel selection",
+      "category": "email-sequences",
+      "priority": "P1",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-007",
+      "name": "Email Sequence Triggers",
+      "description": "Trigger sequences on form submit, lead tier change, tag added, or manual",
+      "category": "email-sequences",
+      "priority": "P1",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "EMAIL-008",
+      "name": "Email Analytics Dashboard",
+      "description": "Track sequence performance: sent, delivered, opened, clicked, converted",
+      "category": "email-sequences",
+      "priority": "P2",
+      "phase": 25,
+      "prd": "PRD_EMAIL_SEQUENCES.md",
+      "passes": false
+    },
+    {
+      "id": "IGAPI-001",
+      "name": "Instagram OAuth Flow",
+      "description": "Implement Facebook/Instagram OAuth with required scopes for Graph API access",
+      "category": "instagram-graph",
+      "priority": "P1",
+      "phase": 26,
+      "prd": "PRD_INSTAGRAM_GRAPH_API.md",
+      "passes": false
+    },
+    {
+      "id": "IGAPI-002",
+      "name": "Instagram Graph API Client",
+      "description": "Client for Instagram Graph API endpoints (media, insights, publishing)",
+      "category": "instagram-graph",
+      "priority": "P0",
+      "phase": 26,
+      "prd": "PRD_INSTAGRAM_GRAPH_API.md",
+      "passes": false
+    },
+    {
+      "id": "IGAPI-003",
+      "name": "Instagram Official Insights",
+      "description": "Fetch official account and media insights (impressions, reach, engagement, demographics)",
+      "category": "instagram-graph",
+      "priority": "P1",
+      "phase": 26,
+      "prd": "PRD_INSTAGRAM_GRAPH_API.md",
+      "passes": false
+    },
+    {
+      "id": "IGAPI-004",
+      "name": "Instagram Publishing via API",
+      "description": "Publish images, videos, reels, and carousels via Graph API",
+      "category": "instagram-graph",
+      "priority": "P1",
+      "phase": 26,
+      "prd": "PRD_INSTAGRAM_GRAPH_API.md",
+      "passes": false
+    },
+    {
+      "id": "IGAPI-005",
+      "name": "Instagram Comments API Integration",
+      "description": "Fetch and reply to comments via official API, sync to Community Inbox",
+      "category": "instagram-graph",
+      "priority": "P2",
+      "phase": 26,
+      "prd": "PRD_INSTAGRAM_GRAPH_API.md",
+      "passes": false
+    },
+    {
+      "id": "META-001",
+      "name": "Meta Marketing API Client",
+      "description": "Client for Meta Marketing API with campaign, adset, and ad management",
+      "category": "meta-ads",
+      "priority": "P0",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-002",
+      "name": "Ad Creative Variation Generator",
+      "description": "Generate 50-100+ video variations from transcript hooks, CTAs, and pain points",
+      "category": "meta-ads",
+      "priority": "P0",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-003",
+      "name": "Batch Video Rendering",
+      "description": "Render multiple ad variations in parallel using Remotion",
+      "category": "meta-ads",
+      "priority": "P1",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-004",
+      "name": "Meta Campaign Deployment",
+      "description": "Deploy campaigns to Meta with targeting, budget, and creative sets",
+      "category": "meta-ads",
+      "priority": "P0",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-005",
+      "name": "Meta Insights Fetcher",
+      "description": "Fetch campaign performance metrics (CPM, CPC, CTR, ROAS) from Insights API",
+      "category": "meta-ads",
+      "priority": "P1",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-006",
+      "name": "Ads Performance Dashboard",
+      "description": "Dashboard showing ad performance, winner identification, and spend tracking",
+      "category": "meta-ads",
+      "priority": "P1",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-007",
+      "name": "AI Ads Insights Engine",
+      "description": "AI analysis of ad performance patterns with recommendations",
+      "category": "meta-ads",
+      "priority": "P2",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-008",
+      "name": "Campaign Budget Optimizer",
+      "description": "Automatically adjust budgets based on performance (pause losers, scale winners)",
+      "category": "meta-ads",
+      "priority": "P1",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-009",
+      "name": "Meta Pixel Integration",
+      "description": "Track conversions via Meta Pixel for lead forms and key actions",
+      "category": "meta-ads",
+      "priority": "P1",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
+      "passes": false
+    },
+    {
+      "id": "META-010",
+      "name": "Meta CAPI Integration",
+      "description": "Server-side event tracking via Conversions API for accurate attribution",
+      "category": "meta-ads",
+      "priority": "P2",
+      "phase": 27,
+      "prd": "PRD_META_ADS_AUTOPILOT.md",
       "passes": false
     }
   ]

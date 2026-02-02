@@ -454,6 +454,23 @@ class MasterOrchestrator:
         # ARCH-003: Auto-fill titles and descriptions from content analysis
         auto_fill_metadata = self._extract_platform_metadata(analysis)
 
+        # ARCH-005: Create tracked offers for each platform
+        tracked_offer_url = config.offer_url
+        if config.offer_url:
+            try:
+                from services.offer_tracker import get_offer_tracker
+                tracker = get_offer_tracker()
+                tracked_offer_url = await tracker.create_tracked_link(
+                    offer_url=config.offer_url,
+                    campaign=f"pipeline-{pipeline_id[:8]}",
+                    source="blotato",
+                    metadata={"theme": config.theme, "num_parts": config.num_parts}
+                )
+                logger.info(f"[{pipeline_id}] Created tracked offer URL for ARCH-005")
+            except Exception as e:
+                logger.warning(f"[{pipeline_id}] Failed to create tracked offer: {e}")
+                tracked_offer_url = config.offer_url
+
         # Publish to each platform
         for platform in config.publish_platforms:
             # ARCH-003: Inject platform-specific metadata
@@ -466,7 +483,7 @@ class MasterOrchestrator:
                     "platform": platform,
                     "video_path": video_path,
                     "analysis": analysis,
-                    "offer_url": config.offer_url,
+                    "offer_url": tracked_offer_url,  # ARCH-005: Use tracked URL
                     # ARCH-003: Auto-filled metadata from content analysis
                     "title": platform_metadata.get("title"),
                     "description": platform_metadata.get("description"),
@@ -1321,6 +1338,100 @@ class MasterOrchestrator:
         except Exception as e:
             logger.error(f"Failed to list pipelines from DB: {e}")
             return []
+
+    async def cleanup_old_pipelines(self, days_old: int = 7) -> int:
+        """
+        Delete old completed pipelines beyond retention period (ARCH-001).
+
+        Args:
+            days_old: Delete pipelines completed more than N days ago
+
+        Returns:
+            Number of pipelines deleted
+        """
+        if not self.use_db or not self._db_engine:
+            return 0
+
+        try:
+            from sqlalchemy import text
+
+            with self._db_engine.connect() as conn:
+                result = conn.execute(text("""
+                    DELETE FROM orchestrator_pipelines
+                    WHERE status IN ('completed', 'failed')
+                    AND completed_at IS NOT NULL
+                    AND completed_at < NOW() - INTERVAL '%s days'
+                    RETURNING pipeline_id
+                """ % days_old))
+
+                deleted_count = len(result.fetchall())
+                conn.commit()
+
+                logger.info(f"Cleaned up {deleted_count} pipelines older than {days_old} days")
+                return deleted_count
+        except Exception as e:
+            logger.error(f"Failed to cleanup old pipelines: {e}")
+            return 0
+
+    def get_pipeline_statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive statistics about all pipelines (ARCH-008).
+
+        Returns:
+            Dict with pipeline metrics and performance data
+        """
+        active = list(self.active_pipelines.values())
+        completed = list(self.completed_pipelines.values())
+        all_pipelines = active + completed
+
+        if not all_pipelines:
+            return {
+                "total_pipelines": 0,
+                "active_pipelines": 0,
+                "completed_pipelines": 0,
+                "status_breakdown": {},
+                "average_duration_seconds": 0,
+                "success_rate": 0,
+                "total_videos_generated": 0,
+                "total_posts_published": 0,
+                "total_tweets_scheduled": 0
+            }
+
+        # Calculate duration statistics
+        durations = []
+        for p in completed:
+            if p.get("duration_seconds"):
+                durations.append(p["duration_seconds"])
+
+        avg_duration = sum(durations) / len(durations) if durations else 0
+
+        # Calculate success rate
+        success_count = sum(1 for p in all_pipelines if p.get("status") == "completed")
+        success_rate = (success_count / len(all_pipelines) * 100) if all_pipelines else 0
+
+        # Aggregate outputs
+        total_posts = sum(p.get("outputs", {}).get("publish_jobs", {}) and
+                          len([j for j in p["outputs"]["publish_jobs"] if j["status"] == "completed"])
+                          or 0 for p in all_pipelines)
+        total_tweets = sum(p.get("outputs", {}).get("twitter", {}).get("tweets_scheduled", 0)
+                          for p in all_pipelines)
+
+        status_counts = {}
+        for p in all_pipelines:
+            status = p.get("status", "unknown")
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        return {
+            "total_pipelines": len(all_pipelines),
+            "active_pipelines": len(active),
+            "completed_pipelines": len(completed),
+            "status_breakdown": status_counts,
+            "average_duration_seconds": round(avg_duration, 2),
+            "success_rate": round(success_rate, 2),
+            "total_videos_generated": len(completed),
+            "total_posts_published": total_posts,
+            "total_tweets_scheduled": total_tweets,
+        }
 
 
 # ============================================================================

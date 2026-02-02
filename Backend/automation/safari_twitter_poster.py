@@ -178,6 +178,10 @@ class SafariTwitterPoster:
         success, result = self._run_applescript(script)
         return success and result == "loaded"
     
+    def check_login(self) -> Dict:
+        """Check if user is logged in (alias for check_login_status)."""
+        return self.check_login_status()
+
     def check_login_status(self) -> Dict:
         """Check if user is logged into X/Twitter using JavaScript."""
         # Wait for page to load first
@@ -484,7 +488,7 @@ class SafariTwitterPoster:
                     # Success - got tweet URL
                     if data.get('posted') and data.get('tweet_id'):
                         tweet_id = data['tweet_id']
-                        tweet_url = data['url']
+                        tweet_url = data.get('url', f"https://x.com/i/status/{tweet_id}")
                         logger.success(f"✅ Tweet posted! ID: {tweet_id}")
                         return {
                             'posted': True,

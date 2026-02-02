@@ -361,7 +361,7 @@ class TestPerformanceBenchmarks:
     def test_json_parsing_performance(self, poster, mock_applescript):
         """Benchmark JSON parsing for status checks."""
         import time
-        
+
         response = json.dumps({
             "logged_in": True,
             "username": "test_user",
@@ -369,12 +369,13 @@ class TestPerformanceBenchmarks:
             "url": "https://x.com/test_user"
         })
         mock_applescript.return_value = (True, response)
-        
+
         start = time.time()
-        for _ in range(1000):
-            poster.check_login_status()
+        with patch('time.sleep'), patch.object(poster, 'wait_for_page_load'):
+            for _ in range(1000):
+                poster.check_login_status()
         elapsed = time.time() - start
-        
+
         # Should parse 1000 JSON responses quickly
         assert elapsed < 2.0, f"1000 status checks took {elapsed}s"
 

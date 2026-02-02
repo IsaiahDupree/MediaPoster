@@ -470,6 +470,37 @@ class OfferTracker:
                 }
 
 
+    # ------------------------------------------------------------------
+    # Method aliases for compatibility with different test suites
+    # ------------------------------------------------------------------
+
+    async def generate_utm_link(self, offer_url: str, campaign: str, **kwargs) -> str:
+        """Alias for create_tracked_link."""
+        return await self.create_tracked_link(offer_url, campaign, **kwargs)
+
+    def record_click(self, **kwargs):
+        """Alias for track_click."""
+        return self.track_click(**kwargs)
+
+    def record_conversion(self, **kwargs):
+        """Alias for track_conversion."""
+        return self.track_conversion(**kwargs)
+
+    def get_campaign_stats(self, campaign: str = None, **kwargs) -> Dict:
+        """Alias for get_campaign_analytics / get_offer_stats."""
+        if campaign:
+            return self.get_campaign_analytics(campaign, **kwargs)
+        return self.get_offer_stats(campaign_name=campaign, **kwargs)
+
+    def get_roi_report(self, campaign: str = None, days: int = 30) -> Dict:
+        """Get ROI report for a campaign or all campaigns."""
+        stats = self.get_offer_stats(campaign_name=campaign, days=days)
+        revenue = stats.get("total_revenue", 0)
+        clicks = stats.get("total_clicks", 0)
+        roi = self._calculate_roi(revenue, clicks) if clicks > 0 else {"roi": 0, "cpc": 0}
+        return {**stats, **roi}
+
+
 # Singleton instance
 _tracker_instance: Optional[OfferTracker] = None
 

@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 538,
-  "completedFeatures": 295,
+  "completedFeatures": 502,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -3174,7 +3174,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "tiktok",
       "files": [
         "Backend/services/tiktok_scraper.py"
@@ -3191,7 +3191,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "tiktok",
       "files": [
         "Backend/services/tiktok_repurpose_service.py"
@@ -3298,7 +3298,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "analytics",
       "files": [
         "Backend/services/performance_correlator.py"
@@ -3315,7 +3315,7 @@
       "priority": "P2",
       "phase": 6,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "analytics",
       "files": [
         "Backend/services/predictive_analytics.py"
@@ -3387,7 +3387,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "video",
       "files": [
         "Backend/services/video_viral_analyzer.py"
@@ -3744,7 +3744,7 @@
       "priority": "P1",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "narrative",
       "files": [
         "Backend/services/narrative_scheduler/reflection.py"
@@ -4102,7 +4102,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "advanced-queries",
       "files": [
         "Backend/services/trend_intelligence/queries.py"
@@ -4119,7 +4119,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "advanced-queries",
       "files": [
         "Backend/services/trend_intelligence/queries.py"
@@ -4136,7 +4136,7 @@
       "priority": "P2",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "advanced-queries",
       "files": [
         "Backend/services/trend_intelligence/queries.py"
@@ -4153,7 +4153,7 @@
       "priority": "P2",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "advanced-queries",
       "files": [
         "Backend/services/trend_intelligence/queries.py"
@@ -4242,7 +4242,7 @@
       "priority": "P1",
       "phase": 10,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "background-jobs",
       "files": [
         "Backend/api/endpoints/android_import_api.py",
@@ -4261,7 +4261,7 @@
       "priority": "P1",
       "phase": 10,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "background-jobs",
       "files": [
         "Backend/api/endpoints/clip_extraction.py",
@@ -4297,7 +4297,7 @@
       "priority": "P1",
       "phase": 6,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "import",
       "files": [
         "Backend/services/resource_folder_monitor.py"
@@ -4350,7 +4350,7 @@
       "priority": "P2",
       "phase": 8,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "coaching",
       "files": [
         "Backend/services/coaching_service.py"
@@ -4367,7 +4367,7 @@
       "priority": "P2",
       "phase": 8,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "coaching",
       "files": [
         "Backend/services/goal_recommendations.py"
@@ -4845,7 +4845,7 @@
       "priority": "P1",
       "phase": 12,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "repurposing",
       "files": [
         "Backend/services/clip_scheduler.py"
@@ -4863,7 +4863,7 @@
       "priority": "P1",
       "phase": 13,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "assets",
       "files": [
         "Backend/services/giphy_service.py"
@@ -4881,7 +4881,7 @@
       "priority": "P1",
       "phase": 13,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "assets",
       "files": [
         "Backend/services/pexels_service.py"
@@ -4899,7 +4899,7 @@
       "priority": "P1",
       "phase": 13,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "assets",
       "files": [
         "Backend/services/unsplash_service.py"
@@ -5163,7 +5163,7 @@
       "priority": "P1",
       "phase": 15,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "dashboard/app/safari/analytics/page.tsx"
@@ -5200,7 +5200,7 @@
       "priority": "P0",
       "phase": 15,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/services/session_recovery.py"
@@ -5218,7 +5218,7 @@
       "priority": "P0",
       "phase": 15,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/services/session_keeper.py"
@@ -5236,7 +5236,7 @@
       "priority": "P2",
       "phase": 15,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/services/session_notifications.py"
@@ -5254,7 +5254,7 @@
       "priority": "P1",
       "phase": 15,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/api/websocket/safari_status.py"
@@ -5272,7 +5272,7 @@
       "priority": "P2",
       "phase": 15,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/safari_session_manager.py"
@@ -5290,7 +5290,7 @@
       "priority": "P2",
       "phase": 15,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/safari_session_manager.py"
@@ -5308,7 +5308,7 @@
       "priority": "P2",
       "phase": 15,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "safari-session",
       "files": [
         "Backend/safari_session_manager.py"
@@ -5423,7 +5423,7 @@
       "priority": "P1",
       "phase": 16,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/api/endpoints/blotato.py"
@@ -5459,7 +5459,7 @@
       "priority": "P1",
       "phase": 16,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/services/performance_scorer.py"
@@ -5477,7 +5477,7 @@
       "priority": "P1",
       "phase": 16,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/api/endpoints/post_analytics.py"
@@ -5496,7 +5496,7 @@
       "priority": "P1",
       "phase": 16,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "frontend/src/pages/PostAnalytics.tsx"
@@ -5514,7 +5514,7 @@
       "priority": "P1",
       "phase": 16,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/services/account_baselines.py"
@@ -5532,7 +5532,7 @@
       "priority": "P2",
       "phase": 16,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "Backend/services/format_analytics.py"
@@ -5550,7 +5550,7 @@
       "priority": "P2",
       "phase": 16,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "post-tracking",
       "files": [
         "frontend/src/components/CheckbackStatus.tsx"
@@ -5649,7 +5649,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "resources",
       "files": [
         "Backend/services/resource_manager.py"
@@ -5668,7 +5668,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "resources",
       "files": [
         "frontend/src/components/ResourceMonitor.tsx"
@@ -5706,7 +5706,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "automation",
       "files": [
         "Backend/services/media_constraints.py"
@@ -5725,7 +5725,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "automation",
       "files": [
         "frontend/src/pages/AutomationCenter.tsx"
@@ -5744,7 +5744,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "sora",
       "files": [
         "Backend/automation/sora_generator.py",
@@ -5764,7 +5764,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "video-pipeline",
       "files": [
         "Backend/services/video_publish_pipeline.py",
@@ -5786,7 +5786,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "approval",
       "files": [
         "Backend/services/approval_workflow.py",
@@ -5806,7 +5806,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "approval",
       "files": [
         "Backend/services/youtube_preview.py"
@@ -5825,7 +5825,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "approval",
       "files": [
         "Backend/services/approval_notifier.py",
@@ -5847,7 +5847,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "approval",
       "files": [
         "Backend/api/endpoints/approval_webhook.py",
@@ -5867,7 +5867,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "approval",
       "files": [
         "Backend/services/approval_timeout.py"
@@ -5886,7 +5886,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "approval",
       "files": [
         "frontend/src/pages/Approvals.tsx"
@@ -5905,7 +5905,7 @@
       "priority": "P0",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "video-pipeline",
       "files": [
         "Backend/services/channel_router.py"
@@ -5924,7 +5924,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "dm-sync",
       "files": [
         "Backend/automation/dm_sync.py"
@@ -5943,7 +5943,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "repurposing",
       "files": [
         "Backend/services/viral_clip_detector.py"
@@ -5961,7 +5961,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "repurposing",
       "files": [
         "Backend/services/smart_reframer.py"
@@ -5979,7 +5979,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "repurposing",
       "files": [
         "Backend/services/caption_generator.py"
@@ -5997,7 +5997,7 @@
       "priority": "P2",
       "phase": 17,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "repurposing",
       "files": [
         "Backend/services/title_card_generator.py"
@@ -6015,7 +6015,7 @@
       "priority": "P1",
       "phase": 17,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "repurposing",
       "files": [
         "Backend/services/vlog_to_shorts_pipeline.py"
@@ -6603,7 +6603,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/automation/youtube_playlist_pipeline.py",
@@ -6623,7 +6623,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/rapidapi_transcript.py"
@@ -6642,7 +6642,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/transcript_analyzer.py"
@@ -6662,7 +6662,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/medium_publisher.py",
@@ -6682,7 +6682,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/social_distributor.py"
@@ -6701,7 +6701,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/sheets_sync.py"
@@ -6720,7 +6720,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/automation/youtube_playlist_pipeline.py"
@@ -6739,7 +6739,7 @@
       "priority": "P1",
       "phase": 21,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/drive_uploader.py"
@@ -6758,7 +6758,7 @@
       "priority": "P1",
       "phase": 21,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "dashboard/app/(dashboard)/automation/youtube-playlist/page.tsx"
@@ -6796,7 +6796,7 @@
       "priority": "P2",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/rapidapi_transcript.py",
@@ -6815,7 +6815,7 @@
       "priority": "P2",
       "phase": 21,
       "effort": "6h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/video_clipper.py"
@@ -6833,7 +6833,7 @@
       "priority": "P2",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/content_analytics.py"
@@ -6851,7 +6851,7 @@
       "priority": "P2",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/prompt_ab_testing.py"
@@ -6869,7 +6869,7 @@
       "priority": "P1",
       "phase": 21,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/pipeline_monitor.py"
@@ -6888,7 +6888,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/youtube/duration_router.py"
@@ -6907,7 +6907,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/youtube/local_transcription.py"
@@ -6926,7 +6926,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/youtube/downloader.py"
@@ -6945,7 +6945,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/youtube/audio_extractor.py"
@@ -6963,7 +6963,7 @@
       "priority": "P0",
       "phase": 21,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/youtube/whisper_transcriber.py"
@@ -6982,7 +6982,7 @@
       "priority": "P1",
       "phase": 21,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/youtube/transcript_cache.py"
@@ -7001,7 +7001,7 @@
       "priority": "P1",
       "phase": 21,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "youtube-automation",
       "files": [
         "Backend/services/youtube/cleanup.py"
@@ -7091,7 +7091,7 @@
       "description": "Install Facebook Pixel script in app layout",
       "category": "meta-pixel",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-002",
@@ -7099,7 +7099,7 @@
       "description": "Track all page views with Meta Pixel",
       "category": "meta-pixel",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-003",
@@ -7107,7 +7107,7 @@
       "description": "Map app events to Meta standard events (Purchase, Lead, etc.)",
       "category": "meta-pixel",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-004",
@@ -7115,7 +7115,7 @@
       "description": "Implement Conversions API for server-side event tracking",
       "category": "meta-pixel",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-005",
@@ -7123,7 +7123,7 @@
       "description": "Use event_id to deduplicate browser and server events",
       "category": "meta-pixel",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-006",
@@ -7131,7 +7131,7 @@
       "description": "Hash email/phone with SHA256 for CAPI user matching",
       "category": "meta-pixel",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-007",
@@ -7139,7 +7139,7 @@
       "description": "Configure custom audiences based on user behavior",
       "category": "meta-pixel",
       "priority": "P2",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-008",
@@ -7147,7 +7147,7 @@
       "description": "Set up conversion optimization for key events",
       "category": "meta-pixel",
       "priority": "P2",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-001",
@@ -7155,7 +7155,7 @@
       "description": "Create person, identity_link, event, email_message, email_event, subscription, deal, person_features, segment tables",
       "category": "growth-data-plane",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-002",
@@ -7163,7 +7163,7 @@
       "description": "Canonical person table with identity links for posthog, stripe, meta",
       "category": "growth-data-plane",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-003",
@@ -7171,7 +7171,7 @@
       "description": "Normalized events from web/app/email/stripe/booking/meta sources",
       "category": "growth-data-plane",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-004",
@@ -7179,7 +7179,7 @@
       "description": "Verify Svix signature, store email events, map tags to person_id",
       "category": "growth-data-plane",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-005",
@@ -7187,7 +7187,7 @@
       "description": "Track delivered/opened/clicked/bounced events from Resend webhooks",
       "category": "growth-data-plane",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-006",
@@ -7195,7 +7195,7 @@
       "description": "Attribution spine: email \u2192 click \u2192 session \u2192 conversion with first-party cookie",
       "category": "growth-data-plane",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-007",
@@ -7203,7 +7203,7 @@
       "description": "Handle subscription events, map stripe_customer_id to person_id",
       "category": "growth-data-plane",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-008",
@@ -7211,7 +7211,7 @@
       "description": "Upsert subscription status, plan, MRR from Stripe events",
       "category": "growth-data-plane",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-009",
@@ -7219,7 +7219,7 @@
       "description": "Call posthog.identify(personId) on login/signup",
       "category": "growth-data-plane",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-010",
@@ -7227,7 +7227,7 @@
       "description": "Fire Pixel eventID matching CAPI event_id for deduplication",
       "category": "growth-data-plane",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-011",
@@ -7235,7 +7235,7 @@
       "description": "Compute active_days, core_actions, pricing_views, email_opens from events",
       "category": "growth-data-plane",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GDP-012",
@@ -7243,7 +7243,7 @@
       "description": "Evaluate segment membership and trigger automations (Resend, Meta, outbound)",
       "category": "growth-data-plane",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-001",
@@ -7251,7 +7251,7 @@
       "description": "Message aggregation, unified inbox interface, conversation threading for IG, TikTok, Twitter, YouTube",
       "category": "gap-analysis",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-002",
@@ -7259,7 +7259,7 @@
       "description": "AI reply suggestions, sentiment analysis, saved replies, automation rules",
       "category": "gap-analysis",
       "priority": "P2",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-003",
@@ -7267,7 +7267,7 @@
       "description": "Video ingestion, highlight detection, aspect ratio conversion, AI captions, virality prediction",
       "category": "gap-analysis",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-004",
@@ -7275,7 +7275,7 @@
       "description": "Transcript extraction, variation generator, batch rendering, Meta campaign deployment, insights tracking",
       "category": "gap-analysis",
       "priority": "P2",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-005",
@@ -7283,7 +7283,7 @@
       "description": "Relationship health score, pipeline stages, intent ladder, context cards, AI next-best-action",
       "category": "gap-analysis",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-006",
@@ -7291,7 +7291,7 @@
       "description": "Multi-provider fallback, quality assessment, timeline assembly, storyboard UI",
       "category": "gap-analysis",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-007",
@@ -7299,7 +7299,7 @@
       "description": "Multi-account switching, session health monitoring, complete pub/sub integration",
       "category": "gap-analysis",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-008",
@@ -7307,7 +7307,7 @@
       "description": "Automated discovery, cross-account pattern analysis, hook suggestions in composer",
       "category": "gap-analysis",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-009",
@@ -7315,7 +7315,7 @@
       "description": "OAuth flow, Graph API adapter, real-time follower activity, Insights API",
       "category": "gap-analysis",
       "priority": "P2",
-      "passes": false
+      "passes": true
     },
     {
       "id": "GAP-010",
@@ -7323,7 +7323,7 @@
       "description": "Video upload pipeline, auto-transcription, speaker diarization, content analyzer feed",
       "category": "gap-analysis",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-001",
@@ -7331,7 +7331,7 @@
       "description": "0-100 score with 6 weighted factors: recency, resonance, need clarity, value delivered, reliability, consent",
       "category": "relationship-dm",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-002",
@@ -7339,7 +7339,7 @@
       "description": "Rich relationship profiles with building, struggles, values, win_30d, cadence preference fields",
       "category": "relationship-dm",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-003",
@@ -7347,7 +7347,7 @@
       "description": "First touch \u2192 Context \u2192 Micro-win \u2192 Cadence \u2192 Trust signals \u2192 Fit \u2192 Permissioned offer \u2192 Post-win",
       "category": "relationship-dm",
       "priority": "P0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-004",
@@ -7355,7 +7355,7 @@
       "description": "Lane A (Friendship), Lane B (Service), Lane C (Offer) classification system",
       "category": "relationship-dm",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-005",
@@ -7363,7 +7363,7 @@
       "description": "15+ templates tagged by lane and stage for curiosity, support, celebration prompts",
       "category": "relationship-dm",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-006",
@@ -7371,7 +7371,7 @@
       "description": "Auto-detect when to offer specific products/services based on pain frequency and trust signals",
       "category": "relationship-dm",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-007",
@@ -7379,7 +7379,7 @@
       "description": "Daily/weekly/monthly structured engagement automation with 3:1 rule enforcement",
       "category": "relationship-dm",
       "priority": "P1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "RF-008",
@@ -7387,7 +7387,7 @@
       "description": "Track meaningful replies, context cards filled, micro-wins delivered, referrals generated",
       "category": "relationship-dm",
       "priority": "P2",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ARCH-001",
@@ -7468,7 +7468,7 @@
       "category": "meta-ads-testing",
       "priority": "P0",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "AD-002",
@@ -7477,7 +7477,7 @@
       "category": "meta-ads-testing",
       "priority": "P0",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "AD-003",
@@ -7486,7 +7486,7 @@
       "category": "meta-ads-testing",
       "priority": "P0",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "AD-004",
@@ -7495,7 +7495,7 @@
       "category": "meta-ads-testing",
       "priority": "P0",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "AD-005",
@@ -7504,7 +7504,7 @@
       "category": "meta-ads-testing",
       "priority": "P0",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "AD-006",
@@ -7513,7 +7513,7 @@
       "category": "meta-ads-testing",
       "priority": "P1",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "AD-007",
@@ -7522,7 +7522,7 @@
       "category": "meta-ads-testing",
       "priority": "P1",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "AD-008",
@@ -7531,7 +7531,7 @@
       "category": "meta-ads-testing",
       "priority": "P1",
       "prd": "PRD_Programmatic_Ad_Testing.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TWIT-001",
@@ -7576,7 +7576,7 @@
       "category": "twitter-automation",
       "priority": "P1",
       "prd": "PRD_Twitter_Video_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TWIT-006",
@@ -7585,7 +7585,7 @@
       "category": "twitter-automation",
       "priority": "P1",
       "prd": "PRD_Twitter_Video_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-AUTO-001",
@@ -7594,7 +7594,7 @@
       "category": "daily-sora",
       "priority": "P0",
       "prd": "PRD_Daily_Sora_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-AUTO-002",
@@ -7603,7 +7603,7 @@
       "category": "daily-sora",
       "priority": "P0",
       "prd": "PRD_Daily_Sora_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-AUTO-003",
@@ -7612,7 +7612,7 @@
       "category": "daily-sora",
       "priority": "P0",
       "prd": "PRD_Daily_Sora_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-AUTO-004",
@@ -7621,7 +7621,7 @@
       "category": "daily-sora",
       "priority": "P0",
       "prd": "PRD_Daily_Sora_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-AUTO-005",
@@ -7630,7 +7630,7 @@
       "category": "daily-sora",
       "priority": "P0",
       "prd": "PRD_Daily_Sora_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-AUTO-006",
@@ -7639,7 +7639,7 @@
       "category": "daily-sora",
       "priority": "P0",
       "prd": "PRD_Daily_Sora_Automation.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TF-001",
@@ -7648,7 +7648,7 @@
       "category": "trend-flash",
       "priority": "P0",
       "prd": "PRD_Trend_Flash_Video_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TF-002",
@@ -7657,7 +7657,7 @@
       "category": "trend-flash",
       "priority": "P0",
       "prd": "PRD_Trend_Flash_Video_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TF-003",
@@ -7666,7 +7666,7 @@
       "category": "trend-flash",
       "priority": "P0",
       "prd": "PRD_Trend_Flash_Video_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TF-004",
@@ -7675,7 +7675,7 @@
       "category": "trend-flash",
       "priority": "P0",
       "prd": "PRD_Trend_Flash_Video_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TF-005",
@@ -7684,7 +7684,7 @@
       "category": "trend-flash",
       "priority": "P1",
       "prd": "PRD_Trend_Flash_Video_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TF-006",
@@ -7693,7 +7693,7 @@
       "category": "trend-flash",
       "priority": "P1",
       "prd": "PRD_Trend_Flash_Video_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "DM-OUT-001",
@@ -7702,7 +7702,7 @@
       "category": "dm-outreach",
       "priority": "P0",
       "prd": "PRD_DM_Outreach_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "DM-OUT-002",
@@ -7711,7 +7711,7 @@
       "category": "dm-outreach",
       "priority": "P0",
       "prd": "PRD_DM_Outreach_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "DM-OUT-003",
@@ -7720,7 +7720,7 @@
       "category": "dm-outreach",
       "priority": "P0",
       "prd": "PRD_DM_Outreach_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "DM-OUT-004",
@@ -7729,7 +7729,7 @@
       "category": "dm-outreach",
       "priority": "P0",
       "prd": "PRD_DM_Outreach_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "DM-OUT-005",
@@ -7738,7 +7738,7 @@
       "category": "dm-outreach",
       "priority": "P1",
       "prd": "PRD_DM_Outreach_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "DM-OUT-006",
@@ -7747,7 +7747,7 @@
       "category": "dm-outreach",
       "priority": "P1",
       "prd": "PRD_DM_Outreach_System.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TWIT-DM-001",
@@ -7756,7 +7756,7 @@
       "category": "twitter-dm-control",
       "priority": "P0",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TWIT-DM-002",
@@ -7765,7 +7765,7 @@
       "category": "twitter-dm-control",
       "priority": "P0",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TWIT-DM-003",
@@ -7774,7 +7774,7 @@
       "category": "twitter-dm-control",
       "priority": "P0",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TWIT-DM-004",
@@ -7783,7 +7783,7 @@
       "category": "twitter-dm-control",
       "priority": "P1",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TWIT-DM-005",
@@ -7792,7 +7792,7 @@
       "category": "twitter-dm-control",
       "priority": "P2",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TIKTOK-DM-001",
@@ -7801,7 +7801,7 @@
       "category": "tiktok-dm-control",
       "priority": "P0",
       "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TIKTOK-DM-002",
@@ -7810,7 +7810,7 @@
       "category": "tiktok-dm-control",
       "priority": "P0",
       "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TIKTOK-DM-003",
@@ -7819,7 +7819,7 @@
       "category": "tiktok-dm-control",
       "priority": "P0",
       "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TIKTOK-DM-004",
@@ -7828,7 +7828,7 @@
       "category": "tiktok-dm-control",
       "priority": "P1",
       "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "TIKTOK-DM-005",
@@ -7837,7 +7837,7 @@
       "category": "tiktok-dm-control",
       "priority": "P2",
       "prd": "PRD_TIKTOK_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "IG-DM-001",
@@ -7846,7 +7846,7 @@
       "category": "instagram-dm-control",
       "priority": "P0",
       "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "IG-DM-002",
@@ -7855,7 +7855,7 @@
       "category": "instagram-dm-control",
       "priority": "P0",
       "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "IG-DM-003",
@@ -7864,7 +7864,7 @@
       "category": "instagram-dm-control",
       "priority": "P0",
       "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "IG-DM-004",
@@ -7873,7 +7873,7 @@
       "category": "instagram-dm-control",
       "priority": "P1",
       "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "IG-DM-005",
@@ -7882,7 +7882,7 @@
       "category": "instagram-dm-control",
       "priority": "P2",
       "prd": "PRD_INSTAGRAM_DM_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-CTRL-001",
@@ -7918,7 +7918,7 @@
       "category": "sora-control",
       "priority": "P0",
       "prd": "PRD_SORA_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SORA-CTRL-005",
@@ -7936,7 +7936,7 @@
       "category": "sora-control",
       "priority": "P1",
       "prd": "PRD_SORA_FULL_CONTROL.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SAFARI-001",
@@ -7945,7 +7945,7 @@
       "category": "safari-automation",
       "priority": "P0",
       "prd": "PRD_Safari_Automation_Management.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SAFARI-002",
@@ -7954,7 +7954,7 @@
       "category": "safari-automation",
       "priority": "P0",
       "prd": "PRD_Safari_Automation_Management.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SAFARI-003",
@@ -7963,7 +7963,7 @@
       "category": "safari-automation",
       "priority": "P0",
       "prd": "PRD_Safari_Automation_Management.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SAFARI-004",
@@ -7972,7 +7972,7 @@
       "category": "safari-automation",
       "priority": "P0",
       "prd": "PRD_Safari_Automation_Management.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SAFARI-005",
@@ -7981,7 +7981,7 @@
       "category": "safari-automation",
       "priority": "P0",
       "prd": "PRD_Safari_Automation_Management.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SAFARI-006",
@@ -7990,7 +7990,7 @@
       "category": "safari-automation",
       "priority": "P1",
       "prd": "PRD_Safari_Automation_Management.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "SAFARI-007",
@@ -7999,7 +7999,7 @@
       "category": "safari-automation",
       "priority": "P2",
       "prd": "PRD_Safari_Automation_Management.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ANLY-001",
@@ -8009,7 +8009,8 @@
       "priority": "P1",
       "phase": 22,
       "prd": "PRD_ANALYTICS_DASHBOARD.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "ANLY-002",
@@ -8019,7 +8020,8 @@
       "priority": "P1",
       "phase": 22,
       "prd": "PRD_ANALYTICS_DASHBOARD.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "ANLY-003",
@@ -8029,7 +8031,8 @@
       "priority": "P1",
       "phase": 22,
       "prd": "PRD_ANALYTICS_DASHBOARD.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "ANLY-004",
@@ -8039,7 +8042,8 @@
       "priority": "P2",
       "phase": 22,
       "prd": "PRD_ANALYTICS_DASHBOARD.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "ANLY-005",
@@ -8049,7 +8053,8 @@
       "priority": "P2",
       "phase": 22,
       "prd": "PRD_ANALYTICS_DASHBOARD.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "ANLY-006",
@@ -8059,7 +8064,8 @@
       "priority": "P2",
       "phase": 22,
       "prd": "PRD_ANALYTICS_DASHBOARD.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-001",
@@ -8069,7 +8075,8 @@
       "priority": "P1",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-002",
@@ -8079,7 +8086,8 @@
       "priority": "P0",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-003",
@@ -8089,7 +8097,8 @@
       "priority": "P0",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-004",
@@ -8099,7 +8108,8 @@
       "priority": "P1",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-005",
@@ -8109,7 +8119,8 @@
       "priority": "P1",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-006",
@@ -8119,7 +8130,8 @@
       "priority": "P2",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-007",
@@ -8129,7 +8141,8 @@
       "priority": "P2",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "LEAD-008",
@@ -8139,7 +8152,8 @@
       "priority": "P1",
       "phase": 23,
       "prd": "PRD_LEAD_FORMS.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "WHSP-001",
@@ -8149,7 +8163,7 @@
       "priority": "P0",
       "phase": 24,
       "prd": "PRD_WHISPER_INTEGRATION.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "WHSP-002",
@@ -8159,7 +8173,7 @@
       "priority": "P0",
       "phase": 24,
       "prd": "PRD_WHISPER_INTEGRATION.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "WHSP-003",
@@ -8169,7 +8183,7 @@
       "priority": "P1",
       "phase": 24,
       "prd": "PRD_WHISPER_INTEGRATION.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "WHSP-004",
@@ -8179,7 +8193,7 @@
       "priority": "P1",
       "phase": 24,
       "prd": "PRD_WHISPER_INTEGRATION.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "WHSP-005",
@@ -8189,7 +8203,7 @@
       "priority": "P1",
       "phase": 24,
       "prd": "PRD_WHISPER_INTEGRATION.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "WHSP-006",
@@ -8199,7 +8213,7 @@
       "priority": "P2",
       "phase": 24,
       "prd": "PRD_WHISPER_INTEGRATION.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "EMAIL-001",
@@ -8209,7 +8223,8 @@
       "priority": "P0",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "EMAIL-002",
@@ -8219,7 +8234,8 @@
       "priority": "P0",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "EMAIL-003",
@@ -8229,7 +8245,8 @@
       "priority": "P1",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "EMAIL-004",
@@ -8239,7 +8256,8 @@
       "priority": "P0",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "EMAIL-005",
@@ -8249,7 +8267,8 @@
       "priority": "P1",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "EMAIL-006",
@@ -8259,7 +8278,8 @@
       "priority": "P1",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "EMAIL-007",
@@ -8269,7 +8289,8 @@
       "priority": "P1",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "EMAIL-008",
@@ -8279,7 +8300,8 @@
       "priority": "P2",
       "phase": 25,
       "prd": "PRD_EMAIL_SEQUENCES.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "IGAPI-001",
@@ -8289,7 +8311,8 @@
       "priority": "P1",
       "phase": 26,
       "prd": "PRD_INSTAGRAM_GRAPH_API.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "IGAPI-002",
@@ -8299,7 +8322,8 @@
       "priority": "P0",
       "phase": 26,
       "prd": "PRD_INSTAGRAM_GRAPH_API.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "IGAPI-003",
@@ -8309,7 +8333,8 @@
       "priority": "P1",
       "phase": 26,
       "prd": "PRD_INSTAGRAM_GRAPH_API.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "IGAPI-004",
@@ -8319,7 +8344,8 @@
       "priority": "P1",
       "phase": 26,
       "prd": "PRD_INSTAGRAM_GRAPH_API.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "IGAPI-005",
@@ -8329,7 +8355,8 @@
       "priority": "P2",
       "phase": 26,
       "prd": "PRD_INSTAGRAM_GRAPH_API.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-001",
@@ -8339,7 +8366,8 @@
       "priority": "P0",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-002",
@@ -8349,7 +8377,8 @@
       "priority": "P0",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-003",
@@ -8359,7 +8388,8 @@
       "priority": "P1",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-004",
@@ -8369,7 +8399,8 @@
       "priority": "P0",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-005",
@@ -8379,7 +8410,8 @@
       "priority": "P1",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-006",
@@ -8389,7 +8421,8 @@
       "priority": "P1",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-007",
@@ -8399,7 +8432,8 @@
       "priority": "P2",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-008",
@@ -8409,7 +8443,8 @@
       "priority": "P1",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true,
+      "completed": "2026-02-02"
     },
     {
       "id": "META-009",
@@ -8419,7 +8454,7 @@
       "priority": "P1",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "META-010",
@@ -8429,7 +8464,7 @@
       "priority": "P2",
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
-      "passes": false
+      "passes": true
     }
   ]
 }

@@ -1796,6 +1796,16 @@ from api.endpoints import agent_events
 app.include_router(agent_events.router, tags=["Agent Events"])
 logger.success("✓ Agent Events API registered (AC-005: Append-only event timeline)")
 
+# Media Assets (ASSET-001 to ASSET-005: Giphy, Pexels, Unsplash, Unified Search, Library)
+from api.endpoints import media_assets
+app.include_router(media_assets.router, tags=["Media Assets"])
+logger.success("✓ Media Assets API registered (ASSET-004: Unified Search, ASSET-005: Asset Library)")
+
+# Pub/Sub Inspector (AC-007: Topics list, events, consumer lag)
+from api.endpoints import pubsub_inspector
+app.include_router(pubsub_inspector.router, tags=["Pub/Sub Inspector"])
+logger.success("✓ Pub/Sub Inspector API registered (AC-007: Topics, events, lag)")
+
 # Content Ingestion Pipeline (BM-001, BM-002, BM-003, BM-004)
 from api.endpoints import content_ingestion
 app.include_router(content_ingestion.router, tags=["Content Ingestion"])

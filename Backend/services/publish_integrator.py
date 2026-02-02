@@ -30,12 +30,19 @@ class PublishIntegrator:
 
     Auto-injects AI-generated titles, descriptions, and hashtags
     into multi-platform publish workflows.
+
+    Lifecycle:
+        integrator = PublishIntegrator.get_instance()
+        await integrator.start()   # subscribes to events
+        ...
+        await integrator.stop()    # cleanup
     """
 
     _instance: Optional['PublishIntegrator'] = None
 
     def __init__(self, event_bus: Optional[EventBus] = None):
         self.event_bus = event_bus or EventBus.get_instance()
+        self._running = False
 
         # Load Blotato service for account lookups
         try:
@@ -53,6 +60,22 @@ class PublishIntegrator:
         if cls._instance is None:
             cls._instance = cls(event_bus)
         return cls._instance
+
+    async def start(self) -> None:
+        """Start the integrator service."""
+        if self._running:
+            return
+        self._running = True
+        logger.info("🚀 PublishIntegrator started")
+
+    async def stop(self) -> None:
+        """Stop the integrator service."""
+        self._running = False
+        logger.info("🛑 PublishIntegrator stopped")
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
 
     def _setup_subscriptions(self) -> None:
         """Subscribe to orchestrator publish requests."""
@@ -90,9 +113,29 @@ class PublishIntegrator:
 
             logger.info(f"🔗 [ARCH-003] Processing publish for {platform} (pipeline={pipeline_id})")
 
-            # Get platform-specific metadata from analysis
-            caption = self._generate_caption(platform, analysis, offer_url)
-            title = self._get_platform_title(platform, analysis)
+            # ARCH-003: Use pre-extracted metadata from orchestrator when available.
+            # The MasterOrchestrator injects platform-specific title/description/
+            # hashtags/hook via _extract_platform_metadata(). Prefer those over
+            # re-extracting from the raw analysis to avoid divergence.
+            pre_title = payload.get("title")
+            pre_hook = payload.get("hook")
+            pre_hashtags = payload.get("hashtags")
+            pre_description = payload.get("description")
+
+            if pre_title or pre_hook:
+                # Orchestrator already extracted platform metadata
+                enriched_analysis = {
+                    **analysis,
+                    "hook": pre_hook or analysis.get("hook", ""),
+                    "description": pre_description or analysis.get("description", ""),
+                    "hashtags": pre_hashtags or analysis.get("hashtags", []),
+                }
+                caption = self._generate_caption(platform, enriched_analysis, offer_url)
+                title = pre_title or self._get_platform_title(platform, enriched_analysis)
+            else:
+                # Fallback: extract from raw analysis
+                caption = self._generate_caption(platform, analysis, offer_url)
+                title = self._get_platform_title(platform, analysis)
 
             # Get target accounts for this platform
             accounts = self._get_platform_accounts(platform)

@@ -122,7 +122,7 @@ class TrendingContentService:
                     "description": v["description"][:100],
                     "views": v["stats"]["views"],
                     "likes": v["stats"]["likes"],
-                    "url": v["url"]
+                    "url": v.get("url", "")
                 }
                 for v in best_videos
             ]

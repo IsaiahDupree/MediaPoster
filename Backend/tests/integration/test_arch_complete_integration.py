@@ -112,7 +112,7 @@ class TestArchitectureIntegration:
         # Track events emitted
         events_received = []
 
-        def capture_event(event: Event):
+        async def capture_event(event: Event):
             events_received.append(event)
 
         event_bus.subscribe("orchestrator.*", capture_event)
@@ -130,6 +130,9 @@ class TestArchitectureIntegration:
         )
 
         pipeline_id = await orchestrator.start_pipeline(config)
+
+        # Allow the background task (SORA_BATCH_REQUESTED) to run
+        await asyncio.sleep(0.1)
 
         # Verify pipeline was created
         assert pipeline_id is not None
@@ -216,7 +219,7 @@ class TestArchitectureIntegration:
         """
         events_captured = []
 
-        def capture_blotato_event(event: Event):
+        async def capture_blotato_event(event: Event):
             events_captured.append(event)
 
         event_bus.subscribe("blotato.publish.requested", capture_blotato_event)
@@ -426,7 +429,11 @@ class TestArchitectureIntegration:
 
         # Track all events
         all_events = []
-        event_bus.subscribe("*", lambda e: all_events.append(e))
+
+        async def track_all(e):
+            all_events.append(e)
+
+        event_bus.subscribe("*", track_all)
 
         # 1. Start pipeline
         config = PipelineConfig(
@@ -440,6 +447,8 @@ class TestArchitectureIntegration:
         )
 
         pipeline_id = await orchestrator.start_pipeline(config)
+        # Allow background task (SORA_BATCH_REQUESTED) to run
+        await asyncio.sleep(0.1)
         print(f"✅ Step 1: Pipeline started: {pipeline_id}")
 
         # 2. Simulate Sora batch completion

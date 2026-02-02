@@ -11,7 +11,7 @@ Endpoints:
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -39,18 +39,17 @@ class StartPipelineRequest(BaseModel):
     offer_url: Optional[str] = Field(None, description="Offer URL to track and promote")
     metadata: Optional[Dict[str, Any]] = Field(default={}, description="Additional metadata")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "theme": "AI automation revolutionizing content creation",
-                "num_parts": 3,
-                "character": "@isaiahdupree",
-                "publish_platforms": ["tiktok", "instagram", "youtube"],
-                "schedule_tweets": True,
-                "tweets_per_day": 12,
-                "offer_url": "https://blotato.com/offers/ai-automation"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "theme": "AI automation revolutionizing content creation",
+            "num_parts": 3,
+            "character": "@isaiahdupree",
+            "publish_platforms": ["tiktok", "instagram", "youtube"],
+            "schedule_tweets": True,
+            "tweets_per_day": 12,
+            "offer_url": "https://blotato.com/offers/ai-automation"
         }
+    })
 
 
 # Alias for backwards compatibility
@@ -225,6 +224,40 @@ async def list_pipelines(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list pipelines: {str(e)}")
+
+
+@router.delete("/pipeline/{pipeline_id}")
+async def cancel_pipeline(pipeline_id: str) -> Dict[str, Any]:
+    """
+    Cancel a running pipeline.
+
+    Args:
+        pipeline_id: Unique pipeline identifier
+
+    Returns:
+        Cancellation status
+    """
+    try:
+        orchestrator = MasterOrchestrator.get_instance()
+        cancelled = await orchestrator.cancel_pipeline(pipeline_id)
+
+        if not cancelled:
+            raise HTTPException(
+                status_code=404,
+                detail="Pipeline not found or already finished"
+            )
+
+        return {
+            "success": True,
+            "pipeline_id": pipeline_id,
+            "status": "cancelled",
+            "message": f"Pipeline {pipeline_id} has been cancelled"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cancel pipeline: {str(e)}")
 
 
 @router.get("/pipeline/{pipeline_id}/events")

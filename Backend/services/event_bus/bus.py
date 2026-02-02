@@ -261,6 +261,37 @@ class EventBus:
             "total_subscribers": sum(len(h) for h in self._subscribers.values()),
             "topics_with_subscribers": list(self._subscribers.keys()),
         }
+
+    def get_topic_history(self, topic: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get recent events for a specific topic."""
+        events = [
+            {
+                "id": e.id,
+                "topic": e.topic,
+                "data": e.data,
+                "source": e.source,
+                "timestamp": e.timestamp.isoformat() if hasattr(e.timestamp, 'isoformat') else str(e.timestamp),
+            }
+            for e in reversed(self._event_log)
+            if e.topic == topic
+        ]
+        return events[:limit]
+
+    def get_topic_subscribers(self, topic: str) -> List[str]:
+        """Get subscriber names/ids for a specific topic pattern."""
+        handlers = self._subscribers.get(topic, [])
+        return [getattr(h, '__qualname__', getattr(h, '__name__', str(h))) for h in handlers]
+
+    def get_all_subscribers(self) -> Dict[str, List[str]]:
+        """Get all subscribers grouped by topic pattern."""
+        return {
+            pattern: [getattr(h, '__qualname__', getattr(h, '__name__', str(h))) for h in handlers]
+            for pattern, handlers in self._subscribers.items()
+        }
+
+    def get_consumer_lag(self) -> Dict[str, Any]:
+        """Get consumer lag data. For in-memory bus, returns empty (no lag concept)."""
+        return {}
     
     async def shutdown(self) -> None:
         """Gracefully shutdown the event bus."""

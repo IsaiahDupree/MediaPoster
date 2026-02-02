@@ -19,7 +19,7 @@ Workflow:
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 from uuid import uuid4
 import os
 from enum import Enum
@@ -28,6 +28,18 @@ from services.event_bus import EventBus, Event, Topics
 from services.content_analyzer import ContentAnalyzer
 
 logger = logging.getLogger(__name__)
+
+# Pipeline step timeout defaults (in seconds)
+STEP_TIMEOUTS = {
+    "sora_generation": 900,   # 15 minutes for video generation
+    "video_stitching": 120,   # 2 minutes for stitching
+    "content_analysis": 60,   # 1 minute for AI analysis
+    "publishing": 300,        # 5 minutes for multi-platform publish
+    "twitter_campaign": 60,   # 1 minute for scheduling tweets
+}
+
+# Maximum retry attempts per step
+MAX_STEP_RETRIES = 2
 
 
 class PipelineStatus(Enum):
@@ -53,7 +65,10 @@ class PipelineConfig:
         schedule_tweets: bool = True,
         tweets_per_day: int = 12,
         offer_url: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        step_timeouts: Optional[Dict[str, int]] = None,
+        max_retries: int = MAX_STEP_RETRIES,
+        on_step_complete: Optional[Callable] = None,
     ):
         self.theme = theme
         self.num_parts = num_parts
@@ -63,6 +78,9 @@ class PipelineConfig:
         self.tweets_per_day = tweets_per_day
         self.offer_url = offer_url
         self.metadata = metadata or {}
+        self.step_timeouts = {**STEP_TIMEOUTS, **(step_timeouts or {})}
+        self.max_retries = max_retries
+        self.on_step_complete = on_step_complete
 
 
 class MasterOrchestrator:
@@ -114,6 +132,9 @@ class MasterOrchestrator:
         # In-memory cache for fast access
         self.active_pipelines: Dict[str, Dict[str, Any]] = {}
         self.completed_pipelines: Dict[str, Dict[str, Any]] = {}
+
+        # Timeout monitoring tasks
+        self._timeout_tasks: Dict[str, asyncio.Task] = {}
 
         # Database connection
         self._db_engine = None
@@ -273,6 +294,9 @@ class MasterOrchestrator:
         pipeline["status"] = "generating_video"
         await self._db_update_pipeline_status(pipeline_id, "generating_video")
 
+        # Start timeout monitor for sora_generation step
+        self._start_step_timeout(pipeline_id, "sora_generation")
+
         # Start Sora video generation asynchronously.
         # We use create_task so start_pipeline returns immediately with the
         # pipeline still in active_pipelines.  The SoraWorker will pick up
@@ -295,6 +319,45 @@ class MasterOrchestrator:
 
         return pipeline_id
 
+    async def cancel_pipeline(self, pipeline_id: str) -> bool:
+        """
+        Cancel a running pipeline.
+
+        Moves the pipeline to 'cancelled' state and removes from active.
+
+        Args:
+            pipeline_id: ID of the pipeline to cancel.
+
+        Returns:
+            True if cancelled, False if not found or already finished.
+        """
+        if pipeline_id not in self.active_pipelines:
+            return False
+
+        pipeline = self.active_pipelines[pipeline_id]
+        pipeline["status"] = "cancelled"
+        pipeline["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+
+        logger.info(f"[{pipeline_id}] Pipeline cancelled by user")
+
+        # Cancel any active timeout monitors
+        for key in list(self._timeout_tasks.keys()):
+            if key.startswith(pipeline_id):
+                self._cancel_step_timeout(pipeline_id, key.split(":")[1])
+
+        await self._db_update_pipeline_status(pipeline_id, "cancelled")
+
+        await self.event_bus.publish(
+            Topics.ORCHESTRATOR_PIPELINE_FAILED,
+            {"pipeline_id": pipeline_id, "reason": "cancelled"},
+            correlation_id=pipeline.get("correlation_id"),
+            source="MasterOrchestrator"
+        )
+
+        self.completed_pipelines[pipeline_id] = pipeline
+        del self.active_pipelines[pipeline_id]
+        return True
+
     async def _handle_sora_batch_completed(self, event: Event) -> None:
         payload = event.payload
         pipeline_id = payload.get("pipeline_id")
@@ -302,23 +365,21 @@ class MasterOrchestrator:
         if not pipeline_id or pipeline_id not in self.active_pipelines:
             return
 
+        # Cancel sora_generation timeout since the step completed
+        self._cancel_step_timeout(pipeline_id, "sora_generation")
+
         # If the batch status is "failed", treat it as a pipeline failure
         batch_status = payload.get("status")
         if batch_status == "failed":
             error = payload.get("error", "Sora batch generation failed")
-            pipeline = self.active_pipelines[pipeline_id]
-            pipeline["status"] = "failed"
-            pipeline["error"] = error
-            logger.error(f"[{pipeline_id}] ❌ Sora batch failed: {error}")
-            await self._db_update_pipeline_status(pipeline_id, "failed", {"error": error})
+            await self._fail_pipeline(pipeline_id, error)
             await self._db_update_pipeline_step(pipeline_id, "sora_generation", "failed", error=error)
-            self.completed_pipelines[pipeline_id] = pipeline
-            del self.active_pipelines[pipeline_id]
             return
 
         pipeline = self.active_pipelines[pipeline_id]
+        video_path = payload.get("stitched_video") or payload.get("video_path")
         pipeline["outputs"]["sora"] = {
-            "stitched_video": payload.get("stitched_video") or payload.get("video_path"),
+            "stitched_video": video_path,
             "analysis": payload.get("analysis")
         }
 
@@ -328,13 +389,23 @@ class MasterOrchestrator:
             "sora_generation",
             "completed",
             output={
-                "stitched_video": payload.get("stitched_video") or payload.get("video_path"),
+                "stitched_video": video_path,
                 "successful_parts": payload.get("successful_parts", 0),
                 "failed_parts": payload.get("failed_parts", 0)
             }
         )
 
-        # Update step: content_analysis -> completed (assuming it's done in Sora pipeline)
+        # Update step: video_stitching -> completed (ARCH-001)
+        # Stitching is performed as part of the Sora batch pipeline
+        if video_path:
+            await self._db_update_pipeline_step(
+                pipeline_id,
+                "video_stitching",
+                "completed",
+                output={"stitched_video": video_path}
+            )
+
+        # Update step: content_analysis -> completed (analysis done in Sora pipeline)
         await self._db_update_pipeline_step(
             pipeline_id,
             "content_analysis",
@@ -348,9 +419,17 @@ class MasterOrchestrator:
         logger.info(f"[{pipeline_id}] ✅ Sora generation complete, starting publishing")
 
         # Proceed to publishing
-        video_path = payload.get("stitched_video")
+        video_path = payload.get("stitched_video") or payload.get("video_path")
         analysis = payload.get("analysis", {})
         config: PipelineConfig = pipeline["config"]
+
+        # Validate video_path before proceeding to publishing.
+        # If Sora returned 0 successful parts, video_path will be None.
+        if not video_path:
+            error = "No video produced from Sora generation (video_path is None)"
+            logger.error(f"[{pipeline_id}] ❌ {error}")
+            await self._fail_pipeline(pipeline_id, error)
+            return
 
         pipeline["status"] = "publishing"
         pipeline["current_step"] = "publishing"
@@ -368,6 +447,9 @@ class MasterOrchestrator:
 
         # Update step: publishing -> running
         await self._db_update_pipeline_step(pipeline_id, "publishing", "running")
+
+        # Start publishing timeout
+        self._start_step_timeout(pipeline_id, "publishing")
 
         # ARCH-003: Auto-fill titles and descriptions from content analysis
         auto_fill_metadata = self._extract_platform_metadata(analysis)
@@ -444,6 +526,9 @@ class MasterOrchestrator:
         )
 
         if all_complete:
+            # Cancel publishing timeout
+            self._cancel_step_timeout(pipeline_id, "publishing")
+
             # Count successful publishes
             published_count = sum(
                 1 for job in pipeline["outputs"].get("publish_jobs", [])
@@ -472,6 +557,9 @@ class MasterOrchestrator:
                 # Update database (ARCH-001)
                 await self._db_update_pipeline_status(pipeline_id, "scheduling_tweets")
                 await self._db_update_pipeline_step(pipeline_id, "twitter_campaign", "running")
+
+                # Start twitter_campaign timeout
+                self._start_step_timeout(pipeline_id, "twitter_campaign")
 
                 interval_minutes = int((24 * 60) / config.tweets_per_day)
 
@@ -527,6 +615,9 @@ class MasterOrchestrator:
         if not pipeline_id or pipeline_id not in self.active_pipelines:
             return
 
+        # Cancel twitter_campaign timeout
+        self._cancel_step_timeout(pipeline_id, "twitter_campaign")
+
         pipeline = self.active_pipelines[pipeline_id]
         tweets_scheduled = payload.get("tweets_scheduled", 0)
         pipeline["outputs"]["twitter"] = {
@@ -543,11 +634,169 @@ class MasterOrchestrator:
 
         await self._complete_pipeline(pipeline_id)
 
+    def _start_step_timeout(self, pipeline_id: str, step_name: str) -> None:
+        """Start a timeout monitor for a pipeline step."""
+        pipeline = self.active_pipelines.get(pipeline_id)
+        if not pipeline:
+            return
+
+        config: PipelineConfig = pipeline["config"]
+        timeout_secs = config.step_timeouts.get(step_name, 300)
+
+        # Cancel existing timeout for this pipeline if any
+        task_key = f"{pipeline_id}:{step_name}"
+        if task_key in self._timeout_tasks:
+            self._timeout_tasks[task_key].cancel()
+
+        async def _timeout_handler():
+            try:
+                await asyncio.sleep(timeout_secs)
+                # If we get here, the step timed out
+                if pipeline_id in self.active_pipelines:
+                    p = self.active_pipelines[pipeline_id]
+                    if p.get("current_step") == step_name:
+                        retries = p.get("_retry_counts", {}).get(step_name, 0)
+                        max_retries = config.max_retries
+
+                        if retries < max_retries:
+                            logger.warning(
+                                f"[{pipeline_id}] Step '{step_name}' timed out after {timeout_secs}s, "
+                                f"retrying ({retries + 1}/{max_retries})"
+                            )
+                            p.setdefault("_retry_counts", {})[step_name] = retries + 1
+                            await self._retry_step(pipeline_id, step_name)
+                        else:
+                            logger.error(
+                                f"[{pipeline_id}] Step '{step_name}' timed out after {timeout_secs}s, "
+                                f"max retries ({max_retries}) exhausted"
+                            )
+                            await self._fail_pipeline(
+                                pipeline_id,
+                                f"Step '{step_name}' timed out after {timeout_secs}s "
+                                f"(retries exhausted: {max_retries})"
+                            )
+            except asyncio.CancelledError:
+                pass  # Timeout was cancelled because step completed
+            finally:
+                self._timeout_tasks.pop(task_key, None)
+
+        self._timeout_tasks[task_key] = asyncio.create_task(_timeout_handler())
+
+    def _cancel_step_timeout(self, pipeline_id: str, step_name: str) -> None:
+        """Cancel a timeout monitor for a pipeline step."""
+        task_key = f"{pipeline_id}:{step_name}"
+        task = self._timeout_tasks.pop(task_key, None)
+        if task and not task.done():
+            task.cancel()
+
+    async def _retry_step(self, pipeline_id: str, step_name: str) -> None:
+        """Retry a failed/timed-out pipeline step."""
+        pipeline = self.active_pipelines.get(pipeline_id)
+        if not pipeline:
+            return
+
+        config: PipelineConfig = pipeline["config"]
+
+        logger.info(f"[{pipeline_id}] Retrying step: {step_name}")
+
+        await self._db_update_pipeline_step(pipeline_id, step_name, "retrying")
+
+        if step_name == "sora_generation":
+            # Re-trigger Sora batch generation
+            self._start_step_timeout(pipeline_id, "sora_generation")
+            await self.event_bus.publish(
+                Topics.SORA_BATCH_REQUESTED,
+                {
+                    "pipeline_id": pipeline_id,
+                    "theme": config.theme,
+                    "num_parts": config.num_parts,
+                    "character": config.character,
+                    "stitch": True,
+                    "remove_watermark": True,
+                    "retry": True
+                },
+                correlation_id=pipeline["correlation_id"],
+                source="MasterOrchestrator"
+            )
+        elif step_name == "publishing":
+            # Re-publish to platforms that haven't completed
+            pending_jobs = [
+                job for job in pipeline["outputs"].get("publish_jobs", [])
+                if job["status"] not in ["completed"]
+            ]
+            self._start_step_timeout(pipeline_id, "publishing")
+            for job in pending_jobs:
+                job["status"] = "requested"
+                analysis = pipeline["outputs"].get("sora", {}).get("analysis", {})
+                auto_fill = self._extract_platform_metadata(analysis)
+                platform_meta = auto_fill.get(job["platform"], auto_fill.get("default", {}))
+
+                await self.event_bus.publish(
+                    Topics.PUBLISH_REQUESTED,
+                    {
+                        "pipeline_id": pipeline_id,
+                        "platform": job["platform"],
+                        "video_path": pipeline["outputs"].get("sora", {}).get("stitched_video"),
+                        "analysis": analysis,
+                        "offer_url": config.offer_url,
+                        "title": platform_meta.get("title"),
+                        "description": platform_meta.get("description"),
+                        "hashtags": platform_meta.get("hashtags"),
+                        "retry": True
+                    },
+                    correlation_id=pipeline["correlation_id"],
+                    source="MasterOrchestrator"
+                )
+
+    async def _fail_pipeline(self, pipeline_id: str, error: str) -> None:
+        """Fail a pipeline with an error message."""
+        pipeline = self.active_pipelines.get(pipeline_id)
+        if not pipeline:
+            return
+
+        pipeline["status"] = "failed"
+        pipeline["error"] = error
+        pipeline["failed_at"] = datetime.now(timezone.utc).isoformat()
+
+        logger.error(f"[{pipeline_id}] Pipeline failed: {error}")
+
+        # Cancel any active timeout monitors
+        for key in list(self._timeout_tasks.keys()):
+            if key.startswith(pipeline_id):
+                self._cancel_step_timeout(pipeline_id, key.split(":")[1])
+
+        await self._db_update_pipeline_status(pipeline_id, "failed", {"error": error})
+
+        await self.event_bus.publish(
+            "orchestrator.pipeline.failed",
+            {"pipeline_id": pipeline_id, "error": error},
+            correlation_id=pipeline.get("correlation_id"),
+            source="MasterOrchestrator"
+        )
+
+        self.completed_pipelines[pipeline_id] = pipeline
+        del self.active_pipelines[pipeline_id]
+
     async def _complete_pipeline(self, pipeline_id: str) -> None:
         """Mark pipeline as completed and persist final state."""
         pipeline = self.active_pipelines[pipeline_id]
         pipeline["status"] = "completed"
         pipeline["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+        # Cancel any remaining timeout monitors
+        for key in list(self._timeout_tasks.keys()):
+            if key.startswith(pipeline_id):
+                self._cancel_step_timeout(pipeline_id, key.split(":")[1])
+
+        # Calculate total pipeline duration
+        started_at = pipeline.get("started_at")
+        if started_at:
+            try:
+                start_dt = datetime.fromisoformat(started_at)
+                end_dt = datetime.fromisoformat(pipeline["completed_at"])
+                pipeline["duration_seconds"] = (end_dt - start_dt).total_seconds()
+            except (ValueError, TypeError):
+                pass
 
         logger.info(f"[{pipeline_id}] 🎉 Pipeline completed successfully")
 
@@ -620,6 +869,22 @@ class MasterOrchestrator:
 
         return all_pipelines[:limit]
 
+    # ------------------------------------------------------------------
+    # Method aliases for compatibility with different test suites
+    # ------------------------------------------------------------------
+
+    async def run_content_pipeline(self, **kwargs) -> str:
+        """Alias for run_full_pipeline."""
+        return await self.run_full_pipeline(**kwargs)
+
+    def get_job_status(self, pipeline_id: str) -> Dict[str, Any]:
+        """Alias for get_pipeline_status."""
+        return self.get_pipeline_status(pipeline_id)
+
+    async def list_jobs(self, status: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """Alias for list_pipelines."""
+        return await self.list_pipelines(status=status, limit=limit)
+
     def list_active_pipelines(self) -> List[Dict[str, Any]]:
         """
         List currently active pipelines (synchronous version for compatibility).
@@ -651,6 +916,33 @@ class MasterOrchestrator:
             "status_breakdown": status_counts,
         }
 
+    def get_pipeline_health(self, pipeline_id: str) -> Dict[str, Any]:
+        """
+        Get health status of a pipeline including timeout and retry info.
+
+        Returns:
+            Dict with health metrics, active timeouts, and retry counts.
+        """
+        pipeline = self.active_pipelines.get(pipeline_id) or self.completed_pipelines.get(pipeline_id)
+        if not pipeline:
+            return {"error": "Pipeline not found"}
+
+        active_timeouts = [
+            key.split(":")[1]
+            for key in self._timeout_tasks
+            if key.startswith(pipeline_id) and not self._timeout_tasks[key].done()
+        ]
+
+        return {
+            "pipeline_id": pipeline_id,
+            "status": pipeline.get("status"),
+            "current_step": pipeline.get("current_step"),
+            "active_timeouts": active_timeouts,
+            "retry_counts": pipeline.get("_retry_counts", {}),
+            "started_at": pipeline.get("started_at"),
+            "duration_seconds": pipeline.get("duration_seconds"),
+        }
+
     def _extract_platform_metadata(self, analysis: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """
         Extract platform-specific metadata from content analysis (ARCH-003).
@@ -676,10 +968,19 @@ class MasterOrchestrator:
         viral_score = analysis.get("viral_score") or analysis.get("pre_social_score", 0)
         cta_data = analysis.get("call_to_action", {})
         cta_text = cta_data.get("text", "") if isinstance(cta_data, dict) else ""
-        suggestions = analysis.get("suggestions", [])
         content_type = analysis.get("content_type", "general")
         tone = analysis.get("tone", "")
         description = analysis.get("description") or analysis.get("viral_analysis") or ""
+        pain_points = analysis.get("pain_points", [])
+        target_audience = analysis.get("target_audience", {})
+        pacing = analysis.get("pacing", "medium")
+
+        # ARCH-003: Generate hashtags from topics when none provided
+        if not hashtags and topics:
+            hashtags = [
+                topic.lower().replace(" ", "").replace("-", "")
+                for topic in topics[:15]
+            ]
 
         # Build base metadata shared across platforms
         base = {
@@ -692,28 +993,46 @@ class MasterOrchestrator:
             "content_type": content_type,
             "tone": tone,
             "topics": topics,
+            "pain_points": pain_points,
+            "target_audience": target_audience,
+            "pacing": pacing,
         }
 
         metadata = {"default": base.copy()}
 
-        # TikTok: Short hook + heavy hashtags (max 10)
+        # TikTok: Short hook + heavy hashtags (max 10), FYP-optimized
+        tiktok_hashtags = list(hashtags[:7])
+        for tag in ["fyp", "viral", "foryou"]:
+            if tag not in [h.lower() for h in tiktok_hashtags] and len(tiktok_hashtags) < 10:
+                tiktok_hashtags.append(tag)
         metadata["tiktok"] = {
             **base,
             "title": analysis.get("title_tiktok") or hook,
-            "hashtags": hashtags[:10],
+            "hashtags": tiktok_hashtags,
+            "description": hook,  # TikTok captions should be short
         }
 
-        # Instagram: Longer caption, up to 30 hashtags
+        # Instagram: Longer caption, up to 30 hashtags, engagement-focused
+        ig_hashtags = list(hashtags[:25])
+        for tag in ["reels", "explore", "instagood", "trending", "viral"]:
+            if tag not in [h.lower() for h in ig_hashtags] and len(ig_hashtags) < 30:
+                ig_hashtags.append(tag)
         metadata["instagram"] = {
             **base,
             "title": analysis.get("title_instagram") or hook,
-            "hashtags": hashtags[:30],
+            "hashtags": ig_hashtags,
         }
 
-        # YouTube: SEO-focused title + description
+        # YouTube: SEO-focused title + description with keywords
+        yt_description = description
+        if pain_points:
+            yt_description += f"\n\nKey topics: {', '.join(pain_points[:3])}"
+        if target_audience and target_audience.get("interests"):
+            yt_description += f"\nFor: {', '.join(target_audience['interests'][:3])}"
         metadata["youtube"] = {
             **base,
             "title": analysis.get("title_youtube") or hook,
+            "description": yt_description,
             "hashtags": hashtags[:15],
         }
 
@@ -721,18 +1040,39 @@ class MasterOrchestrator:
         metadata["twitter"] = {
             **base,
             "title": hook[:200] if hook else "",
+            "description": hook[:250] if hook else "",
             "hashtags": hashtags[:3],
         }
 
-        # Threads: Similar to Instagram
+        # Threads: Conversation-starting format
         metadata["threads"] = {
             **base,
             "title": analysis.get("title_instagram") or hook,
             "hashtags": hashtags[:10],
         }
 
+        # LinkedIn: Professional tone, insight-focused
+        linkedin_desc = description
+        if target_audience and target_audience.get("demographic"):
+            linkedin_desc = f"{description}\n\n{target_audience['demographic']}"
+        metadata["linkedin"] = {
+            **base,
+            "title": hook,
+            "description": linkedin_desc,
+            "hashtags": hashtags[:5],
+            "tone": "professional",
+        }
+
+        # Pinterest: Visual discovery, keyword-rich
+        metadata["pinterest"] = {
+            **base,
+            "title": hook[:100] if hook else "",
+            "description": f"{description} {' '.join(topics[:3])}" if topics else description,
+            "hashtags": hashtags[:20],
+        }
+
         # Remaining platforms use default
-        for platform in ["pinterest", "linkedin", "facebook", "bluesky"]:
+        for platform in ["facebook", "bluesky"]:
             if platform not in metadata:
                 metadata[platform] = base.copy()
 

@@ -317,6 +317,7 @@ class ClipSelector:
             scores={
                 "hook": hook_score,
                 "visual": visual_score,
+                "emotion": emotion_score,
                 "cta": cta_score
             }
         )

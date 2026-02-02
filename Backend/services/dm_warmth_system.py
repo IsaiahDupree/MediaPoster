@@ -90,6 +90,11 @@ class DMContact:
     is_active: bool = True
     opted_out: bool = False
     
+    @property
+    def warmth_score(self) -> float:
+        """Current warmth score (alias for calculate_current_warmth)."""
+        return self.calculate_current_warmth()
+
     def calculate_current_warmth(self) -> float:
         """Calculate current warmth with exponential decay."""
         if self.last_interaction_at is None:

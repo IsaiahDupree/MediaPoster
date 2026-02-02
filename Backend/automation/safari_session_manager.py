@@ -178,7 +178,7 @@ PLATFORM_CONFIGS: Dict[Platform, PlatformConfig] = {
 @dataclass
 class SessionState:
     """Current session state for a platform."""
-    platform: Platform
+    platform: Optional[Platform] = None
     is_logged_in: bool = False
     last_check: Optional[datetime] = None
     last_refresh: Optional[datetime] = None
@@ -538,6 +538,32 @@ class SafariSessionManager:
                 'error': state.error,
             }
         return result
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """
+        Get overall health status of all managed sessions.
+
+        Returns a dict with per-platform health and overall status.
+        """
+        states = self.get_all_session_states()
+        logged_in_count = sum(1 for s in states.values() if s.get('is_logged_in'))
+        total = len(states)
+        has_errors = any(s.get('error') for s in states.values())
+
+        if logged_in_count == total and not has_errors:
+            overall = "healthy"
+        elif logged_in_count > 0:
+            overall = "degraded"
+        else:
+            overall = "unhealthy"
+
+        return {
+            "overall": overall,
+            "logged_in": logged_in_count,
+            "total_platforms": total,
+            "has_errors": has_errors,
+            "platforms": states,
+        }
     
     def _session_keeper_loop(self):
         """Background thread that periodically refreshes sessions."""

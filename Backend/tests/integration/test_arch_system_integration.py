@@ -362,12 +362,12 @@ class TestARCH007_UnifiedPipelineAPI:
         # Verify router exists
         assert router is not None
 
-        # Verify routes are defined
+        # Verify routes are defined (paths include router prefix)
         route_paths = [route.path for route in router.routes]
 
-        assert "/pipeline/start" in route_paths
-        assert "/pipeline/{pipeline_id}" in route_paths
-        assert "/pipelines" in route_paths
+        assert "/api/orchestrator/pipeline/start" in route_paths
+        assert "/api/orchestrator/pipeline/{pipeline_id}" in route_paths
+        assert "/api/orchestrator/pipelines" in route_paths
 
 
 class TestEndToEndIntegration:

@@ -261,7 +261,35 @@ class SoraWorker(BaseWorker):
                     pipeline_id=pipeline_id  # ARCH-002: Pass pipeline_id for orchestrator integration
                 )
 
-                # Emit batch completed
+                # ARCH-002 fix: Check if any parts actually succeeded.
+                # generate_multi_part returns status="completed" even with 0
+                # successful parts. Emit SORA_BATCH_FAILED when nothing usable
+                # was produced so the orchestrator doesn't proceed to publishing
+                # with a None video_path.
+                successful_parts = result.get("successful_parts", 0)
+                video_path = result.get("stitched_video") or result.get("video_path")
+
+                if successful_parts == 0 or (result.get("status") == "failed" and not video_path):
+                    error_msg = (
+                        f"All {num_parts} parts failed to generate"
+                        if successful_parts == 0
+                        else "No video produced"
+                    )
+                    logger.error(f"[{self.worker_id}] Batch failed: {error_msg}")
+                    await self.emit(
+                        Topics.SORA_BATCH_FAILED,
+                        {
+                            "pipeline_id": pipeline_id,
+                            "theme": theme,
+                            "error": error_msg,
+                            "successful_parts": successful_parts,
+                            "failed_parts": result.get("failed_parts", num_parts),
+                        },
+                        correlation_id=event.correlation_id
+                    )
+                    return
+
+                # Emit batch completed with valid video
                 await self.emit(
                     Topics.SORA_BATCH_COMPLETED,
                     {
@@ -270,7 +298,10 @@ class SoraWorker(BaseWorker):
                         "status": result.get("status"),
                         "theme": theme,
                         "num_parts": num_parts,
-                        "video_path": result.get("stitched_video") or result.get("video_path"),
+                        "successful_parts": successful_parts,
+                        "failed_parts": result.get("failed_parts", 0),
+                        "video_path": video_path,
+                        "stitched_video": video_path,
                         "parts": result.get("parts", []),
                         "analysis": result.get("analysis"),
                         "generation_time": result.get("total_generation_time"),
@@ -280,8 +311,8 @@ class SoraWorker(BaseWorker):
                 )
 
                 logger.info(
-                    f"[{self.worker_id}] Batch complete: {result.get('status')} - "
-                    f"{result.get('stitched_video') or result.get('video_path')}"
+                    f"[{self.worker_id}] Batch complete: {result.get('status')} "
+                    f"({successful_parts}/{num_parts} parts) - {video_path}"
                 )
 
             else:

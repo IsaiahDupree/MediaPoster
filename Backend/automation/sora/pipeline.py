@@ -37,6 +37,9 @@ from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
+# Maximum concurrent Sora generations (Safari can only run one at a time)
+MAX_CONCURRENT_GENERATIONS = 2
+
 # Output directories
 SORA_OUTPUT_DIR = Path(
     os.getenv(
@@ -60,7 +63,7 @@ class SoraPipeline:
     stitching and AI content analysis.
     """
 
-    def __init__(self):
+    def __init__(self, max_concurrent: int = MAX_CONCURRENT_GENERATIONS):
         # Ensure output dirs exist
         SORA_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         SORA_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -70,7 +73,18 @@ class SoraPipeline:
         self._analyzer = None
         self._prompt_client = None
 
-        logger.info("SoraPipeline initialized")
+        # Concurrency control for parallel generation
+        self._generation_semaphore = asyncio.Semaphore(max_concurrent)
+
+        # Event bus for progress reporting (optional)
+        self._event_bus = None
+        try:
+            from services.event_bus import EventBus
+            self._event_bus = EventBus.get_instance()
+        except Exception:
+            pass
+
+        logger.info(f"SoraPipeline initialized (max_concurrent={max_concurrent})")
 
     # ------------------------------------------------------------------
     # Properties (lazy-loaded)
@@ -95,6 +109,40 @@ class SoraPipeline:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    async def generate_single(
+        self,
+        prompt: str,
+        character: Optional[str] = None,
+        auto_analyze: bool = True,
+        remove_watermark: bool = True,
+        pipeline_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Generate a single Sora video.
+
+        Convenience wrapper around generate_multi_part with num_parts=1.
+
+        Args:
+            prompt: The video generation prompt.
+            character: Sora @character reference.
+            auto_analyze: Whether to run content analysis on result.
+            remove_watermark: Whether to remove Sora watermark.
+            pipeline_id: Optional pipeline correlation ID.
+
+        Returns:
+            Generation result dict with video path and analysis.
+        """
+        return await self.generate_multi_part(
+            theme=prompt,
+            num_parts=1,
+            character=character,
+            part_prompts=[prompt],
+            auto_stitch=False,
+            auto_analyze=auto_analyze,
+            remove_watermarks=remove_watermark,
+            pipeline_id=pipeline_id,
+        )
 
     async def generate_multi_part(
         self,
@@ -143,39 +191,62 @@ class SoraPipeline:
                 theme, num_parts, character
             )
 
-        # Step 2: Generate each part
-        parts: List[Dict[str, Any]] = []
+        # Step 2: Generate each part (concurrently with semaphore)
+        parts: List[Dict[str, Any]] = [None] * num_parts
         successful_count = 0
         failed_count = 0
 
-        for i, prompt in enumerate(prompts):
-            part_num = i + 1
-            logger.info(
-                f"[{job_id}] Generating part {part_num}/{num_parts}..."
-            )
-
-            part_result = await self._generate_single_part(
-                prompt=prompt,
-                part_num=part_num,
-                job_id=job_id,
-                character=character,
-                remove_watermark=remove_watermarks,
-            )
-
-            parts.append(part_result)
-
-            if part_result["status"] == "completed":
-                successful_count += 1
+        async def _gen_part(idx: int, prompt_text: str) -> Dict[str, Any]:
+            """Generate a single part with semaphore-limited concurrency."""
+            part_num = idx + 1
+            async with self._generation_semaphore:
                 logger.info(
-                    f"[{job_id}] Part {part_num} completed: "
-                    f"{part_result.get('video_path', 'no path')}"
+                    f"[{job_id}] Generating part {part_num}/{num_parts}..."
                 )
-            else:
+                result = await self._generate_single_part(
+                    prompt=prompt_text,
+                    part_num=part_num,
+                    job_id=job_id,
+                    character=character,
+                    remove_watermark=remove_watermarks,
+                )
+                # Emit progress event
+                await self._emit_progress(
+                    job_id, part_num, num_parts, result["status"]
+                )
+                return result
+
+        # Run parts concurrently (semaphore limits actual parallelism)
+        tasks = [_gen_part(i, p) for i, p in enumerate(prompts)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for i, result in enumerate(results):
+            part_num = i + 1
+            if isinstance(result, Exception):
+                logger.error(f"[{job_id}] Part {part_num} raised exception: {result}")
+                parts[i] = {
+                    "part_num": part_num,
+                    "part_id": f"{job_id}_part{part_num}",
+                    "status": "failed",
+                    "prompt": prompts[i],
+                    "video_path": None,
+                    "error": str(result),
+                }
                 failed_count += 1
-                logger.warning(
-                    f"[{job_id}] Part {part_num} failed: "
-                    f"{part_result.get('error', 'unknown')}"
-                )
+            else:
+                parts[i] = result
+                if result["status"] == "completed":
+                    successful_count += 1
+                    logger.info(
+                        f"[{job_id}] Part {part_num} completed: "
+                        f"{result.get('video_path', 'no path')}"
+                    )
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"[{job_id}] Part {part_num} failed: "
+                        f"{result.get('error', 'unknown')}"
+                    )
 
         # Step 3: Stitch parts together
         stitched_video = None
@@ -316,6 +387,36 @@ class SoraPipeline:
             List of prompt strings, one per part.
         """
         return await self._generate_part_prompts(theme, num_parts, character)
+
+    # ------------------------------------------------------------------
+    # Progress reporting
+    # ------------------------------------------------------------------
+
+    async def _emit_progress(
+        self,
+        job_id: str,
+        part_num: int,
+        total_parts: int,
+        status: str,
+    ) -> None:
+        """Emit a progress event for pipeline tracking."""
+        if not self._event_bus:
+            return
+        try:
+            from services.event_bus import Topics
+            await self._event_bus.publish(
+                Topics.SORA_BATCH_PROGRESS,
+                {
+                    "pipeline_id": job_id,
+                    "part_num": part_num,
+                    "total_parts": total_parts,
+                    "status": status,
+                    "progress_pct": int((part_num / total_parts) * 100),
+                },
+                source="SoraPipeline"
+            )
+        except Exception as e:
+            logger.debug(f"Progress event emission failed: {e}")
 
     # ------------------------------------------------------------------
     # Internal methods
@@ -698,10 +799,23 @@ Return JSON: {{"prompts": ["part 1 prompt", "part 2 prompt", ...]}}""",
 
         except Exception as e:
             logger.warning(f"Content analysis failed: {e}")
+            # Generate meaningful fallback from theme and prompts
+            # instead of empty hashtags and a hardcoded viral_score.
+            words = theme.lower().replace("-", " ").split()
+            hashtags = [
+                w for w in words
+                if len(w) > 2 and w.isalpha()
+            ][:8]
             return {
                 "detected_hook": theme,
+                "hook": theme,
                 "topics": [theme],
-                "viral_score": 50,
-                "hashtags": [],
+                "viral_score": 0,  # 0 = not scored (avoid misleading defaults)
+                "pre_social_score": 0,
+                "hashtags": hashtags,
+                "description": f"Video about {theme}",
+                "call_to_action": {"type": "follow", "text": "Follow for more!", "strength": "medium"},
+                "content_type": "general",
+                "tone": "engaging",
                 "error": str(e),
             }

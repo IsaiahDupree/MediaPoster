@@ -3,7 +3,7 @@
   "description": "Autonomous content ops controller with Safari automation, multi-platform publishing, media factory, Sora video generation, narrative scheduling, and sleep/wake mode",
   "version": "5.0",
   "totalFeatures": 538,
-  "completedFeatures": 504,
+  "completedFeatures": 516,
   "phases": {
     "phase1_sleep_wake": "Sleep/Wake mode for CPU efficiency",
     "phase2_content_ops": "Content Ops Controller + Entities + Dashboard UI",
@@ -6035,7 +6035,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Button.tsx"
@@ -6047,7 +6047,8 @@
         "ghost: hover:bg-zinc-800",
         "Loading state with spinner",
         "Disabled state"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-002",
@@ -6056,7 +6057,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Card.tsx"
@@ -6066,7 +6067,8 @@
         "Padding: sm (p-4), md (p-6), lg (p-8)",
         "Optional title/subtitle header",
         "Optional action slot"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-003",
@@ -6075,7 +6077,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/StatusBadge.tsx"
@@ -6084,7 +6086,8 @@
         "Color-coded backgrounds with matching text",
         "Optional dot indicator",
         "Consistent sizing across app"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-004",
@@ -6093,7 +6096,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/LoadingState.tsx"
@@ -6102,7 +6105,8 @@
         "Spinner variant with sizes",
         "Skeleton variant with count",
         "Loading text with animation"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-005",
@@ -6111,7 +6115,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/EmptyState.tsx"
@@ -6121,7 +6125,8 @@
         "Title and description",
         "Optional action button",
         "Centered layout"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-006",
@@ -6130,7 +6135,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/ErrorState.tsx"
@@ -6140,7 +6145,8 @@
         "Title and message display",
         "Retry button with callback",
         "Red accent color"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-007",
@@ -6149,7 +6155,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/layout/PageHeader.tsx"
@@ -6159,7 +6165,8 @@
         "Optional description",
         "Optional breadcrumbs",
         "Action buttons slot"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-008",
@@ -6168,7 +6175,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/layout/PageContainer.tsx"
@@ -6177,7 +6184,8 @@
         "Standard p-6 padding",
         "Consistent max-width",
         "Responsive adjustments"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-009",
@@ -6186,7 +6194,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/lib/constants/platforms.ts"
@@ -6196,7 +6204,8 @@
         "Lucide icons and emojis",
         "bg colors, text colors, gradients",
         "Single source of truth"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-010",
@@ -6205,7 +6214,7 @@
       "priority": "P0",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/lib/constants/colors.ts",
@@ -6216,7 +6225,8 @@
         "text-primary, text-secondary, text-muted",
         "status-success, warning, error, info",
         "Brand violet/indigo"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-011",
@@ -6225,7 +6235,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/lib/constants/typography.ts",
@@ -6236,7 +6246,8 @@
         "text-section-title: lg semibold",
         "text-card-title: base medium",
         "text-body, text-label, text-caption"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-012",
@@ -6245,7 +6256,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "4h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/DataTable.tsx"
@@ -6255,7 +6266,8 @@
         "Pagination controls",
         "Loading skeleton",
         "Empty state integration"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-013",
@@ -6264,7 +6276,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Modal.tsx"
@@ -6274,7 +6286,8 @@
         "Header with title and close button",
         "Body content slot",
         "Footer with action buttons"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-014",
@@ -6283,7 +6296,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "3h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Dropdown.tsx"
@@ -6293,7 +6306,8 @@
         "Menu items with icons",
         "Dividers",
         "Keyboard navigation"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-015",
@@ -6302,7 +6316,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Tabs.tsx"
@@ -6312,7 +6326,8 @@
         "Active state indicator",
         "Content panels",
         "Controlled and uncontrolled modes"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-016",
@@ -6321,7 +6336,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Input.tsx"
@@ -6331,7 +6346,8 @@
         "Error state with message",
         "Disabled state",
         "Icon prefix/suffix"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-017",
@@ -6340,7 +6356,7 @@
       "priority": "P1",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Select.tsx"
@@ -6350,7 +6366,8 @@
         "Placeholder",
         "Error state",
         "Searchable option"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-018",
@@ -6359,7 +6376,7 @@
       "priority": "P2",
       "phase": 20,
       "effort": "2h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Tooltip.tsx"
@@ -6368,7 +6385,8 @@
         "Position: top, bottom, left, right",
         "Hover delay",
         "Arrow indicator"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-019",
@@ -6377,7 +6395,7 @@
       "priority": "P2",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Avatar.tsx"
@@ -6387,7 +6405,8 @@
         "Initials fallback",
         "Size variants",
         "Status dot"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-020",
@@ -6396,7 +6415,7 @@
       "priority": "P2",
       "phase": 20,
       "effort": "1h",
-      "passes": false,
+      "passes": true,
       "category": "design-system",
       "files": [
         "dashboard/components/ui/Progress.tsx"
@@ -6406,7 +6425,8 @@
         "Color variants",
         "Label display",
         "Animated fill"
-      ]
+      ],
+      "completed": "2026-02-02"
     },
     {
       "id": "DS-021",

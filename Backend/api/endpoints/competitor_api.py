@@ -740,6 +740,71 @@ Format as JSON with these keys: hook_formulas, content_formats, posting_strategy
     }
 
 
+@router.post("/batch-fetch-posts")
+async def batch_fetch_posts(count: int = 50):
+    """
+    Fetch posts for ALL tracked competitor accounts via instagram-looter2.
+    Runs sequentially to avoid API rate limits.
+    """
+    import httpx
+    import re
+    import json as json_mod
+
+    service = get_competitor_service()
+
+    if not service.api_key:
+        raise HTTPException(status_code=500, detail="RAPIDAPI_KEY not configured")
+
+    accounts = service.get_stored_accounts()
+    if not accounts:
+        raise HTTPException(status_code=404, detail="No tracked accounts found")
+
+    results = []
+    errors = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for username in accounts:
+            try:
+                response = await client.get(
+                    "https://instagram-looter2.p.rapidapi.com/v1/posts",
+                    headers={
+                        "X-RapidAPI-Key": service.api_key,
+                        "X-RapidAPI-Host": "instagram-looter2.p.rapidapi.com",
+                    },
+                    params={"username": username, "count": str(count)},
+                )
+
+                if response.status_code != 200:
+                    errors.append({"username": username, "error": f"API {response.status_code}"})
+                    continue
+
+                data = response.json()
+                posts = data.get("data", data.get("items", data if isinstance(data, list) else []))
+                if not isinstance(posts, list):
+                    posts = [posts] if posts else []
+
+                # Save
+                account_dir = service._get_account_dir(username)
+                posts_file = account_dir / "posts" / "posts.json"
+                with open(posts_file, "w") as f:
+                    json_mod.dump(posts, f, indent=2, default=str)
+
+                results.append({"username": username, "posts_fetched": len(posts)})
+                logger.info(f"Batch fetched {len(posts)} posts for @{username}")
+
+            except Exception as e:
+                logger.error(f"Batch fetch posts error for @{username}: {e}")
+                errors.append({"username": username, "error": str(e)})
+
+    return {
+        "status": "completed",
+        "fetched": len(results),
+        "failed": len(errors),
+        "results": results,
+        "errors": errors,
+    }
+
+
 @router.post("/batch-analyze")
 async def batch_analyze_all():
     """

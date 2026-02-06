@@ -273,6 +273,52 @@ Return ONLY valid JSON, no markdown."""
         # Key learnings
         key_learnings = list(set(all_tips))[:10]
         
+        # Build detailed posting patterns
+        reels = [c for c in content if c.media_type == "reel"]
+        non_reels = [c for c in content if c.media_type != "reel"]
+
+        def _avg(items, attr):
+            vals = [getattr(c, attr, 0) or 0 for c in items]
+            return round(sum(vals) / max(len(vals), 1), 1)
+
+        # Top performing content (by play_count then likes)
+        top_content = sorted(
+            content,
+            key=lambda c: (c.play_count or 0, c.like_count or 0),
+            reverse=True,
+        )[:5]
+
+        posting_patterns = {
+            "total_reels": len(reels),
+            "total_posts": len(non_reels),
+            "content_mix": {
+                "reels_pct": round(len(reels) / max(len(content), 1) * 100, 1),
+                "posts_pct": round(len(non_reels) / max(len(content), 1) * 100, 1),
+            },
+            "engagement_by_type": {
+                "reels": {
+                    "avg_plays": _avg(reels, "play_count"),
+                    "avg_likes": _avg(reels, "like_count"),
+                    "avg_comments": _avg(reels, "comment_count"),
+                },
+                "posts": {
+                    "avg_likes": _avg(non_reels, "like_count"),
+                    "avg_comments": _avg(non_reels, "comment_count"),
+                },
+            },
+            "top_performing": [
+                {
+                    "shortcode": c.shortcode,
+                    "type": c.media_type,
+                    "plays": c.play_count or 0,
+                    "likes": c.like_count or 0,
+                    "caption_preview": (c.caption or "")[:80],
+                }
+                for c in top_content
+            ],
+            "hashtag_frequency": self._count_hashtags(content),
+        }
+
         return AccountLearnings(
             username=username,
             total_content_analyzed=len(content),
@@ -280,14 +326,27 @@ Return ONLY valid JSON, no markdown."""
             top_hooks=top_hooks,
             top_formats=top_formats,
             content_themes=top_themes,
-            posting_patterns={
-                "total_reels": len([c for c in content if c.media_type == "reel"]),
-                "total_posts": len([c for c in content if c.media_type != "reel"]),
-            },
+            posting_patterns=posting_patterns,
             key_learnings=key_learnings,
             content_ideas=content_ideas,
             generated_at=datetime.now().isoformat()
         )
+
+    @staticmethod
+    def _count_hashtags(content: List[CompetitorContent]) -> List[Dict[str, Any]]:
+        """Count hashtag frequency across all content."""
+        import re
+        counts: Dict[str, int] = {}
+        for c in content:
+            if c.caption:
+                tags = re.findall(r'#(\w+)', c.caption)
+                for tag in tags:
+                    tl = tag.lower()
+                    counts[tl] = counts.get(tl, 0) + 1
+        return [
+            {"tag": f"#{k}", "count": v}
+            for k, v in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:15]
+        ]
     
     async def _generate_content_ideas(
         self,

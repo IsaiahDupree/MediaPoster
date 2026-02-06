@@ -118,3 +118,93 @@ async def list_reports():
         "count": len(reports),
         "reports": reports,
     }
+
+
+@router.post("/full-pipeline")
+async def run_full_research_pipeline():
+    """
+    Run the complete weekly research pipeline in one call:
+    1. Batch analyze all competitors (AI analysis)
+    2. Run content gap analysis
+    3. Run performance benchmark
+    4. Generate weekly strategy report combining all results
+
+    Returns a summary of everything generated.
+    """
+    from services.competitor_service import get_competitor_service
+    from services.competitor_analysis_service import get_analysis_service
+    from services.content_gap_service import get_content_gap_service
+    from services.benchmark_service import get_benchmark_service
+    from services.hook_library_service import get_hook_library_service
+
+    results = {
+        "steps_completed": [],
+        "steps_failed": [],
+    }
+
+    # Step 1: Batch analyze competitors
+    try:
+        competitor_svc = get_competitor_service()
+        analysis_svc = get_analysis_service()
+        accounts = competitor_svc.get_stored_accounts()
+        analyzed = 0
+        for username in accounts:
+            try:
+                content = competitor_svc.load_stored_content(username)
+                if content:
+                    learnings = await analysis_svc.analyze_account(username)
+                    if learnings:
+                        analyzed += 1
+            except Exception as e:
+                logger.warning(f"Skip @{username} analysis: {e}")
+        results["competitor_analyses"] = analyzed
+        results["steps_completed"].append("batch_analyze")
+    except Exception as e:
+        logger.error(f"Batch analyze failed: {e}")
+        results["steps_failed"].append({"step": "batch_analyze", "error": str(e)})
+
+    # Step 2: Extract hooks from all analyses
+    try:
+        hook_svc = get_hook_library_service()
+        hook_result = await hook_svc.auto_populate_from_all_competitors()
+        results["hooks_extracted"] = hook_result.get("hooks_added", 0)
+        results["steps_completed"].append("extract_hooks")
+    except Exception as e:
+        logger.error(f"Hook extraction failed: {e}")
+        results["steps_failed"].append({"step": "extract_hooks", "error": str(e)})
+
+    # Step 3: Content gap analysis
+    try:
+        gap_svc = get_content_gap_service()
+        gap_result = await gap_svc.analyze_gaps()
+        results["gap_themes_found"] = len(gap_result.gap_themes)
+        results["gap_coverage_score"] = gap_result.gap_coverage_score
+        results["steps_completed"].append("gap_analysis")
+    except Exception as e:
+        logger.error(f"Gap analysis failed: {e}")
+        results["steps_failed"].append({"step": "gap_analysis", "error": str(e)})
+
+    # Step 4: Benchmark
+    try:
+        bench_svc = get_benchmark_service()
+        bench_result = await bench_svc.run_benchmark()
+        results["benchmark_score"] = bench_result.overall_score
+        results["steps_completed"].append("benchmark")
+    except Exception as e:
+        logger.error(f"Benchmark failed: {e}")
+        results["steps_failed"].append({"step": "benchmark", "error": str(e)})
+
+    # Step 5: Generate strategy report
+    try:
+        report_svc = get_strategy_report_service()
+        report = await report_svc.generate_report()
+        results["report_week"] = report.week_start
+        results["report_ideas"] = len(report.content_ideas)
+        results["report_actions"] = len(report.action_items)
+        results["steps_completed"].append("strategy_report")
+    except Exception as e:
+        logger.error(f"Strategy report failed: {e}")
+        results["steps_failed"].append({"step": "strategy_report", "error": str(e)})
+
+    results["status"] = "completed" if not results["steps_failed"] else "partial"
+    return results

@@ -738,3 +738,188 @@ Format as JSON with these keys: hook_formulas, content_formats, posting_strategy
         "playbook": playbook,
         "saved_to": str(playbook_path)
     }
+
+
+@router.post("/batch-analyze")
+async def batch_analyze_all():
+    """
+    Run AI analysis on ALL tracked competitor accounts.
+    Processes each account sequentially and returns aggregate results.
+    """
+    service = get_competitor_service()
+    analysis_service = get_analysis_service()
+    accounts = service.get_stored_accounts()
+
+    if not accounts:
+        raise HTTPException(status_code=404, detail="No tracked accounts found")
+
+    results = []
+    errors = []
+
+    for username in accounts:
+        try:
+            logger.info(f"Batch analyzing @{username}...")
+            content = service.load_stored_content(username)
+
+            if not content:
+                errors.append({"username": username, "error": "No stored content"})
+                continue
+
+            learnings = await analysis_service.analyze_account(username)
+
+            if learnings:
+                results.append({
+                    "username": username,
+                    "content_analyzed": learnings.total_content_analyzed,
+                    "themes": learnings.content_themes[:5],
+                    "top_hooks": [h.get("type") for h in learnings.top_hooks[:3]],
+                    "ideas_generated": len(learnings.content_ideas),
+                })
+            else:
+                errors.append({"username": username, "error": "Analysis returned no results"})
+
+        except Exception as e:
+            logger.error(f"Error batch-analyzing @{username}: {e}")
+            errors.append({"username": username, "error": str(e)})
+
+    return {
+        "status": "completed",
+        "analyzed": len(results),
+        "failed": len(errors),
+        "results": results,
+        "errors": errors,
+    }
+
+
+@router.post("/accounts/{username}/fetch-posts")
+async def fetch_posts_looter2(username: str, count: int = 50):
+    """
+    Fetch posts for a competitor via instagram-looter2 API.
+    Uses the confirmed working /v1/posts endpoint.
+    Stores results locally in the account's posts directory.
+    """
+    import httpx
+    import re
+
+    service = get_competitor_service()
+
+    if not service.api_key:
+        raise HTTPException(status_code=500, detail="RAPIDAPI_KEY not configured")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"https://instagram-looter2.p.rapidapi.com/v1/posts",
+                headers={
+                    "X-RapidAPI-Key": service.api_key,
+                    "X-RapidAPI-Host": "instagram-looter2.p.rapidapi.com",
+                },
+                params={"username": username, "count": str(count)},
+            )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"API returned {response.status_code}: {response.text[:200]}",
+            )
+
+        data = response.json()
+        posts = data.get("data", data.get("items", data if isinstance(data, list) else []))
+
+        if not isinstance(posts, list):
+            posts = [posts] if posts else []
+
+        # Save raw posts
+        account_dir = service._get_account_dir(username)
+        posts_file = account_dir / "posts" / "posts.json"
+        
+        import json as json_mod
+        with open(posts_file, "w") as f:
+            json_mod.dump(posts, f, indent=2, default=str)
+
+        # Parse into structured content
+        parsed = []
+        for p in posts:
+            caption = p.get("caption", "") or ""
+            hashtags = re.findall(r'#(\w+)', caption)
+            mentions = re.findall(r'@(\w+)', caption)
+
+            parsed.append({
+                "id": p.get("id", p.get("pk", "")),
+                "shortcode": p.get("code", p.get("shortcode", "")),
+                "type": "video" if p.get("is_video") or p.get("video_url") else "image",
+                "caption": caption[:200],
+                "like_count": p.get("like_count", 0),
+                "comment_count": p.get("comment_count", 0),
+                "play_count": p.get("play_count", p.get("video_view_count", 0)),
+                "hashtags": [f"#{t}" for t in hashtags],
+                "mentions": [f"@{m}" for m in mentions],
+            })
+
+        logger.info(f"Fetched {len(parsed)} posts for @{username} via looter2")
+
+        return {
+            "status": "fetched",
+            "username": username,
+            "posts_count": len(parsed),
+            "saved_to": str(posts_file),
+            "posts": parsed[:10],  # Return first 10 as preview
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching posts for @{username}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/accounts/{username}")
+async def delete_account(username: str):
+    """
+    Remove a tracked competitor account and its local data.
+    """
+    import shutil
+
+    service = get_competitor_service()
+    accounts = service.get_stored_accounts()
+
+    if username not in accounts:
+        raise HTTPException(status_code=404, detail=f"Account @{username} not found")
+
+    account_dir = service.storage_dir / "accounts" / username
+    try:
+        shutil.rmtree(account_dir)
+        logger.info(f"Deleted competitor account @{username}")
+        return {"status": "deleted", "username": username}
+    except Exception as e:
+        logger.error(f"Error deleting @{username}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/accounts/{username}/content")
+async def get_account_content(username: str, limit: int = 50):
+    """
+    Get stored content (reels + posts) for a competitor account.
+    Returns parsed content with engagement metrics.
+    """
+    service = get_competitor_service()
+    content = service.load_stored_content(username)
+
+    if not content:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No content found for @{username}. Run fetch-posts or sync first.",
+        )
+
+    # Sort by play_count desc
+    sorted_content = sorted(
+        [c.model_dump() for c in content],
+        key=lambda x: x.get("play_count", 0),
+        reverse=True,
+    )
+
+    return {
+        "username": username,
+        "total": len(sorted_content),
+        "content": sorted_content[:limit],
+    }

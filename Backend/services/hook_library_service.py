@@ -13,6 +13,12 @@ import openai
 
 from services.competitor_service import COMPETITOR_RESEARCH_DIR
 
+try:
+    from supabase import create_client, Client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+
 
 class SavedHook(BaseModel):
     """A saved hook from competitor analysis"""
@@ -55,6 +61,19 @@ class HookLibraryService:
         self.storage_path = COMPETITOR_RESEARCH_DIR / "learnings" / "hook_library.json"
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._hooks: List[Dict[str, Any]] = self._load_hooks()
+        self._supabase: Optional[Any] = None
+
+    def _get_supabase(self):
+        """Get or create Supabase client."""
+        if self._supabase is None and HAS_SUPABASE:
+            try:
+                url = os.environ.get('SUPABASE_URL', 'http://127.0.0.1:54321')
+                key = os.environ.get('SUPABASE_ANON_KEY', os.environ.get('SUPABASE_KEY', ''))
+                if key:
+                    self._supabase = create_client(url, key)
+            except Exception as e:
+                logger.warning(f"Supabase not available for hook library: {e}")
+        return self._supabase
 
     def _load_hooks(self) -> List[Dict[str, Any]]:
         """Load hooks from local storage"""
@@ -98,8 +117,31 @@ class HookLibraryService:
 
         self._hooks.append(hook_data)
         self._save_hooks()
+        self._persist_hook_to_supabase(hook_data)
         logger.info(f"Added hook to library: {hook.hook_text[:50]}...")
         return hook_data
+
+    def _persist_hook_to_supabase(self, hook_data: Dict[str, Any]):
+        """Persist a hook to Supabase saved_hooks table."""
+        sb = self._get_supabase()
+        if not sb:
+            return
+        try:
+            sb.table('saved_hooks').insert({
+                'hook_text': hook_data.get('hook_text', ''),
+                'hook_type': hook_data.get('hook_type', 'curiosity'),
+                'source_account': hook_data.get('source_account'),
+                'source_views': hook_data.get('source_views'),
+                'source_likes': hook_data.get('source_likes'),
+                'source_comments': hook_data.get('source_comments'),
+                'performance_score': hook_data.get('performance_score', 0),
+                'notes': hook_data.get('notes'),
+                'tags': hook_data.get('tags', []),
+                'is_favorite': hook_data.get('is_favorite', False),
+                'times_used': hook_data.get('times_used', 0),
+            }).execute()
+        except Exception as e:
+            logger.warning(f"Failed to persist hook to Supabase: {e}")
 
     def get_hooks(
         self,

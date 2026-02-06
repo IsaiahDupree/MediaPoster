@@ -13,6 +13,12 @@ import openai
 
 from services.competitor_service import get_competitor_service, COMPETITOR_RESEARCH_DIR
 
+try:
+    from supabase import create_client, Client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+
 
 class MetricComparison(BaseModel):
     """Single metric comparison"""
@@ -85,6 +91,18 @@ class BenchmarkService:
         self.competitor_service = get_competitor_service()
         self.storage_path = COMPETITOR_RESEARCH_DIR / "learnings" / "benchmarks"
         self.storage_path.mkdir(parents=True, exist_ok=True)
+        self._supabase = None
+
+    def _get_supabase(self):
+        if self._supabase is None and HAS_SUPABASE:
+            try:
+                url = os.environ.get('SUPABASE_URL', 'http://127.0.0.1:54321')
+                key = os.environ.get('SUPABASE_ANON_KEY', os.environ.get('SUPABASE_KEY', ''))
+                if key:
+                    self._supabase = create_client(url, key)
+            except Exception as e:
+                logger.warning(f"Supabase not available for benchmarks: {e}")
+        return self._supabase
 
     def _get_account_tier(self, followers: int) -> str:
         """Determine account tier based on follower count"""
@@ -379,7 +397,7 @@ Return ONLY valid JSON array."""
         return recs
 
     def _save_result(self, result: BenchmarkResult):
-        """Save benchmark result"""
+        """Save benchmark result to local files and Supabase."""
         try:
             path = self.storage_path / "latest_benchmark.json"
             with open(path, "w") as f:
@@ -387,6 +405,36 @@ Return ONLY valid JSON array."""
             logger.info(f"Saved benchmark to {path}")
         except Exception as e:
             logger.error(f"Error saving benchmark: {e}")
+
+        # Persist to Supabase
+        sb = self._get_supabase()
+        if not sb:
+            return
+        try:
+            # Extract user/competitor values from comparisons
+            user_er = next((c.user_value for c in result.comparisons if c.metric == 'engagement_rate'), None)
+            user_views = next((c.user_value for c in result.comparisons if c.metric == 'avg_views_per_reel'), None)
+            user_likes = next((c.user_value for c in result.comparisons if c.metric == 'avg_likes_per_post'), None)
+            user_freq = next((c.user_value for c in result.comparisons if c.metric == 'posting_frequency_per_week'), None)
+            comp_er = next((c.competitor_avg for c in result.comparisons if c.metric == 'engagement_rate'), None)
+            comp_views = next((c.competitor_avg for c in result.comparisons if c.metric == 'avg_views_per_reel'), None)
+            comp_likes = next((c.competitor_avg for c in result.comparisons if c.metric == 'avg_likes_per_post'), None)
+
+            sb.table('performance_benchmarks').insert({
+                'user_engagement_rate': user_er,
+                'user_avg_views': user_views,
+                'user_avg_likes': user_likes,
+                'user_posting_frequency': user_freq,
+                'competitor_engagement_rate': comp_er,
+                'competitor_avg_views': comp_views,
+                'competitor_avg_likes': comp_likes,
+                'competitor_breakdown': json.dumps(result.competitor_breakdown, default=str),
+                'deltas': json.dumps({c.metric: {'value': c.delta_vs_competitors, 'status': c.status} for c in result.comparisons}, default=str),
+                'recommendations': json.dumps(result.recommendations, default=str),
+            }).execute()
+            logger.info("Persisted benchmark to Supabase")
+        except Exception as e:
+            logger.warning(f"Failed to persist benchmark to Supabase: {e}")
 
     def get_latest_benchmark(self) -> Optional[BenchmarkResult]:
         """Load most recent benchmark"""

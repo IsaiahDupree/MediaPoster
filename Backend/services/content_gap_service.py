@@ -13,6 +13,12 @@ import openai
 
 from services.competitor_service import COMPETITOR_RESEARCH_DIR
 
+try:
+    from supabase import create_client, Client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+
 
 class GapTheme(BaseModel):
     """A content gap - theme competitors cover but user doesn't"""
@@ -54,6 +60,18 @@ class ContentGapService:
         self.model = "gpt-4o-mini"
         self.storage_path = COMPETITOR_RESEARCH_DIR / "learnings"
         self.storage_path.mkdir(parents=True, exist_ok=True)
+        self._supabase = None
+
+    def _get_supabase(self):
+        if self._supabase is None and HAS_SUPABASE:
+            try:
+                url = os.environ.get('SUPABASE_URL', 'http://127.0.0.1:54321')
+                key = os.environ.get('SUPABASE_ANON_KEY', os.environ.get('SUPABASE_KEY', ''))
+                if key:
+                    self._supabase = create_client(url, key)
+            except Exception as e:
+                logger.warning(f"Supabase not available for gap analysis: {e}")
+        return self._supabase
 
     async def analyze_gaps(
         self,
@@ -295,7 +313,7 @@ Return ONLY valid JSON."""
         )
 
     def _save_results(self, result: GapAnalysisResult):
-        """Save gap analysis results to local storage"""
+        """Save gap analysis results to local storage and Supabase."""
         try:
             output_path = self.storage_path / "content_gap_analysis.json"
             with open(output_path, "w") as f:
@@ -303,6 +321,24 @@ Return ONLY valid JSON."""
             logger.info(f"Saved gap analysis to {output_path}")
         except Exception as e:
             logger.error(f"Error saving gap analysis: {e}")
+
+        # Persist to Supabase
+        sb = self._get_supabase()
+        if not sb:
+            return
+        try:
+            sb.table('content_gap_analysis').insert({
+                'competitor_usernames': result.competitor_usernames,
+                'gap_themes': json.dumps([g.model_dump() for g in result.gap_themes], default=str),
+                'overlap_themes': json.dumps([o.model_dump() for o in result.overlap_themes], default=str),
+                'unique_themes': json.dumps(result.unique_themes, default=str),
+                'gap_coverage_score': result.gap_coverage_score,
+                'ai_analysis': result.ai_analysis,
+                'model_used': self.model,
+            }).execute()
+            logger.info("Persisted gap analysis to Supabase")
+        except Exception as e:
+            logger.warning(f"Failed to persist gap analysis to Supabase: {e}")
 
     def get_latest_analysis(self) -> Optional[GapAnalysisResult]:
         """Load the most recent gap analysis from storage"""

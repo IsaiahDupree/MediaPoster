@@ -16,6 +16,12 @@ import openai
 
 from services.competitor_service import COMPETITOR_RESEARCH_DIR
 
+try:
+    from supabase import create_client, Client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+
 
 class StrategyReport(BaseModel):
     """Weekly strategy report"""
@@ -42,6 +48,18 @@ class StrategyReportService:
         self.model = "gpt-4o-mini"
         self.storage_path = COMPETITOR_RESEARCH_DIR / "learnings" / "strategy_reports"
         self.storage_path.mkdir(parents=True, exist_ok=True)
+        self._supabase = None
+
+    def _get_supabase(self):
+        if self._supabase is None and HAS_SUPABASE:
+            try:
+                url = os.environ.get('SUPABASE_URL', 'http://127.0.0.1:54321')
+                key = os.environ.get('SUPABASE_ANON_KEY', os.environ.get('SUPABASE_KEY', ''))
+                if key:
+                    self._supabase = create_client(url, key)
+            except Exception as e:
+                logger.warning(f"Supabase not available for strategy reports: {e}")
+        return self._supabase
 
     async def generate_report(
         self,
@@ -393,8 +411,33 @@ Return ONLY valid JSON."""
 
             logger.info(f"Saved strategy report for week of {report.week_start}")
 
+            # Persist to Supabase
+            self._persist_to_supabase(report)
+
         except Exception as e:
             logger.error(f"Error saving strategy report: {e}")
+
+    def _persist_to_supabase(self, report: StrategyReport):
+        """Persist report to Supabase strategy_reports table."""
+        sb = self._get_supabase()
+        if not sb:
+            return
+        try:
+            sb.table('strategy_reports').upsert({
+                'week_start': report.week_start,
+                'week_end': report.week_end,
+                'performance_summary': json.dumps(report.performance_summary, default=str),
+                'top_content': json.dumps(report.top_content, default=str),
+                'trending_recommendations': json.dumps(report.trending_recommendations, default=str),
+                'content_ideas': json.dumps(report.content_ideas, default=str),
+                'action_items': json.dumps(report.action_items, default=str),
+                'report_markdown': report.report_markdown,
+                'competitors_analyzed': report.competitors_analyzed,
+                'model_used': 'gpt-4o-mini',
+            }, on_conflict='week_start').execute()
+            logger.info(f"Persisted strategy report to Supabase")
+        except Exception as e:
+            logger.warning(f"Failed to persist strategy report to Supabase: {e}")
 
     def get_latest_report(self) -> Optional[StrategyReport]:
         """Load the most recent strategy report"""

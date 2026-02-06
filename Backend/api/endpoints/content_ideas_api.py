@@ -356,6 +356,37 @@ async def update_idea_status(idea_id: str, status: str):
     raise HTTPException(status_code=404, detail="Idea not found")
 
 
+@router.patch("/{idea_id}/schedule")
+async def schedule_idea(idea_id: str, scheduled_date: str, platform: str = "instagram"):
+    """
+    Schedule a content idea for a specific date.
+    Moves the idea to 'scheduled' status with a target date and platform.
+    """
+    ideas = _load_saved_ideas()
+    for idea in ideas:
+        if idea.get("id") == idea_id:
+            idea["status"] = "scheduled"
+            idea["scheduled_date"] = scheduled_date
+            idea["platform"] = platform
+            idea["updated_at"] = datetime.now().isoformat()
+            _persist_saved_ideas(ideas)
+            return {"status": "scheduled", "idea": idea}
+
+    raise HTTPException(status_code=404, detail="Idea not found")
+
+
+@router.get("/scheduled")
+async def list_scheduled_ideas():
+    """List all ideas that are scheduled (content calendar view)"""
+    ideas = _load_saved_ideas()
+    scheduled = [i for i in ideas if i.get("status") == "scheduled"]
+    scheduled.sort(key=lambda i: i.get("scheduled_date", ""))
+    return {
+        "count": len(scheduled),
+        "ideas": scheduled,
+    }
+
+
 @router.delete("/{idea_id}")
 async def delete_idea(idea_id: str):
     """Delete a saved content idea"""

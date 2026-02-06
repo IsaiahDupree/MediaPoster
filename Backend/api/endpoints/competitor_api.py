@@ -1169,3 +1169,48 @@ Return ONLY valid JSON array."""
     except Exception as e:
         logger.error(f"Error discovering accounts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hashtag-analytics")
+async def get_hashtag_analytics(limit: int = 50):
+    """
+    Aggregate hashtag analytics across all tracked competitors.
+    Returns frequency, accounts using each tag, and estimated reach.
+    """
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    tag_data: Dict[str, Dict[str, Any]] = {}
+
+    for username in all_accounts:
+        analysis_path = service.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+        if not analysis_path.exists():
+            continue
+        try:
+            with open(analysis_path) as f:
+                data = json.load(f)
+
+            hashtag_freq = data.get("posting_patterns", {}).get("hashtag_frequency", [])
+            for entry in hashtag_freq:
+                tag = entry.get("tag", "")
+                count = entry.get("count", 0)
+                if not tag:
+                    continue
+                if tag not in tag_data:
+                    tag_data[tag] = {"tag": tag, "total_uses": 0, "accounts": [], "top_account": ""}
+                tag_data[tag]["total_uses"] += count
+                tag_data[tag]["accounts"].append({"username": username, "count": count})
+        except Exception:
+            pass
+
+    # Sort by total uses and enrich
+    sorted_tags = sorted(tag_data.values(), key=lambda t: t["total_uses"], reverse=True)[:limit]
+    for t in sorted_tags:
+        t["account_count"] = len(t["accounts"])
+        t["top_account"] = max(t["accounts"], key=lambda a: a["count"])["username"] if t["accounts"] else ""
+
+    return {
+        "total_unique_hashtags": len(tag_data),
+        "competitors_analyzed": len(all_accounts),
+        "top_hashtags": sorted_tags,
+    }

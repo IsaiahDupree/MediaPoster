@@ -55,6 +55,20 @@ async def list_accounts():
     }
 
 
+@router.get("/accounts/detailed")
+async def list_accounts_detailed():
+    """
+    List all tracked competitor accounts with full details.
+    Includes profile data, analysis status, and local video counts.
+    """
+    service = get_competitor_service()
+    details = service.get_stored_account_details()
+    return {
+        "count": len(details),
+        "accounts": details
+    }
+
+
 @router.post("/accounts")
 async def add_account(request: AddAccountRequest):
     """

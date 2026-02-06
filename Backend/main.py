@@ -1640,6 +1640,19 @@ logger.success("✓ Voice Cloning API registered (VC-002, VC-003, VC-006)")
 from api.endpoints import competitor_api
 app.include_router(competitor_api.router, tags=["Competitor Research"])
 
+# Hook Library (curated hooks from competitor analysis)
+from api.endpoints import hook_library_api
+app.include_router(hook_library_api.router, tags=["Hook Library"])
+
+# Content Gap Analysis (identify content opportunities)
+from api.endpoints import content_gap_api
+app.include_router(content_gap_api.router, tags=["Content Gap Analysis"])
+
+# Strategy Reports (weekly AI-generated content strategy)
+from api.endpoints import strategy_report_api
+app.include_router(strategy_report_api.router, tags=["Strategy Reports"])
+logger.success("✓ Instagram Research APIs registered (Hooks, Gap Analysis, Strategy Reports)")
+
 # Content Sourcing (PIPE-001: Auto-discover and ingest media files)
 from api.endpoints import content_sourcing
 app.include_router(content_sourcing.router, tags=["Content Sourcing"])

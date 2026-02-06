@@ -18,6 +18,13 @@ from services.competitor_service import (
 )
 from services.keyword_extraction_service import get_keyword_service
 
+# Optional Supabase persistence
+try:
+    from supabase import create_client, Client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+
 
 class ContentAnalysis(BaseModel):
     """AI-generated analysis of a piece of content"""
@@ -59,11 +66,24 @@ class CompetitorAnalysisService:
         self.model = "gpt-4o-mini"  # Fast and cost-effective
         self.competitor_service = get_competitor_service()
         self.keyword_service = get_keyword_service()
+        self._supabase: Optional[Client] = None
         
         if self.api_key:
             openai.api_key = self.api_key
         else:
             logger.warning("OPENAI_API_KEY not set - analysis will fail")
+    
+    def _get_supabase(self) -> Optional[Client]:
+        """Get or create Supabase client for persistence."""
+        if self._supabase is None and HAS_SUPABASE:
+            try:
+                url = os.environ.get('SUPABASE_URL', 'http://127.0.0.1:54321')
+                key = os.environ.get('SUPABASE_ANON_KEY', os.environ.get('SUPABASE_KEY', ''))
+                if key:
+                    self._supabase = create_client(url, key)
+            except Exception as e:
+                logger.warning(f"Supabase not available for analysis persistence: {e}")
+        return self._supabase
     
     async def analyze_content(self, content: CompetitorContent) -> Optional[ContentAnalysis]:
         """
@@ -321,22 +341,81 @@ Return as a JSON array of strings."""
             return []
     
     async def _save_learnings(self, username: str, learnings: AccountLearnings):
-        """Save learnings to the account's analysis folder"""
+        """Save learnings to local files and optionally Supabase."""
+        # --- File-based storage (always) ---
         account_dir = COMPETITOR_RESEARCH_DIR / "accounts" / username / "analysis"
         account_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save as JSON
         json_path = account_dir / "learnings.json"
         with open(json_path, "w") as f:
             json.dump(learnings.model_dump(), f, indent=2, default=str)
         
-        # Generate markdown summary
-        md_path = account_dir / "learnings.md"
         md_content = self._generate_markdown(learnings)
+        md_path = account_dir / "learnings.md"
         with open(md_path, "w") as f:
             f.write(md_content)
         
         logger.info(f"Saved learnings to {account_dir}")
+        
+        # --- Supabase persistence (if available) ---
+        await self._persist_to_supabase(username, learnings, md_content)
+    
+    async def _persist_to_supabase(
+        self, username: str, learnings: AccountLearnings, markdown: str
+    ):
+        """Persist analysis results to Supabase tables."""
+        supabase = self._get_supabase()
+        if not supabase:
+            return
+        
+        try:
+            # Upsert into competitor_account
+            account_result = supabase.table('competitor_account').upsert({
+                'platform': 'instagram',
+                'handle': username,
+                'fetched_at': datetime.now().isoformat(),
+                'last_full_audit_at': datetime.now().isoformat(),
+                'is_active': True,
+            }, on_conflict='platform,handle').execute()
+            
+            account_id = None
+            if account_result.data:
+                account_id = account_result.data[0].get('account_id')
+            
+            if not account_id:
+                # Fetch account_id if upsert didn't return it
+                lookup = supabase.table('competitor_account').select('account_id').eq(
+                    'platform', 'instagram'
+                ).eq('handle', username).execute()
+                if lookup.data:
+                    account_id = lookup.data[0].get('account_id')
+            
+            if not account_id:
+                logger.warning(f"Could not get account_id for @{username} in Supabase")
+                return
+            
+            # Save audit report
+            report_data = {
+                'account_id': account_id,
+                'posts_analyzed': learnings.total_content_analyzed,
+                'time_window': '30d',
+                'strategy': json.dumps({
+                    'content_pillars': learnings.content_themes,
+                    'hook_system': learnings.top_hooks,
+                }),
+                'playbook': json.dumps({
+                    'content_ideas': learnings.content_ideas,
+                    'key_learnings': learnings.key_learnings,
+                }),
+                'full_report_json': json.dumps(learnings.model_dump(), default=str),
+                'report_markdown': markdown,
+            }
+            
+            supabase.table('competitor_audit_report').insert(report_data).execute()
+            logger.info(f"Persisted analysis for @{username} to Supabase")
+            
+        except Exception as e:
+            logger.warning(f"Failed to persist analysis to Supabase: {e}")
     
     def _generate_markdown(self, learnings: AccountLearnings) -> str:
         """Generate a markdown summary of learnings"""

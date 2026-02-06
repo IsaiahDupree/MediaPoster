@@ -220,6 +220,176 @@ async def generate_ab_test(hook_id: str, niche: str = "personal branding"):
     return result
 
 
+@router.post("/{hook_id}/track-usage")
+async def track_hook_usage(hook_id: str, platform: str = "instagram", post_url: str = "", notes: str = ""):
+    """
+    Record that a hook was used in a post. Tracks which hooks you've actually posted.
+    """
+    service = get_hook_library_service()
+    hooks = service.get_all_hooks()
+    hook = next((h for h in hooks if h.get("id") == hook_id), None)
+    if not hook:
+        raise HTTPException(status_code=404, detail="Hook not found")
+
+    from datetime import datetime
+    usage_entry = {
+        "id": f"usage_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "hook_id": hook_id,
+        "hook_text": hook.get("hook", ""),
+        "platform": platform,
+        "post_url": post_url,
+        "notes": notes,
+        "used_at": datetime.now().isoformat(),
+        "results": None,
+    }
+
+    # Load or create usage log
+    usage_path = service.storage_path.parent / "hook_usage_log.json"
+    usage_log = []
+    if usage_path.exists():
+        try:
+            import json
+            with open(usage_path) as f:
+                usage_log = json.load(f)
+        except Exception:
+            usage_log = []
+
+    usage_log.append(usage_entry)
+
+    import json
+    with open(usage_path, "w") as f:
+        json.dump(usage_log, f, indent=2)
+
+    # Increment hook usage count
+    hook["usage_count"] = hook.get("usage_count", 0) + 1
+    service._save_hooks(hooks)
+
+    return {"status": "tracked", "usage": usage_entry}
+
+
+@router.patch("/{hook_id}/track-results")
+async def track_hook_results(
+    hook_id: str,
+    usage_id: str = "",
+    views: int = 0,
+    likes: int = 0,
+    comments: int = 0,
+    shares: int = 0,
+    saves: int = 0,
+    watch_through_rate: float = 0.0,
+):
+    """
+    Record performance results for a hook that was used.
+    Updates the usage log entry with actual engagement metrics.
+    """
+    service = get_hook_library_service()
+    usage_path = service.storage_path.parent / "hook_usage_log.json"
+
+    if not usage_path.exists():
+        raise HTTPException(status_code=404, detail="No usage log found")
+
+    import json
+    with open(usage_path) as f:
+        usage_log = json.load(f)
+
+    # Find usage entry
+    target = None
+    if usage_id:
+        target = next((u for u in usage_log if u.get("id") == usage_id), None)
+    else:
+        # Find latest usage of this hook
+        for u in reversed(usage_log):
+            if u.get("hook_id") == hook_id:
+                target = u
+                break
+
+    if not target:
+        raise HTTPException(status_code=404, detail="Usage entry not found")
+
+    from datetime import datetime
+    target["results"] = {
+        "views": views,
+        "likes": likes,
+        "comments": comments,
+        "shares": shares,
+        "saves": saves,
+        "watch_through_rate": watch_through_rate,
+        "engagement_rate": round((likes + comments + shares + saves) / max(views, 1) * 100, 2),
+        "recorded_at": datetime.now().isoformat(),
+    }
+
+    with open(usage_path, "w") as f:
+        json.dump(usage_log, f, indent=2)
+
+    return {"status": "results_recorded", "usage": target}
+
+
+@router.get("/effectiveness")
+async def get_hook_effectiveness():
+    """
+    Get hook effectiveness report: which hooks performed best when actually used.
+    Returns hooks sorted by engagement rate with full performance data.
+    """
+    service = get_hook_library_service()
+    usage_path = service.storage_path.parent / "hook_usage_log.json"
+
+    if not usage_path.exists():
+        return {"total_uses": 0, "with_results": 0, "hooks": []}
+
+    import json
+    with open(usage_path) as f:
+        usage_log = json.load(f)
+
+    # Group by hook_id
+    hook_perf: dict = {}
+    for entry in usage_log:
+        hid = entry.get("hook_id", "")
+        if hid not in hook_perf:
+            hook_perf[hid] = {
+                "hook_id": hid,
+                "hook_text": entry.get("hook_text", ""),
+                "times_used": 0,
+                "times_with_results": 0,
+                "total_views": 0,
+                "total_likes": 0,
+                "total_comments": 0,
+                "total_shares": 0,
+                "total_saves": 0,
+                "avg_engagement_rate": 0,
+                "best_platform": "",
+                "usages": [],
+            }
+        hook_perf[hid]["times_used"] += 1
+        hook_perf[hid]["usages"].append(entry)
+
+        if entry.get("results"):
+            r = entry["results"]
+            hook_perf[hid]["times_with_results"] += 1
+            hook_perf[hid]["total_views"] += r.get("views", 0)
+            hook_perf[hid]["total_likes"] += r.get("likes", 0)
+            hook_perf[hid]["total_comments"] += r.get("comments", 0)
+            hook_perf[hid]["total_shares"] += r.get("shares", 0)
+            hook_perf[hid]["total_saves"] += r.get("saves", 0)
+
+    # Calculate averages
+    for hid, perf in hook_perf.items():
+        if perf["total_views"] > 0:
+            total_eng = perf["total_likes"] + perf["total_comments"] + perf["total_shares"] + perf["total_saves"]
+            perf["avg_engagement_rate"] = round(total_eng / perf["total_views"] * 100, 2)
+        # Remove full usages from summary (too verbose)
+        perf.pop("usages", None)
+
+    sorted_hooks = sorted(hook_perf.values(), key=lambda h: h["avg_engagement_rate"], reverse=True)
+    total_with_results = sum(1 for h in sorted_hooks if h["times_with_results"] > 0)
+
+    return {
+        "total_uses": len(usage_log),
+        "unique_hooks_used": len(hook_perf),
+        "with_results": total_with_results,
+        "hooks": sorted_hooks,
+    }
+
+
 @router.post("/auto-populate")
 async def auto_populate_hooks():
     """

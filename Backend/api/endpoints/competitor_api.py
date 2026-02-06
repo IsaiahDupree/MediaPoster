@@ -1318,3 +1318,195 @@ async def get_engagement_timing():
         },
         "top_performing_content": top_content[:10],
     }
+
+
+@router.get("/audit-report")
+async def get_audit_report():
+    """
+    Generate a comprehensive audit report synthesizing all competitor data:
+    - Account summaries with follower counts and content volume
+    - Cross-competitor theme analysis
+    - Hashtag strategy overview
+    - Engagement benchmarks
+    - Content format breakdown
+    - Key opportunities identified
+    """
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    account_summaries = []
+    all_themes: Dict[str, int] = {}
+    all_hashtags: Dict[str, int] = {}
+    total_reels = 0
+    total_posts = 0
+    engagement_scores: List[float] = []
+    all_hooks: List[str] = []
+    all_strategies: List[str] = []
+    opportunities: List[Dict[str, Any]] = []
+
+    for username in all_accounts:
+        analysis_path = service.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+        if not analysis_path.exists():
+            account_summaries.append({
+                "username": username,
+                "has_analysis": False,
+                "status": "needs_analysis",
+            })
+            continue
+
+        try:
+            with open(analysis_path) as f:
+                data = json.load(f)
+
+            # Account summary
+            pp = data.get("posting_patterns", {})
+            acct_reels = pp.get("total_reels", 0)
+            acct_posts = pp.get("total_posts", 0)
+            total_reels += acct_reels
+            total_posts += acct_posts
+
+            reel_eng = pp.get("engagement_by_type", {}).get("reels", {})
+            post_eng = pp.get("engagement_by_type", {}).get("posts", {})
+            avg_eng = (reel_eng.get("avg_likes", 0) + post_eng.get("avg_likes", 0)) / 2
+
+            account_summaries.append({
+                "username": username,
+                "has_analysis": True,
+                "total_content": acct_reels + acct_posts,
+                "reels": acct_reels,
+                "posts": acct_posts,
+                "avg_reel_plays": reel_eng.get("avg_plays", 0),
+                "avg_reel_likes": reel_eng.get("avg_likes", 0),
+                "avg_post_likes": post_eng.get("avg_likes", 0),
+                "engagement_score": round(avg_eng, 1),
+                "themes": data.get("content_themes", [])[:5],
+                "top_hooks": [h.get("hook", "") for h in pp.get("top_performing", [])[:2] if h.get("hook")],
+            })
+
+            engagement_scores.append(avg_eng)
+
+            # Aggregate themes
+            for theme in data.get("content_themes", []):
+                if theme:
+                    key = theme.lower().strip()
+                    all_themes[key] = all_themes.get(key, 0) + 1
+
+            # Aggregate hashtags
+            for ht in data.get("hashtag_strategy", []):
+                if ht:
+                    key = ht.lower().strip()
+                    all_hashtags[key] = all_hashtags.get(key, 0) + 1
+
+            # Collect hooks
+            for hook in data.get("hook_patterns", []):
+                if isinstance(hook, str) and hook:
+                    all_hooks.append(hook)
+                elif isinstance(hook, dict) and hook.get("pattern"):
+                    all_hooks.append(hook["pattern"])
+
+            # Collect strategies
+            for strat in data.get("growth_strategies", []):
+                if isinstance(strat, str) and strat:
+                    all_strategies.append(strat)
+
+        except Exception:
+            account_summaries.append({
+                "username": username,
+                "has_analysis": False,
+                "status": "error",
+            })
+
+    # Sort themes and hashtags by frequency
+    sorted_themes = sorted(all_themes.items(), key=lambda x: x[1], reverse=True)[:20]
+    sorted_hashtags = sorted(all_hashtags.items(), key=lambda x: x[1], reverse=True)[:30]
+
+    # Identify opportunities from gaps
+    analyzed_count = sum(1 for a in account_summaries if a.get("has_analysis"))
+    if analyzed_count > 0:
+        # Low-competition themes (used by few competitors)
+        for theme, count in sorted_themes:
+            if count <= max(1, analyzed_count // 3):
+                opportunities.append({
+                    "type": "underserved_theme",
+                    "label": f"Low-competition theme: {theme}",
+                    "detail": f"Only {count}/{analyzed_count} competitors cover this",
+                    "priority": "high" if count == 1 else "medium",
+                })
+        # High-engagement formats
+        if total_reels > total_posts * 2:
+            opportunities.append({
+                "type": "format_trend",
+                "label": "Reels dominate competitor content",
+                "detail": f"{round(total_reels / max(total_reels + total_posts, 1) * 100)}% reels vs posts",
+                "priority": "high",
+            })
+
+    avg_eng_score = round(sum(engagement_scores) / len(engagement_scores), 1) if engagement_scores else 0
+
+    return {
+        "generated_at": datetime.now().isoformat(),
+        "summary": {
+            "total_competitors": len(all_accounts),
+            "analyzed": analyzed_count,
+            "total_content_pieces": total_reels + total_posts,
+            "total_reels": total_reels,
+            "total_posts": total_posts,
+            "avg_engagement_score": avg_eng_score,
+        },
+        "accounts": sorted(account_summaries, key=lambda a: a.get("engagement_score", 0), reverse=True),
+        "top_themes": [{"theme": t, "count": c, "coverage_pct": round(c / max(analyzed_count, 1) * 100, 1)} for t, c in sorted_themes],
+        "top_hashtags": [{"hashtag": h, "count": c} for h, c in sorted_hashtags],
+        "hook_patterns": list(set(all_hooks))[:20],
+        "growth_strategies": list(set(all_strategies))[:15],
+        "opportunities": opportunities[:10],
+    }
+
+
+@router.get("/research-export")
+async def export_research_data():
+    """
+    Export all research data in a unified format for download/sharing.
+    Combines competitor analysis, hashtags, themes, hooks, and strategies.
+    """
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    export_data: Dict[str, Any] = {
+        "exported_at": datetime.now().isoformat(),
+        "accounts": {},
+    }
+
+    for username in all_accounts:
+        analysis_path = service.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+        acct_data: Dict[str, Any] = {"username": username, "has_analysis": False}
+
+        if analysis_path.exists():
+            try:
+                with open(analysis_path) as f:
+                    acct_data = json.load(f)
+                acct_data["has_analysis"] = True
+                acct_data["username"] = username
+            except Exception:
+                pass
+
+        export_data["accounts"][username] = acct_data
+
+    # Include saved hooks
+    hooks_path = service.storage_dir / "saved_hooks.json"
+    if hooks_path.exists():
+        try:
+            with open(hooks_path) as f:
+                export_data["saved_hooks"] = json.load(f)
+        except Exception:
+            export_data["saved_hooks"] = []
+
+    # Include saved ideas
+    ideas_path = service.storage_dir / "saved_ideas.json"
+    if ideas_path.exists():
+        try:
+            with open(ideas_path) as f:
+                export_data["saved_ideas"] = json.load(f)
+        except Exception:
+            export_data["saved_ideas"] = []
+
+    return export_data

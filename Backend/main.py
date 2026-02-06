@@ -1651,7 +1651,15 @@ app.include_router(content_gap_api.router, tags=["Content Gap Analysis"])
 # Strategy Reports (weekly AI-generated content strategy)
 from api.endpoints import strategy_report_api
 app.include_router(strategy_report_api.router, tags=["Strategy Reports"])
-logger.success("✓ Instagram Research APIs registered (Hooks, Gap Analysis, Strategy Reports)")
+
+# Performance Benchmarks (compare user vs competitors vs industry)
+from api.endpoints import benchmark_api
+app.include_router(benchmark_api.router, tags=["Performance Benchmarks"])
+
+# Content Ideas (AI-powered idea generation from competitor patterns)
+from api.endpoints import content_ideas_api
+app.include_router(content_ideas_api.router, tags=["Content Ideas"])
+logger.success("✓ Instagram Research APIs registered (Hooks, Gap Analysis, Strategy Reports, Benchmarks, Content Ideas)")
 
 # Content Sourcing (PIPE-001: Auto-discover and ingest media files)
 from api.endpoints import content_sourcing

@@ -1214,3 +1214,107 @@ async def get_hashtag_analytics(limit: int = 50):
         "competitors_analyzed": len(all_accounts),
         "top_hashtags": sorted_tags,
     }
+
+
+@router.get("/theme-analytics")
+async def get_theme_analytics():
+    """
+    Aggregate content themes across all tracked competitors.
+    Shows which themes are most common, who uses them, and overlap.
+    """
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    theme_data: Dict[str, Dict[str, Any]] = {}
+
+    for username in all_accounts:
+        analysis_path = service.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+        if not analysis_path.exists():
+            continue
+        try:
+            with open(analysis_path) as f:
+                data = json.load(f)
+            for theme in data.get("content_themes", []):
+                if not theme:
+                    continue
+                key = theme.lower().strip()
+                if key not in theme_data:
+                    theme_data[key] = {"theme": theme, "accounts": [], "count": 0}
+                if username not in theme_data[key]["accounts"]:
+                    theme_data[key]["accounts"].append(username)
+                theme_data[key]["count"] += 1
+        except Exception:
+            pass
+
+    sorted_themes = sorted(theme_data.values(), key=lambda t: t["count"], reverse=True)
+    for t in sorted_themes:
+        t["account_count"] = len(t["accounts"])
+        t["coverage_pct"] = round(len(t["accounts"]) / max(len(all_accounts), 1) * 100, 1)
+
+    return {
+        "total_themes": len(theme_data),
+        "competitors_analyzed": len(all_accounts),
+        "themes": sorted_themes[:50],
+    }
+
+
+@router.get("/engagement-timing")
+async def get_engagement_timing():
+    """
+    Analyze posting patterns and top-performing content timing across competitors.
+    Returns aggregated data on content mix, engagement rates, and best performing content.
+    """
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    total_reels = 0
+    total_posts = 0
+    reel_plays: List[int] = []
+    reel_likes: List[int] = []
+    post_likes: List[int] = []
+    top_content: List[Dict[str, Any]] = []
+
+    for username in all_accounts:
+        analysis_path = service.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+        if not analysis_path.exists():
+            continue
+        try:
+            with open(analysis_path) as f:
+                data = json.load(f)
+            pp = data.get("posting_patterns", {})
+            total_reels += pp.get("total_reels", 0)
+            total_posts += pp.get("total_posts", 0)
+
+            reel_eng = pp.get("engagement_by_type", {}).get("reels", {})
+            post_eng = pp.get("engagement_by_type", {}).get("posts", {})
+            if reel_eng.get("avg_plays"):
+                reel_plays.append(reel_eng["avg_plays"])
+            if reel_eng.get("avg_likes"):
+                reel_likes.append(reel_eng["avg_likes"])
+            if post_eng.get("avg_likes"):
+                post_likes.append(post_eng["avg_likes"])
+
+            for tc in pp.get("top_performing", [])[:3]:
+                top_content.append({**tc, "source": username})
+        except Exception:
+            pass
+
+    top_content.sort(key=lambda c: c.get("plays", 0) + c.get("likes", 0) * 10, reverse=True)
+
+    def _avg(lst: list) -> float:
+        return round(sum(lst) / len(lst), 1) if lst else 0
+
+    return {
+        "competitors_analyzed": len(all_accounts),
+        "content_mix": {
+            "total_reels": total_reels,
+            "total_posts": total_posts,
+            "reels_pct": round(total_reels / max(total_reels + total_posts, 1) * 100, 1),
+        },
+        "avg_engagement": {
+            "reel_avg_plays": _avg(reel_plays),
+            "reel_avg_likes": _avg(reel_likes),
+            "post_avg_likes": _avg(post_likes),
+        },
+        "top_performing_content": top_content[:10],
+    }

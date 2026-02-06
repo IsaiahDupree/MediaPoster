@@ -117,3 +117,69 @@ async def get_industry_averages(
         }.get(tier, "unknown"),
         "benchmarks": averages,
     }
+
+
+@router.get("/history")
+async def get_benchmark_history(limit: int = 20):
+    """
+    Get historical benchmark results over time.
+    Returns past benchmarks sorted by date descending.
+    """
+    import json
+    from services.competitor_service import COMPETITOR_RESEARCH_DIR
+
+    benchmarks_dir = COMPETITOR_RESEARCH_DIR / "learnings" / "benchmarks"
+    if not benchmarks_dir.exists():
+        return {"count": 0, "benchmarks": []}
+
+    history = []
+
+    # Load latest
+    latest_path = benchmarks_dir / "latest_benchmark.json"
+    if latest_path.exists():
+        try:
+            with open(latest_path) as f:
+                data = json.load(f)
+            history.append({
+                "generated_at": data.get("generated_at", ""),
+                "overall_score": data.get("overall_score", 0),
+                "comparisons_count": len(data.get("comparisons", [])),
+                "recommendations_count": len(data.get("recommendations", [])),
+            })
+        except Exception:
+            pass
+
+    # Also check Supabase for historical data
+    service = get_benchmark_service()
+    sb = service._get_supabase()
+    if sb:
+        try:
+            result = sb.table('performance_benchmarks').select(
+                'id,user_engagement_rate,user_avg_views,competitor_engagement_rate,benchmarked_at'
+            ).order('benchmarked_at', desc=True).limit(limit).execute()
+            if result.data:
+                for row in result.data:
+                    history.append({
+                        "id": row.get("id"),
+                        "generated_at": row.get("benchmarked_at", ""),
+                        "user_engagement_rate": row.get("user_engagement_rate"),
+                        "user_avg_views": row.get("user_avg_views"),
+                        "competitor_engagement_rate": row.get("competitor_engagement_rate"),
+                        "source": "supabase",
+                    })
+        except Exception as e:
+            logger.warning(f"Error fetching benchmark history from Supabase: {e}")
+
+    # Deduplicate by generated_at
+    seen = set()
+    unique = []
+    for b in history:
+        key = b.get("generated_at", "")
+        if key not in seen:
+            seen.add(key)
+            unique.append(b)
+
+    return {
+        "count": len(unique),
+        "benchmarks": unique[:limit],
+    }

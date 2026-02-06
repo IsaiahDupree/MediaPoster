@@ -130,6 +130,65 @@ def _load_trending_context() -> Dict[str, Any]:
     return result
 
 
+@router.post("/sync-trending")
+async def sync_trending_data():
+    """
+    Fetch trending hashtags from the Instagram Trends service and cache locally.
+    This ensures content idea generation has fresh trending data to reference.
+    """
+    try:
+        from services.trend_intelligence import get_instagram_trends_service, Region
+        trends_svc = get_instagram_trends_service()
+        feed = await trends_svc.get_trends_feed(region=Region.US)
+
+        trending_data = {
+            "synced_at": datetime.now().isoformat(),
+            "hashtags": [],
+            "sounds": [],
+            "formats": [],
+        }
+
+        if feed:
+            for h in getattr(feed, 'hashtags', [])[:20]:
+                trending_data["hashtags"].append({
+                    "tag": f"#{h.tag}" if not h.tag.startswith("#") else h.tag,
+                    "media_count": getattr(h, 'media_count', 0),
+                    "trending_score": getattr(h, 'trending_score', 0),
+                })
+            for s in getattr(feed, 'sounds', [])[:10]:
+                trending_data["sounds"].append({
+                    "name": getattr(s, 'name', ''),
+                    "artist": getattr(s, 'artist', ''),
+                    "use_count": getattr(s, 'use_count', 0),
+                })
+            for f in getattr(feed, 'formats', [])[:10]:
+                trending_data["formats"].append({
+                    "name": getattr(f, 'name', ''),
+                    "description": getattr(f, 'description', ''),
+                })
+
+        # Save to cache file
+        cache_path = COMPETITOR_RESEARCH_DIR / "learnings" / "trending_hashtags.json"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w") as f_out:
+            json.dump(trending_data, f_out, indent=2, default=str)
+
+        return {
+            "status": "synced",
+            "hashtags": len(trending_data["hashtags"]),
+            "sounds": len(trending_data["sounds"]),
+            "formats": len(trending_data["formats"]),
+            "cached_to": str(cache_path),
+        }
+
+    except ImportError:
+        logger.warning("Instagram trends service not available")
+        return {"status": "unavailable", "detail": "Trends service not imported"}
+    except Exception as e:
+        logger.error(f"Error syncing trending data: {e}")
+        return {"status": "error", "detail": str(e)}
+
+
 @router.get("/health")
 async def health_check():
     """Health check for content ideas service"""

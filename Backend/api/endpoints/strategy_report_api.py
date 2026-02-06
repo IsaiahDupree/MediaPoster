@@ -5,6 +5,7 @@ Weekly AI-generated content strategy reports.
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+from datetime import datetime
 from loguru import logger
 
 from services.strategy_report_service import get_strategy_report_service
@@ -208,3 +209,75 @@ async def run_full_research_pipeline():
 
     results["status"] = "completed" if not results["steps_failed"] else "partial"
     return results
+
+
+@router.get("/export")
+async def export_research_data():
+    """
+    Export all research data as a single JSON bundle.
+    Includes: competitor analyses, hooks, gap analysis, benchmarks, and latest report.
+    Useful for backups or sharing research insights.
+    """
+    import json as json_mod
+    from services.competitor_service import get_competitor_service, COMPETITOR_RESEARCH_DIR
+    from services.hook_library_service import get_hook_library_service
+    from services.content_gap_service import get_content_gap_service
+    from services.benchmark_service import get_benchmark_service
+
+    export: Dict[str, Any] = {
+        "exported_at": datetime.now().isoformat(),
+        "competitors": [],
+        "hooks": [],
+        "gap_analysis": None,
+        "benchmark": None,
+        "strategy_report": None,
+    }
+
+    # Competitors
+    try:
+        svc = get_competitor_service()
+        for username in svc.get_stored_accounts():
+            entry = {"username": username}
+            analysis_path = svc.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+            if analysis_path.exists():
+                with open(analysis_path) as f:
+                    entry["analysis"] = json_mod.load(f)
+            export["competitors"].append(entry)
+    except Exception as e:
+        logger.warning(f"Export competitors error: {e}")
+
+    # Hooks
+    try:
+        hook_svc = get_hook_library_service()
+        export["hooks"] = hook_svc.get_hooks(limit=500)
+    except Exception as e:
+        logger.warning(f"Export hooks error: {e}")
+
+    # Gap analysis
+    try:
+        gap_svc = get_content_gap_service()
+        gap = gap_svc.get_latest_analysis()
+        if gap:
+            export["gap_analysis"] = gap.model_dump()
+    except Exception as e:
+        logger.warning(f"Export gap analysis error: {e}")
+
+    # Benchmark
+    try:
+        bench_svc = get_benchmark_service()
+        bench = bench_svc.get_latest_benchmark()
+        if bench:
+            export["benchmark"] = bench.model_dump()
+    except Exception as e:
+        logger.warning(f"Export benchmark error: {e}")
+
+    # Strategy report
+    try:
+        report_svc = get_strategy_report_service()
+        report = report_svc.get_latest_report()
+        if report:
+            export["strategy_report"] = report.model_dump()
+    except Exception as e:
+        logger.warning(f"Export report error: {e}")
+
+    return export

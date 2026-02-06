@@ -1429,6 +1429,14 @@ from api.endpoints import repurpose
 app.include_router(repurpose.router, tags=["Content Repurposing"])
 logger.success("✓ Content Repurposing Engine API registered (REPURPOSE-001, REPURPOSE-002)")
 
+# Media Vault + Staging Cache
+try:
+    from api.endpoints import vault_api
+    app.include_router(vault_api.router, tags=["Media Vault"])
+    logger.success("✓ Media Vault API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Media Vault API registration failed: {e}")
+
 # B-Roll Detection (Speech-based B-Roll Classification)
 from api.endpoints import broll
 app.include_router(broll.router, tags=["B-Roll Detection"])

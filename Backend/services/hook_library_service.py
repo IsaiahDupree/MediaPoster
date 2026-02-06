@@ -313,6 +313,130 @@ Return as a JSON array of strings."""
             logger.error(f"Error generating hook variations: {e}")
             return []
 
+    def score_hooks(self) -> List[Dict[str, Any]]:
+        """
+        Score all hooks in the library based on engagement metrics and usage.
+        Returns hooks sorted by computed score with tier labels.
+        """
+        scored = []
+        for hook in self._hooks:
+            views = hook.get("source_views") or 0
+            likes = hook.get("source_likes") or 0
+            comments = hook.get("source_comments") or 0
+            times_used = hook.get("times_used", 0)
+            is_fav = hook.get("is_favorite", False)
+
+            # Weighted scoring
+            engagement_score = (views * 0.1) + (likes * 5) + (comments * 15)
+            usage_bonus = times_used * 50
+            fav_bonus = 200 if is_fav else 0
+            total = round(engagement_score + usage_bonus + fav_bonus, 1)
+
+            # Tier
+            if total >= 1000:
+                tier = "S"
+            elif total >= 500:
+                tier = "A"
+            elif total >= 100:
+                tier = "B"
+            else:
+                tier = "C"
+
+            scored.append({
+                **hook,
+                "computed_score": total,
+                "tier": tier,
+            })
+
+        scored.sort(key=lambda h: h["computed_score"], reverse=True)
+        return scored
+
+    async def generate_ab_test(
+        self,
+        hook_id: str,
+        niche: str = "personal branding",
+    ) -> Dict[str, Any]:
+        """
+        Generate an A/B test plan for a specific hook.
+        Returns the original hook plus a variant with rationale and test parameters.
+        """
+        # Find hook
+        original = None
+        for h in self._hooks:
+            if h.get("id") == hook_id:
+                original = h
+                break
+
+        if not original:
+            return {"error": "Hook not found"}
+
+        if not self.api_key:
+            return {
+                "original": original.get("hook_text", ""),
+                "variant": f"Try: {original.get('hook_text', '')[:30]}... (rephrase manually)",
+                "rationale": "AI not available - create a manual variant",
+                "test_plan": {"sample_size": 1000, "duration_days": 3},
+            }
+
+        try:
+            client = openai.OpenAI(api_key=self.api_key)
+
+            prompt = f"""Create an A/B test plan for this Instagram hook in the "{niche}" niche:
+
+ORIGINAL HOOK (A):
+"{original.get('hook_text', '')}"
+
+Hook type: {original.get('hook_type', 'unknown')}
+Current performance score: {original.get('performance_score', 0)}
+
+Generate a JSON response:
+{{
+    "variant_hook": "The B variant hook text (same intent, different angle/structure)",
+    "variant_type": "What was changed (e.g., question→statement, long→short, specific→broad)",
+    "rationale": "Why this variant might outperform the original",
+    "hypothesis": "If we [change], then [expected outcome] because [reason]",
+    "test_plan": {{
+        "metric_to_track": "primary metric (e.g., save rate, watch time, shares)",
+        "secondary_metrics": ["2-3 additional metrics"],
+        "sample_size": 1000,
+        "duration_days": 3,
+        "winner_criteria": "How to determine which hook won"
+    }}
+}}
+
+Return ONLY valid JSON."""
+
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert in Instagram A/B testing and content optimization. Return only valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=800,
+            )
+
+            result_text = response.choices[0].message.content.strip()
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+
+            result = json.loads(result_text)
+            return {
+                "original": original.get("hook_text", ""),
+                "original_type": original.get("hook_type", ""),
+                "hook_id": hook_id,
+                **result,
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating A/B test: {e}")
+            return {
+                "original": original.get("hook_text", ""),
+                "error": str(e),
+            }
+
     async def auto_populate_from_all_competitors(self) -> Dict[str, Any]:
         """Scan all competitor analysis data and populate the hook library"""
         accounts_dir = COMPETITOR_RESEARCH_DIR / "accounts"

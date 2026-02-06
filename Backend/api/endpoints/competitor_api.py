@@ -1074,3 +1074,98 @@ async def compare_competitors(usernames: str = ""):
         "count": len(comparisons),
         "comparisons": comparisons,
     }
+
+
+@router.post("/discover")
+async def discover_similar_accounts(niche: str = "personal branding", count: int = 10):
+    """
+    AI-powered competitor discovery.
+    Suggests new accounts to track based on existing competitor data and niche.
+    """
+    import openai as _openai
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    # Gather context from existing tracked accounts
+    themes: List[str] = []
+    hashtags: List[str] = []
+    for username in all_accounts:
+        analysis_path = service.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+        if analysis_path.exists():
+            try:
+                with open(analysis_path) as f:
+                    data = json.load(f)
+                themes.extend(data.get("content_themes", []))
+                for h in data.get("posting_patterns", {}).get("hashtag_frequency", []):
+                    hashtags.append(h.get("tag", ""))
+            except Exception:
+                pass
+
+    unique_themes = list(set(themes))[:10]
+    unique_tags = list(set(hashtags))[:15]
+
+    try:
+        client = _openai.OpenAI(api_key=api_key)
+
+        prompt = f"""Suggest {count} Instagram accounts to track as competitors/inspirations for the "{niche}" niche.
+
+CURRENTLY TRACKED ACCOUNTS (exclude these):
+{json.dumps(all_accounts)}
+
+THEMES FROM CURRENT COMPETITORS:
+{json.dumps(unique_themes)}
+
+POPULAR HASHTAGS IN NICHE:
+{json.dumps(unique_tags)}
+
+Return a JSON array of account suggestions:
+[
+    {{
+        "username": "instagram_handle (no @)",
+        "reason": "Why this account is worth tracking",
+        "estimated_followers": "approximate range like 50K-100K",
+        "content_style": "brief description of their content approach",
+        "overlap_themes": ["themes they share with current competitors"]
+    }}
+]
+
+Rules:
+- Suggest REAL, active Instagram accounts in this niche
+- Mix of account sizes (micro to large)
+- Focus on accounts with strong engagement, not just followers
+- Don't repeat any currently tracked accounts
+
+Return ONLY valid JSON array."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an Instagram growth expert who discovers high-value competitor accounts to study. Return only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.8,
+            max_tokens=1500,
+        )
+
+        result_text = response.choices[0].message.content.strip()
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
+
+        suggestions = json.loads(result_text)
+
+        return {
+            "niche": niche,
+            "currently_tracked": len(all_accounts),
+            "suggestions": suggestions,
+        }
+
+    except Exception as e:
+        logger.error(f"Error discovering accounts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

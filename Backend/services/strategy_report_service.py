@@ -84,6 +84,10 @@ class StrategyReportService:
         # Gather trending hashtags from local data
         trending = trending_data or self._load_trending_data()
 
+        # Gather gap analysis and benchmark data
+        gap_data = self._load_gap_analysis()
+        benchmark_data = self._load_benchmark_data()
+
         # Generate the report with AI
         report = await self._generate_with_ai(
             week_start=week_start,
@@ -91,6 +95,8 @@ class StrategyReportService:
             user_performance=user_performance or {},
             competitor_insights=competitor_insights,
             trending=trending,
+            gap_analysis=gap_data,
+            benchmark=benchmark_data,
         )
 
         # Save report
@@ -162,6 +168,51 @@ class StrategyReportService:
                 logger.error(f"Error loading trending data: {e}")
         return {}
 
+    def _load_gap_analysis(self) -> Dict[str, Any]:
+        """Load latest content gap analysis results"""
+        gap_path = COMPETITOR_RESEARCH_DIR / "content_gap_analysis.json"
+        if not gap_path.exists():
+            gap_path = COMPETITOR_RESEARCH_DIR / "learnings" / "content_gap_analysis.json"
+        if gap_path.exists():
+            try:
+                with open(gap_path) as f:
+                    data = json.load(f)
+                return {
+                    "gap_themes": [
+                        {"theme": g.get("theme", ""), "score": g.get("opportunity_score", 0),
+                         "suggestion": g.get("suggested_content", "")}
+                        for g in data.get("gap_themes", [])[:5]
+                    ],
+                    "coverage_score": data.get("gap_coverage_score", 0),
+                    "unique_themes": data.get("unique_themes", [])[:5],
+                }
+            except Exception as e:
+                logger.warning(f"Error loading gap analysis: {e}")
+        return {}
+
+    def _load_benchmark_data(self) -> Dict[str, Any]:
+        """Load latest benchmark results"""
+        bench_path = COMPETITOR_RESEARCH_DIR / "learnings" / "benchmarks" / "latest_benchmark.json"
+        if bench_path.exists():
+            try:
+                with open(bench_path) as f:
+                    data = json.load(f)
+                return {
+                    "overall_score": data.get("overall_score", 0),
+                    "comparisons": [
+                        {"metric": c.get("metric", ""), "status": c.get("status", ""),
+                         "delta_vs_competitors": c.get("delta_vs_competitors", 0)}
+                        for c in data.get("comparisons", [])[:6]
+                    ],
+                    "recommendations": [
+                        {"action": r.get("action", ""), "priority": r.get("priority", "")}
+                        for r in data.get("recommendations", [])[:4]
+                    ],
+                }
+            except Exception as e:
+                logger.warning(f"Error loading benchmark data: {e}")
+        return {}
+
     async def _generate_with_ai(
         self,
         week_start: date,
@@ -169,6 +220,8 @@ class StrategyReportService:
         user_performance: Dict[str, Any],
         competitor_insights: Dict[str, Any],
         trending: Dict[str, Any],
+        gap_analysis: Optional[Dict[str, Any]] = None,
+        benchmark: Optional[Dict[str, Any]] = None,
     ) -> StrategyReport:
         """Generate the strategy report using AI"""
         if not self.api_key:
@@ -208,6 +261,10 @@ COMPETITOR INSIGHTS ({len(competitor_insights.get('accounts', []))} accounts ana
 
 TRENDING HASHTAGS:
 {json.dumps(top_hashtags)}
+
+{"CONTENT GAP ANALYSIS (themes competitors cover that you don't):" + chr(10) + "Coverage score: " + str(gap_analysis.get("coverage_score", 0)) + "/100" + chr(10) + "Gap opportunities: " + json.dumps(gap_analysis.get("gap_themes", []), default=str) + chr(10) + "Your unique themes: " + json.dumps(gap_analysis.get("unique_themes", []), default=str) if gap_analysis else "No gap analysis available yet."}
+
+{"PERFORMANCE BENCHMARK:" + chr(10) + "Overall score: " + str(benchmark.get("overall_score", 0)) + "/100" + chr(10) + "Metric comparisons: " + json.dumps(benchmark.get("comparisons", []), default=str) + chr(10) + "Top recommendations: " + json.dumps(benchmark.get("recommendations", []), default=str) if benchmark else "No benchmark data available yet."}
 
 Return JSON with:
 {{

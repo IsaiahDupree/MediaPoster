@@ -182,6 +182,44 @@ async def extract_hooks_from_competitor(username: str):
     }
 
 
+@router.get("/scored")
+async def get_scored_hooks():
+    """
+    Get all hooks scored and tiered by engagement + usage metrics.
+    
+    Tiers:
+    - S: score >= 1000 (top performers)
+    - A: score >= 500
+    - B: score >= 100
+    - C: score < 100 (new/untested)
+    """
+    service = get_hook_library_service()
+    scored = service.score_hooks()
+    tiers = {}
+    for h in scored:
+        t = h.get("tier", "C")
+        tiers.setdefault(t, 0)
+        tiers[t] += 1
+    return {
+        "total": len(scored),
+        "tier_breakdown": tiers,
+        "hooks": scored,
+    }
+
+
+@router.post("/{hook_id}/ab-test")
+async def generate_ab_test(hook_id: str, niche: str = "personal branding"):
+    """
+    Generate an AI-powered A/B test plan for a specific hook.
+    Returns: original hook, variant, hypothesis, rationale, and test parameters.
+    """
+    service = get_hook_library_service()
+    result = await service.generate_ab_test(hook_id=hook_id, niche=niche)
+    if result.get("error") == "Hook not found":
+        raise HTTPException(status_code=404, detail="Hook not found")
+    return result
+
+
 @router.post("/auto-populate")
 async def auto_populate_hooks():
     """

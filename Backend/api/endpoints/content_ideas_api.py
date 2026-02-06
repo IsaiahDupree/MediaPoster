@@ -82,18 +82,52 @@ def _load_competitor_context(usernames: Optional[List[str]] = None) -> Dict[str,
 
 
 def _load_trending_context() -> Dict[str, Any]:
-    """Load trending hashtag data"""
+    """Load trending hashtag data from multiple sources"""
+    result: Dict[str, Any] = {"hashtags": [], "gap_themes": [], "gap_suggestions": []}
+
+    # Source 1: Trending hashtags file
     trending_path = COMPETITOR_RESEARCH_DIR / "learnings" / "trending_hashtags.json"
     if trending_path.exists():
         try:
             with open(trending_path) as f:
                 data = json.load(f)
-            return {
-                "hashtags": [h.get("tag") for h in data.get("hashtags", [])[:15]]
-            }
+            result["hashtags"] = [h.get("tag") for h in data.get("hashtags", [])[:15]]
         except Exception:
             pass
-    return {"hashtags": []}
+
+    # Source 2: Competitor hashtag frequencies (aggregate from all analyses)
+    accounts_dir = COMPETITOR_RESEARCH_DIR / "accounts"
+    if accounts_dir.exists():
+        tag_counts: Dict[str, int] = {}
+        for acct in accounts_dir.iterdir():
+            analysis = acct / "analysis" / "learnings.json"
+            if not analysis.exists():
+                continue
+            try:
+                with open(analysis) as f:
+                    data = json.load(f)
+                for h in data.get("posting_patterns", {}).get("hashtag_frequency", []):
+                    tag = h.get("tag", "")
+                    tag_counts[tag] = tag_counts.get(tag, 0) + h.get("count", 0)
+            except Exception:
+                pass
+        top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+        result["hashtags"] = list(set(result["hashtags"] + [t[0] for t in top_tags]))[:20]
+
+    # Source 3: Content gap themes (untapped opportunities)
+    gap_path = COMPETITOR_RESEARCH_DIR / "learnings" / "content_gap_analysis.json"
+    if gap_path.exists():
+        try:
+            with open(gap_path) as f:
+                data = json.load(f)
+            for gap in data.get("gap_themes", [])[:5]:
+                result["gap_themes"].append(gap.get("theme", ""))
+                if gap.get("suggested_content"):
+                    result["gap_suggestions"].append(gap["suggested_content"])
+        except Exception:
+            pass
+
+    return result
 
 
 @router.get("/health")
@@ -149,6 +183,9 @@ CONTEXT FROM COMPETITOR ANALYSIS ({len(competitor_ctx['accounts'])} accounts):
 
 TRENDING HASHTAGS:
 {json.dumps(trending_ctx.get('hashtags', [])[:10])}
+
+{"CONTENT GAP OPPORTUNITIES (themes competitors cover that user doesn't):" + chr(10) + json.dumps(trending_ctx.get('gap_themes', [])[:5]) if trending_ctx.get('gap_themes') else ""}
+{"GAP-BASED SUGGESTIONS:" + chr(10) + json.dumps(trending_ctx.get('gap_suggestions', [])[:5]) if trending_ctx.get('gap_suggestions') else ""}
 
 {"USER ALREADY COVERS THESE THEMES (avoid repeating): " + json.dumps(request.user_themes) if request.user_themes else ""}
 

@@ -923,3 +923,89 @@ async def get_account_content(username: str, limit: int = 50):
         "total": len(sorted_content),
         "content": sorted_content[:limit],
     }
+
+
+@router.get("/compare")
+async def compare_competitors(usernames: str = ""):
+    """
+    Side-by-side comparison of multiple competitor accounts.
+    Pass comma-separated usernames, or leave empty for all tracked accounts.
+
+    Returns metrics, themes, hooks, and content mix for each account.
+    """
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    if usernames:
+        selected = [u.strip() for u in usernames.split(",") if u.strip()]
+    else:
+        selected = all_accounts
+
+    if len(selected) < 1:
+        raise HTTPException(status_code=400, detail="Need at least 1 account to compare")
+
+    comparisons = []
+
+    for username in selected:
+        if username not in all_accounts:
+            continue
+
+        account_dir = service.storage_dir / "accounts" / username
+        entry: Dict[str, Any] = {
+            "username": username,
+            "followers": 0,
+            "total_content": 0,
+            "avg_engagement": 0,
+            "content_mix": {"reels": 0, "posts": 0},
+            "themes": [],
+            "top_hooks": [],
+            "top_formats": [],
+            "hashtags": [],
+        }
+
+        # Load profile
+        profile_path = account_dir / "profile.json"
+        if profile_path.exists():
+            try:
+                with open(profile_path) as f:
+                    profile = json.load(f)
+                entry["followers"] = profile.get("followers_count", 0)
+                entry["full_name"] = profile.get("full_name", "")
+                entry["bio"] = profile.get("bio", "")[:120]
+            except Exception:
+                pass
+
+        # Load analysis
+        analysis_path = account_dir / "analysis" / "learnings.json"
+        if analysis_path.exists():
+            try:
+                with open(analysis_path) as f:
+                    data = json.load(f)
+                entry["total_content"] = data.get("total_content_analyzed", 0)
+                entry["avg_engagement"] = round(data.get("avg_engagement_rate", 0), 1)
+                entry["themes"] = data.get("content_themes", [])[:6]
+                entry["top_hooks"] = data.get("top_hooks", [])[:4]
+                entry["top_formats"] = data.get("top_formats", [])[:4]
+
+                patterns = data.get("posting_patterns", {})
+                entry["content_mix"] = {
+                    "reels": patterns.get("total_reels", 0),
+                    "posts": patterns.get("total_posts", 0),
+                }
+                entry["hashtags"] = [
+                    h.get("tag", "") for h in patterns.get("hashtag_frequency", [])[:8]
+                ]
+                entry["content_ideas"] = data.get("content_ideas", [])[:3]
+                entry["key_learnings"] = data.get("key_learnings", [])[:3]
+            except Exception:
+                pass
+
+        comparisons.append(entry)
+
+    # Sort by followers desc
+    comparisons.sort(key=lambda c: c.get("followers", 0), reverse=True)
+
+    return {
+        "count": len(comparisons),
+        "comparisons": comparisons,
+    }

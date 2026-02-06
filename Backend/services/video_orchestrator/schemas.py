@@ -122,7 +122,7 @@ class ProviderReferenceSchema(BaseModel):
 
 class ProviderHintsSchema(BaseModel):
     """Provider hints schema."""
-    primary_provider: str = Field(default="sora", pattern="^(sora|runway|kling|pika|luma|mock)$")
+    primary_provider: str = Field(default="sora", pattern="^(sora|runway|kling|pika|luma)$")
     model: str = "sora-2"
     size: str = "1280x720"
     seed: Optional[int] = None

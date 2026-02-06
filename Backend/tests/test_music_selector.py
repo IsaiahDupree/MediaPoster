@@ -621,13 +621,25 @@ class TestCompatibilityCalculation:
 class TestAIProviderIntegration:
     """Test AI provider integration for mood analysis."""
     
-    def test_get_ai_provider_mock(self):
-        """Test mock AI provider is loaded."""
+    def test_get_ai_provider_mock_blocked_in_factory(self):
+        """Test mock AI provider raises error from factory but MusicSelector handles gracefully."""
         from services.music_selector import MusicSelector
-        
+
         selector = MusicSelector(ai_provider="mock")
+        # Factory now blocks mock, _get_ai_provider catches the exception and returns None
         provider = selector._get_ai_provider()
-        
+
+        assert provider is None
+
+    def test_get_ai_provider_mock_direct_injection(self):
+        """Test mock AI provider can be injected directly for testing."""
+        from services.music_selector import MusicSelector
+        from services.ai_providers.mock_provider import MockAIProvider
+
+        selector = MusicSelector()
+        selector._ai_provider = MockAIProvider()
+        provider = selector._get_ai_provider()
+
         assert provider is not None
         assert provider.name == "mock"
     

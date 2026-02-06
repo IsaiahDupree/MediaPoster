@@ -17,8 +17,9 @@ from database.connection import get_db
 from database.models import PlatformPost, PlatformCheckback, PostComment
 from services.multi_platform_publisher import MultiPlatformPublisher
 from services.platform_adapters.base import (
-    PlatformType, PublishRequest, MockPlatformAdapter
+    PlatformType, PublishRequest
 )
+from services.platform_adapters.loader import load_platform_adapters
 from services.event_bus import EventBus, Topics
 
 logger = logging.getLogger(__name__)
@@ -96,19 +97,24 @@ class PostDetailResponse(BaseModel):
 
 def get_publisher(db: Session) -> MultiPlatformPublisher:
     """
-    Get configured multi-platform publisher
-    
-    TODO: In production, load real adapters based on configuration
-    For now, using mock adapters for all platforms
+    Get configured multi-platform publisher with real platform adapters.
+
+    Loads adapters based on environment configuration. Adapters that lack
+    required credentials are skipped (not registered).
     """
     publisher = MultiPlatformPublisher(db=db)
-    
-    # Register mock adapters for all supported platforms
-    # TODO: Replace with real adapters when APIs are integrated
-    for platform_type in PlatformType:
-        adapter = MockPlatformAdapter(platform_type)
+
+    # Load real adapters from configuration
+    adapters = load_platform_adapters()
+    for adapter in adapters:
         publisher.register_adapter(adapter)
-    
+
+    if not adapters:
+        logger.warning(
+            "No platform adapters loaded. "
+            "Set platform credentials (TWITTER_API_KEY, META_ACCESS_TOKEN, etc.) to enable publishing."
+        )
+
     return publisher
 
 
@@ -419,10 +425,8 @@ async def schedule_post_checkbacks(
 ):
     """
     Schedule automated metric checkbacks for a post
-    
+
     Default checkbacks: 1h, 6h, 24h, 72h, 168h (7 days)
-    
-    TODO: In production, this will create background jobs
     """
     post_uuid = uuid.UUID(post_id)
     query = select(PlatformPost).where(PlatformPost.id == post_uuid)

@@ -10,16 +10,16 @@ Based on SupoClip architecture:
 4. Render clips with subtitles
 
 AI Provider Configuration:
-    Set AI_PROVIDER=openai|mock in environment
+    Set AI_PROVIDER=openai in environment
     Set OPENAI_API_KEY for OpenAI
-    Use mock provider for testing
 
 Usage:
     service = ClipExtractionService()
     result = await service.extract_clips(video_path, output_dir)
-    
-    # For testing with mock provider:
-    service = ClipExtractionService(ai_provider="mock")
+
+    # For testing with mock provider (inject directly in test files):
+    # from services.ai_providers.mock_provider import MockAIProvider
+    # service = ClipExtractionService(ai_provider_instance=MockAIProvider())
 """
 
 import asyncio
@@ -81,7 +81,7 @@ class ClipExtractionService:
     
     Pipeline:
         1. Transcription (AssemblyAI with word-level timing)
-        2. AI Segment Selection (configurable provider: openai, mock)
+        2. AI Segment Selection (configurable provider: openai)
         3. Smart Cropping (face-centered 9:16)
         4. Clip Rendering (with subtitles)
     """
@@ -90,6 +90,7 @@ class ClipExtractionService:
         self,
         assemblyai_key: Optional[str] = None,
         ai_provider: Optional[str] = None,
+        ai_provider_instance=None,
         output_dir: Optional[Path] = None,
         font_family: str = "Arial",
         font_size: int = 24,
@@ -101,8 +102,8 @@ class ClipExtractionService:
         self.font_family = font_family
         self.font_size = font_size
         self.font_color = font_color
-        self._ai_provider = None
-        
+        self._ai_provider = ai_provider_instance
+
         # Ensure output directory exists
         self.output_dir.mkdir(parents=True, exist_ok=True)
     

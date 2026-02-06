@@ -96,17 +96,17 @@ class TestPhase1MockAIProvider:
     @pytest.mark.asyncio
     async def test_phase1_mock_provider_initialization(self):
         """Test MockAIProvider can be initialized."""
-        from services.ai_providers import MockAIProvider
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         provider = MockAIProvider()
-        
+
         assert provider.name == "mock"
         assert provider.call_count == 0
-    
+
     @pytest.mark.asyncio
     async def test_phase1_mock_provider_analyze_transcript(self, sample_transcript):
         """Test MockAIProvider can analyze transcript."""
-        from services.ai_providers import MockAIProvider
+        from services.ai_providers.mock_provider import MockAIProvider
         
         provider = MockAIProvider()
         
@@ -126,17 +126,17 @@ class TestPhase1MockAIProvider:
     @pytest.mark.asyncio
     async def test_phase1_mock_provider_segment_validation(self, sample_transcript):
         """Test that MockAIProvider returns valid segments."""
-        from services.ai_providers import MockAIProvider
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         provider = MockAIProvider()
-        
+
         result = await provider.analyze_transcript(
             transcript=sample_transcript,
             min_duration=10,
             max_duration=60,
             max_segments=5
         )
-        
+
         for segment in result.segments:
             # Verify segment has required fields
             assert segment.start_time is not None
@@ -151,7 +151,7 @@ class TestPhase1MockAIProvider:
     @pytest.mark.asyncio
     async def test_phase1_mock_provider_deterministic(self, sample_transcript):
         """Test that MockAIProvider returns consistent results for same input."""
-        from services.ai_providers import MockAIProvider
+        from services.ai_providers.mock_provider import MockAIProvider
         
         provider = MockAIProvider()
         
@@ -168,7 +168,7 @@ class TestPhase1MockAIProvider:
     @pytest.mark.asyncio
     async def test_phase1_mock_provider_no_timestamps(self, sample_transcript_no_timestamps):
         """Test MockAIProvider handles transcript without timestamps."""
-        from services.ai_providers import MockAIProvider
+        from services.ai_providers.mock_provider import MockAIProvider
         
         provider = MockAIProvider()
         
@@ -186,7 +186,7 @@ class TestPhase1MockAIProvider:
     @pytest.mark.asyncio
     async def test_phase1_mock_provider_metadata_generation(self, sample_transcript):
         """Test MockAIProvider can generate clip metadata."""
-        from services.ai_providers import MockAIProvider
+        from services.ai_providers.mock_provider import MockAIProvider
         from services.ai_providers.base import TranscriptSegment
         
         provider = MockAIProvider()
@@ -209,7 +209,7 @@ class TestPhase1MockAIProvider:
     @pytest.mark.asyncio
     async def test_phase1_mock_provider_health_check(self):
         """Test MockAIProvider health check."""
-        from services.ai_providers import MockAIProvider
+        from services.ai_providers.mock_provider import MockAIProvider
         
         provider = MockAIProvider()
         
@@ -223,12 +223,18 @@ class TestPhase1MockAIProvider:
 class TestPhase1AIProviderFactory:
     """Phase 1: Test AI provider factory function."""
     
-    def test_phase1_get_mock_provider(self):
-        """Test getting mock provider."""
-        from services.ai_providers import get_ai_provider
-        
-        provider = get_ai_provider("mock")
-        
+    def test_phase1_get_mock_provider_raises_not_configured(self):
+        """Test getting mock provider raises NotConfiguredError in production."""
+        from services.ai_providers import get_ai_provider, NotConfiguredError
+
+        with pytest.raises(NotConfiguredError):
+            get_ai_provider("mock")
+
+    def test_phase1_mock_provider_direct_import(self):
+        """Test MockAIProvider can still be imported directly for testing."""
+        from services.ai_providers.mock_provider import MockAIProvider
+
+        provider = MockAIProvider()
         assert provider.name == "mock"
     
     def test_phase1_get_openai_provider(self):
@@ -426,25 +432,27 @@ class TestPhase2ClipExtractionServiceAIProvider:
     """Phase 2: Test ClipExtractionService AI provider integration."""
     
     def test_phase2_service_uses_mock_provider(self, temp_output_dir):
-        """Test service uses mock provider when specified."""
+        """Test service can use mock provider when injected directly."""
         from services.clip_extraction_service import ClipExtractionService
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         service = ClipExtractionService(
-            ai_provider="mock",
+            ai_provider_instance=MockAIProvider(),
             output_dir=temp_output_dir
         )
-        
+
         provider = service._get_ai_provider()
-        
+
         assert provider.name == "mock"
-    
+
     @pytest.mark.asyncio
     async def test_phase2_service_identify_segments_mock(self, temp_output_dir, sample_transcript):
         """Test segment identification with mock provider."""
         from services.clip_extraction_service import ClipExtractionService
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         service = ClipExtractionService(
-            ai_provider="mock",
+            ai_provider_instance=MockAIProvider(),
             output_dir=temp_output_dir
         )
         
@@ -507,9 +515,10 @@ class TestPhase3IntegrationMockProvider:
     async def test_phase3_full_pipeline_mock(self, temp_output_dir, mock_video_path):
         """Test full extraction pipeline with mock provider."""
         from services.clip_extraction_service import ClipExtractionService
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         service = ClipExtractionService(
-            ai_provider="mock",
+            ai_provider_instance=MockAIProvider(),
             output_dir=temp_output_dir
         )
         
@@ -540,9 +549,10 @@ class TestPhase3IntegrationMockProvider:
     async def test_phase3_progress_callback(self, temp_output_dir, mock_video_path):
         """Test progress callback is called during extraction."""
         from services.clip_extraction_service import ClipExtractionService
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         service = ClipExtractionService(
-            ai_provider="mock",
+            ai_provider_instance=MockAIProvider(),
             output_dir=temp_output_dir
         )
         
@@ -582,9 +592,10 @@ class TestPhase3IntegrationMockProvider:
     async def test_phase3_file_not_found(self, temp_output_dir):
         """Test extraction with non-existent file."""
         from services.clip_extraction_service import ClipExtractionService
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         service = ClipExtractionService(
-            ai_provider="mock",
+            ai_provider_instance=MockAIProvider(),
             output_dir=temp_output_dir
         )
         
@@ -694,9 +705,10 @@ class TestPhase4EndToEnd:
     async def test_phase4_real_video_extraction(self, real_video_path, temp_output_dir):
         """Test extraction with real video file."""
         from services.clip_extraction_service import ClipExtractionService
-        
+        from services.ai_providers.mock_provider import MockAIProvider
+
         service = ClipExtractionService(
-            ai_provider="mock",  # Use mock to avoid API calls
+            ai_provider_instance=MockAIProvider(),  # Use mock to avoid API calls
             output_dir=temp_output_dir
         )
         

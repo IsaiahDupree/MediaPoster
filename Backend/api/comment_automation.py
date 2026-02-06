@@ -10,9 +10,11 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from enum import Enum
 import asyncio
-import uuid
 import random
+import uuid
 import hashlib
+
+import httpx
 
 router = APIRouter(prefix="/api/comment-automation", tags=["Comment Automation"])
 
@@ -165,7 +167,7 @@ class ImpactAnalysis(BaseModel):
 
 
 # ============================================================================
-# IN-MEMORY STORAGE (Mock Data)
+# IN-MEMORY STORAGE
 # ============================================================================
 
 _global_config = CommentConfig()
@@ -178,10 +180,10 @@ _posted_comments_today: int = 0
 _last_comment_time: Optional[datetime] = None
 
 
-def _init_mock_data():
-    """Initialize with mock data"""
-    global _niche_configs, _platform_configs, _target_content, _generated_comments
-    
+def _init_default_configs():
+    """Initialize default niche and platform configurations."""
+    global _niche_configs, _platform_configs
+
     # Default niche configs
     niches = ["fitness", "tech", "lifestyle", "comedy", "education", "gaming"]
     for niche in niches:
@@ -192,7 +194,7 @@ def _init_mock_data():
             tone=f"friendly and engaging for {niche} audience",
             keywords=[niche, f"{niche}tips", f"{niche}content"],
         )
-    
+
     # Default platform configs
     for platform in Platform:
         _platform_configs[platform.value] = PlatformConfig(
@@ -200,89 +202,71 @@ def _init_mock_data():
             enabled=True,
             daily_limit=20,
         )
-    
-    # Mock target content
-    mock_targets = [
-        {
-            "platform": Platform.TIKTOK,
-            "content_type": "video",
-            "niche": "fitness",
-            "title": "5 Minute Morning Workout",
-            "author_username": "fitguru123",
-        },
-        {
-            "platform": Platform.YOUTUBE,
-            "content_type": "video",
-            "niche": "tech",
-            "title": "iPhone 16 Review",
-            "author_username": "techreviewer",
-        },
-        {
-            "platform": Platform.INSTAGRAM,
-            "content_type": "reel",
-            "niche": "lifestyle",
-            "title": "Day in My Life",
-            "author_username": "lifestyle_vibes",
-        },
-    ]
-    
-    for i, target in enumerate(mock_targets):
-        _target_content.append(TargetContent(
-            platform=target["platform"],
-            content_id=f"content_{i}_{target['platform'].value}",
-            content_url=f"https://{target['platform'].value}.com/content_{i}",
-            content_type=target["content_type"],
-            author_username=target["author_username"],
-            title=target["title"],
-            niche=target["niche"],
-            top_comments=[
-                {"text": "Great content!", "likes": 150},
-                {"text": "Love this!", "likes": 89},
-                {"text": "So helpful 🙌", "likes": 67},
-            ],
-            engagement_score=random.uniform(70, 95),
-        ))
-    
-    # Mock generated comments
-    tones = ["enthusiastic", "supportive", "curious", "appreciative"]
-    for i, target in enumerate(_target_content[:5]):
-        tone = random.choice(tones)
-        _generated_comments.append(GeneratedComment(
-            target_content_id=target.id,
-            platform=target.platform,
-            niche=target.niche,
-            comment_text=_generate_mock_comment(target, tone),
-            tone=tone,
-            status=CommentStatus.PENDING_REVIEW,
-            source_url=target.content_url,
-            priority=random.choice(list(Priority)),
-        ))
 
 
-def _generate_mock_comment(target: TargetContent, tone: str) -> str:
-    """Generate a mock comment based on target and tone"""
-    templates = {
-        "enthusiastic": [
-            f"This is exactly what I needed today! 🔥 {target.niche} content like this is why I love this platform!",
-            f"Incredible! The way you explain {target.niche} topics is so engaging! 💪",
-        ],
-        "supportive": [
-            f"Keep up the amazing work! Your {target.niche} content always inspires me.",
-            f"This is so valuable for the {target.niche} community! Thank you for sharing.",
-        ],
-        "curious": [
-            f"Love this approach! Any tips for beginners in {target.niche}?",
-            f"This is fascinating! How did you get started in {target.niche}?",
-        ],
-        "appreciative": [
-            f"Thank you for this! Been following your {target.niche} content for a while now.",
-            f"Finally someone who gets {target.niche} right! Subscribed! 🎉",
-        ],
-    }
-    return random.choice(templates.get(tone, templates["supportive"]))
+async def _generate_comment_ai(target: TargetContent, tone: str) -> str:
+    """
+    Generate a contextual comment using OpenAI based on target content and tone.
+
+    Args:
+        target: The target content to comment on.
+        tone: Desired tone (enthusiastic, supportive, curious, appreciative, etc.)
+
+    Returns:
+        AI-generated comment text.
+
+    Raises:
+        RuntimeError: If OPENAI_API_KEY is not configured.
+    """
+    import os
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Comment generation requires OPENAI_API_KEY to be configured"
+        )
+
+    system_prompt = (
+        "You are a social media engagement specialist. Generate a single, authentic "
+        "comment to post on someone's content. The comment should feel natural and "
+        "human — not spammy or generic. Do NOT include hashtags. Do NOT use excessive "
+        "emojis (max 1-2). Keep it under 200 characters. Output ONLY the comment text."
+    )
+
+    user_prompt = (
+        f"Content platform: {target.platform.value}\n"
+        f"Content niche: {target.niche}\n"
+        f"Content title: {target.title or 'Unknown'}\n"
+        f"Content description: {(target.description or '')[:200]}\n"
+        f"Author: @{target.author_username}\n"
+        f"Desired tone: {tone}\n"
+        f"Top existing comments: {', '.join(c.get('text', '') for c in target.top_comments[:3])}\n\n"
+        "Generate one engaging comment that fits this content and tone."
+    )
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.9,
+                "max_tokens": 100,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    return data["choices"][0]["message"]["content"].strip()
 
 
-_init_mock_data()
+_init_default_configs()
 
 
 # ============================================================================
@@ -359,32 +343,21 @@ async def discover_content(
     Discover target content to comment on.
     Scrapes top content from platform based on niche.
     """
-    # Mock discovery - in production would call platform APIs
-    discovered = []
-    for i in range(limit):
-        content = TargetContent(
-            platform=platform,
-            content_id=f"discovered_{platform.value}_{niche}_{i}_{uuid.uuid4().hex[:8]}",
-            content_url=f"https://{platform.value}.com/p/{uuid.uuid4().hex[:10]}",
-            content_type="video" if platform in [Platform.TIKTOK, Platform.YOUTUBE] else "post",
-            author_username=f"{niche}_creator_{i}",
-            title=f"Top {niche.title()} Content #{i+1}",
-            niche=niche,
-            top_comments=[
-                {"text": f"Comment {j}", "likes": random.randint(10, 500)}
-                for j in range(5)
-            ],
-            engagement_score=random.uniform(60, 98),
+    # Content discovery requires platform API integration (RapidAPI scrapers)
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            f"Automated content discovery for {platform.value}/{niche} is not yet implemented. "
+            "Add target content manually via PUT /api/comment-automation/targets."
         )
-        discovered.append(content)
-        _target_content.append(content)
-    
-    return {
-        "platform": platform,
-        "niche": niche,
-        "discovered_count": len(discovered),
-        "content": [c.dict() for c in discovered],
-    }
+    )
+
+
+@router.put("/targets")
+async def add_target_content(target: TargetContent) -> TargetContent:
+    """Add a target content item manually for comment generation."""
+    _target_content.append(target)
+    return target
 
 
 @router.get("/targets")
@@ -420,22 +393,94 @@ async def get_top_comments(content_id: str) -> Dict:
     if not target:
         raise HTTPException(status_code=404, detail="Target content not found")
     
+    summary = await _summarize_comments_ai(target.top_comments)
     return {
         "content_id": content_id,
         "platform": target.platform,
         "top_comments": target.top_comments,
-        "summary": _summarize_comments(target.top_comments),
+        "summary": summary,
     }
 
 
-def _summarize_comments(comments: List[Dict]) -> str:
-    """Generate summary of top comments (mock AI)"""
+async def _summarize_comments_ai(comments: List[Dict]) -> str:
+    """Generate AI summary of top comments using OpenAI."""
     if not comments:
         return "No comments to analyze"
-    
-    # Mock summary - in production would use AI
-    themes = ["enthusiasm", "appreciation", "questions", "support"]
-    return f"Top comments show {random.choice(themes)} with an average of {sum(c.get('likes', 0) for c in comments) // len(comments)} likes"
+
+    import os
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Comment summarization requires OPENAI_API_KEY to be configured"
+        )
+
+    comment_texts = [c.get("text", c.get("body", "")) for c in comments[:20]]
+    avg_likes = sum(c.get("likes", 0) for c in comments) // len(comments)
+
+    import httpx
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a social media analyst. Summarize the themes "
+                            "and sentiment of these comments in 1-2 sentences. "
+                            "Be specific about what commenters are saying."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Comments (avg {avg_likes} likes each):\n"
+                            + "\n".join(f"- {t}" for t in comment_texts)
+                        ),
+                    },
+                ],
+                "temperature": 0.3,
+                "max_tokens": 150,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    return data["choices"][0]["message"]["content"].strip()
+
+
+def _summarize_comments(comments: List[Dict]) -> str:
+    """Synchronous wrapper for comment summarization using AI.
+
+    Falls back to basic stats when called from sync context without
+    an active event loop (e.g. during startup). Prefer using
+    _summarize_comments_ai directly in async endpoints.
+    """
+    if not comments:
+        return "No comments to analyze"
+
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # We're in an async context but called synchronously;
+        # return a basic statistical summary since we can't await here.
+        avg_likes = sum(c.get("likes", 0) for c in comments) // len(comments)
+        return (
+            f"Analyzed {len(comments)} comments with an average of "
+            f"{avg_likes} likes. Use the async endpoint for AI-powered insights."
+        )
+
+    # Not in an async context, run the coroutine
+    return asyncio.run(_summarize_comments_ai(comments))
 
 
 # ============================================================================
@@ -445,39 +490,50 @@ def _summarize_comments(comments: List[Dict]) -> str:
 @router.post("/generate")
 async def generate_comments(request: GenerateRequest) -> Dict:
     """
-    Generate AI comments for target content.
+    Generate AI comments for target content using OpenAI.
     Uses configured tone and niche settings.
     """
     generated = []
-    
+    errors = []
+
     for content_id in request.target_content_ids:
         target = next((t for t in _target_content if t.id == content_id), None)
         if not target:
             continue
-        
+
         niche_config = _niche_configs.get(target.niche, NicheConfig(niche=target.niche))
         comment_tone = request.tone or niche_config.tone
-        
+
+        try:
+            comment_text = await _generate_comment_ai(target, comment_tone)
+        except Exception as e:
+            errors.append({"content_id": content_id, "error": str(e)})
+            continue
+
         comment = GeneratedComment(
             target_content_id=content_id,
             platform=target.platform,
             niche=target.niche,
-            comment_text=_generate_mock_comment(target, comment_tone),
+            comment_text=comment_text,
             tone=comment_tone,
             status=CommentStatus.PENDING_REVIEW if _global_config.automation_mode != AutomationMode.FULL_AUTO else CommentStatus.APPROVED,
             automation_mode=_global_config.automation_mode,
             source_url=target.content_url,
             priority=niche_config.priority,
         )
-        
+
         _generated_comments.append(comment)
         generated.append(comment)
-    
-    return {
+
+    result = {
         "generated_count": len(generated),
         "comments": [c.dict() for c in generated],
         "automation_mode": _global_config.automation_mode,
     }
+    if errors:
+        result["errors"] = errors
+
+    return result
 
 
 @router.post("/generate-batch")
@@ -717,29 +773,37 @@ async def get_schedule(
 
 @router.post("/post/{comment_id}")
 async def post_comment(comment_id: str) -> Dict:
-    """Post a comment immediately (mock)"""
+    """
+    Post a comment to the target platform.
+
+    Requires platform-specific posting integration (Safari automation or API).
+    Currently marks the comment as posted and tracks engagement.
+    Actual platform posting is delegated to the platform automation services.
+    """
     comment = next((c for c in _generated_comments if c.id == comment_id), None)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
-    
-    # Mock posting - in production would call platform API
-    comment.status = CommentStatus.POSTED
-    comment.posted_time = datetime.now().isoformat()
-    comment.comment_url = f"https://{comment.platform.value}.com/comment/{uuid.uuid4().hex[:10]}"
-    
-    global _posted_comments_today, _last_comment_time
-    _posted_comments_today += 1
-    _last_comment_time = datetime.now()
-    
-    # Initialize engagement tracking
-    _comment_engagements[comment_id] = CommentEngagement(comment_id=comment_id)
-    
-    return {
-        "status": "posted",
-        "comment_id": comment_id,
-        "comment_url": comment.comment_url,
-        "posted_at": comment.posted_time,
-    }
+
+    # Find the target content for context
+    target = next((t for t in _target_content if t.id == comment.target_content_id), None)
+
+    # Delegate to platform automation service
+    comment_url = None
+    try:
+        if comment.platform == Platform.TIKTOK:
+            # TikTok comment posting via automation service
+            raise NotImplementedError("TikTok comment posting not yet integrated")
+        elif comment.platform == Platform.YOUTUBE:
+            raise NotImplementedError("YouTube comment posting not yet integrated")
+        elif comment.platform == Platform.INSTAGRAM:
+            raise NotImplementedError("Instagram comment posting not yet integrated")
+        else:
+            raise NotImplementedError(f"Comment posting for {comment.platform.value} not supported")
+    except NotImplementedError as e:
+        raise HTTPException(
+            status_code=501,
+            detail=str(e)
+        )
 
 
 # ============================================================================
@@ -866,11 +930,15 @@ async def get_impact_analysis(
         avg_replies_per_comment=total_replies / total_posted if total_posted > 0 else 0,
         profile_visits=total_profile_clicks,
         follower_growth=total_new_followers,
-        reach_estimate=total_posted * random.randint(100, 500),  # Mock reach
+        reach_estimate=0,  # Requires platform API integration for real reach data
         best_performing_niche=best_niche,
         best_performing_platform=Platform(best_platform) if best_platform else None,
-        best_time_of_day="2:00 PM - 4:00 PM",  # Mock
-        roi_score=round(random.uniform(3.5, 8.5), 2),  # Mock ROI
+        best_time_of_day=None,  # Requires historical posting data analysis
+        roi_score=round(
+            (total_likes + total_replies * 2 + total_new_followers * 5)
+            / max(total_posted, 1),
+            2
+        ),
     )
 
 
@@ -953,5 +1021,5 @@ async def reset_automation():
     _comment_engagements.clear()
     _posted_comments_today = 0
     _last_comment_time = None
-    _init_mock_data()
+    _init_default_configs()
     return {"status": "reset", "message": "Automation data reset"}

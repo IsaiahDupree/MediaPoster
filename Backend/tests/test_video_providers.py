@@ -539,14 +539,19 @@ class TestSoraProvider:
 class TestProviderFactory:
     """Test get_video_provider factory."""
     
-    def test_get_mock_provider(self):
-        """Test getting mock provider."""
-        from services.video_providers import get_video_provider, ProviderName
+    def test_get_mock_provider_raises_not_configured(self):
+        """Test getting mock provider raises NotConfiguredError in production."""
+        from services.video_providers import get_video_provider, ProviderName, NotConfiguredError
+
+        with pytest.raises(NotConfiguredError):
+            get_video_provider(ProviderName.MOCK)
+
+    def test_mock_provider_direct_import(self):
+        """Test MockVideoProvider can still be imported directly for testing."""
         from services.video_providers.mock_provider import MockVideoProvider
-        
-        provider = get_video_provider(ProviderName.MOCK)
-        
-        assert isinstance(provider, MockVideoProvider)
+        from services.video_providers.base import ProviderName
+
+        provider = MockVideoProvider()
         assert provider.name == ProviderName.MOCK
     
     def test_get_sora_provider(self):

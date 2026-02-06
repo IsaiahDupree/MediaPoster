@@ -109,16 +109,17 @@ class OrchestrationWorker:
     def __init__(
         self,
         config: Optional[WorkerConfig] = None,
-        provider_name: ProviderName = ProviderName.MOCK
+        provider_name: ProviderName = ProviderName.SORA,
+        provider_instance=None
     ):
         self.config = config or WorkerConfig()
         self.provider_name = provider_name
-        
+
         self._scene_crafter = SceneCrafterService()
         self._assessor = AssessorService()
         self._repair_executor = RepairExecutor(self._scene_crafter)
-        
-        self._provider = None
+
+        self._provider = provider_instance
         self._event_callbacks: List[EventCallback] = []
         self._running_plans: Set[str] = set()
         self._progress: Dict[str, WorkerProgress] = {}

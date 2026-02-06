@@ -588,9 +588,9 @@ async def sora_generate(request: SoraGenerateRequest):
     from services.video_providers.base import CreateClipInput, ProviderReference
     
     try:
-        provider = get_video_provider(ProviderName.MOCK)  # Use mock for demo
+        provider = get_video_provider(ProviderName.SORA)
     except Exception as e:
-        logger.error(f"Failed to get provider: {e}")
+        logger.error(f"Failed to get video provider: {e}")
         raise HTTPException(status_code=500, detail="Video provider unavailable")
     
     # Build input
@@ -649,10 +649,10 @@ async def sora_remix(request: SoraRemixRequest):
     from services.video_providers.base import RemixClipInput
     
     try:
-        provider = get_video_provider(ProviderName.MOCK)
+        provider = get_video_provider(ProviderName.SORA)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Video provider unavailable")
-    
+
     remix_input = RemixClipInput(
         source_generation_id=request.video_id,
         prompt_delta=request.prompt,
@@ -700,7 +700,7 @@ async def get_sora_video(video_id: str):
         
         # Poll provider for status update
         try:
-            provider = get_video_provider(ProviderName.MOCK)
+            provider = get_video_provider(ProviderName.SORA)
             generation = await provider.get_generation(video_id)
             
             # Update status
@@ -773,7 +773,7 @@ async def health_check():
     from services.video_providers import get_video_provider, ProviderName
     
     try:
-        provider = get_video_provider(ProviderName.MOCK)
+        provider = get_video_provider(ProviderName.SORA)
         provider_health = await provider.health_check()
     except Exception as e:
         provider_health = {"status": "error", "error": str(e)}

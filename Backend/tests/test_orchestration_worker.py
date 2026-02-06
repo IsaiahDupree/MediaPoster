@@ -151,7 +151,12 @@ class TestOrchestrationWorker:
             assessment_enabled=False  # Disable for faster tests
         )
         
-        return OrchestrationWorker(config=config, provider_name=ProviderName.MOCK)
+        from services.video_providers.mock_provider import MockVideoProvider
+
+        return OrchestrationWorker(
+            config=config,
+            provider_instance=MockVideoProvider(simulate_delay=0, processing_steps=2)
+        )
     
     @pytest.fixture
     def sample_plan_data(self):
@@ -305,7 +310,12 @@ class TestOrchestrationQueue:
             assessment_enabled=False
         )
         
-        worker = OrchestrationWorker(config=config, provider_name=ProviderName.MOCK)
+        from services.video_providers.mock_provider import MockVideoProvider
+
+        worker = OrchestrationWorker(
+            config=config,
+            provider_instance=MockVideoProvider(simulate_delay=0, processing_steps=2)
+        )
         return OrchestrationQueue(worker=worker, max_workers=1)
     
     def test_queue_creation(self, queue):
@@ -396,8 +406,13 @@ class TestWorkerIntegration:
             poll_interval_seconds=0.1,
             assessment_enabled=False
         )
-        worker = OrchestrationWorker(config=config, provider_name=ProviderName.MOCK)
-        
+        from services.video_providers.mock_provider import MockVideoProvider
+
+        worker = OrchestrationWorker(
+            config=config,
+            provider_instance=MockVideoProvider(simulate_delay=0, processing_steps=2)
+        )
+
         # Track events
         events = []
         worker.on_event(lambda e, d: events.append(e))

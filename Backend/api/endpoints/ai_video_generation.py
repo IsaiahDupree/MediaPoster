@@ -187,25 +187,63 @@ async def publish_event(topic: str, payload: Dict[str, Any], correlation_id: str
 # =============================================================================
 
 async def generate_ai_title(prompt: str) -> str:
-    """Generate an AI title for the video based on the prompt."""
-    # In production, this would call an LLM API
-    # For now, create a smart title from the prompt
-    words = prompt.split()[:6]
-    title = " ".join(words).title()
-    if len(prompt) > 50:
-        title = title[:47] + "..."
-    return title
+    """Generate an AI title for the video based on the prompt using OpenAI."""
+    import os
+    try:
+        from openai import OpenAI
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not configured")
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Generate a short, catchy video title (max 60 chars). Return only the title text."},
+                {"role": "user", "content": f"Create a title for this video: {prompt}"}
+            ],
+            temperature=0.7,
+            max_tokens=30
+        )
+        title = response.choices[0].message.content.strip().strip('"')
+        return title[:60]
+    except Exception as e:
+        logger.warning(f"AI title generation failed, using fallback: {e}")
+        words = prompt.split()[:6]
+        title = " ".join(words).title()
+        if len(title) > 60:
+            title = title[:57] + "..."
+        return title
 
 
 async def generate_ai_description(prompt: str, settings: Dict[str, Any]) -> str:
-    """Generate an AI description for the video."""
-    # In production, this would call an LLM API
-    duration = settings.get('duration', '10s')
-    style = settings.get('style', 'cinematic')
-    aspect = settings.get('aspect_ratio', '16:9')
-    
-    description = f"AI-generated {duration} {style} video in {aspect} format. {prompt}"
-    return description[:500]
+    """Generate an AI description for the video using OpenAI."""
+    import os
+    try:
+        from openai import OpenAI
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not configured")
+        client = OpenAI(api_key=api_key)
+        duration = settings.get('duration', '10s')
+        style = settings.get('style', 'cinematic')
+        aspect = settings.get('aspect_ratio', '16:9')
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Generate a compelling video description for social media (max 300 chars). Include relevant hashtags. Return only the description text."},
+                {"role": "user", "content": f"Describe this {duration} {style} video ({aspect}): {prompt}"}
+            ],
+            temperature=0.7,
+            max_tokens=100
+        )
+        description = response.choices[0].message.content.strip()
+        return description[:500]
+    except Exception as e:
+        logger.warning(f"AI description generation failed, using fallback: {e}")
+        duration = settings.get('duration', '10s')
+        style = settings.get('style', 'cinematic')
+        aspect = settings.get('aspect_ratio', '16:9')
+        return f"AI-generated {duration} {style} video in {aspect} format. {prompt}"[:500]
 
 
 # =============================================================================

@@ -89,6 +89,7 @@ class Topics:
     # POST TRACKING (PTK-001 to PTK-006)
     # =========================================================================
     POST_PUBLISHED = "post.published"                     # Post successfully published
+    CONTENT_PUBLISHED = "content.published"               # Content published to platform
     CHECKBACK_SCHEDULED = "checkback.scheduled"           # Checkback period scheduled
     CHECKBACK_TRIGGERED = "checkback.triggered"           # Checkback period triggered
     CHECKBACK_COMPLETED = "checkback.completed"           # Checkback metrics collected
@@ -449,6 +450,8 @@ class Topics:
     # =========================================================================
     # DM PERMISSIONS (OPS-017, OPS-018)
     # =========================================================================
+    DM_RECEIVED = "dm.received"                           # Incoming DM received
+    DM_SENT = "dm.sent"                                   # DM sent successfully
     DM_CONSENT_REQUESTED = "dm.consent.requested"         # Consent requested from contact
     DM_CONSENT_GRANTED = "dm.consent.granted"             # Consent granted (can send links)
     DM_CONSENT_DENIED = "dm.consent.denied"               # Consent denied (no links)

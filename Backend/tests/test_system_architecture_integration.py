@@ -312,7 +312,7 @@ def test_arch_005_offer_tracker_exists():
     tracker = OfferTracker()
 
     assert tracker is not None
-    assert tracker.engine is not None
+    assert tracker._engine is not None
 
 
 def test_arch_005_offer_tracker_has_tracking_methods():
@@ -322,13 +322,13 @@ def test_arch_005_offer_tracker_has_tracking_methods():
     # Verify methods exist
     assert hasattr(tracker, 'track_click')
     assert hasattr(tracker, 'track_conversion')
-    assert hasattr(tracker, 'get_campaign_analytics')
-    assert hasattr(tracker, 'get_top_performing_content')
+    assert hasattr(tracker, 'get_campaign_report')
+    assert hasattr(tracker, 'get_platform_report')
 
     # Verify all are callable
     assert callable(tracker.track_click)
     assert callable(tracker.track_conversion)
-    assert callable(tracker.get_campaign_analytics)
+    assert callable(tracker.get_campaign_report)
 
 
 # =========================================================================

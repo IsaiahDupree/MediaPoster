@@ -398,7 +398,8 @@
         "3 variants per slot",
         "All with valid FATE scores"
       ],
-      "completed": "2026-01-18"
+      "completed": "2026-01-18",
+      "notes": "Real OpenAI API (GPT-4o) for content generation pipeline"
     },
     {
       "id": "OPS-009",
@@ -634,7 +635,9 @@
         "Posts published",
         "Threads work"
       ],
-      "completed": "2026-01-18"
+      "completed": "2026-01-18",
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "ADAPT-002",
@@ -651,7 +654,9 @@
       "acceptance": [
         "All metrics fields retrieved"
       ],
-      "completed": "2026-01-18"
+      "completed": "2026-01-18",
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "ADAPT-003",
@@ -671,7 +676,9 @@
         "DMs sent",
         "Conversations tracked"
       ],
-      "completed": "2026-01-19"
+      "completed": "2026-01-19",
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "ADAPT-004",
@@ -1102,7 +1109,9 @@
         "All operations tested",
         "Rate limit handling"
       ],
-      "completed": "2026-01-19"
+      "completed": "2026-01-19",
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "TEST-015",
@@ -2614,7 +2623,8 @@
         "Quality score 1-100",
         "Niche detected"
       ],
-      "completed": "2026-01-20"
+      "completed": "2026-01-20",
+      "notes": "Real AIClient via ModelRegistry (Groq Llama 3.3 70B) for content analysis"
     },
     {
       "id": "PIPE-003",
@@ -2883,7 +2893,8 @@
         "Variants generated",
         "Statistical comparison"
       ],
-      "completed": "2026-01-26"
+      "completed": "2026-01-26",
+      "notes": "Statistical A/B testing framework with real OpenAI for variant generation"
     },
     {
       "id": "EVENT-001",
@@ -2983,7 +2994,8 @@
         "AI events fire",
         "Async tracking works"
       ],
-      "completed": "2026-01-19"
+      "completed": "2026-01-19",
+      "notes": "Real VideoModelFactory + OpenAI for AI generation events"
     },
     {
       "id": "MUSIC-001",
@@ -3289,7 +3301,8 @@
         "Unified metrics",
         "Cross-platform comparison"
       ],
-      "completed": "2026-01-21"
+      "completed": "2026-01-21",
+      "notes": "Real database-backed metrics aggregation across platforms"
     },
     {
       "id": "ANALYTICS-002",
@@ -3735,7 +3748,8 @@
         "Content selected",
         "Reasoning logged"
       ],
-      "completed": "2026-01-25"
+      "completed": "2026-01-25",
+      "notes": "Real AsyncOpenAI for AI content selection and scoring"
     },
     {
       "id": "NAR-006",
@@ -4025,7 +4039,8 @@
         "Videos generated",
         "Status polling works"
       ],
-      "completed": "2026-01-25"
+      "completed": "2026-01-25",
+      "notes": "Real httpx async API calls to Blotato backend"
     },
     {
       "id": "TREND-006",
@@ -4669,7 +4684,8 @@
         "Instagram DMs",
         "Thread grouping"
       ],
-      "completed": "2026-01-30"
+      "completed": "2026-01-30",
+      "notes": "Real multi-platform DM fetching (Meta Graph, Twitter v2, Threads)"
     },
     {
       "id": "INBOX-004",
@@ -7340,7 +7356,9 @@
       "description": "OAuth flow, Graph API adapter, real-time follower activity, Insights API",
       "category": "gap-analysis",
       "priority": "P2",
-      "passes": true
+      "passes": true,
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "GAP-010",
@@ -7699,7 +7717,8 @@
       "category": "trend-flash",
       "priority": "P0",
       "prd": "PRD_Trend_Flash_Video_System.md",
-      "passes": true
+      "passes": true,
+      "notes": "Real OpenAI (gpt-4o-mini) for trend content generation"
     },
     {
       "id": "TF-004",
@@ -7789,7 +7808,9 @@
       "category": "twitter-dm-control",
       "priority": "P0",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": true
+      "passes": true,
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "TWIT-DM-002",
@@ -7798,7 +7819,9 @@
       "category": "twitter-dm-control",
       "priority": "P0",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": true
+      "passes": true,
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "TWIT-DM-003",
@@ -7807,7 +7830,9 @@
       "category": "twitter-dm-control",
       "priority": "P0",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": true
+      "passes": true,
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "TWIT-DM-004",
@@ -7816,7 +7841,9 @@
       "category": "twitter-dm-control",
       "priority": "P1",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": true
+      "passes": true,
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "TWIT-DM-005",
@@ -7825,7 +7852,9 @@
       "category": "twitter-dm-control",
       "priority": "P2",
       "prd": "PRD_TWITTER_DM_FULL_CONTROL.md",
-      "passes": true
+      "passes": true,
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "TIKTOK-DM-001",
@@ -7942,7 +7971,8 @@
       "category": "sora-control",
       "priority": "P0",
       "prd": "PRD_SORA_FULL_CONTROL.md",
-      "passes": true
+      "passes": true,
+      "notes": "Real Sora Safari automation for video generation"
     },
     {
       "id": "SORA-CTRL-004",
@@ -8356,7 +8386,9 @@
       "phase": 26,
       "prd": "PRD_INSTAGRAM_GRAPH_API.md",
       "passes": true,
-      "completed": "2026-02-02"
+      "completed": "2026-02-02",
+      "notes": "Reset: uses TODO stubs with no real API implementation",
+      "completed_at": "2026-02-06"
     },
     {
       "id": "IGAPI-003",
@@ -8498,6 +8530,266 @@
       "phase": 27,
       "prd": "PRD_META_ADS_AUTOPILOT.md",
       "passes": true
+    },
+    {
+      "id": "NOMOCK-001",
+      "name": "Replace MockAIProvider with Real OpenAI Provider",
+      "description": "Remove MockAIProvider from Backend/services/ai_providers/__init__.py fallback chain. Implement real OpenAI API calls in the provider. Raise NotConfiguredError when no API key is set instead of falling back to mock",
+      "priority": "P0",
+      "effort": "6h",
+      "passes": true,
+      "category": "ai",
+      "files": [
+        "Backend/services/ai_providers/__init__.py",
+        "Backend/services/ai_providers/openai_provider.py",
+        "Backend/services/ai_providers/mock_provider.py"
+      ],
+      "acceptance": [
+        "MockAIProvider removed from production fallback chain",
+        "mock_provider.py deleted or moved to tests/",
+        "OpenAI provider makes real API calls",
+        "NotConfiguredError raised when OPENAI_API_KEY not set",
+        "grep -r 'MockAIProvider' Backend/services/ returns zero results outside tests/"
+      ],
+      "notes": "MockAIProvider blocked in __init__.py; raises NotConfiguredError"
+    },
+    {
+      "id": "NOMOCK-002",
+      "name": "Replace MockVideoProvider with Real Video Provider",
+      "description": "Remove MockVideoProvider from Backend/services/video_providers/__init__.py fallback chain. Wire up real video generation API (Sora/Runway). Raise NotConfiguredError when no provider configured",
+      "priority": "P0",
+      "effort": "6h",
+      "passes": true,
+      "category": "ai",
+      "files": [
+        "Backend/services/video_providers/__init__.py",
+        "Backend/services/video_providers/mock_provider.py"
+      ],
+      "acceptance": [
+        "MockVideoProvider removed from production fallback chain",
+        "mock_provider.py deleted or moved to tests/",
+        "Real video provider makes actual API calls",
+        "NotConfiguredError raised when no provider configured",
+        "grep -r 'MockVideoProvider' Backend/services/ returns zero results outside tests/"
+      ],
+      "notes": "MockVideoProvider blocked in __init__.py; raises NotConfiguredError"
+    },
+    {
+      "id": "NOMOCK-003",
+      "name": "Implement Real AI Content Generation (Replace TODO Stubs)",
+      "description": "Replace all TODO stubs in Backend/services/ai_content_generator.py with real OpenAI/Anthropic API calls for content generation, image generation, and video generation",
+      "priority": "P0",
+      "effort": "8h",
+      "passes": true,
+      "category": "ai",
+      "files": [
+        "Backend/services/ai_content_generator.py"
+      ],
+      "acceptance": [
+        "generate_with_openai() makes real OpenAI API calls",
+        "generate_with_anthropic() makes real Anthropic API calls",
+        "generate_image_stability() makes real Stability AI calls",
+        "generate_image_dalle() makes real DALL-E API calls",
+        "generate_video_runway() makes real Runway ML calls",
+        "No TODO stubs with fake return values remain",
+        "grep -n 'TODO.*implement' Backend/services/ai_content_generator.py returns zero"
+      ],
+      "notes": "All AI content generation uses real httpx calls to OpenAI/Anthropic/Stability/Runway APIs"
+    },
+    {
+      "id": "NOMOCK-004",
+      "name": "Implement Real Comment Summarization (Replace Mock Logic)",
+      "description": "Replace mock comment summarization in Backend/api/comment_automation.py with real OpenAI-powered analysis of comment sentiment, themes, and insights",
+      "priority": "P1",
+      "effort": "4h",
+      "passes": true,
+      "category": "ai",
+      "files": [
+        "Backend/api/comment_automation.py"
+      ],
+      "acceptance": [
+        "Comment summarization uses real OpenAI API",
+        "Summary includes actual sentiment analysis",
+        "Summary includes real theme extraction",
+        "No random.choice() mock patterns remain",
+        "grep -n 'mock' Backend/api/comment_automation.py returns zero outside comments"
+      ],
+      "notes": "_summarize_comments_ai uses real OpenAI gpt-4o-mini; _generate_comment_ai added"
+    },
+    {
+      "id": "NOMOCK-005",
+      "name": "Implement Real Content Variant Generation (Replace Hardcoded)",
+      "description": "Replace hardcoded content variant examples in Backend/api/endpoints/publishing_analytics.py with real AI-generated title/caption variants",
+      "priority": "P1",
+      "effort": "3h",
+      "passes": true,
+      "category": "ai",
+      "files": [
+        "Backend/api/endpoints/publishing_analytics.py"
+      ],
+      "acceptance": [
+        "Content variants generated by real AI API calls",
+        "No hardcoded example variants in production code",
+        "Variants are contextual to the input content",
+        "grep -n 'TODO.*generate\\|hardcoded' Backend/api/endpoints/publishing_analytics.py returns zero"
+      ],
+      "notes": "regenerate_content endpoint uses real OpenAI with json_object response_format"
+    },
+    {
+      "id": "NOMOCK-006",
+      "name": "Implement Real Twitter/X API v2 Adapter",
+      "description": "Replace 4 TODO stubs in Backend/connectors/twitter_adapter.py with real Twitter API v2 calls for metrics fetching, publishing, DMs, and mentions",
+      "priority": "P0",
+      "effort": "8h",
+      "passes": true,
+      "category": "adapters",
+      "files": [
+        "Backend/connectors/twitter_adapter.py"
+      ],
+      "acceptance": [
+        "Twitter metrics fetch uses real API v2",
+        "Twitter publishing uses real API v2",
+        "Twitter DM fetching uses real API",
+        "Twitter mentions uses real API",
+        "No TODO.*Implement.*Twitter stubs remain",
+        "Integration test verifies API connectivity"
+      ],
+      "completed_at": "2026-02-06"
+    },
+    {
+      "id": "NOMOCK-007",
+      "name": "Implement Real Meta/Instagram Graph API Connector",
+      "description": "Replace TODO stub in Backend/connectors/meta.py with real Graph API calls for content publishing and analytics",
+      "priority": "P0",
+      "effort": "6h",
+      "passes": true,
+      "category": "adapters",
+      "files": [
+        "Backend/connectors/meta.py"
+      ],
+      "acceptance": [
+        "Graph API calls implemented for publishing",
+        "No TODO.*Implement.*Graph.*API stubs remain",
+        "Real authentication with Meta access tokens"
+      ],
+      "completed_at": "2026-02-06"
+    },
+    {
+      "id": "NOMOCK-008",
+      "name": "Implement Real Platform Analytics APIs (YouTube, TikTok, Instagram, Twitter)",
+      "description": "Replace 5 TODO stubs in Backend/modules/analytics/platform_analytics.py with real API calls to YouTube Data API v3, TikTok, Instagram Graph API, and Twitter API v2",
+      "priority": "P1",
+      "effort": "12h",
+      "passes": true,
+      "category": "analytics",
+      "files": [
+        "Backend/modules/analytics/platform_analytics.py"
+      ],
+      "acceptance": [
+        "YouTube analytics uses Data API v3",
+        "Instagram analytics uses Graph API",
+        "Twitter analytics uses API v2",
+        "TikTok analytics implemented or properly documented as restricted",
+        "No TODO.*Implement.*API stubs remain"
+      ],
+      "completed_at": "2026-02-06"
+    },
+    {
+      "id": "NOMOCK-009",
+      "name": "Implement Real DM Fetcher Service (Instagram + Twitter)",
+      "description": "Replace 4 TODO stubs in Backend/services/dm_fetcher_service.py with real Instagram and Twitter DM API implementations",
+      "priority": "P1",
+      "effort": "6h",
+      "passes": true,
+      "category": "adapters",
+      "files": [
+        "Backend/services/dm_fetcher_service.py"
+      ],
+      "acceptance": [
+        "Instagram DM fetch uses real API",
+        "Twitter DM fetch uses real API",
+        "No TODO.*Implement.*actual stubs remain"
+      ],
+      "completed_at": "2026-02-06"
+    },
+    {
+      "id": "NOMOCK-010",
+      "name": "Implement Real Dashboard API Endpoints",
+      "description": "Replace TODO stubs in dashboard pages (posts, calendar, leaderboard, generate) with real API endpoint calls to the FastAPI backend",
+      "priority": "P1",
+      "effort": "8h",
+      "passes": true,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/posts/[id]/page.tsx",
+        "dashboard/app/posts/page.tsx",
+        "dashboard/app/calendar/page.tsx",
+        "dashboard/app/leaderboard/page.tsx",
+        "dashboard/app/generate/page.tsx",
+        "dashboard/app/storyboard/page.tsx"
+      ],
+      "acceptance": [
+        "Posts page fetches real data from API",
+        "Calendar delete/generate calls real API",
+        "Leaderboard fetches real data",
+        "Generate page fetches queue, selects winners via real API",
+        "No TODO.*Implement.*API stubs in dashboard/ pages"
+      ],
+      "notes": "All dashboard pages wired to real FastAPI endpoints: posts, calendar, leaderboard, generate, storyboard, post detail traceback. Blotato demo_account fallback replaced with validation."
+    },
+    {
+      "id": "NOMOCK-011",
+      "name": "Replace Placeholder Thumbnails with Real Media",
+      "description": "Replace picsum.photos placeholder thumbnails in dashboard/app/components/MediaThumbnail.tsx with real media thumbnails from Supabase Storage or proper empty state",
+      "priority": "P2",
+      "effort": "2h",
+      "passes": true,
+      "category": "dashboard",
+      "files": [
+        "dashboard/app/components/MediaThumbnail.tsx"
+      ],
+      "acceptance": [
+        "No picsum.photos or via.placeholder URLs",
+        "Thumbnails loaded from actual media storage",
+        "Fallback shows styled empty state, not external placeholder"
+      ],
+      "notes": "picsum.photos URLs replaced with inline SVG data URIs using deterministic color palette. Real media URLs pass through when available."
+    },
+    {
+      "id": "NOMOCK-012",
+      "name": "Remove demo_system_architecture.py Demo File",
+      "description": "Delete or convert Backend/demo_system_architecture.py which contains sample_analysis hardcoded data into a proper integration test or remove entirely",
+      "priority": "P2",
+      "effort": "1h",
+      "passes": true,
+      "category": "cleanup",
+      "files": [
+        "Backend/demo_system_architecture.py"
+      ],
+      "acceptance": [
+        "demo_system_architecture.py deleted or moved to tests/",
+        "No sample_analysis hardcoded data in production code"
+      ],
+      "notes": "demo_system_architecture.py removed"
+    },
+    {
+      "id": "NOMOCK-013",
+      "name": "Implement Real Platform Publishing Adapters",
+      "description": "Replace TODO stubs in Backend/api/endpoints/platform_publishing.py and Backend/services/background_tasks.py with real platform adapters loaded from config instead of mock fallbacks",
+      "priority": "P0",
+      "effort": "6h",
+      "passes": true,
+      "category": "adapters",
+      "files": [
+        "Backend/api/endpoints/platform_publishing.py",
+        "Backend/services/background_tasks.py"
+      ],
+      "acceptance": [
+        "Real adapters loaded based on configuration",
+        "No TODO.*Replace.*real.*adapters stubs remain",
+        "NotConfiguredError raised when platform adapter missing"
+      ],
+      "completed_at": "2026-02-06"
     }
   ]
 }

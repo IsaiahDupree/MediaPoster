@@ -222,22 +222,90 @@ class DMFetcherService:
         workspace_id: str,
         hours: int
     ) -> int:
-        """Fetch recent Instagram DMs"""
+        """
+        Fetch recent Instagram DMs via Meta Graph API.
+
+        Uses GET /{ig-user-id}/conversations to list conversations,
+        then GET /{conversation-id}/messages for each thread.
+        Requires instagram_manage_messages permission.
+        """
+        import os
+        import httpx
+
         logger.debug(f"Fetching Instagram DMs from last {hours}h")
 
-        async with async_session_maker() as session:
-            # Get connected Instagram account
-            # Note: In production, would fetch from user's connected accounts
-            # For now, using placeholder logic that can be extended
+        access_token = os.getenv("META_ACCESS_TOKEN")
+        ig_user_id = os.getenv("INSTAGRAM_USER_ID")
+        if not access_token or not ig_user_id:
+            raise RuntimeError(
+                "Instagram DM fetching requires META_ACCESS_TOKEN and INSTAGRAM_USER_ID"
+            )
 
+        api_version = "v18.0"
+        base_url = f"https://graph.facebook.com/{api_version}"
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+        async with async_session_maker() as session:
             dm_count = 0
-            # TODO: Implement actual Instagram API calls
-            # This would involve:
-            # 1. Get user's Instagram Business Account ID
-            # 2. Call Meta Graph API: GET /{ig-user-id}/conversations
-            # 3. For each conversation, fetch messages
-            # 4. Group messages into threads
-            # 5. Store in database
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                # Step 1: Get conversations
+                conv_response = await client.get(
+                    f"{base_url}/{ig_user_id}/conversations",
+                    params={
+                        "fields": "id,updated_time,participants",
+                        "access_token": access_token,
+                    },
+                )
+                conv_response.raise_for_status()
+                conversations = conv_response.json().get("data", [])
+
+                for conv in conversations:
+                    conv_id = conv.get("id", "")
+                    updated = conv.get("updated_time", "")
+
+                    # Skip conversations not updated in our window
+                    if updated:
+                        from dateutil.parser import parse as parse_date
+                        try:
+                            conv_updated = parse_date(updated)
+                            if conv_updated < cutoff:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Step 2: Fetch messages in conversation
+                    msg_response = await client.get(
+                        f"{base_url}/{conv_id}/messages",
+                        params={
+                            "fields": "id,message,from,created_time",
+                            "limit": "50",
+                            "access_token": access_token,
+                        },
+                    )
+                    msg_response.raise_for_status()
+                    messages = msg_response.json().get("data", [])
+
+                    for msg in messages:
+                        sender = msg.get("from", {})
+                        msg_data = {
+                            "platform": "instagram",
+                            "platform_message_id": msg.get("id", ""),
+                            "sender_username": sender.get("username", sender.get("name", "")),
+                            "sender_name": sender.get("name", ""),
+                            "content": msg.get("message", ""),
+                            "received_at": msg.get("created_time"),
+                            "conversation_id": conv_id,
+                            "is_thread_root": False,
+                        }
+
+                        stored = await self._store_dm_message(
+                            session, msg_data, conv_id, workspace_id
+                        )
+                        if stored:
+                            dm_count += 1
+
+                await session.commit()
 
             return dm_count
 
@@ -248,31 +316,151 @@ class DMFetcherService:
         workspace_id: str,
         limit: int
     ) -> int:
-        """Fetch DMs from specific Instagram user"""
+        """
+        Fetch DMs from specific Instagram user via Meta Graph API.
+
+        Uses GET /{ig-user-id}/conversations?user_id={target_user_id}
+        """
+        import os
+        import httpx
+
         logger.debug(f"Fetching Instagram DMs from user {user_id}")
 
-        # TODO: Implement actual Instagram API calls
-        # Would fetch conversation thread with specific user
+        access_token = os.getenv("META_ACCESS_TOKEN")
+        ig_user_id = os.getenv("INSTAGRAM_USER_ID")
+        if not access_token or not ig_user_id:
+            raise RuntimeError(
+                "Instagram DM fetching requires META_ACCESS_TOKEN and INSTAGRAM_USER_ID"
+            )
 
-        return 0
+        api_version = "v18.0"
+        base_url = f"https://graph.facebook.com/{api_version}"
+
+        dm_count = 0
+        async with httpx.AsyncClient(timeout=30) as client:
+            conv_response = await client.get(
+                f"{base_url}/{ig_user_id}/conversations",
+                params={
+                    "fields": "id,participants",
+                    "user_id": user_id,
+                    "access_token": access_token,
+                },
+            )
+            conv_response.raise_for_status()
+            conversations = conv_response.json().get("data", [])
+
+            for conv in conversations:
+                conv_id = conv.get("id", "")
+                msg_response = await client.get(
+                    f"{base_url}/{conv_id}/messages",
+                    params={
+                        "fields": "id,message,from,created_time",
+                        "limit": str(limit),
+                        "access_token": access_token,
+                    },
+                )
+                msg_response.raise_for_status()
+                messages = msg_response.json().get("data", [])
+
+                for msg in messages:
+                    sender = msg.get("from", {})
+                    msg_data = {
+                        "platform": "instagram",
+                        "platform_message_id": msg.get("id", ""),
+                        "sender_username": sender.get("username", sender.get("name", "")),
+                        "sender_name": sender.get("name", ""),
+                        "content": msg.get("message", ""),
+                        "received_at": msg.get("created_time"),
+                        "conversation_id": conv_id,
+                        "is_thread_root": False,
+                    }
+
+                    stored = await self._store_dm_message(
+                        session, msg_data, conv_id, workspace_id
+                    )
+                    if stored:
+                        dm_count += 1
+
+            await session.commit()
+
+        return dm_count
 
     async def _fetch_twitter_dms(
         self,
         workspace_id: str,
         hours: int
     ) -> int:
-        """Fetch recent Twitter/X DMs"""
+        """
+        Fetch recent Twitter/X DMs via Twitter API v2.
+
+        Uses GET /2/dm_events with event_types=MessageCreate
+        and filters by timestamp.
+        """
+        import os
+        import httpx
+
         logger.debug(f"Fetching Twitter DMs from last {hours}h")
+
+        bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
+        access_token = os.getenv("TWITTER_ACCESS_TOKEN")
+        if not bearer_token and not access_token:
+            raise RuntimeError(
+                "Twitter DM fetching requires TWITTER_BEARER_TOKEN or TWITTER_ACCESS_TOKEN"
+            )
+
+        base_url = "https://api.twitter.com/2"
+        headers = {"Authorization": f"Bearer {bearer_token}"} if bearer_token else {}
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         async with async_session_maker() as session:
             dm_count = 0
-            # TODO: Implement actual Twitter API calls
-            # This would involve:
-            # 1. Call Twitter API v2: GET /2/dm_events
-            # 2. Filter by timestamp
-            # 3. For each DM, create InboxMessage
-            # 4. Group related messages into conversations
-            # 5. Store in database
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(
+                    f"{base_url}/dm_events",
+                    headers=headers,
+                    params={
+                        "event_types": "MessageCreate",
+                        "dm_event.fields": "id,text,sender_id,created_at,dm_conversation_id",
+                        "max_results": "100",
+                    },
+                )
+                response.raise_for_status()
+                events = response.json().get("data", [])
+
+                for event in events:
+                    # Filter by timestamp
+                    created_at_str = event.get("created_at", "")
+                    if created_at_str:
+                        from dateutil.parser import parse as parse_date
+                        try:
+                            created_at = parse_date(created_at_str)
+                            if created_at < cutoff:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+
+                    conv_id = event.get("dm_conversation_id", "")
+                    sender_id = event.get("sender_id", "")
+
+                    msg_data = {
+                        "platform": "twitter",
+                        "platform_message_id": event.get("id", ""),
+                        "sender_username": sender_id,
+                        "sender_name": "",
+                        "content": event.get("text", ""),
+                        "received_at": created_at_str or datetime.now(timezone.utc).isoformat(),
+                        "conversation_id": conv_id,
+                        "is_thread_root": False,
+                    }
+
+                    stored = await self._store_dm_message(
+                        session, msg_data, conv_id, workspace_id
+                    )
+                    if stored:
+                        dm_count += 1
+
+            await session.commit()
 
             return dm_count
 
@@ -283,27 +471,143 @@ class DMFetcherService:
         workspace_id: str,
         limit: int
     ) -> int:
-        """Fetch DMs from specific Twitter user"""
+        """
+        Fetch DMs from specific Twitter user via API v2.
+
+        Uses GET /2/dm_conversations/with/:participant_id/dm_events
+        """
+        import os
+        import httpx
+
         logger.debug(f"Fetching Twitter DMs from user {user_id}")
 
-        # TODO: Implement actual Twitter API calls
-        # Would fetch DM conversation with specific user
+        bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
+        if not bearer_token:
+            raise RuntimeError("Twitter DM fetching requires TWITTER_BEARER_TOKEN")
 
-        return 0
+        base_url = "https://api.twitter.com/2"
+        headers = {"Authorization": f"Bearer {bearer_token}"}
+
+        dm_count = 0
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{base_url}/dm_conversations/with/{user_id}/dm_events",
+                headers=headers,
+                params={
+                    "dm_event.fields": "id,text,sender_id,created_at",
+                    "max_results": str(min(limit, 100)),
+                },
+            )
+            response.raise_for_status()
+            events = response.json().get("data", [])
+
+            conv_id = f"twitter:{user_id}"
+            for event in events:
+                msg_data = {
+                    "platform": "twitter",
+                    "platform_message_id": event.get("id", ""),
+                    "sender_username": event.get("sender_id", ""),
+                    "sender_name": "",
+                    "content": event.get("text", ""),
+                    "received_at": event.get("created_at", ""),
+                    "conversation_id": conv_id,
+                    "is_thread_root": False,
+                }
+
+                stored = await self._store_dm_message(
+                    session, msg_data, conv_id, workspace_id
+                )
+                if stored:
+                    dm_count += 1
+
+        await session.commit()
+        return dm_count
 
     async def _fetch_threads_dms(
         self,
         workspace_id: str,
         hours: int
     ) -> int:
-        """Fetch recent Threads DMs"""
+        """
+        Fetch recent Threads DMs via Meta Graph API.
+
+        Threads uses the same Meta Graph API conversation endpoints
+        as Instagram, with the Threads user ID.
+        """
+        import os
+        import httpx
+
         logger.debug(f"Fetching Threads DMs from last {hours}h")
+
+        access_token = os.getenv("META_ACCESS_TOKEN")
+        threads_user_id = os.getenv("THREADS_USER_ID")
+        if not access_token or not threads_user_id:
+            raise RuntimeError(
+                "Threads DM fetching requires META_ACCESS_TOKEN and THREADS_USER_ID"
+            )
+
+        api_version = "v18.0"
+        base_url = f"https://graph.facebook.com/{api_version}"
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         async with async_session_maker() as session:
             dm_count = 0
-            # TODO: Implement actual Threads API calls
-            # Threads uses Meta Graph API similar to Instagram
-            # Similar flow as Instagram DM fetching
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                conv_response = await client.get(
+                    f"{base_url}/{threads_user_id}/conversations",
+                    params={
+                        "fields": "id,updated_time,participants",
+                        "access_token": access_token,
+                    },
+                )
+                conv_response.raise_for_status()
+                conversations = conv_response.json().get("data", [])
+
+                for conv in conversations:
+                    conv_id = conv.get("id", "")
+                    updated = conv.get("updated_time", "")
+
+                    if updated:
+                        from dateutil.parser import parse as parse_date
+                        try:
+                            conv_updated = parse_date(updated)
+                            if conv_updated < cutoff:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+
+                    msg_response = await client.get(
+                        f"{base_url}/{conv_id}/messages",
+                        params={
+                            "fields": "id,message,from,created_time",
+                            "limit": "50",
+                            "access_token": access_token,
+                        },
+                    )
+                    msg_response.raise_for_status()
+                    messages = msg_response.json().get("data", [])
+
+                    for msg in messages:
+                        sender = msg.get("from", {})
+                        msg_data = {
+                            "platform": "threads",
+                            "platform_message_id": msg.get("id", ""),
+                            "sender_username": sender.get("username", sender.get("name", "")),
+                            "sender_name": sender.get("name", ""),
+                            "content": msg.get("message", ""),
+                            "received_at": msg.get("created_time"),
+                            "conversation_id": conv_id,
+                            "is_thread_root": False,
+                        }
+
+                        stored = await self._store_dm_message(
+                            session, msg_data, conv_id, workspace_id
+                        )
+                        if stored:
+                            dm_count += 1
+
+                await session.commit()
 
             return dm_count
 
@@ -314,12 +618,74 @@ class DMFetcherService:
         workspace_id: str,
         limit: int
     ) -> int:
-        """Fetch DMs from specific Threads user"""
+        """
+        Fetch DMs from specific Threads user via Meta Graph API.
+
+        Uses GET /{threads-user-id}/conversations?user_id={target}
+        """
+        import os
+        import httpx
+
         logger.debug(f"Fetching Threads DMs from user {user_id}")
 
-        # TODO: Implement actual Threads API calls
+        access_token = os.getenv("META_ACCESS_TOKEN")
+        threads_user_id = os.getenv("THREADS_USER_ID")
+        if not access_token or not threads_user_id:
+            raise RuntimeError(
+                "Threads DM fetching requires META_ACCESS_TOKEN and THREADS_USER_ID"
+            )
 
-        return 0
+        api_version = "v18.0"
+        base_url = f"https://graph.facebook.com/{api_version}"
+
+        dm_count = 0
+        async with httpx.AsyncClient(timeout=30) as client:
+            conv_response = await client.get(
+                f"{base_url}/{threads_user_id}/conversations",
+                params={
+                    "fields": "id,participants",
+                    "user_id": user_id,
+                    "access_token": access_token,
+                },
+            )
+            conv_response.raise_for_status()
+            conversations = conv_response.json().get("data", [])
+
+            for conv in conversations:
+                conv_id = conv.get("id", "")
+                msg_response = await client.get(
+                    f"{base_url}/{conv_id}/messages",
+                    params={
+                        "fields": "id,message,from,created_time",
+                        "limit": str(limit),
+                        "access_token": access_token,
+                    },
+                )
+                msg_response.raise_for_status()
+                messages = msg_response.json().get("data", [])
+
+                for msg in messages:
+                    sender = msg.get("from", {})
+                    msg_data = {
+                        "platform": "threads",
+                        "platform_message_id": msg.get("id", ""),
+                        "sender_username": sender.get("username", sender.get("name", "")),
+                        "sender_name": sender.get("name", ""),
+                        "content": msg.get("message", ""),
+                        "received_at": msg.get("created_time"),
+                        "conversation_id": conv_id,
+                        "is_thread_root": False,
+                    }
+
+                    stored = await self._store_dm_message(
+                        session, msg_data, conv_id, workspace_id
+                    )
+                    if stored:
+                        dm_count += 1
+
+            await session.commit()
+
+        return dm_count
 
     # =========================================================================
     # THREAD GROUPING & MESSAGE PROCESSING
@@ -520,17 +886,28 @@ class DMFetcherService:
     # =========================================================================
 
     async def _fetch_loop(self) -> None:
-        """Background loop that periodically fetches DMs"""
+        """Background loop that periodically fetches DMs from all connected workspaces."""
         logger.info("🔄 DM Fetcher background loop started")
 
         while self._is_running:
             try:
-                # TODO: Get list of all workspaces with connected accounts
-                # For now, this is a placeholder
-                # In production:
-                # 1. Query User table to get all workspaces
-                # 2. For each workspace, check which platforms are connected
-                # 3. Fetch DMs from those platforms
+                async with async_session_maker() as session:
+                    # Query all active workspaces from the database
+                    from database.models import Workspace
+                    stmt = select(Workspace).where(Workspace.is_active == True)
+                    result = await session.execute(stmt)
+                    workspaces = result.scalars().all()
+
+                    for workspace in workspaces:
+                        try:
+                            await self.fetch_recent_dms(
+                                workspace_id=str(workspace.id),
+                                hours=1,  # Fetch last hour each cycle
+                            )
+                        except Exception as ws_err:
+                            logger.error(
+                                f"Error fetching DMs for workspace {workspace.id}: {ws_err}"
+                            )
 
                 await asyncio.sleep(self._fetch_interval)
 

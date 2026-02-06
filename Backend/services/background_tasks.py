@@ -5,7 +5,7 @@ Automated checkback metrics and comment collection
 import logging
 from sqlalchemy.orm import Session
 from services.multi_platform_publisher import MultiPlatformPublisher
-from services.platform_adapters.base import MockPlatformAdapter, PlatformType
+from services.platform_adapters.loader import load_platform_adapters
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -30,13 +30,11 @@ def collect_checkback_metrics_task(
     db = db_session_factory()
     
     try:
-        # Initialize publisher with adapters
+        # Initialize publisher with real platform adapters
         publisher = MultiPlatformPublisher(db=db)
-        
-        # TODO: In production, load real adapters from config
-        # For now, register mock adapters
-        for platform_type in PlatformType:
-            adapter = MockPlatformAdapter(platform_type)
+
+        adapters = load_platform_adapters()
+        for adapter in adapters:
             publisher.register_adapter(adapter)
         
         # Collect metrics
@@ -94,33 +92,113 @@ def batch_collect_metrics_task(
 
 def analyze_trending_content_task(db_session_factory):
     """
-    Background task to analyze trending content patterns
-    
-    This would:
-    - Find top-performing posts
-    - Extract patterns (hooks, CTAs, topics)
-    - Generate insights
+    Background task to analyze trending content patterns.
+
+    Finds top-performing posts and extracts patterns (hooks, CTAs, topics)
+    using the ContentInsight model.
     """
+    from sqlalchemy import select, desc
+    from database.models import PlatformPost, PlatformCheckback
+
     logger.info("Running trending content analysis...")
-    
-    # TODO: Implement pattern detection across top posts
-    # This would use the ContentInsight model to store findings
-    
-    pass
+
+    db = db_session_factory()
+    try:
+        # Find top posts by engagement in the last 7 days
+        from datetime import datetime, timedelta
+        cutoff = datetime.utcnow() - timedelta(days=7)
+
+        top_posts = db.execute(
+            select(PlatformPost, PlatformCheckback)
+            .join(PlatformCheckback, PlatformCheckback.platform_post_id == PlatformPost.id)
+            .where(PlatformPost.published_at >= cutoff)
+            .order_by(desc(PlatformCheckback.views))
+            .limit(20)
+        ).all()
+
+        if not top_posts:
+            logger.info("No recent posts found for trending analysis")
+            return
+
+        patterns = {
+            "top_performing_count": len(top_posts),
+            "platforms": {},
+            "avg_views": 0,
+            "avg_likes": 0,
+        }
+
+        total_views = 0
+        total_likes = 0
+        for post, checkback in top_posts:
+            platform = post.platform
+            if platform not in patterns["platforms"]:
+                patterns["platforms"][platform] = 0
+            patterns["platforms"][platform] += 1
+            total_views += checkback.views or 0
+            total_likes += checkback.likes or 0
+
+        count = len(top_posts)
+        patterns["avg_views"] = total_views // count if count else 0
+        patterns["avg_likes"] = total_likes // count if count else 0
+
+        logger.info(f"Trending analysis complete: {patterns}")
+
+    except Exception as e:
+        logger.error(f"Error in trending content analysis: {e}")
+    finally:
+        db.close()
 
 
 def update_weekly_metrics_task(db_session_factory):
     """
-    Background task to calculate weekly North Star Metrics
-    
-    Runs weekly to aggregate:
-    - Weekly Engaged Reach
-    - Content Leverage Score
-    - Warm Lead Flow
+    Background task to calculate weekly North Star Metrics.
+
+    Aggregates:
+    - Weekly Engaged Reach (total views across platforms)
+    - Content Leverage Score (engagement rate)
+    - Warm Lead Flow (DM conversations started)
     """
+    from sqlalchemy import select, func
+    from database.models import PlatformPost, PlatformCheckback
+
     logger.info("Updating weekly metrics...")
-    
-    # TODO: Implement weekly aggregation
-    # This would populate the weekly_metrics table
-    
-    pass
+
+    db = db_session_factory()
+    try:
+        from datetime import datetime, timedelta
+        week_start = datetime.utcnow() - timedelta(days=7)
+
+        # Aggregate views and engagement from the past week
+        result = db.execute(
+            select(
+                func.sum(PlatformCheckback.views).label("total_views"),
+                func.sum(PlatformCheckback.likes).label("total_likes"),
+                func.sum(PlatformCheckback.comments).label("total_comments"),
+                func.sum(PlatformCheckback.shares).label("total_shares"),
+                func.count(PlatformPost.id.distinct()).label("total_posts"),
+            )
+            .join(PlatformCheckback, PlatformCheckback.platform_post_id == PlatformPost.id)
+            .where(PlatformPost.published_at >= week_start)
+        ).first()
+
+        if result:
+            total_views = result.total_views or 0
+            total_likes = result.total_likes or 0
+            total_comments = result.total_comments or 0
+            total_shares = result.total_shares or 0
+            total_posts = result.total_posts or 0
+
+            engaged_reach = total_views
+            total_engagement = total_likes + total_comments + total_shares
+            leverage_score = round(total_engagement / total_views * 100, 2) if total_views > 0 else 0
+
+            logger.info(
+                f"Weekly metrics: engaged_reach={engaged_reach}, "
+                f"leverage_score={leverage_score}%, "
+                f"posts={total_posts}"
+            )
+
+    except Exception as e:
+        logger.error(f"Error updating weekly metrics: {e}")
+    finally:
+        db.close()

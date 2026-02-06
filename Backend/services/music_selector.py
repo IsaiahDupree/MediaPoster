@@ -129,7 +129,7 @@ class MusicSelector:
             os.getenv("MUSIC_INDEX_PATH", "./music_index.json")
         )
         self.max_clip_duration = max_clip_duration
-        self.ai_provider_name = ai_provider or os.getenv("AI_PROVIDER", "mock")
+        self.ai_provider_name = ai_provider or os.getenv("AI_PROVIDER", "openai")
         self._music_library: List[MusicTrack] = []
         self._ai_provider = None
     

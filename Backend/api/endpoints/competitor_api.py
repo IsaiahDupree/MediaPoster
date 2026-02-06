@@ -1510,3 +1510,320 @@ async def export_research_data():
             export_data["saved_ideas"] = []
 
     return export_data
+
+
+# =============================================================================
+# SWIPE FILE - Save inspiring competitor content with notes/tags
+# =============================================================================
+
+def _load_swipe_file() -> List[Dict[str, Any]]:
+    service = get_competitor_service()
+    path = service.storage_dir / "swipe_file.json"
+    if path.exists():
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _save_swipe_file(items: List[Dict[str, Any]]):
+    service = get_competitor_service()
+    path = service.storage_dir / "swipe_file.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(items, f, indent=2)
+
+
+@router.get("/swipe-file")
+async def get_swipe_file(tag: str = "", source: str = ""):
+    """Get all saved swipe file entries, optionally filtered by tag or source account."""
+    items = _load_swipe_file()
+    if tag:
+        items = [i for i in items if tag.lower() in [t.lower() for t in i.get("tags", [])]]
+    if source:
+        items = [i for i in items if i.get("source_account", "").lower() == source.lower()]
+    return {"count": len(items), "items": items}
+
+
+@router.post("/swipe-file")
+async def add_to_swipe_file(
+    source_account: str = "",
+    content_url: str = "",
+    content_type: str = "reel",
+    caption: str = "",
+    thumbnail_url: str = "",
+    plays: int = 0,
+    likes: int = 0,
+    comments: int = 0,
+    notes: str = "",
+    tags: str = "",
+    why_saved: str = "",
+):
+    """Save a piece of competitor content to your swipe file for inspiration."""
+    items = _load_swipe_file()
+    entry = {
+        "id": f"swipe_{datetime.now().strftime('%Y%m%d%H%M%S')}_{len(items)}",
+        "source_account": source_account,
+        "content_url": content_url,
+        "content_type": content_type,
+        "caption": caption[:500] if caption else "",
+        "thumbnail_url": thumbnail_url,
+        "plays": plays,
+        "likes": likes,
+        "comments": comments,
+        "notes": notes,
+        "tags": [t.strip() for t in tags.split(",") if t.strip()] if tags else [],
+        "why_saved": why_saved,
+        "saved_at": datetime.now().isoformat(),
+    }
+    items.append(entry)
+    _save_swipe_file(items)
+    return {"status": "saved", "item": entry}
+
+
+@router.patch("/swipe-file/{item_id}")
+async def update_swipe_item(
+    item_id: str,
+    notes: str = "",
+    tags: str = "",
+    why_saved: str = "",
+):
+    """Update notes/tags on a swipe file entry."""
+    items = _load_swipe_file()
+    target = next((i for i in items if i.get("id") == item_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Swipe item not found")
+    if notes:
+        target["notes"] = notes
+    if tags:
+        target["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
+    if why_saved:
+        target["why_saved"] = why_saved
+    _save_swipe_file(items)
+    return {"status": "updated", "item": target}
+
+
+@router.delete("/swipe-file/{item_id}")
+async def delete_swipe_item(item_id: str):
+    """Remove an entry from the swipe file."""
+    items = _load_swipe_file()
+    items = [i for i in items if i.get("id") != item_id]
+    _save_swipe_file(items)
+    return {"status": "deleted"}
+
+
+# =============================================================================
+# TRENDING AUDIO TRACKER - aggregate audio from competitor reels
+# =============================================================================
+
+@router.get("/trending-audio")
+async def get_trending_audio(limit: int = 30):
+    """
+    Aggregate audio/sound data from all tracked competitor reels.
+    Shows which sounds are most used and their associated engagement.
+    """
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+    audio_map: Dict[str, Dict[str, Any]] = {}
+
+    for username in all_accounts:
+        reels_dir = service.storage_dir / "accounts" / username / "reels"
+        if not reels_dir.exists():
+            continue
+        for reel_file in reels_dir.glob("*.json"):
+            try:
+                with open(reel_file) as f:
+                    reel = json.load(f)
+                audio_title = reel.get("audio_title") or reel.get("music_title") or ""
+                audio_artist = reel.get("audio_artist") or reel.get("music_artist") or ""
+                audio_id = reel.get("audio_id") or reel.get("music_id") or ""
+                is_original = reel.get("is_original_audio", False)
+                if not audio_title:
+                    continue
+                key = f"{audio_title}|{audio_artist}".lower()
+                if key not in audio_map:
+                    audio_map[key] = {
+                        "audio_title": audio_title,
+                        "audio_artist": audio_artist,
+                        "audio_id": audio_id,
+                        "is_original_audio": is_original,
+                        "used_by": set(),
+                        "total_plays": 0,
+                        "total_likes": 0,
+                        "count": 0,
+                    }
+                audio_map[key]["used_by"].add(username)
+                audio_map[key]["total_plays"] += reel.get("play_count", 0)
+                audio_map[key]["total_likes"] += reel.get("like_count", 0)
+                audio_map[key]["count"] += 1
+            except Exception:
+                continue
+
+    # Sort by usage count, convert sets to lists
+    sorted_audio = sorted(audio_map.values(), key=lambda a: a["count"], reverse=True)[:limit]
+    for a in sorted_audio:
+        a["used_by"] = list(a["used_by"])
+        a["avg_plays"] = round(a["total_plays"] / max(a["count"], 1))
+        a["avg_likes"] = round(a["total_likes"] / max(a["count"], 1))
+
+    original_count = sum(1 for a in sorted_audio if a.get("is_original_audio"))
+    return {
+        "total_unique_audio": len(audio_map),
+        "showing": len(sorted_audio),
+        "original_audio_pct": round(original_count / max(len(sorted_audio), 1) * 100, 1),
+        "audio": sorted_audio,
+    }
+
+
+# =============================================================================
+# HASHTAG STRATEGY BUILDER - build and save optimized hashtag sets
+# =============================================================================
+
+def _load_hashtag_sets() -> List[Dict[str, Any]]:
+    service = get_competitor_service()
+    path = service.storage_dir / "hashtag_sets.json"
+    if path.exists():
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _save_hashtag_sets(sets: List[Dict[str, Any]]):
+    service = get_competitor_service()
+    path = service.storage_dir / "hashtag_sets.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(sets, f, indent=2)
+
+
+@router.get("/hashtag-sets")
+async def get_hashtag_sets():
+    """Get all saved hashtag strategy sets."""
+    sets = _load_hashtag_sets()
+    return {"count": len(sets), "sets": sets}
+
+
+@router.post("/hashtag-sets")
+async def create_hashtag_set(
+    name: str = "Default Set",
+    description: str = "",
+    hashtags: str = "",
+    category: str = "general",
+):
+    """Create a new hashtag strategy set."""
+    sets = _load_hashtag_sets()
+    tag_list = [t.strip().lstrip("#") for t in hashtags.split(",") if t.strip()]
+    entry = {
+        "id": f"hset_{datetime.now().strftime('%Y%m%d%H%M%S')}_{len(sets)}",
+        "name": name,
+        "description": description,
+        "hashtags": tag_list,
+        "category": category,
+        "times_used": 0,
+        "created_at": datetime.now().isoformat(),
+    }
+    sets.append(entry)
+    _save_hashtag_sets(sets)
+    return {"status": "created", "set": entry}
+
+
+@router.post("/hashtag-sets/generate")
+async def generate_hashtag_set(
+    niche: str = "personal branding",
+    content_type: str = "reel",
+    theme: str = "",
+    count: int = 30,
+):
+    """
+    AI-powered hashtag set generation based on competitor data and niche.
+    Builds an optimized mix of high-reach, mid-tier, and niche hashtags.
+    """
+    import openai
+
+    service = get_competitor_service()
+    all_accounts = service.get_stored_accounts()
+
+    # Gather competitor hashtags for context
+    comp_hashtags: Dict[str, int] = {}
+    for username in all_accounts:
+        analysis_path = service.storage_dir / "accounts" / username / "analysis" / "learnings.json"
+        if not analysis_path.exists():
+            continue
+        try:
+            with open(analysis_path) as f:
+                data = json.load(f)
+            for ht in data.get("hashtag_strategy", []):
+                if ht:
+                    comp_hashtags[ht.lower()] = comp_hashtags.get(ht.lower(), 0) + 1
+            for h in data.get("posting_patterns", {}).get("hashtag_frequency", []):
+                tag = h.get("tag", "")
+                if tag:
+                    comp_hashtags[tag.lower()] = comp_hashtags.get(tag.lower(), 0) + h.get("count", 0)
+        except Exception:
+            continue
+
+    top_comp_tags = sorted(comp_hashtags.items(), key=lambda x: x[1], reverse=True)[:20]
+    comp_context = ", ".join([f"#{t} ({c}x)" for t, c in top_comp_tags]) if top_comp_tags else "none found"
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not set")
+
+    client = openai.OpenAI(api_key=api_key)
+    prompt = f"""Generate an optimized hashtag set for Instagram {content_type} content.
+
+Niche: {niche}
+{f'Theme/topic: {theme}' if theme else ''}
+Competitor hashtags: {comp_context}
+
+Create {count} hashtags in 3 tiers:
+1. HIGH REACH (10): Popular hashtags with millions of posts (broad discovery)
+2. MID TIER (10): Medium-competition hashtags (thousands of posts, targeted)
+3. NICHE (10): Low-competition, highly specific hashtags (your unique positioning)
+
+Return as JSON: {{"name": "set name", "hashtags": [{{"tag": "hashtag", "tier": "high|mid|niche", "reasoning": "why"}}]}}
+Only return valid JSON, no markdown."""
+
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+        )
+        result = json.loads(resp.choices[0].message.content.strip())
+
+        # Save as a new set
+        sets = _load_hashtag_sets()
+        entry = {
+            "id": f"hset_{datetime.now().strftime('%Y%m%d%H%M%S')}_{len(sets)}",
+            "name": result.get("name", f"{niche} - {content_type}"),
+            "description": f"AI-generated for {niche} {content_type}" + (f" ({theme})" if theme else ""),
+            "hashtags": [h.get("tag", "") for h in result.get("hashtags", [])],
+            "hashtag_details": result.get("hashtags", []),
+            "category": "ai_generated",
+            "niche": niche,
+            "content_type": content_type,
+            "times_used": 0,
+            "created_at": datetime.now().isoformat(),
+        }
+        sets.append(entry)
+        _save_hashtag_sets(sets)
+
+        return {"status": "generated", "set": entry}
+    except Exception as e:
+        logger.error(f"Error generating hashtag set: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/hashtag-sets/{set_id}")
+async def delete_hashtag_set(set_id: str):
+    """Delete a hashtag set."""
+    sets = _load_hashtag_sets()
+    sets = [s for s in sets if s.get("id") != set_id]
+    _save_hashtag_sets(sets)
+    return {"status": "deleted"}

@@ -448,6 +448,128 @@ def _load_saved_ideas() -> List[Dict[str, Any]]:
         return []
 
 
+@router.post("/{idea_id}/generate-brief")
+async def generate_content_brief(idea_id: str, niche: str = "personal branding"):
+    """
+    Generate a full production brief from a saved content idea.
+    Includes script outline, hook options, CTAs, hashtag strategy,
+    posting time recommendation, and visual direction.
+    """
+    ideas = _load_saved_ideas()
+    idea = next((i for i in ideas if i.get("id") == idea_id), None)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not set")
+
+    # Load competitor context for richer briefs
+    comp_context = _load_competitor_context()
+    trending = _load_trending_context()
+
+    client = openai.OpenAI(api_key=api_key)
+    prompt = f"""Create a detailed content production brief for this Instagram content idea:
+
+IDEA:
+- Title: {idea.get('title', '')}
+- Hook: {idea.get('hook', 'none')}
+- Format: {idea.get('format_type', 'reel')}
+- Why it works: {idea.get('why_it_works', '')}
+- Notes: {idea.get('notes', '')}
+
+CONTEXT:
+- Niche: {niche}
+- Competitor themes: {', '.join(comp_context.get('themes', [])[:10])}
+- Trending hashtags: {', '.join(trending.get('hashtags', [])[:10])}
+
+Generate a comprehensive brief as JSON:
+{{
+  "title": "brief title",
+  "format": "reel|carousel|post",
+  "estimated_duration": "30s|60s|90s",
+  "script_outline": [
+    {{"section": "Hook (0-3s)", "content": "what to say/show", "visual": "visual direction"}},
+    {{"section": "Problem (3-10s)", "content": "...", "visual": "..."}},
+    {{"section": "Solution (10-25s)", "content": "...", "visual": "..."}},
+    {{"section": "CTA (25-30s)", "content": "...", "visual": "..."}}
+  ],
+  "hook_options": ["hook 1", "hook 2", "hook 3"],
+  "cta_options": ["cta 1", "cta 2"],
+  "caption": "full caption with line breaks",
+  "hashtags": ["tag1", "tag2"],
+  "posting_strategy": {{
+    "best_day": "day of week",
+    "best_time": "time range",
+    "reasoning": "why"
+  }},
+  "visual_direction": {{
+    "style": "talking head|b-roll|text overlay|mixed",
+    "transitions": ["transition types"],
+    "text_overlays": ["key text to show on screen"],
+    "music_mood": "upbeat|calm|dramatic|trending"
+  }},
+  "success_metrics": {{
+    "target_views": "range",
+    "key_metric": "what to optimize for",
+    "benchmark": "competitor average for this format"
+  }}
+}}
+Only return valid JSON, no markdown."""
+
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+        )
+        content = resp.choices[0].message.content.strip()
+        # Strip markdown fences if present
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        brief = json.loads(content)
+
+        # Save brief alongside the idea
+        brief["idea_id"] = idea_id
+        brief["idea_title"] = idea.get("title", "")
+        brief["generated_at"] = datetime.now().isoformat()
+
+        # Persist briefs
+        briefs_path = COMPETITOR_RESEARCH_DIR / "learnings" / "content_briefs.json"
+        briefs_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_briefs = []
+        if briefs_path.exists():
+            try:
+                with open(briefs_path) as f:
+                    existing_briefs = json.load(f)
+            except Exception:
+                existing_briefs = []
+        existing_briefs.append(brief)
+        with open(briefs_path, "w") as f:
+            json.dump(existing_briefs, f, indent=2)
+
+        return brief
+    except json.JSONDecodeError:
+        return {"error": "AI returned invalid JSON", "raw": content[:500]}
+    except Exception as e:
+        logger.error(f"Error generating brief: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/briefs")
+async def list_briefs():
+    """List all generated content briefs."""
+    briefs_path = COMPETITOR_RESEARCH_DIR / "learnings" / "content_briefs.json"
+    if not briefs_path.exists():
+        return {"count": 0, "briefs": []}
+    try:
+        with open(briefs_path) as f:
+            briefs = json.load(f)
+        return {"count": len(briefs), "briefs": briefs}
+    except Exception:
+        return {"count": 0, "briefs": []}
+
+
 def _persist_saved_ideas(ideas: List[Dict[str, Any]]):
     """Persist user-saved ideas"""
     path = COMPETITOR_RESEARCH_DIR / "learnings" / "saved_ideas.json"

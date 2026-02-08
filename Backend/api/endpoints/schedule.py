@@ -174,7 +174,7 @@ async def list_scheduled_posts(
     ensure_table_exists()
     engine = get_engine()
     
-    where_clauses = ["1=1"]
+    where_clauses = ["sp.status != 'draft'"]
     params = {"limit": limit}
     
     if start_date:
@@ -221,7 +221,7 @@ async def list_scheduled_posts(
                 'Check out this content!'
             ) as caption, 
             COALESCE(
-                sp.hashtags,
+                CASE WHEN sp.hashtags IS NOT NULL THEN array_to_json(sp.hashtags)::jsonb ELSE NULL END,
                 CASE WHEN va.topics IS NOT NULL AND array_length(va.topics, 1) > 0 
                     THEN array_to_json(va.topics)::jsonb
                     ELSE NULL 
@@ -229,7 +229,7 @@ async def list_scheduled_posts(
                 '[]'::jsonb
             ) as hashtags, 
             sp.account_username,
-            v.thumbnail_path as thumbnail_url,
+            COALESCE(sp.thumbnail_url, v.thumbnail_path) as thumbnail_url,
             v.source_uri as video_source_uri,
             v.id as video_id,  -- Add video_id for media-provider thumbnail lookup
             COALESCE(sp.clip_id::text, sp.content_variant_id::text, sp.content_id) as media_ref_id,

@@ -21,13 +21,17 @@ load_dotenv(env_path, override=True)
 
 
 class PublishService:
-    """Service to handle full publish flow with Google Drive staging"""
+    """Service to handle full publish flow with cloud storage staging"""
     
     BLOTATO_BASE_URL = "https://backend.blotato.com/v2"
     
     def __init__(self):
         self.blotato_api_key = os.getenv("BLOTATO_API_KEY")
         self.gdrive_uploader = None
+        # Cloud Supabase for staging (publicly accessible URLs)
+        self.cloud_supabase_url = os.getenv("CLOUD_SUPABASE_URL")
+        self.cloud_supabase_key = os.getenv("CLOUD_SUPABASE_ANON_KEY")
+        self.cloud_storage_bucket = os.getenv("CLOUD_SUPABASE_STORAGE_BUCKET", "media-staging")
         
     def _get_blotato_headers(self) -> dict:
         """Get headers for Blotato API requests"""
@@ -45,24 +49,100 @@ class PublishService:
                 raise Exception("Failed to authenticate with Google Drive")
         return self.gdrive_uploader
     
-    async def upload_to_supabase(self, file_path: Path) -> Optional[Dict]:
+    async def upload_to_cloud_supabase(self, file_path: Path) -> Optional[Dict]:
         """
-        Upload file to Supabase Storage and get public URL
+        Upload file to Cloud Supabase Storage for publicly accessible staging.
+        This is the preferred method since it provides URLs that Blotato can fetch.
         
         Returns:
-            Dict with file_id and public_url, or None if failed
+            Dict with file_id, storage_path, public_url, and name
+        """
+        if not self.cloud_supabase_url or not self.cloud_supabase_key:
+            logger.error("Cloud Supabase not configured (CLOUD_SUPABASE_URL / CLOUD_SUPABASE_ANON_KEY)")
+            return None
+        
+        try:
+            import uuid
+            
+            staging_id = f"staging_{uuid.uuid4().hex[:12]}"
+            extension = file_path.suffix.lstrip('.').lower() or 'mp4'
+            storage_path = f"{staging_id}.{extension}"
+            
+            mime_types = {
+                'mp4': 'video/mp4', 'mov': 'video/quicktime', 'webm': 'video/webm',
+                'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+            }
+            content_type = mime_types.get(extension, 'video/mp4')
+            
+            upload_url = f"{self.cloud_supabase_url}/storage/v1/object/{self.cloud_storage_bucket}/{storage_path}"
+            
+            file_size = file_path.stat().st_size
+            logger.info(f"Uploading {file_path.name} ({file_size / 1024 / 1024:.1f} MB) to cloud storage...")
+            
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+            
+            async with httpx.AsyncClient(timeout=300) as client:
+                response = await client.post(
+                    upload_url,
+                    headers={
+                        "Authorization": f"Bearer {self.cloud_supabase_key}",
+                        "Content-Type": content_type,
+                    },
+                    content=file_data,
+                )
+                
+                if response.status_code not in (200, 201):
+                    logger.error(f"Cloud upload failed: {response.status_code} - {response.text}")
+                    return None
+            
+            public_url = f"{self.cloud_supabase_url}/storage/v1/object/public/{self.cloud_storage_bucket}/{storage_path}"
+            
+            logger.success(f"✓ Uploaded to Cloud Supabase: {file_path.name}")
+            logger.info(f"  Public URL: {public_url}")
+            
+            return {
+                'file_id': staging_id,
+                'storage_path': storage_path,
+                'public_url': public_url,
+                'name': file_path.name,
+            }
+            
+        except Exception as e:
+            logger.error(f"Cloud Supabase upload failed: {e}")
+            return None
+    
+    async def delete_from_cloud_supabase(self, storage_path: str) -> bool:
+        """Delete file from Cloud Supabase Storage after successful publish."""
+        if not self.cloud_supabase_url or not self.cloud_supabase_key:
+            return False
+        
+        try:
+            delete_url = f"{self.cloud_supabase_url}/storage/v1/object/{self.cloud_storage_bucket}/{storage_path}"
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.delete(
+                    delete_url,
+                    headers={"Authorization": f"Bearer {self.cloud_supabase_key}"},
+                )
+            logger.success(f"✓ Deleted from Cloud Supabase: {storage_path}")
+            return response.status_code in (200, 204)
+        except Exception as e:
+            logger.error(f"Failed to delete from Cloud Supabase: {e}")
+            return False
+    
+    async def upload_to_supabase(self, file_path: Path) -> Optional[Dict]:
+        """
+        Upload file to local Supabase Storage and get public URL.
+        NOTE: Local Supabase URLs are NOT accessible from the internet.
+        Prefer upload_to_cloud_supabase() for publishing workflows.
         """
         try:
             from services.supabase_storage import SupabaseStorageService
             import uuid
             
             storage = SupabaseStorageService()
-            
-            # Generate unique ID for staging file
             staging_id = f"staging_{uuid.uuid4().hex[:12]}"
             extension = file_path.suffix.lstrip('.').lower() or 'mp4'
-            
-            # Upload to staging folder
             storage_path = f"staging/{staging_id}.{extension}"
             
             with open(file_path, 'rb') as f:
@@ -72,11 +152,8 @@ class PublishService:
                     file_options={"content-type": f"video/{extension}"}
                 )
             
-            # Get public URL
             public_url = storage.client.storage.from_(storage.bucket_name).get_public_url(storage_path)
-            
-            logger.success(f"✓ Uploaded to Supabase Storage: {file_path.name}")
-            logger.info(f"  Public URL: {public_url}")
+            logger.success(f"✓ Uploaded to local Supabase Storage: {file_path.name}")
             
             return {
                 'file_id': staging_id,
@@ -86,19 +163,19 @@ class PublishService:
             }
             
         except Exception as e:
-            logger.error(f"Supabase Storage upload failed: {e}")
+            logger.error(f"Local Supabase Storage upload failed: {e}")
             return None
     
     async def delete_from_supabase(self, storage_path: str) -> bool:
-        """Delete file from Supabase Storage after successful publish"""
+        """Delete file from local Supabase Storage after successful publish"""
         try:
             from services.supabase_storage import SupabaseStorageService
             storage = SupabaseStorageService()
             storage.client.storage.from_(storage.bucket_name).remove([storage_path])
-            logger.success(f"✓ Deleted from Supabase Storage: {storage_path}")
+            logger.success(f"✓ Deleted from local Supabase Storage: {storage_path}")
             return True
         except Exception as e:
-            logger.error(f"Failed to delete from Supabase Storage: {e}")
+            logger.error(f"Failed to delete from local Supabase Storage: {e}")
             return False
     
     async def upload_to_gdrive(self, file_path: Path) -> Optional[Dict]:
@@ -245,6 +322,9 @@ class PublishService:
                 pass
             
             # Build payload per Blotato v2 spec
+            logger.debug(f"[Blotato] text length={len(text)}, target keys={list(target.keys())}, platform={platform}")
+            if platform == 'tiktok':
+                logger.info(f"[Blotato TikTok] text={len(text)} chars, title={len(target.get('title',''))} chars, total={len(text)+len(target.get('title',''))}")
             payload = {
                 "post": {
                     "accountId": account_id,
@@ -334,23 +414,32 @@ class PublishService:
         storage_info = None
         
         try:
-            # Step 1: Upload to cloud storage
-            if use_supabase:
-                logger.info(f"Step 1: Uploading to Supabase Storage...")
+            # Step 1: Upload to cloud storage (prefer cloud Supabase for public URLs)
+            if self.cloud_supabase_url and self.cloud_supabase_key:
+                logger.info(f"Step 1: Uploading to Cloud Supabase Storage...")
+                storage_result = await self.upload_to_cloud_supabase(file_path)
+                if storage_result:
+                    storage_info = {'type': 'cloud_supabase', 'path': storage_result['storage_path']}
+                else:
+                    logger.warning("Cloud Supabase upload failed, trying fallbacks...")
+                    storage_result = None
+            
+            if not storage_result and use_supabase:
+                logger.info(f"Step 1: Uploading to local Supabase Storage...")
                 storage_result = await self.upload_to_supabase(file_path)
-                if not storage_result:
-                    result['error'] = "Failed to upload to Supabase Storage"
-                    result['steps']['storage_upload'] = {'success': False}
-                    return result
-                storage_info = {'type': 'supabase', 'path': storage_result['storage_path']}
-            else:
+                if storage_result:
+                    storage_info = {'type': 'supabase', 'path': storage_result['storage_path']}
+            
+            if not storage_result:
                 logger.info(f"Step 1: Uploading to Google Drive...")
                 storage_result = await self.upload_to_gdrive(file_path)
-                if not storage_result:
-                    result['error'] = "Failed to upload to Google Drive"
-                    result['steps']['storage_upload'] = {'success': False}
-                    return result
-                storage_info = {'type': 'gdrive', 'file_id': storage_result['file_id']}
+                if storage_result:
+                    storage_info = {'type': 'gdrive', 'file_id': storage_result['file_id']}
+            
+            if not storage_result:
+                result['error'] = "Failed to upload to any cloud storage (Cloud Supabase, local Supabase, or Google Drive)"
+                result['steps']['storage_upload'] = {'success': False}
+                return result
             
             result['steps']['storage_upload'] = {
                 'success': True,
@@ -394,7 +483,9 @@ class PublishService:
             # Step 4: Cleanup storage (optional)
             if cleanup_storage and storage_info:
                 logger.info(f"Step 4: Cleaning up storage...")
-                if storage_info['type'] == 'supabase':
+                if storage_info['type'] == 'cloud_supabase':
+                    cleanup_success = await self.delete_from_cloud_supabase(storage_info['path'])
+                elif storage_info['type'] == 'supabase':
                     cleanup_success = await self.delete_from_supabase(storage_info['path'])
                 else:
                     cleanup_success = await self.delete_from_gdrive(storage_info['file_id'])
@@ -411,7 +502,9 @@ class PublishService:
             # Cleanup on failure if we uploaded to storage
             if not result['success'] and storage_info and cleanup_storage:
                 logger.info("Cleaning up storage after failure...")
-                if storage_info['type'] == 'supabase':
+                if storage_info['type'] == 'cloud_supabase':
+                    await self.delete_from_cloud_supabase(storage_info['path'])
+                elif storage_info['type'] == 'supabase':
                     await self.delete_from_supabase(storage_info['path'])
                 else:
                     await self.delete_from_gdrive(storage_info['file_id'])

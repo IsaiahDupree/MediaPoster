@@ -7,6 +7,10 @@
 👉 **Understanding structure:** [`ONBOARDING_GUIDE.md`](./ONBOARDING_GUIDE.md) - Complete navigation guide  
 👉 **Project structure:** [`PROJECT_STRUCTURE.md`](./PROJECT_STRUCTURE.md) - Directory map
 
+## 📋 **SCRIPTS & TOOLS INDEX**
+👉 **[`SCRIPTS_AND_TOOLS.md`](./SCRIPTS_AND_TOOLS.md)** — Master reference for all publishing, scheduling, automation, and monitoring scripts  
+👉 **[`Backend/scripts/SCHEDULING_TOOLS.md`](./Backend/scripts/SCHEDULING_TOOLS.md)** — Detailed scheduling & planning CLI docs with examples
+
 ## 🎯 Overview
 
 MediaPoster is a comprehensive automation system that transforms long-form videos from your iPhone into optimized, viral-style short clips and automatically distributes them across multiple social media platforms. Built with modularity and scalability in mind, each component can operate independently or as part of an integrated pipeline.

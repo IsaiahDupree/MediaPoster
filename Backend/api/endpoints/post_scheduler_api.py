@@ -27,7 +27,7 @@ class SchedulerStatusResponse(BaseModel):
 
 
 class QueueItem(BaseModel):
-    id: int
+    id: str
     title: Optional[str]
     platform: str
     account_username: Optional[str]

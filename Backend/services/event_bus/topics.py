@@ -478,6 +478,32 @@ class Topics:
     MEDIA_FACTORY_STAGE_STARTED = "media_factory.stage.started"       # Stage started (alias for compatibility)
     MEDIA_FACTORY_STAGE_COMPLETED = "media_factory.stage.completed"   # Stage completed (alias for compatibility)
 
+    # =========================================================================
+    # STRATEGIC ANALYSIS (Cross-Platform Intelligence)
+    # =========================================================================
+    STRATEGY_ANALYSIS_REQUESTED = "strategy.analysis.requested"             # Request full cross-platform analysis
+    STRATEGY_DATA_COLLECTION_STARTED = "strategy.data_collection.started"   # Pulling stats from APIs
+    STRATEGY_PLATFORM_DATA_READY = "strategy.platform.data_ready"           # One platform's data fetched
+    STRATEGY_DATA_COLLECTION_COMPLETED = "strategy.data_collection.completed"  # All platform data collected
+    STRATEGY_AI_ANALYSIS_STARTED = "strategy.ai_analysis.started"           # AI processing raw data
+    STRATEGY_AI_ANALYSIS_COMPLETED = "strategy.ai_analysis.completed"       # AI strategy generated
+    STRATEGY_RECOMMENDATIONS_READY = "strategy.recommendations.ready"       # Actionable recommendations available
+    STRATEGY_CADENCE_UPDATED = "strategy.cadence.updated"                   # Posting cadence changed
+    STRATEGY_REPORT_READY = "strategy.report.ready"                         # Full report available
+    STRATEGY_ANALYSIS_FAILED = "strategy.analysis.failed"                   # Analysis pipeline error
+
+    # =========================================================================
+    # ADAPTIVE SCHEDULER (Assessment-Driven Scheduling)
+    # =========================================================================
+    ADAPTIVE_ASSESSMENT_INGESTED = "adaptive.assessment.ingested"             # New assessment processed
+    ADAPTIVE_SCHEDULE_ADAPTED = "adaptive.schedule.adapted"                   # Schedule updated from assessment
+    ADAPTIVE_CROSSPOST_QUEUED = "adaptive.crosspost.queued"                   # Cross-post candidate queued
+    ADAPTIVE_CROSSPOST_EXECUTED = "adaptive.crosspost.executed"               # Cross-post published
+    ADAPTIVE_OFFER_ROTATED = "adaptive.offer.rotated"                         # CTA offer rotated
+    ADAPTIVE_FATIGUE_WARNING = "adaptive.fatigue.warning"                     # Audience fatigue detected
+    ADAPTIVE_CONTENT_SCORED = "adaptive.content.scored"                       # Content performance scored
+    ADAPTIVE_CYCLE_COMPLETED = "adaptive.cycle.completed"                     # Full adapt cycle done
+
     @classmethod
     def all_topics(cls) -> list:
         """Return list of all defined topics."""

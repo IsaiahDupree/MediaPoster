@@ -32,6 +32,9 @@ class ExternalAnalyticsFetcher:
         self.rapidapi_key = os.getenv("RAPIDAPI_KEY")
         self.rapidapi_tiktok_host = "tiktok-api6.p.rapidapi.com"
         self.youtube_api_key = os.getenv("YOUTUBE_API_KEY")
+        self.ig_graph_token = os.getenv("INSTAGRAM_GRAPH_TOKEN")
+        self.meta_access_token = os.getenv("META_ACCESS_TOKEN")
+        self.fb_ad_account_id = os.getenv("FACEBOOK_AD_ACCOUNT_ID")
         
         # Import usage tracker
         from services.api_usage_tracker import get_api_usage_tracker, APIProvider
@@ -350,6 +353,224 @@ class ExternalAnalyticsFetcher:
         seconds = int(match.group(3) or 0)
         return hours * 3600 + minutes * 60 + seconds
     
+    async def fetch_instagram_analytics(self, post_url: str) -> Dict[str, Any]:
+        """
+        Fetch Instagram post analytics via the IGAA Graph API token.
+        
+        Supports /p/ and /reel/ URLs. Gets per-media insights including
+        likes, comments, shares, saves, and total_interactions.
+        
+        Falls back to RapidAPI instagram-looter2 if IGAA token unavailable.
+        """
+        shortcode = self.extract_instagram_media_id(post_url)
+        if not shortcode:
+            return {"error": f"Could not extract media ID from URL: {post_url}"}
+        
+        # Primary path: IGAA token → graph.instagram.com
+        if self.ig_graph_token:
+            try:
+                ig_base = "https://graph.instagram.com/v21.0"
+                params = {"access_token": self.ig_graph_token}
+                
+                async with httpx.AsyncClient(timeout=30) as client:
+                    # Search recent media for matching shortcode/permalink
+                    media_resp = await client.get(
+                        f"{ig_base}/me/media",
+                        params={
+                            **params,
+                            "fields": "id,caption,media_type,media_product_type,timestamp,like_count,comments_count,permalink,shortcode",
+                            "limit": 50,
+                        },
+                    )
+                    
+                    if media_resp.status_code != 200:
+                        return {"error": f"IG Graph API error: {media_resp.status_code}", "platform": "instagram"}
+                    
+                    # Find matching media by shortcode in permalink
+                    target_media = None
+                    for item in media_resp.json().get("data", []):
+                        permalink = item.get("permalink", "")
+                        if shortcode in permalink:
+                            target_media = item
+                            break
+                    
+                    if not target_media:
+                        return {
+                            "error": f"Media with shortcode '{shortcode}' not found in recent 50 posts",
+                            "platform": "instagram",
+                            "media_id": shortcode,
+                        }
+                    
+                    # Get per-media insights
+                    media_id = target_media["id"]
+                    ins_resp = await client.get(
+                        f"{ig_base}/{media_id}/insights",
+                        params={**params, "metric": "likes,comments,shares,saved,total_interactions"},
+                    )
+                    
+                    insights = {}
+                    if ins_resp.status_code == 200:
+                        for m in ins_resp.json().get("data", []):
+                            val = m.get("values", [{}])[0].get("value", 0)
+                            insights[m["name"]] = val
+                    
+                    result = {
+                        "success": True,
+                        "platform": "instagram",
+                        "media_id": media_id,
+                        "shortcode": shortcode,
+                        "video_url": post_url,
+                        "metrics": {
+                            "likes": target_media.get("like_count", 0),
+                            "comments": target_media.get("comments_count", 0),
+                            "shares": insights.get("shares", 0),
+                            "saves": insights.get("saved", 0),
+                            "total_interactions": insights.get("total_interactions", 0),
+                        },
+                        "video_info": {
+                            "caption": (target_media.get("caption") or "")[:500],
+                            "media_type": target_media.get("media_type", ""),
+                            "product_type": target_media.get("media_product_type", ""),
+                            "published_at": target_media.get("timestamp", ""),
+                            "permalink": target_media.get("permalink", ""),
+                        },
+                        "fetched_at": datetime.now().isoformat(),
+                        "source": "instagram_graph_api",
+                    }
+                    
+                    logger.info(
+                        f"✓ Instagram analytics fetched for {shortcode}: "
+                        f"{result['metrics']['likes']} likes, "
+                        f"{result['metrics']['saves']} saves, "
+                        f"{result['metrics']['total_interactions']} interactions"
+                    )
+                    return result
+                    
+            except Exception as e:
+                logger.error(f"Instagram Graph API fetch error: {e}")
+                return {"error": str(e), "platform": "instagram", "media_id": shortcode}
+        
+        # Fallback: RapidAPI
+        if self.rapidapi_key:
+            try:
+                host = "instagram-looter2.p.rapidapi.com"
+                headers = {"X-RapidAPI-Key": self.rapidapi_key, "X-RapidAPI-Host": host}
+                
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.get(
+                        f"https://{host}/post",
+                        headers=headers,
+                        params={"url": post_url},
+                    )
+                    if resp.status_code != 200:
+                        return {"error": f"RapidAPI error: {resp.status_code}", "platform": "instagram"}
+                    
+                    item = resp.json().get("data", {})
+                    return {
+                        "success": True,
+                        "platform": "instagram",
+                        "media_id": shortcode,
+                        "video_url": post_url,
+                        "metrics": {
+                            "likes": item.get("edge_media_preview_like", {}).get("count", 0),
+                            "comments": item.get("edge_media_to_comment", {}).get("count", 0),
+                            "views": item.get("video_view_count", 0),
+                        },
+                        "video_info": {
+                            "caption": item.get("edge_media_to_caption", {}).get("edges", [{}])[0].get("node", {}).get("text", "")[:500],
+                        },
+                        "fetched_at": datetime.now().isoformat(),
+                        "source": "rapidapi_instagram_looter2",
+                    }
+            except Exception as e:
+                logger.error(f"Instagram RapidAPI fetch error: {e}")
+                return {"error": str(e), "platform": "instagram"}
+        
+        return {"error": "No Instagram API credentials configured (INSTAGRAM_GRAPH_TOKEN or RAPIDAPI_KEY)", "platform": "instagram"}
+    
+    async def fetch_facebook_ads_analytics(self) -> Dict[str, Any]:
+        """
+        Fetch Facebook Ads account-level analytics (last 30 days).
+        
+        Returns campaign-level spend, impressions, clicks, CTR, CPC.
+        """
+        if not self.meta_access_token or not self.fb_ad_account_id:
+            return {"error": "META_ACCESS_TOKEN or FACEBOOK_AD_ACCOUNT_ID not configured", "platform": "facebook_ads"}
+        
+        fb_base = "https://graph.facebook.com/v21.0"
+        params = {"access_token": self.meta_access_token}
+        
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                # Account info
+                acct_resp = await client.get(
+                    f"{fb_base}/{self.fb_ad_account_id}",
+                    params={**params, "fields": "name,account_status,currency,amount_spent,balance"},
+                )
+                if acct_resp.status_code != 200:
+                    err = acct_resp.json().get("error", {}).get("message", "")
+                    return {"error": f"FB Ads error: {err}", "platform": "facebook_ads"}
+                
+                acct = acct_resp.json()
+                
+                # Campaign insights (last 30 days)
+                ins_resp = await client.get(
+                    f"{fb_base}/{self.fb_ad_account_id}/insights",
+                    params={
+                        **params,
+                        "fields": "campaign_name,impressions,reach,clicks,spend,ctr,cpc,cpm",
+                        "date_preset": "last_30d",
+                        "level": "campaign",
+                        "limit": 50,
+                    },
+                )
+                
+                campaigns = []
+                total_spend = 0.0
+                total_impressions = 0
+                total_clicks = 0
+                
+                if ins_resp.status_code == 200:
+                    for row in ins_resp.json().get("data", []):
+                        spend = float(row.get("spend", 0))
+                        impressions = int(row.get("impressions", 0))
+                        clicks = int(row.get("clicks", 0))
+                        total_spend += spend
+                        total_impressions += impressions
+                        total_clicks += clicks
+                        campaigns.append({
+                            "name": row.get("campaign_name", ""),
+                            "spend": spend,
+                            "impressions": impressions,
+                            "clicks": clicks,
+                            "ctr": row.get("ctr", "0"),
+                            "cpc": row.get("cpc", "0"),
+                            "cpm": row.get("cpm", "0"),
+                        })
+                
+                result = {
+                    "success": True,
+                    "platform": "facebook_ads",
+                    "account_name": acct.get("name", ""),
+                    "currency": acct.get("currency", "USD"),
+                    "metrics": {
+                        "total_spend_30d": round(total_spend, 2),
+                        "total_impressions_30d": total_impressions,
+                        "total_clicks_30d": total_clicks,
+                        "ctr_30d": f"{(total_clicks / total_impressions * 100):.2f}%" if total_impressions else "0%",
+                        "campaign_count": len(campaigns),
+                    },
+                    "campaigns": campaigns,
+                    "fetched_at": datetime.now().isoformat(),
+                }
+                
+                logger.info(f"✓ Facebook Ads analytics: ${total_spend:.2f} spend, {total_impressions:,} impressions")
+                return result
+                
+        except Exception as e:
+            logger.error(f"Facebook Ads fetch error: {e}")
+            return {"error": str(e), "platform": "facebook_ads"}
+    
     async def fetch_analytics_by_url(self, url: str) -> Dict[str, Any]:
         """
         Fetch analytics for any supported platform URL
@@ -368,14 +589,11 @@ class ExternalAnalyticsFetcher:
         if platform == 'tiktok':
             return await self.fetch_tiktok_analytics(url)
         elif platform == 'instagram':
-            # TODO: Implement Instagram analytics via RapidAPI
-            return {
-                "error": "Instagram analytics not yet implemented",
-                "platform": "instagram",
-                "media_id": self.extract_instagram_media_id(url)
-            }
+            return await self.fetch_instagram_analytics(url)
         elif platform == 'youtube':
             return await self.fetch_youtube_analytics(url)
+        elif platform == 'facebook':
+            return await self.fetch_facebook_ads_analytics()
         else:
             return {
                 "error": f"Analytics not yet supported for platform: {platform}",

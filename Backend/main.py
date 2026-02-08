@@ -171,8 +171,8 @@ async def lifespan(app: FastAPI):
     # Start the Post Scheduler background worker
     post_scheduler = None
     try:
-        from services.post_scheduler import PostScheduler
-        post_scheduler = PostScheduler()
+        from services.post_scheduler import get_scheduler
+        post_scheduler = get_scheduler()
         await post_scheduler.start()
         logger.success("✓ Post Scheduler started (checking every 60s)")
     except Exception as e:
@@ -758,6 +758,11 @@ THUMBNAIL_DIR = "/tmp/mediaposter/thumbnails"
 if os.path.exists(THUMBNAIL_DIR):
     app.mount("/thumbnails", StaticFiles(directory=THUMBNAIL_DIR), name="thumbnails")
 
+# Mount Backend/static directory for generated thumbnails
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 # Serve video files by ID
 @app.get("/api/media/video/{video_id}")
@@ -1141,6 +1146,22 @@ try:
     logger.success("✓ Master Orchestrator API registered (REQ-ORCH-001)")
 except Exception as e:
     logger.warning(f"⚠️  Master Orchestrator API registration failed: {e}")
+
+# Strategic Analysis (Cross-Platform Intelligence)
+try:
+    from api.endpoints import strategic_analysis
+    app.include_router(strategic_analysis.router, tags=["Strategic Analysis"])
+    logger.success("✓ Strategic Analysis API registered (strategy.*)")
+except Exception as e:
+    logger.warning(f"⚠️  Strategic Analysis API registration failed: {e}")
+
+# Adaptive Scheduler (Assessment-Driven Scheduling)
+try:
+    from api.endpoints import adaptive_scheduler
+    app.include_router(adaptive_scheduler.router, tags=["Adaptive Scheduler"])
+    logger.success("✓ Adaptive Scheduler API registered (adaptive.*)")
+except Exception as e:
+    logger.warning(f"⚠️  Adaptive Scheduler API registration failed: {e}")
 
 # Analytics Feedback Loop (AI-powered insights)
 try:

@@ -13,6 +13,7 @@ Features:
 """
 
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
@@ -24,17 +25,23 @@ from services.instagram_analytics import InstagramAnalytics
 from services.tiktok_analytics_service import get_tiktok_analytics_service
 from services.youtube_analytics_service import get_youtube_analytics_service
 from services.fetch_social_analytics import SocialAnalyticsFetcher
+from services.strategic_analysis_service import (
+    YouTubeCollector, TikTokCollector, InstagramCollector,
+    InstagramGraphCollector, FacebookAdsCollector,
+)
 
 
 class Platform(Enum):
     """Supported platforms"""
     INSTAGRAM = "instagram"
+    INSTAGRAM_GRAPH = "instagram_graph"
     TIKTOK = "tiktok"
     YOUTUBE = "youtube"
     TWITTER = "twitter"
     THREADS = "threads"
     LINKEDIN = "linkedin"
     FACEBOOK = "facebook"
+    FACEBOOK_ADS = "facebook_ads"
 
 
 @dataclass
@@ -172,17 +179,35 @@ class MultiPlatformAnalyticsAggregator:
         if MultiPlatformAnalyticsAggregator._instance is not None:
             raise RuntimeError("Use MultiPlatformAnalyticsAggregator.get_instance()")
 
-        # Initialize platform-specific services
+        # Initialize platform-specific services (legacy)
         self.instagram_service = InstagramAnalytics()
         self.tiktok_service = get_tiktok_analytics_service()
         self.youtube_service = get_youtube_analytics_service()
         self.social_fetcher = SocialAnalyticsFetcher()
 
+        # Live API collectors (real data)
+        self._youtube_collector = YouTubeCollector()
+        self._tiktok_collector = TikTokCollector()
+        self._instagram_collector = InstagramCollector()
+        self._instagram_graph_collector = InstagramGraphCollector()
+        self._facebook_ads_collector = FacebookAdsCollector()
+
+        # Event bus integration
+        self._bus = None
+        try:
+            from services.event_bus import EventBus, Topics
+            self._bus = EventBus.get_instance()
+            self._topics = Topics
+            self._bus.subscribe(Topics.STRATEGY_PLATFORM_DATA_READY, self._on_strategy_data)
+            self._bus.subscribe(Topics.METRICS_FETCH_REQUESTED, self._on_metrics_requested)
+        except Exception as e:
+            logger.warning(f"Event bus not available for aggregator: {e}")
+
         # Cache for aggregated data
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 300  # 5 minutes
 
-        logger.info("📊 Multi-Platform Analytics Aggregator initialized")
+        logger.info("📊 Multi-Platform Analytics Aggregator initialized (live API collectors)")
 
     @classmethod
     def get_instance(cls) -> "MultiPlatformAnalyticsAggregator":
@@ -219,9 +244,11 @@ class MultiPlatformAnalyticsAggregator:
 
         # Fetch metrics from all platforms in parallel
         tasks = [
-            self._get_instagram_metrics(time_range_days),
-            self._get_tiktok_metrics(time_range_days),
             self._get_youtube_metrics(time_range_days),
+            self._get_tiktok_metrics(time_range_days),
+            self._get_instagram_metrics(time_range_days),
+            self._get_instagram_graph_metrics(time_range_days),
+            self._get_facebook_ads_metrics(time_range_days),
         ]
 
         platform_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -310,7 +337,7 @@ class MultiPlatformAnalyticsAggregator:
         Get metrics for a specific platform
 
         Args:
-            platform: Platform name (instagram, tiktok, youtube, etc.)
+            platform: Platform name (instagram, tiktok, youtube, instagram_graph, facebook_ads)
             account_id: Specific account ID (optional)
             time_range_days: Number of days to include
 
@@ -319,15 +346,20 @@ class MultiPlatformAnalyticsAggregator:
         """
         platform = platform.lower()
 
-        if platform == "instagram":
-            return await self._get_instagram_metrics(time_range_days, account_id)
-        elif platform == "tiktok":
-            return await self._get_tiktok_metrics(time_range_days, account_id)
-        elif platform == "youtube":
-            return await self._get_youtube_metrics(time_range_days, account_id)
-        else:
+        fetchers = {
+            "instagram": self._get_instagram_metrics,
+            "tiktok": self._get_tiktok_metrics,
+            "youtube": self._get_youtube_metrics,
+            "instagram_graph": self._get_instagram_graph_metrics,
+            "facebook_ads": self._get_facebook_ads_metrics,
+        }
+
+        fetcher = fetchers.get(platform)
+        if not fetcher:
             logger.warning(f"Platform '{platform}' not supported")
             return None
+
+        return await fetcher(time_range_days, account_id)
 
     async def compare_platforms(
         self,
@@ -345,7 +377,7 @@ class MultiPlatformAnalyticsAggregator:
         logger.info("Comparing platform performance...")
 
         # Get metrics for all platforms
-        platforms = ["instagram", "tiktok", "youtube"]
+        platforms = ["youtube", "tiktok", "instagram", "instagram_graph", "facebook_ads"]
         metrics_list = []
 
         for platform in platforms:
@@ -436,39 +468,70 @@ class MultiPlatformAnalyticsAggregator:
 
         return comparison
 
-    # Private methods for platform-specific fetching
+    # =========================================================================
+    # EVENT HANDLERS
+    # =========================================================================
 
-    async def _get_instagram_metrics(
+    async def _on_strategy_data(self, event):
+        """Auto-update cache when strategic analysis produces fresh platform data."""
+        platform = event.payload.get("platform", "unknown")
+        logger.debug(f"📊 Aggregator received strategy data for {platform}")
+        # Invalidate cache so next request fetches fresh
+        self._cache.clear()
+
+    async def _on_metrics_requested(self, event):
+        """Handle metrics.fetch.requested — trigger a fresh aggregation."""
+        platforms = event.payload.get("platforms")
+        logger.info(f"📊 Metrics fetch requested via event bus: {platforms}")
+        await self.get_unified_metrics(force_refresh=True)
+
+    async def _publish_metrics_event(self, topic: str, payload: Dict[str, Any]):
+        """Publish a metrics event to the event bus if available."""
+        if self._bus:
+            try:
+                await self._bus.publish(topic, payload, source="multi-platform-aggregator")
+            except Exception as e:
+                logger.debug(f"Could not publish {topic}: {e}")
+
+    # =========================================================================
+    # LIVE PLATFORM DATA FETCHERS
+    # =========================================================================
+
+    async def _get_youtube_metrics(
         self,
         time_range_days: int,
         account_id: Optional[str] = None
     ) -> Optional[PlatformMetrics]:
-        """Fetch Instagram metrics"""
+        """Fetch YouTube metrics via YouTube Data API v3"""
         try:
-            # Get Instagram analytics (using existing service)
-            # This is a placeholder - actual implementation depends on Instagram API
+            snap = await self._youtube_collector.collect()
 
-            # For now, return mock data structure
             metrics = PlatformMetrics(
-                platform="instagram",
-                account_id=account_id or "instagram_default",
-                account_username="@username",
-                views=10000,
-                likes=500,
-                comments=50,
-                saves=100,
-                followers=5000,
-                engagement_rate=0.065,
-                total_posts=20,
-                posts_last_7d=3,
-                posts_last_30d=15
+                platform="youtube",
+                account_id=account_id or snap.account_id or "youtube",
+                account_username=snap.account_username,
+                views=snap.total_views,
+                likes=snap.total_likes,
+                comments=snap.total_comments,
+                shares=snap.total_shares,
+                followers=snap.followers,
+                engagement_rate=snap.engagement_rate,
+                avg_views_per_post=snap.avg_views_per_post if hasattr(snap, 'avg_views_per_post') else 0,
+                total_posts=snap.total_posts,
+            )
+            if snap.error:
+                metrics.errors.append(snap.error)
+
+            await self._publish_metrics_event(
+                self._topics.METRICS_FETCH_COMPLETED if self._bus else "metrics.fetch.completed",
+                {"platform": "youtube", "followers": snap.followers, "views": snap.total_views},
             )
 
-            logger.debug(f"Fetched Instagram metrics: {metrics.views} views, {metrics.engagement_rate:.2%} ER")
+            logger.debug(f"YouTube live: {metrics.views:,} views, {metrics.followers:,} subs")
             return metrics
 
         except Exception as e:
-            logger.error(f"Error fetching Instagram metrics: {e}")
+            logger.error(f"Error fetching YouTube metrics: {e}")
             return None
 
     async def _get_tiktok_metrics(
@@ -476,66 +539,163 @@ class MultiPlatformAnalyticsAggregator:
         time_range_days: int,
         account_id: Optional[str] = None
     ) -> Optional[PlatformMetrics]:
-        """Fetch TikTok metrics"""
+        """Fetch TikTok metrics via RapidAPI tiktok-scraper7"""
         try:
-            # Get TikTok analytics (using existing service)
-            # This is a placeholder - actual implementation depends on TikTok API
+            snap = await self._tiktok_collector.collect()
 
             metrics = PlatformMetrics(
                 platform="tiktok",
-                account_id=account_id or "tiktok_default",
-                account_username="@tiktoker",
-                views=50000,
-                likes=2000,
-                comments=150,
-                shares=300,
-                followers=10000,
-                engagement_rate=0.049,
-                avg_watch_time_seconds=8.5,
-                total_posts=25,
-                posts_last_7d=5,
-                posts_last_30d=20
+                account_id=account_id or "tiktok",
+                account_username=snap.account_username,
+                views=snap.total_views,
+                likes=snap.total_likes,
+                comments=snap.total_comments,
+                shares=snap.total_shares,
+                saves=snap.total_saves,
+                followers=snap.followers,
+                engagement_rate=snap.engagement_rate,
+                total_posts=snap.total_posts,
+            )
+            if snap.error:
+                metrics.errors.append(snap.error)
+
+            await self._publish_metrics_event(
+                self._topics.METRICS_FETCH_COMPLETED if self._bus else "metrics.fetch.completed",
+                {"platform": "tiktok", "followers": snap.followers, "likes": snap.total_likes},
             )
 
-            logger.debug(f"Fetched TikTok metrics: {metrics.views} views, {metrics.engagement_rate:.2%} ER")
+            logger.debug(f"TikTok live: {metrics.likes:,} likes, {metrics.followers:,} followers")
             return metrics
 
         except Exception as e:
             logger.error(f"Error fetching TikTok metrics: {e}")
             return None
 
-    async def _get_youtube_metrics(
+    async def _get_instagram_metrics(
         self,
         time_range_days: int,
         account_id: Optional[str] = None
     ) -> Optional[PlatformMetrics]:
-        """Fetch YouTube metrics"""
+        """Fetch Instagram metrics via RapidAPI instagram-looter2 (public data)"""
         try:
-            # Get YouTube analytics (using existing service)
-            # This is a placeholder - actual implementation depends on YouTube Data API
+            snap = await self._instagram_collector.collect()
 
             metrics = PlatformMetrics(
-                platform="youtube",
-                account_id=account_id or "youtube_default",
-                account_username="@youtuber",
-                views=25000,
-                likes=800,
-                comments=100,
-                clicks=500,
-                followers=15000,
-                engagement_rate=0.056,
-                avg_watch_time_seconds=120.0,
-                completion_rate=0.65,
-                total_posts=10,
-                posts_last_7d=1,
-                posts_last_30d=4
+                platform="instagram",
+                account_id=account_id or "instagram",
+                account_username=snap.account_username,
+                views=snap.total_views,
+                likes=snap.total_likes,
+                comments=snap.total_comments,
+                followers=snap.followers,
+                engagement_rate=snap.engagement_rate,
+                total_posts=snap.total_posts,
             )
+            if snap.error:
+                metrics.errors.append(snap.error)
 
-            logger.debug(f"Fetched YouTube metrics: {metrics.views} views, {metrics.engagement_rate:.2%} ER")
+            logger.debug(f"Instagram (RapidAPI): {metrics.followers:,} followers, {metrics.total_posts} posts")
             return metrics
 
         except Exception as e:
-            logger.error(f"Error fetching YouTube metrics: {e}")
+            logger.error(f"Error fetching Instagram metrics: {e}")
+            return None
+
+    async def _get_instagram_graph_metrics(
+        self,
+        time_range_days: int,
+        account_id: Optional[str] = None
+    ) -> Optional[PlatformMetrics]:
+        """Fetch Instagram metrics via official Graph API (IGAA token)
+
+        Returns per-post insights: likes, comments, shares, saves, total_interactions.
+        """
+        try:
+            snap = await self._instagram_graph_collector.collect()
+
+            metrics = PlatformMetrics(
+                platform="instagram_graph",
+                account_id=account_id or snap.account_id or "instagram_graph",
+                account_username=snap.account_username,
+                views=snap.total_views,
+                impressions=snap.raw_data.get("total_impressions_25_posts", 0),
+                likes=snap.total_likes,
+                comments=snap.total_comments,
+                shares=snap.total_shares,
+                saves=snap.total_saves,
+                followers=snap.followers,
+                engagement_rate=snap.engagement_rate,
+                total_posts=snap.total_posts,
+            )
+            if snap.error:
+                metrics.errors.append(snap.error)
+
+            await self._publish_metrics_event(
+                self._topics.METRICS_FETCH_COMPLETED if self._bus else "metrics.fetch.completed",
+                {
+                    "platform": "instagram_graph",
+                    "followers": snap.followers,
+                    "interactions": snap.raw_data.get("total_interactions_25_posts", 0),
+                    "saves": snap.total_saves,
+                    "shares": snap.total_shares,
+                },
+            )
+
+            logger.debug(
+                f"Instagram Graph: {metrics.followers:,} followers, "
+                f"{metrics.saves} saves, {metrics.shares} shares, "
+                f"{snap.raw_data.get('total_interactions_25_posts', 0)} interactions"
+            )
+            return metrics
+
+        except Exception as e:
+            logger.error(f"Error fetching Instagram Graph metrics: {e}")
+            return None
+
+    async def _get_facebook_ads_metrics(
+        self,
+        time_range_days: int,
+        account_id: Optional[str] = None
+    ) -> Optional[PlatformMetrics]:
+        """Fetch Facebook Ads metrics via Marketing API (30-day campaign data)"""
+        try:
+            snap = await self._facebook_ads_collector.collect()
+
+            metrics = PlatformMetrics(
+                platform="facebook_ads",
+                account_id=account_id or snap.account_id or "facebook_ads",
+                account_username=snap.raw_data.get("account_name", "Facebook Ads"),
+                views=snap.total_views,  # impressions
+                impressions=snap.raw_data.get("total_impressions_30d", 0),
+                clicks=snap.raw_data.get("total_clicks_30d", 0),
+                engagement_rate=snap.engagement_rate,  # CTR
+            )
+            if snap.error:
+                metrics.errors.append(snap.error)
+
+            # Attach ad-specific data
+            metrics.ad_spend_30d = snap.raw_data.get("total_spend_30d", 0)
+            metrics.ad_ctr = snap.raw_data.get("ctr_30d", "0%")
+            metrics.ad_campaigns = snap.raw_data.get("campaign_count", 0)
+
+            await self._publish_metrics_event(
+                self._topics.METRICS_FETCH_COMPLETED if self._bus else "metrics.fetch.completed",
+                {
+                    "platform": "facebook_ads",
+                    "spend": snap.raw_data.get("total_spend_30d", 0),
+                    "impressions": snap.raw_data.get("total_impressions_30d", 0),
+                    "clicks": snap.raw_data.get("total_clicks_30d", 0),
+                },
+            )
+
+            logger.debug(
+                f"Facebook Ads: ${snap.raw_data.get('total_spend_30d', 0)} spend, "
+                f"{snap.raw_data.get('total_impressions_30d', 0):,} impressions"
+            )
+            return metrics
+
+        except Exception as e:
+            logger.error(f"Error fetching Facebook Ads metrics: {e}")
             return None
 
 

@@ -6,6 +6,7 @@ Matches our content tracking schema
 import os
 import asyncio
 import aiohttp
+import httpx
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dotenv import load_dotenv
@@ -16,20 +17,32 @@ RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 RAPIDAPI_HOST = "instagram-looter2.p.rapidapi.com"
 API_BASE = f"https://{RAPIDAPI_HOST}"
 
+# Instagram Graph API (IGAA token)
+INSTAGRAM_GRAPH_TOKEN = os.getenv("INSTAGRAM_GRAPH_TOKEN")
+IG_GRAPH_BASE = "https://graph.instagram.com/v21.0"
+
 
 class InstagramAnalytics:
     """
-    Swappable Instagram analytics client
-    Can easily switch between different Instagram APIs
+    Swappable Instagram analytics client.
+    
+    Supports two backends:
+        1. Instagram Graph API (IGAA token) — official, per-post insights
+        2. RapidAPI instagram-looter2 — public profile scraping
+    
+    The Graph API path is preferred when INSTAGRAM_GRAPH_TOKEN is set.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, prefer_graph_api: bool = True):
         self.api_key = api_key or RAPIDAPI_KEY
-        if not self.api_key:
-            raise ValueError("RapidAPI key not found. Set RAPIDAPI_KEY in .env")
+        self.ig_token = INSTAGRAM_GRAPH_TOKEN
+        self.prefer_graph_api = prefer_graph_api and bool(self.ig_token)
+        
+        if not self.api_key and not self.ig_token:
+            raise ValueError("No Instagram API credentials. Set RAPIDAPI_KEY or INSTAGRAM_GRAPH_TOKEN in .env")
         
         self.headers = {
-            "X-RapidAPI-Key": self.api_key,
+            "X-RapidAPI-Key": self.api_key or "",
             "X-RapidAPI-Host": RAPIDAPI_HOST
         }
     
@@ -176,8 +189,140 @@ class InstagramAnalytics:
         max_posts: int = 50
     ) -> Dict[str, Any]:
         """
-        Get complete analytics for an Instagram account
+        Get complete analytics for an Instagram account.
+        
+        Uses Instagram Graph API (IGAA token) when available for per-post
+        insights (shares, saves, total_interactions). Falls back to RapidAPI.
         """
+        # Prefer Graph API if token is set
+        if self.prefer_graph_api:
+            try:
+                result = await self.get_account_analytics_graph_api(max_posts=max_posts)
+                if result and not result.get("error"):
+                    return result
+                print(f"⚠️  Graph API failed, falling back to RapidAPI: {result.get('error')}")
+            except Exception as e:
+                print(f"⚠️  Graph API error, falling back to RapidAPI: {e}")
+        
+        return await self._get_account_analytics_rapidapi(username, max_posts)
+    
+    async def get_account_analytics_graph_api(
+        self,
+        max_posts: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Get analytics via official Instagram Graph API (IGAA token).
+        
+        Returns profile data + per-post insights (likes, comments, shares,
+        saves, total_interactions) — data not available via scraping.
+        """
+        if not self.ig_token:
+            return {"error": "INSTAGRAM_GRAPH_TOKEN not configured"}
+        
+        params = {"access_token": self.ig_token}
+        
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                # Profile
+                profile_resp = await client.get(
+                    f"{IG_GRAPH_BASE}/me",
+                    params={**params, "fields": "id,username,name,account_type,media_count,followers_count,follows_count,biography"},
+                )
+                if profile_resp.status_code != 200:
+                    err = profile_resp.json().get("error", {}).get("message", "")
+                    return {"error": f"Graph API profile error: {err}"}
+                
+                profile_data = profile_resp.json()
+                profile = {
+                    "user_id": profile_data.get("id", ""),
+                    "username": profile_data.get("username", ""),
+                    "full_name": profile_data.get("name", ""),
+                    "biography": profile_data.get("biography", ""),
+                    "follower_count": profile_data.get("followers_count", 0),
+                    "following_count": profile_data.get("follows_count", 0),
+                    "media_count": profile_data.get("media_count", 0),
+                    "account_type": profile_data.get("account_type", ""),
+                    "is_verified": False,
+                    "is_private": False,
+                }
+                
+                print(f"\n📸 Instagram Graph API analytics for: @{profile['username']}")
+                print(f"📊 {profile['follower_count']:,} followers, {profile['media_count']} posts\n")
+                
+                # Media with insights
+                media_resp = await client.get(
+                    f"{IG_GRAPH_BASE}/me/media",
+                    params={
+                        **params,
+                        "fields": "id,caption,media_type,media_product_type,timestamp,like_count,comments_count,permalink",
+                        "limit": min(max_posts, 50),
+                    },
+                )
+                
+                posts = []
+                if media_resp.status_code == 200:
+                    for item in media_resp.json().get("data", []):
+                        media_id = item.get("id")
+                        
+                        # Per-post insights
+                        shares = 0
+                        saves = 0
+                        interactions = 0
+                        if media_id:
+                            ins_resp = await client.get(
+                                f"{IG_GRAPH_BASE}/{media_id}/insights",
+                                params={**params, "metric": "likes,comments,shares,saved,total_interactions"},
+                            )
+                            if ins_resp.status_code == 200:
+                                for m in ins_resp.json().get("data", []):
+                                    val = m.get("values", [{}])[0].get("value", 0)
+                                    if m["name"] == "shares":
+                                        shares = val
+                                    elif m["name"] == "saved":
+                                        saves = val
+                                    elif m["name"] == "total_interactions":
+                                        interactions = val
+                        
+                        permalink = item.get("permalink", "")
+                        shortcode = permalink.split("/")[-2] if "/p/" in permalink or "/reel/" in permalink else ""
+                        
+                        posts.append({
+                            "media_id": media_id,
+                            "shortcode": shortcode,
+                            "media_type": 2 if item.get("media_type") == "VIDEO" else 1,
+                            "caption": (item.get("caption") or "")[:500],
+                            "like_count": item.get("like_count", 0),
+                            "comment_count": item.get("comments_count", 0),
+                            "shares_count": shares,
+                            "saves_count": saves,
+                            "total_interactions": interactions,
+                            "play_count": 0,
+                            "taken_at": item.get("timestamp"),
+                            "url": permalink,
+                            "thumbnail_url": None,
+                            "video_url": None,
+                        })
+                        
+                        print(f"📷 {item.get('timestamp', '')[:10]} | {item.get('like_count', 0):>3} likes | {shares:>2} shares | {saves:>2} saves | {interactions:>3} total | {(item.get('caption') or '')[:40]}")
+                
+                print(f"\n✅ Fetched {len(posts)} posts via Graph API\n")
+                
+                return {
+                    "profile": profile,
+                    "posts": posts,
+                    "fetched_at": datetime.now().isoformat(),
+                    "source": "instagram_graph_api",
+                }
+                
+        except Exception as e:
+            return {"error": str(e)}
+    
+    async def _get_account_analytics_rapidapi(
+        self,
+        username: str,
+        max_posts: int = 50
+    ) -> Dict[str, Any]:
+        """Original RapidAPI-based analytics (fallback)"""
         print(f"\n📸 Fetching Instagram analytics for: @{username}\n")
         
         # Get profile info
@@ -225,7 +370,8 @@ class InstagramAnalytics:
         return {
             "profile": profile,
             "posts": posts,
-            "fetched_at": datetime.now().isoformat()
+            "fetched_at": datetime.now().isoformat(),
+            "source": "rapidapi_instagram_looter2",
         }
 
 

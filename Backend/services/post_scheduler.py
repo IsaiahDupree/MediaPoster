@@ -258,7 +258,8 @@ class PostScheduler:
                 RETURNING 
                     id, clip_id, content_variant_id, platform, 
                     platform_account_id, scheduled_time, status,
-                    caption, title, hashtags, account_username
+                    caption, title, hashtags, recommendation_reasoning,
+                    media_path, blotato_account_id, account_username
             """), {"now": now})
             
             posts = []
@@ -267,13 +268,15 @@ class PostScheduler:
                     "id": row[0],
                     "content_id": row[1] or row[2],  # Use clip_id or content_variant_id
                     "platform": row[3],
-                    "account_id": row[4],
+                    "account_id": row[4] or row[12],  # platform_account_id or blotato_account_id
                     "scheduled_at": row[5],
                     "status": row[6],
                     "caption": row[7],           # Caption from scheduled_posts
                     "title": row[8],             # Title from scheduled_posts
                     "hashtags": row[9],          # Hashtags from scheduled_posts
-                    "account_username": row[10], # Username from scheduled_posts
+                    "account_username": row[13] or (row[10] or "").replace("account: ", ""),
+                    "media_path": row[11],       # Local file path for video
+                    "blotato_account_id": row[12],  # Blotato account ID
                 })
             
             return posts
@@ -283,7 +286,7 @@ class PostScheduler:
         now = datetime.now(timezone.utc)
         with self.engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT id, platform, scheduled_time
+                SELECT id, platform, scheduled_time, COALESCE(title, 'Untitled') as title
                 FROM scheduled_posts
                 WHERE status = 'scheduled'
                   AND scheduled_time > :now
@@ -297,6 +300,7 @@ class PostScheduler:
                     "id": row[0],
                     "platform": row[1],
                     "scheduled_at": row[2],
+                    "title": row[3],
                 })
             return posts
 
@@ -397,9 +401,17 @@ class PostScheduler:
         
         # BUG FIX: Verify media file still exists (might have been deleted after scheduling)
         # This is a pre-check; BackgroundPublisher will also verify during publish
-        if media_id:
+        media_path = post.get("media_path")
+        if media_path:
+            # Direct file path available (e.g. Sora videos) - verify on disk
+            from pathlib import Path
+            if not Path(media_path).exists():
+                logger.error(f"❌ Media file not found on disk: {media_path}")
+                return {"success": False, "error": f"File not found: {media_path}", "file_deleted": True}
+            logger.info(f"✅ Media file verified on disk: {Path(media_path).name}")
+        elif media_id:
             try:
-                # Use BackgroundPublisher to verify media (reuses same logic)
+                # Use BackgroundPublisher to verify media via DB (reuses same logic)
                 publisher = self.background_publisher
                 media_check = await publisher.verify_media(str(media_id))
                 if not media_check.get("valid"):
@@ -537,15 +549,16 @@ class PostScheduler:
             
             # Build publish request from scheduled post data
             request = PublishRequest(
-                media_id=post["content_id"],
+                media_id=str(post["content_id"]) if post.get("content_id") else post_id,
                 blotato_account_id=str(post["account_id"]),
                 platform=post["platform"],
-                username=post.get("account_username", ""),
+                username=post.get("account_username", "").replace("account: ", "") if post.get("account_username") else "",
                 caption=post.get("caption"),
                 title=post.get("title"),
                 hashtags=self._parse_hashtags(post.get("hashtags")),
                 poll_for_url=True,
                 cleanup_storage=True,
+                file_path_override=post.get("media_path"),  # Direct path for Sora/local videos
             )
             
             logger.info(f"📤 Publishing scheduled post {post['id']} via BackgroundPublisher...")
@@ -697,7 +710,7 @@ class PostScheduler:
         with self.engine.connect() as conn:
             # Get the original post data - use correct column name platform_account_id
             post_data = conn.execute(text("""
-                SELECT platform, platform_account_id, account_username, caption, hashtags
+                SELECT platform, platform_account_id, recommendation_reasoning, caption, hashtags
                 FROM scheduled_posts WHERE id = :id
             """), {"id": str(post_id)}).fetchone()
             
@@ -724,19 +737,16 @@ class PostScheduler:
                 
                 conn.execute(text("""
                     INSERT INTO posted_content 
-                    (platform, platform_post_id, platform_url, account_id, 
-                     account_username, caption, hashtags, status, posted_at)
+                    (platform, platform_post_id, platform_url, 
+                     caption, posted_at)
                     VALUES 
-                    (:platform, :platform_post_id, :platform_url, :account_id,
-                     :account_username, :caption, CAST(:hashtags AS text[]), 'published', NOW())
+                    (:platform, :platform_post_id, :platform_url,
+                     :caption, NOW())
                 """), {
                     "platform": post_data[0],
                     "platform_post_id": result.get("platform_post_id"),
                     "platform_url": result.get("platform_url"),
-                    "account_id": post_data[1],
-                    "account_username": post_data[2],
                     "caption": post_data[3],
-                    "hashtags": pg_array
                 })
                 conn.commit()
     
@@ -856,7 +866,7 @@ class PostScheduler:
         with self.engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT 
-                    id, 'Scheduled Post' as title, platform, platform_account_id as account_username, 
+                    id, COALESCE(title, 'Scheduled Post') as title, platform, COALESCE(account_username, platform_account_id::text) as account_username, 
                     scheduled_time, status, retry_count, last_error
                 FROM scheduled_posts
                 WHERE status IN ('scheduled', 'pending', 'failed')
@@ -869,7 +879,7 @@ class PostScheduler:
             queue = []
             for row in result.fetchall():
                 queue.append({
-                    "id": row[0],
+                    "id": str(row[0]),
                     "title": row[1],
                     "platform": row[2],
                     "account_username": row[3],

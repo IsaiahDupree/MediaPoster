@@ -78,6 +78,8 @@ class PublishRequest:
     target_config: Optional[Dict] = None
     # Scheduling
     scheduled_time: Optional[datetime] = None
+    # Direct file path override (bypasses media DB lookup, e.g. for Sora videos)
+    file_path_override: Optional[str] = None
 
 
 class BackgroundPublisher:
@@ -396,7 +398,16 @@ class BackgroundPublisher:
                 correlation_id=correlation_id
             )
             
-            media_check = await self.verify_media(request.media_id)
+            # Support direct file path override (e.g. Sora videos with local paths)
+            if request.file_path_override:
+                override_path = Path(request.file_path_override.strip())
+                if override_path.exists() and override_path.is_file():
+                    media_check = {"valid": True, "file_path": str(override_path), "override": True}
+                    logger.info(f"[Publish] Using file_path_override: {override_path.name}")
+                else:
+                    media_check = {"valid": False, "error": f"Override file not found: {request.file_path_override}"}
+            else:
+                media_check = await self.verify_media(request.media_id)
             result.verification["media"] = media_check["valid"]
             result.steps["media_verification"] = media_check
             
@@ -412,7 +423,12 @@ class BackgroundPublisher:
             # ─────────────────────────────────────────────────────────────────
             logger.info(f"[Publish] Step 2/6: Fetching analysis data...")
             
-            analysis = await self.verify_analysis(request.media_id)
+            if request.file_path_override:
+                # Skip analysis DB lookup for direct-file publishes (Sora, local videos)
+                analysis = {"valid": True, "has_analysis": False, "override": True}
+                logger.info("[Publish] Step 2/6: Skipping analysis (direct file publish)")
+            else:
+                analysis = await self.verify_analysis(request.media_id)
             result.verification["analysis"] = analysis.get("valid", False)
             result.steps["analysis_verification"] = {
                 "has_analysis": analysis.get("has_analysis"),
@@ -491,6 +507,30 @@ class BackgroundPublisher:
             elif platform_lower == "pinterest":
                 # Pinterest also requires a title
                 target_config.setdefault("title", request.title or caption[:80] or "Check this out!")
+            
+            # Enforce platform-specific caption length limits
+            # TikTok: Blotato counts title + text together, so subtract title length
+            title_len = len(target_config.get("title", "")) if platform_lower in ("tiktok",) else 0
+            PLATFORM_CAPTION_LIMITS = {
+                "tiktok": 2200,
+                "instagram": 2200,
+                "youtube": 5000,
+                "twitter": 280,
+                "threads": 500,
+                "facebook": 63206,
+                "linkedin": 3000,
+                "pinterest": 500,
+                "bluesky": 300,
+            }
+            max_len = PLATFORM_CAPTION_LIMITS.get(platform_lower, 2200) - title_len - 10  # safety margin
+            if caption and len(caption) > max_len:
+                logger.warning(f"[Publish] Caption too long for {platform_lower}: {len(caption)} > {max_len} (title={title_len}), truncating")
+                # Truncate at last space before limit to avoid cutting words
+                truncated = caption[:max_len]
+                last_space = truncated.rfind(' ')
+                if last_space > max_len - 50:
+                    truncated = truncated[:last_space]
+                caption = truncated + "..."
             
             # Use publish service for the heavy lifting
             publish_result = await self.publish_service.full_publish_with_url_tracking(

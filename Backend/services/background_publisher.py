@@ -494,41 +494,59 @@ class BackgroundPublisher:
             target_config = request.target_config or {}
             platform_lower = request.platform.lower()
             
-            if platform_lower == "tiktok":
-                target_config.setdefault("privacy_level", "PUBLIC_TO_EVERYONE")
-                target_config.setdefault("is_ai_generated", False)
-                # TikTok requires a non-empty title
-                target_config.setdefault("title", request.title or caption[:80] or "Check this out!")
-            elif platform_lower == "instagram":
-                target_config.setdefault("media_type", "reel")
-            elif platform_lower == "youtube":
-                target_config.setdefault("title", request.title or caption[:100] or "Video")
-                target_config.setdefault("privacy_status", "public")
-            elif platform_lower == "pinterest":
-                # Pinterest also requires a title
-                target_config.setdefault("title", request.title or caption[:80] or "Check this out!")
-            
-            # Enforce platform-specific caption length limits
-            # TikTok: Blotato counts title + text together, so subtract title length
-            title_len = len(target_config.get("title", "")) if platform_lower in ("tiktok",) else 0
-            PLATFORM_CAPTION_LIMITS = {
-                "tiktok": 2200,
-                "instagram": 2200,
-                "youtube": 5000,
-                "twitter": 280,
-                "threads": 500,
-                "facebook": 63206,
-                "linkedin": 3000,
-                "pinterest": 500,
-                "bluesky": 300,
+            # ── Per-platform title + description limits ──────────────────
+            # Sources: Blotato API docs + native platform specs (2026)
+            #   title_max  = max chars for the target.title field (0 = no title)
+            #   desc_max   = max chars for content.text (caption / description)
+            PLATFORM_LIMITS = {
+                #                    title_max  desc_max
+                "tiktok":           (90,        2200),   # title only for images; no effect on video
+                "instagram":        (0,         2200),   # no separate title field
+                "youtube":          (100,       5000),   # title required
+                "twitter":          (0,          280),   # no title
+                "threads":          (0,          500),   # no title
+                "facebook":         (0,        63206),   # no title
+                "linkedin":         (0,         3000),   # no title
+                "pinterest":        (100,        500),   # title + description
+                "bluesky":          (0,          300),   # no title
             }
-            max_len = PLATFORM_CAPTION_LIMITS.get(platform_lower, 2200) - title_len - 10  # safety margin
-            if caption and len(caption) > max_len:
-                logger.warning(f"[Publish] Caption too long for {platform_lower}: {len(caption)} > {max_len} (title={title_len}), truncating")
-                # Truncate at last space before limit to avoid cutting words
-                truncated = caption[:max_len]
+            title_max, desc_max = PLATFORM_LIMITS.get(platform_lower, (0, 2200))
+            
+            # Platform-specific target defaults (camelCase keys per Blotato API spec)
+            if platform_lower == "tiktok":
+                target_config.setdefault("privacyLevel", "PUBLIC_TO_EVERYONE")
+                target_config.setdefault("isAiGenerated", False)
+                target_config.setdefault("disabledComments", False)
+                target_config.setdefault("disabledDuet", False)
+                target_config.setdefault("disabledStitch", False)
+                target_config.setdefault("isBrandedContent", False)
+                target_config.setdefault("isYourBrand", False)
+                raw_title = request.title or caption[:title_max] or "Check this out!"
+                target_config.setdefault("title", raw_title[:title_max])
+            elif platform_lower == "instagram":
+                target_config.setdefault("mediaType", "reel")
+            elif platform_lower == "youtube":
+                raw_title = request.title or caption[:title_max] or "Video"
+                target_config.setdefault("title", raw_title[:title_max])
+                target_config.setdefault("privacyStatus", "public")
+                target_config.setdefault("shouldNotifySubscribers", True)
+                target_config.setdefault("isMadeForKids", False)
+            elif platform_lower == "pinterest":
+                raw_title = request.title or caption[:title_max] or "Check this out!"
+                target_config.setdefault("title", raw_title[:title_max])
+            
+            # Enforce title length limit (safety net)
+            if title_max > 0 and "title" in target_config:
+                if len(target_config["title"]) > title_max:
+                    logger.warning(f"[Publish] Title too long for {platform_lower}: {len(target_config['title'])} > {title_max}, truncating")
+                    target_config["title"] = target_config["title"][:title_max - 3] + "..."
+            
+            # Enforce description / caption length limit
+            if caption and len(caption) > desc_max:
+                logger.warning(f"[Publish] Caption too long for {platform_lower}: {len(caption)} > {desc_max}, truncating")
+                truncated = caption[:desc_max - 3]
                 last_space = truncated.rfind(' ')
-                if last_space > max_len - 50:
+                if last_space > desc_max - 50:
                     truncated = truncated[:last_space]
                 caption = truncated + "..."
             

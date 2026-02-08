@@ -283,11 +283,13 @@ class PublishService:
             Dict with success status, post_submission_id, and any errors
         """
         try:
-            # Build target configuration with platform-specific defaults
+            # Build target configuration
+            # Platform-specific defaults (camelCase keys, limits) are set
+            # upstream in BackgroundPublisher; this is a safety fallback.
             target = target_config.copy() if target_config else {}
             target['targetType'] = platform
             
-            # Add platform-specific defaults to ensure public visibility
+            # Minimal fallback defaults (BackgroundPublisher is the primary source)
             if platform == 'tiktok':
                 target.setdefault('privacyLevel', 'PUBLIC_TO_EVERYONE')
                 target.setdefault('disabledComments', False)
@@ -295,31 +297,13 @@ class PublishService:
                 target.setdefault('disabledStitch', False)
                 target.setdefault('isBrandedContent', False)
                 target.setdefault('isYourBrand', False)
-                target.setdefault('isAiGenerated', False)  # Most content is real iPhone videos, not AI-generated
+                target.setdefault('isAiGenerated', False)
             elif platform == 'youtube':
                 target.setdefault('privacyStatus', 'public')
                 target.setdefault('shouldNotifySubscribers', True)
                 target.setdefault('isMadeForKids', False)
             elif platform == 'instagram':
-                target.setdefault('mediaType', 'reel')  # Default to reel for video
-            elif platform == 'facebook':
-                # Facebook posts to pages are public by default
-                pass
-            elif platform == 'linkedin':
-                # LinkedIn posts are public by default
-                pass
-            elif platform == 'twitter':
-                # Twitter posts are public by default
-                pass
-            elif platform == 'threads':
-                # Threads posts are public by default
-                pass
-            elif platform == 'bluesky':
-                # Bluesky posts are public by default
-                pass
-            elif platform == 'pinterest':
-                # Pinterest pins are public by default
-                pass
+                target.setdefault('mediaType', 'reel')
             
             # Build payload per Blotato v2 spec
             logger.debug(f"[Blotato] text length={len(text)}, target keys={list(target.keys())}, platform={platform}")

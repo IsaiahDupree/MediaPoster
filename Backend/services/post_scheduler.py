@@ -559,6 +559,7 @@ class PostScheduler:
                 poll_for_url=True,
                 cleanup_storage=True,
                 file_path_override=post.get("media_path"),  # Direct path for Sora/local videos
+                caption_style=post.get("caption_style"),  # Auto-subtitle style
             )
             
             logger.info(f"📤 Publishing scheduled post {post['id']} via BackgroundPublisher...")

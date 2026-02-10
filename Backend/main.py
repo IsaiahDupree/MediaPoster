@@ -448,8 +448,26 @@ async def lifespan(app: FastAPI):
     # except Exception as e:
     #     logger.warning(f"⚠️  Daily Automation Manager failed to start: {e}")
 
+    # Start Innovation Cron Manager (trend detection, cascade, intelligence, A/B testing)
+    innovation_cron = None
+    try:
+        from services.innovation_cron_manager import InnovationCronManager
+        innovation_cron = InnovationCronManager.get_instance()
+        await innovation_cron.start()
+        logger.success("✓ Innovation Cron Manager started (trends, cascade, intelligence, A/B)")
+    except Exception as e:
+        logger.warning(f"⚠️  Innovation Cron Manager failed to start: {e}")
+
     yield
     
+    # Stop the Innovation Cron Manager on shutdown
+    if innovation_cron:
+        try:
+            innovation_cron.stop()
+            logger.success("✓ Innovation Cron Manager stopped")
+        except Exception as e:
+            logger.warning(f"⚠️  Error stopping Innovation Cron Manager: {e}")
+
     # Stop the Notification Worker on shutdown
     if notification_worker:
         try:
@@ -1062,6 +1080,46 @@ app.include_router(posted_content.router, prefix="/api", tags=["Posted Content"]
 from api.endpoints import post_tracking
 app.include_router(post_tracking.router, tags=["Post Tracking"])
 logger.success("✓ Post Tracking API registered (PTK-001, PTK-003, PTK-006)")
+
+# Auto-Subtitles (Whisper + FFmpeg)
+from api.subtitles import router as subtitles_router
+app.include_router(subtitles_router, tags=["Subtitles"])
+
+# AI Caption Variants (GPT per-platform tone rewriting)
+from api.caption_variants import router as caption_variants_router
+app.include_router(caption_variants_router, tags=["Caption Variants"])
+
+# Smart Posting Times (ML-driven optimal scheduling)
+from api.smart_posting_times import router as smart_times_router
+app.include_router(smart_times_router, tags=["Smart Posting Times"])
+
+# Content Recycling Engine (evergreen re-queue)
+from api.content_recycling import router as recycling_router
+app.include_router(recycling_router, tags=["Content Recycling"])
+
+# Cross-Platform Analytics Dashboard
+from api.cross_platform_dashboard import router as dashboard_router
+app.include_router(dashboard_router, tags=["Cross-Platform Dashboard"])
+
+# A/B Testing Framework
+from api.ab_testing import router as ab_testing_router
+app.include_router(ab_testing_router, tags=["A/B Testing"])
+
+# Content Intelligence (closed-loop feedback)
+from api.content_intelligence import router as intel_router
+app.include_router(intel_router, tags=["Content Intelligence"])
+
+# Multi-Account Cascade Publisher
+from api.cascade_publisher import router as cascade_router
+app.include_router(cascade_router, tags=["Cascade Publisher"])
+
+# Automated Trend Detection
+from api.trend_detection import router as trend_router
+app.include_router(trend_router, tags=["Trend Detection"])
+
+# Engagement Autopilot
+from api.engagement_autopilot import router as engagement_router
+app.include_router(engagement_router, tags=["Engagement Autopilot"])
 
 # Publishing Queue
 from api.endpoints import publishing_queue

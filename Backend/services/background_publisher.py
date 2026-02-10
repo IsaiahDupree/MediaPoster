@@ -80,6 +80,8 @@ class PublishRequest:
     scheduled_time: Optional[datetime] = None
     # Direct file path override (bypasses media DB lookup, e.g. for Sora videos)
     file_path_override: Optional[str] = None
+    # Auto-subtitle style: "tiktok_bold", "minimal_white", "bold_yellow", "boxed", "none"
+    caption_style: Optional[str] = None
 
 
 class BackgroundPublisher:
@@ -419,6 +421,34 @@ class BackgroundPublisher:
             file_path = Path(media_check["file_path"])
             
             # ─────────────────────────────────────────────────────────────────
+            # STEP 1.5: Auto-Subtitles (Whisper + FFmpeg burn-in)
+            # ─────────────────────────────────────────────────────────────────
+            caption_style = getattr(request, "caption_style", None) or os.getenv("DEFAULT_CAPTION_STYLE", "tiktok_bold")
+            if caption_style != "none" and file_path.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
+                try:
+                    from services.subtitle_service import AutoSubtitleService
+                    subtitle_svc = AutoSubtitleService()
+                    logger.info(f"[Publish] Step 1.5: Auto-subtitles (style={caption_style})...")
+                    sub_result = await subtitle_svc.process_video(file_path, style=caption_style)
+                    if sub_result.success and sub_result.output_path and not sub_result.skipped:
+                        file_path = sub_result.output_path
+                        result.steps["auto_subtitles"] = {
+                            "style": caption_style,
+                            "words": len(sub_result.transcription.words) if sub_result.transcription else 0,
+                            "output": str(file_path),
+                        }
+                        logger.success(f"[Publish] ✓ Auto-subtitles applied: {file_path.name}")
+                    elif sub_result.skipped:
+                        logger.info(f"[Publish] Subtitles skipped: {sub_result.skip_reason}")
+                        result.steps["auto_subtitles"] = {"skipped": True, "reason": sub_result.skip_reason}
+                    else:
+                        logger.warning(f"[Publish] Subtitle processing failed: {sub_result.error} — continuing without captions")
+                        result.steps["auto_subtitles"] = {"error": sub_result.error}
+                except Exception as e:
+                    logger.warning(f"[Publish] Auto-subtitle error: {e} — continuing without captions")
+                    result.steps["auto_subtitles"] = {"error": str(e)}
+            
+            # ─────────────────────────────────────────────────────────────────
             # STEP 2: Verify/Get Analysis
             # ─────────────────────────────────────────────────────────────────
             logger.info(f"[Publish] Step 2/6: Fetching analysis data...")
@@ -468,6 +498,26 @@ class BackgroundPublisher:
                 custom_caption=request.caption,
                 custom_hashtags=request.hashtags
             )
+            
+            # ── AI Caption Variant: Rewrite in platform-native tone ──────
+            use_ai_captions = os.getenv("ENABLE_AI_CAPTION_VARIANTS", "true").lower() == "true"
+            if use_ai_captions and caption:
+                try:
+                    from services.caption_variants_service import CaptionVariantsService
+                    variant_svc = CaptionVariantsService()
+                    ai_caption = await variant_svc.generate_single(
+                        base_caption=caption,
+                        platform=request.platform,
+                        hashtags=request.hashtags,
+                    )
+                    if ai_caption and ai_caption != caption:
+                        logger.info(f"[Publish] ✓ AI caption variant applied for {request.platform} ({len(caption)} → {len(ai_caption)} chars)")
+                        caption = ai_caption
+                        result.steps["ai_caption_variant"] = {"applied": True, "platform": request.platform}
+                except Exception as e:
+                    logger.warning(f"[Publish] AI caption variant failed: {e} — using original")
+                    result.steps["ai_caption_variant"] = {"applied": False, "error": str(e)}
+            
             result.steps["caption"] = {
                 "length": len(caption),
                 "has_hashtags": "#" in caption

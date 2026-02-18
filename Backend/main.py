@@ -1019,14 +1019,13 @@ except Exception as e:
 # except Exception as e:
 #     logger.warning(f"⚠️  Daily Automation API registration failed: {e}")
 
-# Safari Automation Orchestrator (Unified browser automation)
-# DISABLED: Safari automations disabled per user request
-# try:
-#     from api.endpoints import safari_automation
-#     app.include_router(safari_automation.router, prefix="/api", tags=["Safari Automation"])
-#     logger.success("✓ Safari Automation Orchestrator API registered")
-# except Exception as e:
-#     logger.warning(f"⚠️  Safari Automation API registration failed: {e}")
+# Safari Automation Orchestrator (Unified browser automation + Script Generation)
+try:
+    from api.endpoints import safari_automation
+    app.include_router(safari_automation.router, prefix="/api", tags=["Safari Automation"])
+    logger.success("✓ Safari Automation Orchestrator API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Safari Automation API registration failed: {e}")
 
 # Knowledge Base (Rules, Templates, Playbooks)
 from api.endpoints import knowledge_base
@@ -1124,6 +1123,22 @@ app.include_router(engagement_router, tags=["Engagement Autopilot"])
 # Publishing Queue
 from api.endpoints import publishing_queue
 app.include_router(publishing_queue.router, prefix="/api/publishing", tags=["Publishing Queue"])
+
+# Video Publishing Controls (Queue management, rate limits, config — callable from external servers)
+try:
+    from api.endpoints import publishing_controls
+    app.include_router(publishing_controls.router, prefix="/api", tags=["Publishing Controls"])
+    logger.success("✓ Publishing Controls API registered (queue, config, rate limits)")
+except Exception as e:
+    logger.warning(f"⚠️  Publishing Controls API registration failed: {e}")
+
+# UGC Content Generation (Offer-aware script generation + queue integration)
+try:
+    from api.endpoints import ugc_content
+    app.include_router(ugc_content.router, prefix="/api", tags=["UGC Content Generation"])
+    logger.success("✓ UGC Content Generation API registered (offer-aware scripts, trends, queue)")
+except Exception as e:
+    logger.warning(f"⚠️  UGC Content Generation API registration failed: {e}")
 
 # Goals
 from api.endpoints import goals

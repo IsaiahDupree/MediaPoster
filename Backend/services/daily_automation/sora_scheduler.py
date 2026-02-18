@@ -11,6 +11,12 @@ from loguru import logger
 
 from services.event_bus import EventBus
 
+try:
+    from services.sora_daily.trend_prompts import get_trend_prompt_library
+    HAS_TREND_LIBRARY = True
+except ImportError:
+    HAS_TREND_LIBRARY = False
+
 
 @dataclass
 class SoraCredits:
@@ -200,7 +206,45 @@ class SoraScheduler:
             gen.status = "failed"
         
     def _get_next_prompt(self) -> str:
-        """Get next prompt for generation - uses @isaiahdupree character."""
+        """Get next prompt for generation - uses @isaiahdupree character.
+        
+        Priority order:
+        1. Dynamically generated scripts from DB (status='approved' or 'queued')
+        2. Curated trend prompts from TrendPromptLibrary
+        3. Legacy static prompts
+        """
+        # 1. Try dynamically generated scripts first (DB-persisted, AI-generated)
+        try:
+            from services.sora_daily.script_generator import get_script_generator
+            gen = get_script_generator()
+            # Prefer 'queued' scripts, then 'approved'
+            scripts = gen.get_scripts(status="queued", limit=1)
+            if not scripts:
+                scripts = gen.get_scripts(status="approved", limit=1)
+            if scripts:
+                script = scripts[0]
+                # Pull the first unused part's sora_prompt
+                if script.parts:
+                    prompt = script.parts[0].get("sora_prompt", "")
+                    if prompt:
+                        gen.update_script_status(script.id, "used")
+                        logger.info(f"🎬 Using dynamic script: {script.title} [{script.trend_name}]")
+                        return prompt
+        except Exception as e:
+            logger.debug(f"Dynamic script lookup skipped: {e}")
+
+        # 2. Try curated trend library
+        if HAS_TREND_LIBRARY:
+            try:
+                library = get_trend_prompt_library()
+                trend_prompt = library.get_random_prompt()
+                if trend_prompt:
+                    logger.info(f"📈 Using trend prompt: {trend_prompt.trend_name}")
+                    return trend_prompt.sora_prompt
+            except Exception as e:
+                logger.warning(f"Trend library unavailable, using fallback: {e}")
+        
+        # 3. Legacy fallback prompts
         prompts = [
             "@isaiahdupree walking through a futuristic city at sunset, cinematic",
             "@isaiahdupree presenting content creation tips in a modern studio",

@@ -369,15 +369,19 @@ class BackgroundPublisher:
             steps={}
         )
         
-        # Emit publish requested event
+        # Emit publish pipeline started event (observability only).
+        # NOTE: We intentionally use PUBLISH_STARTED (not PUBLISH_REQUESTED)
+        # because PublishWorker subscribes to PUBLISH_REQUESTED and would
+        # start a second parallel publish pipeline, causing double-posting.
         correlation_id = f"publish-{_str(request.media_id)}-{request.platform}"
         await self.event_bus.publish(
-            Topics.PUBLISH_REQUESTED,
+            Topics.PUBLISH_STARTED,
             {
                 "media_id": _str(request.media_id),
                 "platform": request.platform,
                 "account_id": _str(request.blotato_account_id),
-                "username": request.username
+                "username": request.username,
+                "source": "background_publisher"
             },
             correlation_id=correlation_id
         )

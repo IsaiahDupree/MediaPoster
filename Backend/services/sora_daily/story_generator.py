@@ -250,6 +250,125 @@ Output ONLY the prompt, no explanation."""
         else:
             return f"{character} reaching the conclusion of {theme}, triumphant moment, {style}, golden hour resolution, satisfying closure"
     
+    async def generate_trend_prompt(
+        self,
+        trend_name: Optional[str] = None,
+        character: str = "@isaiahdupree"
+    ) -> Dict:
+        """
+        Generate a prompt using the curated trend library.
+        
+        Args:
+            trend_name: Optional filter for a specific trend
+            character: Sora character
+        
+        Returns:
+            Dict with prompt metadata and sora_prompt
+        """
+        try:
+            from services.sora_daily.trend_prompts import get_trend_prompt_library
+            library = get_trend_prompt_library()
+            
+            if trend_name:
+                matches = library.get_prompts(trend_name=trend_name)
+                singles = [p for p in matches if p.category == "single"]
+                prompt = random.choice(singles) if singles else library.get_random_prompt()
+            else:
+                prompt = library.get_random_prompt()
+            
+            if prompt:
+                return {
+                    "source": "trend_library",
+                    "prompt_id": prompt.id,
+                    "trend_name": prompt.trend_name,
+                    "sora_prompt": prompt.sora_prompt,
+                    "caption": prompt.caption,
+                    "hashtags": prompt.hashtags,
+                    "suggested_audio": prompt.suggested_audio,
+                    "platforms": prompt.platforms,
+                }
+        except ImportError:
+            logger.warning("Trend library not available, falling back to AI generation")
+        except Exception as e:
+            logger.error(f"Trend prompt lookup failed: {e}")
+        
+        # Fallback to standard AI generation
+        sora_prompt = await self.generate_single_prompt(trend=trend_name, character=character)
+        return {
+            "source": "ai_generated",
+            "prompt_id": None,
+            "trend_name": trend_name,
+            "sora_prompt": sora_prompt,
+            "caption": None,
+            "hashtags": [],
+            "suggested_audio": None,
+            "platforms": ["tiktok", "instagram", "youtube_shorts"],
+        }
+
+    async def generate_trend_series(
+        self,
+        trend_name: Optional[str] = None,
+        series_id: Optional[str] = None,
+        character: str = "@isaiahdupree"
+    ) -> Dict:
+        """
+        Generate a 3-part series from the curated trend library.
+        
+        Args:
+            trend_name: Optional filter for a specific trend
+            series_id: Optional specific series ID
+            character: Sora character
+        
+        Returns:
+            Dict with series metadata and all part prompts
+        """
+        try:
+            from services.sora_daily.trend_prompts import get_trend_prompt_library
+            library = get_trend_prompt_library()
+            
+            if series_id:
+                parts = library.get_prompts(series_id=series_id)
+            elif trend_name:
+                all_series = library.get_series()
+                # Find series matching the trend
+                parts = []
+                for sid, series_parts in all_series.items():
+                    if any(trend_name.lower() in p.trend_name.lower() for p in series_parts):
+                        parts = series_parts
+                        break
+            else:
+                series_parts = library.get_random_series()
+                parts = series_parts if series_parts else []
+            
+            if parts:
+                return {
+                    "source": "trend_library",
+                    "series_id": parts[0].series_id,
+                    "trend_name": parts[0].trend_name,
+                    "character": character,
+                    "parts": [
+                        {
+                            "part": i + 1,
+                            "prompt_id": p.id,
+                            "title": p.title,
+                            "sora_prompt": p.sora_prompt,
+                            "caption": p.caption,
+                            "hashtags": p.hashtags,
+                            "suggested_audio": p.suggested_audio,
+                        }
+                        for i, p in enumerate(parts)
+                    ],
+                }
+        except ImportError:
+            logger.warning("Trend library not available, falling back to AI generation")
+        except Exception as e:
+            logger.error(f"Trend series lookup failed: {e}")
+        
+        # Fallback to standard AI story arc generation
+        arc = await self.generate_story_arc(trend=trend_name, character=character)
+        arc["source"] = "ai_generated"
+        return arc
+
     async def generate_story_arc(
         self,
         theme: str = None,

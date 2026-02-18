@@ -105,6 +105,14 @@ class PostScheduler:
         if self.is_running:
             logger.warning("Scheduler already running")
             return
+        
+        # RESTART RESILIENCE: Recover posts stuck in transient states
+        # If the app crashed or restarted mid-publish, posts may be stuck
+        # in 'publishing' or 'processing' status. Reset them to 'scheduled'
+        # so they get retried on next tick.
+        recovered = self._recover_stuck_posts()
+        if recovered > 0:
+            logger.warning(f"🔄 Recovered {recovered} stuck post(s) from interrupted publish")
             
         self.is_running = True
         self._task = asyncio.create_task(self._run_loop())
@@ -116,7 +124,8 @@ class PostScheduler:
             {
                 "check_interval": self.check_interval,
                 "max_retries": self.max_retries,
-                "blotato_configured": bool(self.blotato_api_key)
+                "blotato_configured": bool(self.blotato_api_key),
+                "recovered_posts": recovered
             }
         )
         
@@ -136,6 +145,37 @@ class PostScheduler:
             }
         )
         
+    def _recover_stuck_posts(self) -> int:
+        """Reset posts stuck in transient states back to 'scheduled'.
+        
+        When the app crashes or restarts mid-publish, posts can get stuck in
+        'publishing' or 'processing' status forever. This method runs on
+        startup to recover them so they get retried.
+        
+        Only recovers posts whose scheduled_time is still in the past (due).
+        Posts scheduled for the future are left alone.
+        """
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(text("""
+                    UPDATE scheduled_posts
+                    SET status = 'scheduled',
+                        updated_at = NOW()
+                    WHERE status IN ('publishing', 'processing')
+                      AND scheduled_time <= NOW()
+                    RETURNING id, platform, status
+                """))
+                rows = result.fetchall()
+                conn.commit()
+                
+                for row in rows:
+                    logger.info(f"  🔄 Recovered post {row[0]} ({row[1]}) from '{row[2]}' → 'scheduled'")
+                
+                return len(rows)
+        except Exception as e:
+            logger.error(f"Failed to recover stuck posts: {e}")
+            return 0
+    
     async def _run_loop(self):
         """Main scheduler loop with comprehensive logging and event emissions"""
         while self.is_running:
@@ -147,7 +187,8 @@ class PostScheduler:
             logger.info(f"[Scheduler] 🕐 Check #{self._check_count} at {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
             
             try:
-                # Get counts before processing
+                # Atomically claim due posts (marks them 'publishing' and commits)
+                # This is the ONLY call to _get_due_posts per cycle — no double-fetch
                 due_posts = self._get_due_posts(now)
                 upcoming = self._get_upcoming_posts(5)
                 
@@ -166,7 +207,8 @@ class PostScheduler:
                 
                 if due_posts:
                     logger.info(f"[Scheduler] 🚀 Processing {len(due_posts)} due posts...")
-                    result = await self.process_due_posts()
+                    # Pass already-claimed posts directly — do NOT re-fetch
+                    result = await self._process_claimed_posts(due_posts)
                     logger.info(f"[Scheduler] ✅ Result: {result['success']} success, {result['failed']} failed")
                 else:
                     logger.info("[Scheduler] 💤 No posts due right now")
@@ -197,12 +239,18 @@ class PostScheduler:
     # =========================================================================
     
     async def process_due_posts(self) -> Dict[str, int]:
-        """Find and publish all posts that are due"""
+        """Find and publish all posts that are due (API-compatible entry point)."""
         now = datetime.now(timezone.utc)
-        
-        # Get posts due for publishing
         due_posts = self._get_due_posts(now)
+        if not due_posts:
+            return {"processed": 0, "success": 0, "failed": 0}
+        return await self._process_claimed_posts(due_posts)
+
+    async def _process_claimed_posts(self, due_posts: List[Dict]) -> Dict[str, int]:
+        """Publish posts that have already been atomically claimed (status='publishing').
         
+        This is the single publish path — posts are never re-fetched.
+        """
         if not due_posts:
             return {"processed": 0, "success": 0, "failed": 0}
         
@@ -211,12 +259,31 @@ class PostScheduler:
         success_count = 0
         failed_count = 0
         
+        # Load publishing controller for rate-limit checks (graceful fallback)
+        pub_controller = None
+        try:
+            from services.video_publishing_controller import get_publishing_controller
+            pub_controller = get_publishing_controller()
+        except Exception:
+            pass  # Controller not available, publish without rate limits
+
         for post in due_posts:
             try:
+                platform = post.get("platform", "")
+
+                # Rate-limit gate: defer post if controller says we can't publish
+                if pub_controller and not pub_controller.can_publish(platform):
+                    logger.info(f"⏸️ Rate limit hit for {platform}, deferring post {post['id']}")
+                    self._defer_post(post["id"])
+                    continue
+
                 result = await self._publish_post(post)
                 if result["success"]:
                     success_count += 1
                     self._mark_post_published(post["id"], result)
+                    # Update publishing controller daily counters
+                    if pub_controller:
+                        pub_controller.mark_published(platform)
                 else:
                     failed_count += 1
                     self._handle_post_failure(post, result.get("error", "Unknown error"))
@@ -278,6 +345,11 @@ class PostScheduler:
                     "media_path": row[11],       # Local file path for video
                     "blotato_account_id": row[12],  # Blotato account ID
                 })
+            
+            # BUG FIX: Commit the status change so it persists!
+            # Without this, the UPDATE is rolled back and other workers
+            # can pick up the same posts, causing double-publishing.
+            conn.commit()
             
             return posts
     
@@ -484,21 +556,13 @@ class PostScheduler:
             {"correlation_id": correlation_id}
         )
         
-        # Emit schedule.due event
-        await self.event_bus.publish(
-            Topics.SCHEDULE_DUE,
-            {
-                "post_id": post_id,
-                "media_id": media_id,
-                "platform": platform,
-                "account_id": account_id,
-                "title": post.get("title"),
-                "scheduled_at": str(post.get("scheduled_at")) if post.get("scheduled_at") else None
-            },
-            correlation_id=correlation_id
-        )
+        # NOTE: Do NOT emit Topics.SCHEDULE_DUE here — PostScheduler handles
+        # publishing directly via BackgroundPublisher. Emitting schedule.due
+        # would cause PublishWorker to also try publishing the same post,
+        # resulting in double-publishing.
         
-        # Emit publish.started event
+        # Emit publish.started event (observability only — PublishWorker
+        # does not subscribe to this topic for action)
         await self.event_bus.publish(
             Topics.PUBLISH_STARTED,
             {
@@ -677,6 +741,25 @@ class PostScheduler:
     # STATUS UPDATES
     # =========================================================================
     
+    def _defer_post(self, post_id):
+        """Defer a post back to 'scheduled' when rate-limited.
+        
+        Resets status from 'publishing' to 'scheduled' so the scheduler
+        picks it up again on the next tick when rate limits allow.
+        """
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    UPDATE scheduled_posts
+                    SET status = 'scheduled',
+                        updated_at = NOW()
+                    WHERE id = :id AND status = 'publishing'
+                """), {"id": str(post_id)})
+                conn.commit()
+                logger.info(f"⏸️ Deferred post {post_id} back to 'scheduled' (rate-limited)")
+        except Exception as e:
+            logger.error(f"Failed to defer post {post_id}: {e}")
+
     def _mark_post_published(self, post_id, result: Dict):
         """Mark a post as successfully published"""
         try:

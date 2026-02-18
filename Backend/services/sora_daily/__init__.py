@@ -29,6 +29,20 @@ from .trend_collector import (
     get_trend_collector
 )
 
+from .trend_prompts import (
+    TrendPromptLibrary,
+    TrendPrompt,
+    get_trend_prompt_library,
+    ISAIAH_CHARACTER,
+)
+
+from .script_generator import (
+    SoraScriptGenerator,
+    ScriptPackage,
+    TrendFetcher,
+    get_script_generator,
+)
+
 from .youtube_publisher import (
     YouTubePublisher,
     YouTubeUploadJob,
@@ -64,6 +78,18 @@ __all__ = [
     "TrendCollector",
     "TrendSource",
     "get_trend_collector",
+    
+    # Trend Prompts
+    "TrendPromptLibrary",
+    "TrendPrompt",
+    "get_trend_prompt_library",
+    "ISAIAH_CHARACTER",
+    
+    # Script Generator
+    "SoraScriptGenerator",
+    "ScriptPackage",
+    "TrendFetcher",
+    "get_script_generator",
     
     # YouTube
     "YouTubePublisher",

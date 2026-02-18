@@ -363,6 +363,185 @@ async def get_available_themes():
 
 
 # =============================================================================
+# TREND-AWARE PROMPT ENDPOINTS
+# =============================================================================
+
+@router.get("/trend-prompts")
+async def get_trend_prompts(
+    month: Optional[str] = None,
+    category: Optional[str] = None,
+    trend_name: Optional[str] = None,
+    series_id: Optional[str] = None,
+):
+    """
+    Get curated trend-aware Sora prompts for @isaiahdupree.
+    
+    Filters:
+    - month: e.g. "2026-02" (defaults to current month)
+    - category: "single", "series_part_1", "series_part_2", "series_part_3"
+    - trend_name: partial match on trend name
+    - series_id: exact match on series ID
+    """
+    try:
+        from services.sora_daily.trend_prompts import get_trend_prompt_library
+        
+        library = get_trend_prompt_library()
+        prompts = library.get_prompts(
+            month=month,
+            category=category,
+            series_id=series_id,
+            trend_name=trend_name,
+        )
+        
+        return {
+            "prompts": [p.to_dict() for p in prompts],
+            "count": len(prompts),
+            "month": month or library.get_current_month(),
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get trend prompts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trend-prompts/trends")
+async def list_available_trends(month: Optional[str] = None):
+    """List unique trend names available for the given month."""
+    try:
+        from services.sora_daily.trend_prompts import get_trend_prompt_library
+        
+        library = get_trend_prompt_library()
+        trends = library.list_trends(month=month)
+        
+        return {
+            "trends": trends,
+            "count": len(trends),
+            "month": month or library.get_current_month(),
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to list trends: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trend-prompts/series")
+async def get_trend_series(month: Optional[str] = None):
+    """Get all multi-part series grouped by series_id."""
+    try:
+        from services.sora_daily.trend_prompts import get_trend_prompt_library
+        
+        library = get_trend_prompt_library()
+        series = library.get_series(month=month)
+        
+        result = {}
+        for sid, parts in series.items():
+            result[sid] = {
+                "series_id": sid,
+                "trend_name": parts[0].trend_name if parts else "",
+                "part_count": len(parts),
+                "parts": [p.to_dict() for p in parts],
+            }
+        
+        return {
+            "series": result,
+            "count": len(result),
+            "month": month or library.get_current_month(),
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get trend series: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trend-prompts/{prompt_id}")
+async def get_trend_prompt_by_id(prompt_id: str):
+    """Get a specific trend prompt by its ID."""
+    try:
+        from services.sora_daily.trend_prompts import get_trend_prompt_library
+        
+        library = get_trend_prompt_library()
+        prompt = library.get_prompt_by_id(prompt_id)
+        
+        if not prompt:
+            raise HTTPException(status_code=404, detail=f"Prompt '{prompt_id}' not found")
+        
+        return prompt.to_dict()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get trend prompt: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trend-prompts/random")
+async def get_random_trend_content(
+    content_type: str = "single",
+    trend_name: Optional[str] = None,
+):
+    """
+    Get a random trend prompt or series for quick generation.
+    
+    Args:
+        content_type: "single" for standalone, "series" for 3-part
+        trend_name: optional filter by trend
+    """
+    try:
+        from services.sora_daily.story_generator import get_story_generator
+        
+        generator = get_story_generator()
+        
+        if content_type == "series":
+            result = await generator.generate_trend_series(
+                trend_name=trend_name,
+                character="@isaiahdupree",
+            )
+        else:
+            result = await generator.generate_trend_prompt(
+                trend_name=trend_name,
+                character="@isaiahdupree",
+            )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to generate trend content: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class CustomTrendRequest(BaseModel):
+    """Request to generate a custom trend-based Sora prompt."""
+    trend_description: str = Field(..., description="Description of the trend to incorporate")
+    style: str = Field(default="cinematic 4K", description="Visual style")
+
+
+@router.post("/trend-prompts/generate-custom")
+async def generate_custom_trend_prompt(request: CustomTrendRequest):
+    """Generate a custom Sora prompt based on a trend description using AI."""
+    try:
+        from services.sora_daily.trend_prompts import get_trend_prompt_library
+        
+        library = get_trend_prompt_library()
+        prompt = await library.generate_custom_trend_prompt(
+            trend_description=request.trend_description,
+            character="@isaiahdupree",
+            style=request.style,
+        )
+        
+        return {
+            "sora_prompt": prompt,
+            "trend_description": request.trend_description,
+            "style": request.style,
+            "character": "@isaiahdupree",
+            "source": "ai_generated",
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to generate custom trend prompt: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
 # HISTORY ENDPOINTS
 # =============================================================================
 
@@ -399,4 +578,222 @@ async def get_history(days: int = 7):
         
     except Exception as e:
         logger.error(f"Failed to get history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# DYNAMIC SCRIPT GENERATION ENDPOINTS
+# =============================================================================
+
+class GenerateScriptsRequest(BaseModel):
+    """Request to generate new Sora scripts."""
+    source: str = Field(
+        default="live",
+        description="Trend source: 'live' (fetch from web), 'internal' (from collected trends), 'manual' (provide descriptions)"
+    )
+    count: int = Field(default=5, ge=1, le=15, description="Number of scripts to generate")
+    include_series: bool = Field(default=True, description="Include multi-part series")
+    descriptions: Optional[List[str]] = Field(
+        default=None,
+        description="Manual trend descriptions (required when source='manual')"
+    )
+
+
+@router.post("/scripts/generate")
+async def generate_scripts(request: GenerateScriptsRequest, background_tasks: BackgroundTasks):
+    """
+    Generate new Sora script packages from trend data.
+
+    Sources:
+    - **live**: Fetches current trends from web sources, then generates scripts via AI
+    - **internal**: Uses trends already collected by TrendCollector (comments, DMs, CRM)
+    - **manual**: You provide trend descriptions, AI generates scripts from them
+
+    Returns immediately with a job_id; scripts are generated in the background.
+    """
+    from services.sora_daily.script_generator import get_script_generator
+
+    job_id = str(__import__("uuid").uuid4())
+
+    background_tasks.add_task(
+        _run_script_generation,
+        job_id,
+        request.source,
+        request.count,
+        request.include_series,
+        request.descriptions,
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "generating",
+        "source": request.source,
+        "count": request.count,
+        "message": f"Generating {request.count} scripts from '{request.source}' trends in background. Poll GET /sora-daily/scripts to see results.",
+    }
+
+
+async def _run_script_generation(
+    job_id: str,
+    source: str,
+    count: int,
+    include_series: bool,
+    descriptions: Optional[List[str]],
+):
+    """Background task that runs the script generation pipeline."""
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+
+        if source == "manual" and descriptions:
+            scripts = await gen.generate_from_descriptions(descriptions, include_series)
+        elif source == "internal":
+            scripts = await gen.generate_from_collected_trends(count, include_series)
+        else:  # "live" or default
+            scripts = await gen.generate_from_live_trends(count, include_series)
+
+        logger.info(f"🎬 Script generation job {job_id}: produced {len(scripts)} scripts")
+
+    except Exception as e:
+        logger.error(f"Script generation job {job_id} failed: {e}")
+
+
+@router.post("/scripts/generate-sync")
+async def generate_scripts_sync(request: GenerateScriptsRequest):
+    """
+    Same as /scripts/generate but waits for completion and returns results directly.
+    Use for small batches (count <= 5) or when you need results immediately.
+    """
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+
+        if request.source == "manual" and request.descriptions:
+            scripts = await gen.generate_from_descriptions(
+                request.descriptions, request.include_series
+            )
+        elif request.source == "internal":
+            scripts = await gen.generate_from_collected_trends(
+                request.count, request.include_series
+            )
+        else:
+            scripts = await gen.generate_from_live_trends(
+                request.count, request.include_series
+            )
+
+        return {
+            "scripts": [s.to_dict() for s in scripts],
+            "count": len(scripts),
+            "source": request.source,
+        }
+
+    except Exception as e:
+        logger.error(f"Sync script generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scripts")
+async def list_scripts(
+    month: Optional[str] = None,
+    status: Optional[str] = None,
+    format_type: Optional[str] = None,
+    limit: int = 50,
+):
+    """
+    List saved generated scripts.
+
+    Filters:
+    - month: e.g. "2026-02"
+    - status: generated | approved | queued | used | archived
+    - format_type: single | series
+    """
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+        scripts = gen.get_scripts(
+            month=month, status=status, format_type=format_type, limit=limit
+        )
+
+        return {
+            "scripts": [s.to_dict() for s in scripts],
+            "count": len(scripts),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to list scripts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scripts/{script_id}")
+async def get_script(script_id: str):
+    """Get a single generated script by ID."""
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+        script = gen.get_script_by_id(script_id)
+
+        if not script:
+            raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found")
+
+        return script.to_dict()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get script: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class UpdateScriptStatusRequest(BaseModel):
+    """Request to update a script's status."""
+    status: str = Field(..., description="New status: generated | approved | queued | used | archived")
+
+
+@router.patch("/scripts/{script_id}/status")
+async def update_script_status(script_id: str, request: UpdateScriptStatusRequest):
+    """Update a script's workflow status."""
+    valid = {"generated", "approved", "queued", "used", "archived"}
+    if request.status not in valid:
+        raise HTTPException(status_code=400, detail=f"Status must be one of: {valid}")
+
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+        ok = gen.update_script_status(script_id, request.status)
+
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found")
+
+        return {"script_id": script_id, "status": request.status}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update script status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/scripts/{script_id}")
+async def delete_script(script_id: str):
+    """Delete a generated script."""
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+        ok = gen.delete_script(script_id)
+
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found")
+
+        return {"deleted": True, "script_id": script_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete script: {e}")
         raise HTTPException(status_code=500, detail=str(e))

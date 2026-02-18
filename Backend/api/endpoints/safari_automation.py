@@ -37,7 +37,7 @@ class StatusResponse(BaseModel):
     running: bool
     started_at: Optional[str]
     uptime_minutes: float
-    today: Dict[str, int]
+    today: Dict[str, Any]
     limits: Dict[str, int]
     queue: Dict[str, Any]
     services: Dict[str, bool]
@@ -293,6 +293,159 @@ async def check_services():
         results["engagement"] = {"available": False, "error": str(e)}
     
     return results
+
+
+# ============================================================================
+# Script Generation Trigger (Dynamic Sora Script Pipeline)
+# ============================================================================
+
+class ScriptGenerationRequest(BaseModel):
+    """Request to trigger dynamic Sora script generation."""
+    source: str = "live"  # "live", "internal", "manual"
+    count: int = 5
+    include_series: bool = True
+    descriptions: Optional[List[str]] = None  # required for source="manual"
+
+
+@router.post("/scripts/generate")
+async def trigger_script_generation(
+    request: ScriptGenerationRequest,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Trigger dynamic Sora script generation from the Safari automation server.
+
+    Sources:
+    - **live**: Scrapes current web trends and generates scripts via AI
+    - **internal**: Uses trends from comments, DMs, CRM data
+    - **manual**: Provide trend descriptions, AI generates scripts from them
+
+    Scripts are saved to the DB and can be queued for the SoraScheduler.
+    """
+    import uuid
+
+    job_id = str(uuid.uuid4())
+    background_tasks.add_task(
+        _run_safari_script_generation,
+        job_id,
+        request.source,
+        request.count,
+        request.include_series,
+        request.descriptions,
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "generating",
+        "source": request.source,
+        "count": request.count,
+        "message": (
+            f"Generating {request.count} Sora scripts from '{request.source}' trends. "
+            f"Poll GET /api/sora-daily/scripts to see results."
+        ),
+    }
+
+
+@router.post("/scripts/generate-now")
+async def trigger_script_generation_sync(request: ScriptGenerationRequest):
+    """
+    Synchronous version — waits for generation to complete and returns scripts.
+    Best for small batches (count <= 5).
+    """
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+
+        if request.source == "manual" and request.descriptions:
+            scripts = await gen.generate_from_descriptions(
+                request.descriptions, request.include_series
+            )
+        elif request.source == "internal":
+            scripts = await gen.generate_from_collected_trends(
+                request.count, request.include_series
+            )
+        else:
+            scripts = await gen.generate_from_live_trends(
+                request.count, request.include_series
+            )
+
+        return {
+            "scripts": [s.to_dict() for s in scripts],
+            "count": len(scripts),
+            "source": request.source,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scripts")
+async def list_generated_scripts(
+    status: Optional[str] = None,
+    limit: int = 50,
+):
+    """List generated scripts from the Safari automation pipeline."""
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+        scripts = gen.get_scripts(status=status, limit=limit)
+        return {"scripts": [s.to_dict() for s in scripts], "count": len(scripts)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/scripts/{script_id}/queue")
+async def queue_script_for_scheduler(script_id: str):
+    """Approve a generated script and queue it for the SoraScheduler to pick up."""
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+        script = gen.get_script_by_id(script_id)
+        if not script:
+            raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found")
+
+        gen.update_script_status(script_id, "queued")
+        return {
+            "script_id": script_id,
+            "title": script.title,
+            "status": "queued",
+            "message": "Script queued — SoraScheduler will use it for the next generation.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _run_safari_script_generation(
+    job_id: str,
+    source: str,
+    count: int,
+    include_series: bool,
+    descriptions: Optional[List[str]],
+):
+    """Background task for script generation triggered from Safari automation."""
+    from loguru import logger
+
+    try:
+        from services.sora_daily.script_generator import get_script_generator
+
+        gen = get_script_generator()
+
+        if source == "manual" and descriptions:
+            scripts = await gen.generate_from_descriptions(descriptions, include_series)
+        elif source == "internal":
+            scripts = await gen.generate_from_collected_trends(count, include_series)
+        else:
+            scripts = await gen.generate_from_live_trends(count, include_series)
+
+        logger.info(
+            f"🎬 Safari script generation job {job_id}: produced {len(scripts)} scripts"
+        )
+    except Exception as e:
+        logger.error(f"Safari script generation job {job_id} failed: {e}")
 
 
 @router.get("/1hour-schedule")

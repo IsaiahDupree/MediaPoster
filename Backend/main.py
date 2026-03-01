@@ -694,12 +694,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5557",  # Frontend dev server
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5557",
         "https://mediaposter.vercel.app",  # Production domain
     ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",  # Any local port
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1103,6 +1100,14 @@ app.include_router(dashboard_router, tags=["Cross-Platform Dashboard"])
 # A/B Testing Framework
 from api.ab_testing import router as ab_testing_router
 app.include_router(ab_testing_router, tags=["A/B Testing"])
+
+# Ad Creative Testing Pipeline (ACTP)
+try:
+    from services.creative_testing_pipeline.routers.actp_router import router as actp_router
+    app.include_router(actp_router, tags=["Ad Creative Testing Pipeline"])
+    logger.success("✓ ACTP router registered (74 routes)")
+except Exception as e:
+    logger.warning(f"⚠️  ACTP router registration failed: {e}")
 
 # Content Intelligence (closed-loop feedback)
 from api.content_intelligence import router as intel_router

@@ -589,7 +589,7 @@ class GenerateScriptsRequest(BaseModel):
     """Request to generate new Sora scripts."""
     source: str = Field(
         default="live",
-        description="Trend source: 'live' (fetch from web), 'internal' (from collected trends), 'manual' (provide descriptions)"
+        description="Trend source: 'live' (fetch from web), 'internal' (from collected trends), 'manual' (provide descriptions), 'offers' (trends + offer/product integration)"
     )
     count: int = Field(default=5, ge=1, le=15, description="Number of scripts to generate")
     include_series: bool = Field(default=True, description="Include multi-part series")
@@ -650,6 +650,8 @@ async def _run_script_generation(
             scripts = await gen.generate_from_descriptions(descriptions, include_series)
         elif source == "internal":
             scripts = await gen.generate_from_collected_trends(count, include_series)
+        elif source == "offers":
+            scripts = await gen.generate_from_offers_and_trends(count, include_series)
         else:  # "live" or default
             scripts = await gen.generate_from_live_trends(count, include_series)
 
@@ -676,6 +678,10 @@ async def generate_scripts_sync(request: GenerateScriptsRequest):
             )
         elif request.source == "internal":
             scripts = await gen.generate_from_collected_trends(
+                request.count, request.include_series
+            )
+        elif request.source == "offers":
+            scripts = await gen.generate_from_offers_and_trends(
                 request.count, request.include_series
             )
         else:

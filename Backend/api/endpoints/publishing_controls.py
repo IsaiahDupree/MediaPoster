@@ -376,6 +376,35 @@ async def get_publishing_history(
 
 
 # =============================================================================
+# Queue Processing — dequeue + publish via Blotato
+# =============================================================================
+
+@router.post("/process")
+async def process_next(background_tasks: BackgroundTasks):
+    """
+    Process the next queued item: dequeue → upload to cloud → Blotato → platform.
+
+    Atomically claims the next ready item and publishes it via PublishService.
+    Respects rate limits and posting windows.
+    """
+    controller = get_publishing_controller()
+    result = await controller.process_next_item()
+    return result
+
+
+@router.post("/process/batch")
+async def process_batch(max_items: int = 5):
+    """
+    Process up to `max_items` from the queue in sequence.
+
+    Stops early if the queue is empty or rate limits are hit.
+    """
+    controller = get_publishing_controller()
+    result = await controller.process_batch(max_items=min(max_items, 20))
+    return result
+
+
+# =============================================================================
 # Rate Check (for external servers to query before publishing)
 # =============================================================================
 

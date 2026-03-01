@@ -313,6 +313,62 @@ class SoraScriptGenerator:
         ]
         return await self._generate_scripts_from_trends(trends, len(descriptions), include_series)
 
+    async def generate_from_offers_and_trends(
+        self,
+        count: int = 5,
+        include_series: bool = False,
+    ) -> List[ScriptPackage]:
+        """
+        Generate scripts that weave in offers/products alongside live trends.
+        Fetches offers from UGC system, then generates scripts that naturally
+        incorporate product mentions into trend-aware @isaiahdupree content.
+        """
+        # Fetch offers
+        offers: List[Dict[str, Any]] = []
+        try:
+            from services.ugc_content_generator import UGCContentGenerator
+            ugc = UGCContentGenerator()
+            offers = ugc.get_available_offers() if hasattr(ugc, 'get_available_offers') else []
+        except Exception as e:
+            logger.debug(f"Could not fetch offers: {e}")
+
+        # Fetch live trends as context
+        trends = []
+        try:
+            trends = await self.trend_fetcher.fetch_live_trends()
+        except Exception:
+            trends = self._get_fallback_trends()
+
+        # Build offer-enriched trend objects
+        enriched: List[Dict[str, Any]] = []
+        for i, trend in enumerate(trends[:count * 2]):
+            offer_context = ""
+            if offers and i < len(offers):
+                o = offers[i % len(offers)]
+                offer_context = (
+                    f" Naturally incorporate the product/offer: "
+                    f"\"{o.get('title', 'Premium Product')}\" — {o.get('description', '')}. "
+                    f"Show @isaiahdupree authentically using or showcasing this product."
+                )
+            enriched.append({
+                **trend,
+                "description": trend.get("description", "") + offer_context,
+                "source": "offers_and_trends",
+            })
+
+        if not enriched:
+            enriched = [
+                {
+                    "trend_name": "Creator Brand Showcase",
+                    "description": "Cinematic showcase of @isaiahdupree's brand and products with aspirational lifestyle energy",
+                    "platform": "multi",
+                    "format": "single",
+                    "source": "offers_fallback",
+                }
+            ]
+
+        return await self._generate_scripts_from_trends(enriched, count, include_series)
+
     async def generate_from_collected_trends(
         self,
         count: int = 5,

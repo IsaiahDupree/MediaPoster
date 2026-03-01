@@ -476,6 +476,16 @@ class VideoPublishingController:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> QueueItem:
         """Add a video to the publish queue."""
+        # WATERMARK GUARD — block raw Sora videos at queue entry
+        SAFE_PATH_MARKERS = ("/cleaned/", "/cleaned_", "/finals/")
+        is_sora = "/sora-videos/" in video_url or "/sora_" in video_url
+        is_safe = any(m in video_url for m in SAFE_PATH_MARKERS)
+        if is_sora and not is_safe:
+            raise ValueError(
+                f"WATERMARK GUARD: Cannot queue raw Sora video '{video_url}'. "
+                "Only cleaned or finals videos are allowed."
+            )
+
         item_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
@@ -660,6 +670,152 @@ class VideoPublishingController:
     def set_priority(self, item_id: str, priority: int) -> bool:
         """Change an item's priority (1=highest, 10=lowest)."""
         return self.update_queue_item(item_id, priority=max(1, min(10, priority)))
+
+    # =========================================================================
+    # Queue Processing — dequeue + publish via Blotato
+    # =========================================================================
+
+    async def process_next_item(self) -> Dict[str, Any]:
+        """
+        Atomically dequeue the next ready item and publish it via Blotato.
+
+        Returns dict with success status and details.
+        """
+        from pathlib import Path
+
+        # 1. Atomically claim next queued item
+        with self.engine.connect() as conn:
+            row = conn.execute(text("""
+                UPDATE video_publish_queue
+                SET status = 'publishing', updated_at = NOW()
+                WHERE id = (
+                    SELECT id FROM video_publish_queue
+                    WHERE status = 'queued'
+                      AND (scheduled_for IS NULL OR scheduled_for <= NOW())
+                    ORDER BY priority ASC, created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, video_url, caption, title, hashtags,
+                          platform, account_id, account_username, metadata
+            """)).fetchone()
+            conn.commit()
+
+        if not row:
+            return {"success": False, "reason": "no_items", "message": "No queued items ready"}
+
+        item_id = str(row[0])
+        video_url = row[1]
+        caption = row[2] or ""
+        title = row[3] or ""
+        hashtags = row[4] if isinstance(row[4], list) else json.loads(row[4] or "[]")
+        platform = row[5]
+        account_id = row[6]
+        account_username = row[7] or ""
+        metadata = row[8] if isinstance(row[8], dict) else json.loads(row[8] or "{}")
+
+        logger.info(f"📤 Processing queue item {item_id}: {title} → {platform}/@{account_username}")
+
+        # 2. WATERMARK GUARD — reject raw Sora videos (last line of defense)
+        SAFE_PATH_MARKERS = ("/cleaned/", "/cleaned_", "/finals/")
+        is_sora_video = "/sora-videos/" in video_url or "/sora_" in video_url
+        is_watermark_free = any(marker in video_url for marker in SAFE_PATH_MARKERS)
+
+        if is_sora_video and not is_watermark_free:
+            error_msg = (
+                f"WATERMARK GUARD: Blocked raw Sora video '{video_url}'. "
+                "Only cleaned/finals videos may be published."
+            )
+            logger.error(f"🚫 {error_msg}")
+            self.update_queue_item(item_id, status="failed", error_message=error_msg)
+            return {"success": False, "item_id": item_id, "reason": "watermark_blocked", "error": error_msg}
+
+        # 3. Check rate limits
+        if not self.can_publish(platform):
+            self.update_queue_item(item_id, status="queued")
+            return {"success": False, "reason": "rate_limited", "platform": platform}
+
+        # 3. Publish via PublishService
+        try:
+            from services.publish_service import PublishService
+            publish_svc = PublishService()
+
+            file_path = Path(video_url)
+            if not file_path.exists():
+                raise FileNotFoundError(f"Video file not found: {video_url}")
+
+            # Build caption with hashtags
+            full_caption = caption
+            if hashtags:
+                tag_str = " ".join(f"#{h}" if not h.startswith("#") else h for h in hashtags)
+                if tag_str not in full_caption:
+                    full_caption = f"{full_caption}\n\n{tag_str}"
+
+            # Platform-specific target config
+            target_config: Dict[str, Any] = {}
+            if platform == "youtube":
+                target_config = {
+                    "title": title or caption[:100],
+                    "privacyStatus": "public",
+                    "shouldNotifySubscribers": True,
+                    "isMadeForKids": False,
+                }
+            elif platform == "tiktok":
+                target_config = {
+                    "title": title[:150] if title else "",
+                    "privacyLevel": "PUBLIC_TO_EVERYONE",
+                    "isAiGenerated": True,
+                }
+            elif platform == "instagram":
+                target_config = {"mediaType": "reel"}
+
+            result = await publish_svc.full_publish_flow(
+                file_path=file_path,
+                account_id=account_id,
+                platform=platform,
+                text=full_caption,
+                target_config=target_config,
+            )
+
+            if result.get("success"):
+                self.update_queue_item(
+                    item_id,
+                    status="published",
+                    published_at=datetime.now(timezone.utc),
+                    blotato_submission_id=result.get("post_submission_id"),
+                    platform_url=result.get("steps", {}).get("publish", {}).get("platform_url"),
+                )
+                self.mark_published(platform)
+                logger.info(f"✅ Published {item_id} to {platform}: {result.get('post_submission_id')}")
+                return {"success": True, "item_id": item_id, "platform": platform, "result": result}
+            else:
+                error = result.get("error", "Unknown error")
+                self.update_queue_item(item_id, status="failed", error_message=error)
+                logger.error(f"❌ Publish failed for {item_id}: {error}")
+                return {"success": False, "item_id": item_id, "error": error}
+
+        except Exception as e:
+            error_msg = str(e)
+            self.update_queue_item(item_id, status="failed", error_message=error_msg)
+            logger.error(f"❌ Exception publishing {item_id}: {error_msg}")
+            return {"success": False, "item_id": item_id, "error": error_msg}
+
+    async def process_batch(self, max_items: int = 5) -> Dict[str, Any]:
+        """Process up to max_items from the queue, respecting rate limits."""
+        results = []
+        for _ in range(max_items):
+            result = await self.process_next_item()
+            results.append(result)
+            if result.get("reason") in ("no_items", "rate_limited"):
+                break
+        published = sum(1 for r in results if r.get("success"))
+        failed = sum(1 for r in results if not r.get("success") and r.get("item_id"))
+        return {
+            "processed": len(results),
+            "published": published,
+            "failed": failed,
+            "results": results,
+        }
 
     # =========================================================================
     # Queue Stats

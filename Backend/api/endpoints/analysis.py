@@ -9,6 +9,9 @@ from pathlib import Path
 import uuid
 import json
 import os
+import tempfile
+import urllib.request
+import urllib.parse
 from loguru import logger
 
 from database.connection import get_db
@@ -18,6 +21,263 @@ from config.platform_limits import get_platform_limits, PLATFORM_LIMITS, DEFAULT
 from services.event_bus import EventBus, Topics
 
 router = APIRouter()
+
+
+# ─── Standalone File Analysis (no DB required) ────────────────────────────────
+
+class AnalyzeFileRequest(BaseModel):
+    file_path: Optional[str] = None
+    url: Optional[str] = None
+    transcribe: bool = True
+    analyze_frames: bool = True
+    fate_score: bool = True
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class AnalyzeFileResponse(BaseModel):
+    success: bool
+    source: str
+    transcript: str = ""
+    topics: List[str] = []
+    hooks: List[str] = []
+    detected_hook: Optional[str] = None
+    tone: str = ""
+    pacing: str = ""
+    pre_social_score: float = 0.0
+    viral_analysis: str = ""
+    pain_points: List[str] = []
+    emotional_drivers: List[str] = []
+    emotional_journey: Dict[str, Any] = {}
+    call_to_action: Dict[str, Any] = {}
+    scene_structure: List[Dict[str, Any]] = []
+    content_type: str = ""
+    target_audience: Dict[str, Any] = {}
+    music_suggestion: Dict[str, Any] = {}
+    key_moments: Dict[str, Any] = {}
+    visual_summary: str = ""
+    fate_scores: Dict[str, float] = {}
+    transcription_language: Optional[str] = None
+    transcription_duration_sec: Optional[float] = None
+    transcription_word_count: Optional[int] = None
+    words_per_minute: Optional[float] = None
+    analysis_source: str = ""
+    error: Optional[str] = None
+
+
+@router.post("/analyze-file", response_model=AnalyzeFileResponse)
+async def analyze_file(request: AnalyzeFileRequest):
+    """
+    Standalone video analysis — no database required.
+
+    Accepts either a local file path or a URL to a video file.
+    Runs the full pipeline synchronously and returns all results immediately:
+      - Whisper transcription (Groq)
+      - Content analysis: topics, hooks, tone, viral score, scene structure (Groq Llama)
+      - Frame visual analysis (GPT-4o Mini)
+      - FATE persuasion scoring (rule-based, free)
+
+    Request body:
+        file_path: absolute path to a local video file
+        url:       public URL to a video file (will be downloaded to /tmp)
+        transcribe:     run Whisper transcription (default true)
+        analyze_frames: run GPT-4o Mini frame analysis (default true)
+        fate_score:     run FATE persuasion scoring (default true)
+        metadata:       optional dict passed to content analyzer (duration, title, etc.)
+
+    Example:
+        POST /api/analysis/analyze-file
+        {
+            "file_path": "/Volumes/My Passport/MediaPoster/workspace1/iphone_import/video.MOV",
+            "transcribe": true,
+            "analyze_frames": true,
+            "fate_score": true
+        }
+
+    Or from another local server:
+        POST http://localhost:5555/api/analysis/analyze-file
+        { "url": "http://localhost:8080/media/video.mp4" }
+    """
+    if not request.file_path and not request.url:
+        raise HTTPException(status_code=400, detail="Provide either 'file_path' or 'url'")
+
+    # ── Resolve video path ────────────────────────────────────────────────────
+    video_path = None
+    tmp_file = None
+
+    if request.file_path:
+        video_path = os.path.expanduser(request.file_path)
+        if not os.path.exists(video_path):
+            raise HTTPException(status_code=404, detail=f"File not found: {video_path}")
+        if not os.path.isfile(video_path):
+            raise HTTPException(status_code=400, detail=f"Path is not a file: {video_path}")
+        source = video_path
+    else:
+        # Download URL to a temp file
+        try:
+            parsed = urllib.parse.urlparse(request.url)
+            suffix = Path(parsed.path).suffix or ".mp4"
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp_file.close()
+            logger.info(f"[analyze-file] Downloading {request.url} → {tmp_file.name}")
+            urllib.request.urlretrieve(request.url, tmp_file.name)
+            video_path = tmp_file.name
+            source = request.url
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to download URL: {e}")
+
+    try:
+        result = await _run_standalone_analysis(
+            video_path=video_path,
+            source=source,
+            transcribe=request.transcribe,
+            analyze_frames=request.analyze_frames,
+            fate_score=request.fate_score,
+            metadata=request.metadata or {},
+        )
+        return result
+    finally:
+        if tmp_file and os.path.exists(tmp_file.name):
+            try:
+                os.unlink(tmp_file.name)
+            except Exception:
+                pass
+
+
+async def _run_standalone_analysis(
+    video_path: str,
+    source: str,
+    transcribe: bool,
+    analyze_frames: bool,
+    fate_score: bool,
+    metadata: dict,
+) -> AnalyzeFileResponse:
+    """Run the full analysis pipeline on a file path, return structured results."""
+
+    transcript = ""
+    visual_summary = ""
+    analysis = {}
+    fate_scores = {}
+    transcription_meta = {}
+    analysis_source = "none"
+    error_notes = []
+
+    # ── Step 1: Transcription ─────────────────────────────────────────────────
+    if transcribe:
+        try:
+            from services.whisper_transcriber import WhisperTranscriber
+            transcriber = WhisperTranscriber()
+            logger.info(f"[analyze-file] Step 1/3: Transcribing {Path(video_path).name}")
+            result = transcriber.transcribe_video(video_path)
+            transcript = result.get("text", "")
+            transcription_meta = {
+                "language": result.get("language"),
+                "duration": result.get("duration"),
+                "segments": result.get("segments", []),
+                "words": result.get("words", []),
+            }
+            if transcript:
+                logger.info(f"[analyze-file] Transcript: {len(transcript)} chars")
+            else:
+                logger.warning(f"[analyze-file] No transcript returned (no audio?)")
+                error_notes.append("No audio stream or empty transcript")
+        except Exception as e:
+            logger.error(f"[analyze-file] Transcription failed: {e}")
+            error_notes.append(f"Transcription error: {e}")
+
+    # ── Step 2: Frame visual analysis ─────────────────────────────────────────
+    if analyze_frames:
+        try:
+            from services.thumbnail_generator import ThumbnailGenerator
+            from services.frame_analyzer import FrameAnalyzer
+            logger.info(f"[analyze-file] Step 2/3: Analyzing frames")
+            thumb_gen = ThumbnailGenerator()
+            frames = thumb_gen.extract_frames(video_path, num_frames=5)
+            if frames:
+                frame_analyzer = FrameAnalyzer()
+                visual_result = frame_analyzer.analyze_frames(frames)
+                visual_summary = visual_result.get("visual_summary", "")
+                logger.info(f"[analyze-file] Visual summary: {len(visual_summary)} chars")
+            else:
+                logger.warning(f"[analyze-file] No frames extracted")
+                error_notes.append("No frames could be extracted")
+        except Exception as e:
+            logger.error(f"[analyze-file] Frame analysis failed: {e}")
+            error_notes.append(f"Frame analysis error: {e}")
+
+    # ── Step 3: Content analysis (transcript → Groq Llama) ────────────────────
+    try:
+        from services.content_analyzer import ContentAnalyzer as CA
+        analyzer = CA()
+        analysis_metadata = {**metadata}
+        if visual_summary:
+            analysis_metadata["visual_context"] = visual_summary
+
+        if transcript and len(transcript.strip()) > 10:
+            logger.info(f"[analyze-file] Step 3/3: Content analysis (transcript)")
+            analysis = analyzer.analyze_transcript(transcript, video_metadata=analysis_metadata)
+            analysis_source = "transcript"
+        elif visual_summary and len(visual_summary.strip()) > 20:
+            logger.info(f"[analyze-file] Step 3/3: Content analysis (visuals fallback)")
+            analysis = analyzer.analyze_from_visuals(visual_summary, video_metadata=analysis_metadata)
+            analysis_source = "visuals"
+        else:
+            logger.warning(f"[analyze-file] No content to analyze")
+            error_notes.append("No transcript or visual content available for analysis")
+    except Exception as e:
+        logger.error(f"[analyze-file] Content analysis failed: {e}")
+        error_notes.append(f"Content analysis error: {e}")
+
+    # ── Step 4: FATE scoring ──────────────────────────────────────────────────
+    if fate_score and transcript:
+        try:
+            from services.fate_scorer import get_fate_scorer
+            scorer = get_fate_scorer()
+            fate_scores = scorer.score_all(transcript)
+            logger.info(f"[analyze-file] FATE: F={fate_scores.get('F', 0):.2f} A={fate_scores.get('A', 0):.2f} T={fate_scores.get('T', 0):.2f} E={fate_scores.get('E', 0):.2f}")
+        except Exception as e:
+            logger.error(f"[analyze-file] FATE scoring failed: {e}")
+            error_notes.append(f"FATE scoring error: {e}")
+
+    # ── Compute words per minute ──────────────────────────────────────────────
+    words_per_minute = None
+    word_count = len(transcription_meta.get("words", [])) or (len(transcript.split()) if transcript else 0)
+    duration = transcription_meta.get("duration")
+    if word_count and duration and duration > 0:
+        words_per_minute = round((word_count / duration) * 60, 1)
+
+    # ── Build response ────────────────────────────────────────────────────────
+    hooks = analysis.get("hooks", [])
+    detected_hook = analysis.get("detected_hook") or (hooks[0] if hooks else None)
+
+    return AnalyzeFileResponse(
+        success=True,
+        source=source,
+        transcript=transcript,
+        topics=analysis.get("topics", []),
+        hooks=hooks,
+        detected_hook=detected_hook,
+        tone=analysis.get("tone", ""),
+        pacing=analysis.get("pacing", ""),
+        pre_social_score=float(analysis.get("pre_social_score", 0)),
+        viral_analysis=analysis.get("viral_analysis", ""),
+        pain_points=analysis.get("pain_points", []),
+        emotional_drivers=analysis.get("emotional_drivers", []),
+        emotional_journey=analysis.get("emotional_journey", {}),
+        call_to_action=analysis.get("call_to_action", {}),
+        scene_structure=analysis.get("scene_structure", []),
+        content_type=analysis.get("content_type", ""),
+        target_audience=analysis.get("target_audience", {}),
+        music_suggestion=analysis.get("music_suggestion", {}),
+        key_moments=analysis.get("key_moments", {}),
+        visual_summary=visual_summary,
+        fate_scores=fate_scores,
+        transcription_language=transcription_meta.get("language"),
+        transcription_duration_sec=transcription_meta.get("duration"),
+        transcription_word_count=word_count or None,
+        words_per_minute=words_per_minute,
+        analysis_source=analysis_source,
+        error="; ".join(error_notes) if error_notes else None,
+    )
 
 
 class AnalysisRequest(BaseModel):

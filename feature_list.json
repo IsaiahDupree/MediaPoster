@@ -8424,7 +8424,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-001",
+      "id": "META-011",
       "name": "Meta Marketing API Client",
       "description": "Client for Meta Marketing API with campaign, adset, and ad management",
       "category": "meta-ads",
@@ -8435,7 +8435,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-002",
+      "id": "META-012",
       "name": "Ad Creative Variation Generator",
       "description": "Generate 50-100+ video variations from transcript hooks, CTAs, and pain points",
       "category": "meta-ads",
@@ -8446,7 +8446,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-003",
+      "id": "META-013",
       "name": "Batch Video Rendering",
       "description": "Render multiple ad variations in parallel using Remotion",
       "category": "meta-ads",
@@ -8457,7 +8457,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-004",
+      "id": "META-014",
       "name": "Meta Campaign Deployment",
       "description": "Deploy campaigns to Meta with targeting, budget, and creative sets",
       "category": "meta-ads",
@@ -8468,7 +8468,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-005",
+      "id": "META-015",
       "name": "Meta Insights Fetcher",
       "description": "Fetch campaign performance metrics (CPM, CPC, CTR, ROAS) from Insights API",
       "category": "meta-ads",
@@ -8479,7 +8479,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-006",
+      "id": "META-016",
       "name": "Ads Performance Dashboard",
       "description": "Dashboard showing ad performance, winner identification, and spend tracking",
       "category": "meta-ads",
@@ -8490,7 +8490,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-007",
+      "id": "META-017",
       "name": "AI Ads Insights Engine",
       "description": "AI analysis of ad performance patterns with recommendations",
       "category": "meta-ads",
@@ -8501,7 +8501,7 @@
       "completed": "2026-02-02"
     },
     {
-      "id": "META-008",
+      "id": "META-018",
       "name": "Campaign Budget Optimizer",
       "description": "Automatically adjust budgets based on performance (pause losers, scale winners)",
       "category": "meta-ads",

@@ -5,6 +5,9 @@ REST API endpoints for Remotion video rendering service.
 """
 
 import logging
+import json
+import os
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -15,6 +18,32 @@ from services.remotion.models import SourceType
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/remotion", tags=["remotion"])
+
+# In-process job registry — updated by render endpoint + event subscriptions
+_job_registry: Dict[str, Dict[str, Any]] = {}
+
+# MCP server jobs file (cross-read for jobs submitted via MCP)
+_MCP_JOBS_FILE = os.path.expanduser(
+    "~/Documents/Software/Remotion/output/.mcp-jobs.json"
+)
+
+
+def _load_mcp_jobs() -> Dict[str, Dict[str, Any]]:
+    try:
+        if os.path.exists(_MCP_JOBS_FILE):
+            with open(_MCP_JOBS_FILE) as f:
+                return {j["id"]: j for j in json.load(f)}
+    except Exception:
+        pass
+    return {}
+
+
+def _get_job(job_id: str) -> Optional[Dict[str, Any]]:
+    if job_id in _job_registry:
+        return _job_registry[job_id]
+    # Fall back to MCP jobs file
+    mcp_jobs = _load_mcp_jobs()
+    return mcp_jobs.get(job_id)
 
 
 class LayerRequest(BaseModel):
@@ -127,9 +156,18 @@ async def render_video(request: RemotionRenderRequest, http_request: Request):
     )
     
     job_id = payload.get("job_id", event_id)
-    
+
+    # Register job in in-process registry
+    _job_registry[job_id] = {
+        "job_id": job_id,
+        "status": "queued",
+        "composition": request.composition,
+        "queued_at": datetime.now(timezone.utc).isoformat(),
+        "correlation_id": correlation_id or event_id,
+    }
+
     logger.info(f"Remotion render requested: job_id={job_id}, composition={request.composition}")
-    
+
     return RemotionRenderResponse(
         job_id=job_id,
         status="queued",
@@ -140,18 +178,23 @@ async def render_video(request: RemotionRenderRequest, http_request: Request):
 
 @router.get("/status/{job_id}")
 async def get_remotion_status(job_id: str):
-    """
-    Get status of a Remotion rendering job.
-    
-    Note: This requires the Remotion worker to be running and tracking jobs.
-    In production, job status would be stored in a database.
-    """
-    # TODO: Implement job status lookup from database or worker
-    return {
-        "job_id": job_id,
-        "status": "unknown",
-        "message": "Job status lookup not yet implemented. Check event bus for completion events."
-    }
+    """Get status of a Remotion render job. Checks in-process registry and MCP jobs file."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    return job
+
+
+@router.get("/jobs")
+async def list_remotion_jobs():
+    """List all Remotion render jobs (in-process + MCP-submitted)."""
+    all_jobs = {**_load_mcp_jobs(), **_job_registry}
+    jobs_list = sorted(
+        all_jobs.values(),
+        key=lambda j: j.get("startedAt") or j.get("queued_at") or "",
+        reverse=True,
+    )
+    return {"jobs": jobs_list, "total": len(jobs_list)}
 
 
 @router.get("/source-types")

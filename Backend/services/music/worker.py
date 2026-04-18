@@ -15,6 +15,7 @@ from .models import MusicRequest, MusicResponse, MusicSource
 from .adapters.suno import SunoAdapter
 from .adapters.soundcloud import SoundCloudAdapter
 from .adapters.social_platform import SocialPlatformAdapter
+from .adapters.deezer import DeezerAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class MusicWorker(BaseWorker):
         - Suno (local files)
         - SoundCloud (RapidAPI)
         - Social platforms (RapidAPI for trending music)
+        - Deezer (RapidAPI — confirmed working, 30s preview MP3s)
     """
     
     def __init__(self, event_bus: Optional[EventBus] = None, worker_id: Optional[str] = None):
@@ -35,6 +37,7 @@ class MusicWorker(BaseWorker):
             MusicSource.SUNO: SunoAdapter(),
             MusicSource.SOUNDCLOUD: SoundCloudAdapter(),
             MusicSource.SOCIAL_PLATFORM: SocialPlatformAdapter(),
+            MusicSource.DEEZER: DeezerAdapter(),
         }
         logger.info(f"[{self.worker_id}] Initialized with music adapters: {list(self.adapters.keys())}")
     

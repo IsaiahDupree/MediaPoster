@@ -33,7 +33,9 @@ class MusicSelector:
         Args:
             music_library_path: Path to music library JSON
         """
-        self.music_library_path = music_library_path or Path("./data/music/library.json")
+        self.music_library_path = music_library_path or Path(
+            os.getenv("MUSIC_LIBRARY_PATH", "/Users/isaiahdupree/Documents/Software/MusicLibrary/library.json")
+        )
         self.openai_client = OpenAI(api_key=settings.openai_api_key)
         self.music_tracks = self._load_music_library()
         

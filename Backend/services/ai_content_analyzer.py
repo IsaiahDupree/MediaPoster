@@ -73,6 +73,15 @@ class ContentAnalysis:
     lighting: str = ""  # "bright", "dark", "natural", "studio"
     composition: str = ""  # "centered", "rule-of-thirds", "dynamic"
     confidence_score: float = 0.0  # 0-1 confidence in analysis
+    caption: str = ""
+    hashtags: List[str] = field(default_factory=list)
+    is_screenshot: bool = False
+    platform_fit: Dict[str, Any] = field(default_factory=dict)
+    hook_potential: float = 5.0  # 1-10 scroll-stopping power
+    setting: str = ""  # indoor/outdoor/office/urban/nature/travel/home/event/studio/other
+    energy_level: str = ""  # low/medium/high
+    face_present: bool = False
+    subject_count: int = 0
     analysis_metadata: Dict[str, Any] = field(default_factory=dict)
     analyzed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -92,6 +101,15 @@ class ContentAnalysis:
             "lighting": self.lighting,
             "composition": self.composition,
             "confidence_score": self.confidence_score,
+            "caption": self.caption,
+            "hashtags": self.hashtags,
+            "is_screenshot": self.is_screenshot,
+            "platform_fit": self.platform_fit,
+            "hook_potential": self.hook_potential,
+            "setting": self.setting,
+            "energy_level": self.energy_level,
+            "face_present": self.face_present,
+            "subject_count": self.subject_count,
             "analysis_metadata": self.analysis_metadata,
             "analyzed_at": self.analyzed_at.isoformat()
         }
@@ -145,10 +163,27 @@ Return a JSON object with these fields:
     "color_palette": ["dominant", "colors"],  // 2-3 main colors
     "lighting": "bright|dark|natural|studio",
     "composition": "centered|rule-of-thirds|dynamic",
-    "confidence_score": 0.85  // 0-1 confidence in this analysis
+    "confidence_score": 0.85,  // 0-1 confidence in this analysis
+    "caption": "Engaging 2-sentence social media caption for this content",
+    "hashtags": ["10", "relevant", "hashtags"],
+    "is_screenshot": false,  // true if this looks like a phone/screen screenshot
+    "platform_fit": {
+        "instagram": 8,
+        "tiktok": 7,
+        "twitter": 6,
+        "youtube": 5,
+        "facebook": 6
+    },
+    "hook_potential": 7,  // 1-10 — how likely this stops someone scrolling
+    "setting": "indoor|outdoor|office|urban|nature|travel|home|event|studio|other",
+    "energy_level": "low|medium|high",
+    "face_present": false,  // true if any human face clearly visible
+    "subject_count": 0  // number of people in frame
 }
 
-Be specific and accurate. Focus on visual elements that would help categorize and match this content to social platforms."""
+Be specific and accurate. Focus on visual elements that would help categorize and match this content to social platforms.
+hook_potential: visual intrigue, implied motion, emotional pull, unusual framing all increase this score.
+platform_fit: score each platform 1-10 based on format, aspect ratio, content type, and audience fit."""
 
         logger.info("🎨 AI Content Analyzer initialized")
 
@@ -382,6 +417,15 @@ Be specific and accurate. Focus on visual elements that would help categorize an
                 lighting=analysis_result.get("lighting", ""),
                 composition=analysis_result.get("composition", ""),
                 confidence_score=float(analysis_result.get("confidence_score", 0.0)),
+                caption=analysis_result.get("caption", ""),
+                hashtags=analysis_result.get("hashtags", []),
+                is_screenshot=bool(analysis_result.get("is_screenshot", False)),
+                platform_fit=analysis_result.get("platform_fit", {}),
+                hook_potential=float(analysis_result.get("hook_potential", 5.0)),
+                setting=analysis_result.get("setting", ""),
+                energy_level=analysis_result.get("energy_level", ""),
+                face_present=bool(analysis_result.get("face_present", False)),
+                subject_count=int(analysis_result.get("subject_count", 0)),
                 analysis_metadata={
                     "frames_analyzed": len(frame_paths),
                     "raw_gpt4_response": analysis_result

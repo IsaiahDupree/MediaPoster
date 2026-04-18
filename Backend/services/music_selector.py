@@ -123,10 +123,10 @@ class MusicSelector:
         ai_provider: Optional[str] = None
     ):
         self.music_library_path = music_library_path or Path(
-            os.getenv("MUSIC_LIBRARY_PATH", "./music")
+            os.getenv("MUSIC_LIBRARY_PATH", "/Users/isaiahdupree/Documents/Software/MusicLibrary/tracks")
         )
         self.music_index_path = music_index_path or Path(
-            os.getenv("MUSIC_INDEX_PATH", "./music_index.json")
+            os.getenv("MUSIC_INDEX_PATH", "/Users/isaiahdupree/Documents/Software/MusicLibrary/library.json")
         )
         self.max_clip_duration = max_clip_duration
         self.ai_provider_name = ai_provider or os.getenv("AI_PROVIDER", "openai")

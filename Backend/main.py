@@ -1924,6 +1924,11 @@ from api.endpoints import agent_events
 app.include_router(agent_events.router, tags=["Agent Events"])
 logger.success("✓ Agent Events API registered (AC-005: Append-only event timeline)")
 
+# Orchestrator Goals (PRD-06: GoalDecomposition, CrossPipelineLearning, StrategyVariants, Budget, SSE)
+from api.endpoints import orchestrator_goals
+app.include_router(orchestrator_goals.router)
+logger.success("✓ Orchestrator Goals API registered (PRD-06: GoalDecomposition + CrossPipelineLearning + SSE)")
+
 # Media Assets (ASSET-001 to ASSET-005: Giphy, Pexels, Unsplash, Unified Search, Library)
 from api.endpoints import media_assets
 app.include_router(media_assets.router, tags=["Media Assets"])

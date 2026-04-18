@@ -116,3 +116,38 @@ Backend/venv311/
 venv311/
 Backend/venv311/
 downloads/
+youtube_downloads/
+mcp/
+
+# Media data directories (stored on external drive, symlinked locally)
+Backend/data/broll_outputs/
+Backend/data/tiktok_repurpose/
+Backend/data/generated_videos/
+Backend/data/sora_videos/
+Backend/data/sora_outputs/
+Backend/data/rendered_videos/
+Backend/data/tts_outputs/
+Backend/data/remotion_project/
+Backend/data/remotion-stickfigure/
+Backend/data/stickfigure_scenes/
+Backend/data/stickfigure_scenes_v2/
+Backend/data/stickfigure_scenes_v3/
+
+# Generated/test artifacts
+Backend/data/remotion_cache/
+Backend/SoraWatermarkCleaner/
+Backend/backups/
+Backend/temp/
+Backend/tracked_posts/
+Backend/passport_organization_docs/
+test-results/
+playwright-report/
+harness-*.json
+harness-*.log
+seed_output*.log
+
+# Credentials
+Backend/credentials/
+Backend/google_credentials.json
+Backend/.chatgpt-context/
+.chatgpt-context/

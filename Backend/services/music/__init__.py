@@ -15,6 +15,7 @@ from .adapters.base import MusicAdapter
 from .adapters.suno import SunoAdapter
 from .adapters.soundcloud import SoundCloudAdapter
 from .adapters.social_platform import SocialPlatformAdapter
+from .adapters.deezer import DeezerAdapter
 
 __all__ = [
     "MusicWorker",
@@ -25,5 +26,6 @@ __all__ = [
     "SunoAdapter",
     "SoundCloudAdapter",
     "SocialPlatformAdapter",
+    "DeezerAdapter",
 ]
 

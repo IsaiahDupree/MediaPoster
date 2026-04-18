@@ -1,3 +1,0 @@
-file 'sora_clip_e17aa2ca-cd8b-4663-bb13-b870350cc130.mp4'
-file 'sora_clip_a6783321-ed7c-45d0-b1b3-cb11a8863a0e.mp4'
-file 'sora_clip_3bc930a0-5762-4025-9618-7f2e18d75e56.mp4'

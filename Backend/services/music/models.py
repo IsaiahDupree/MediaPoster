@@ -16,6 +16,7 @@ class MusicSource(str, Enum):
     SUNO = "suno"  # Local Suno downloads
     SOUNDCLOUD = "soundcloud"  # SoundCloud via RapidAPI
     SOCIAL_PLATFORM = "social_platform"  # Social platforms via RapidAPI (TikTok, Instagram, etc.)
+    DEEZER = "deezer"  # Deezer via RapidAPI (confirmed working — 30s preview MP3s)
     LOCAL = "local"  # Generic local file
 
 
@@ -31,6 +32,7 @@ class MusicSearchCriteria:
     tags: Optional[List[str]] = None  # Additional tags
     trending: bool = False  # Prefer trending music
     platform: Optional[str] = None  # "tiktok", "instagram", "youtube", etc.
+    search_query: Optional[str] = None  # Raw search string (overrides mood/genre if set)
 
 
 @dataclass

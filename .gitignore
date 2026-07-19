@@ -151,3 +151,6 @@ Backend/credentials/
 Backend/google_credentials.json
 Backend/.chatgpt-context/
 .chatgpt-context/
+
+# external-drive symlink (My Passport) - ignore the symlink itself, not just dir contents
+Backend/data/remotion-stickfigure

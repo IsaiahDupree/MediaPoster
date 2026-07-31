@@ -74,8 +74,62 @@ class TrendDetectionService:
     # 1. TREND SCANNERS — Platform-specific data fetchers
     # ═══════════════════════════════════════════════════════════════════════
 
+    async def scan_tiktok_for_niche(self, niche: str, count: int = 20) -> List[Dict[str, Any]]:
+        """Search TikTok for real videos matching `niche` via RapidAPI's
+        /feed/search. Used by get_trending_for_niche() instead of
+        scan_tiktok_trending(): that method's endpoint
+        (/trending/hashtags) does not exist on this API (confirmed 404 with a
+        valid key), and its fallback is a hardcoded single-tenant topic list
+        that would be wrong for an arbitrary caller-supplied niche. No
+        fallback here — a missing key or a failed call means TikTok
+        contributes nothing to this call, not hardcoded off-topic content.
+        """
+        if not RAPIDAPI_KEY:
+            logger.warning(f"[Trends] No RAPIDAPI_KEY set, skipping TikTok search for niche={niche!r}")
+            return []
+
+        trends: List[Dict[str, Any]] = []
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(
+                    "https://tiktok-scraper7.p.rapidapi.com/feed/search",
+                    params={"keywords": niche, "count": count},
+                    headers={
+                        "X-RapidAPI-Key": RAPIDAPI_KEY,
+                        "X-RapidAPI-Host": "tiktok-scraper7.p.rapidapi.com",
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    videos = (data.get("data") or {}).get("videos", [])
+                    for v in videos:
+                        title = (v.get("title") or "").strip()
+                        if not title:
+                            continue
+                        trends.append({
+                            "source_platform": "tiktok",
+                            "trend_type": "video",
+                            "trend_identifier": title[:80],
+                            "trend_description": title,
+                            "volume_raw": v.get("play_count", 0),
+                        })
+            logger.info(f"[Trends] TikTok search for {niche!r}: {len(trends)} videos found")
+        except Exception as e:
+            logger.warning(f"[Trends] TikTok search failed for niche={niche!r}: {e}")
+
+        return trends
+
     async def scan_tiktok_trending(self) -> List[Dict[str, Any]]:
-        """Scan TikTok for trending hashtags via RapidAPI."""
+        """Scan TikTok for trending hashtags via RapidAPI.
+
+        KNOWN BROKEN: /trending/hashtags does not exist on this API (confirmed
+        404 with a valid key) — only used by the pre-existing single-tenant
+        run_scan_cycle() pipeline. get_trending_for_niche() uses
+        scan_tiktok_for_niche() instead, which hits a real, verified endpoint.
+        Left as-is here since fixing run_scan_cycle()'s TikTok strategy changes
+        what that separate cron pipeline stores/alerts on — a bigger decision
+        than the niche-query bug this method exists to avoid.
+        """
         trends = []
         if not RAPIDAPI_KEY:
             logger.warning("[Trends] No RAPIDAPI_KEY set, using fallback")
@@ -196,11 +250,11 @@ class TrendDetectionService:
             text = f"{identifier} {description}"
 
             # Exclude check
-            if any(ex in text for ex in exclude):
+            if any(ex.lower() in text for ex in exclude):
                 continue
 
             # Keyword match
-            keyword_match = any(kw in text for kw in all_keywords)
+            keyword_match = any(kw.lower() in text for kw in all_keywords)
             if keyword_match:
                 trend["niche_relevance"] = 0.8
                 filtered.append(trend)
@@ -592,7 +646,7 @@ Create a content brief that rides this trend. Return JSON:
         niche_cfg = self._ad_hoc_niche_config(niche)
 
         raw_trends: List[Dict[str, Any]] = []
-        raw_trends.extend(await self.scan_tiktok_trending())
+        raw_trends.extend(await self.scan_tiktok_for_niche(niche))
         raw_trends.extend(await self.scan_google_trends())
 
         relevant = await self.filter_by_niche(raw_trends, niche=niche_cfg)

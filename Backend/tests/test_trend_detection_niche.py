@@ -32,7 +32,7 @@ class TestGetTrendingForNiche:
             _trend("google", "unrelated sports topic"),
         ]
         with (
-            patch.object(svc, "scan_tiktok_trending", AsyncMock(return_value=[raw[0]])),
+            patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[raw[0]])),
             patch.object(svc, "scan_google_trends", AsyncMock(return_value=[raw[1]])),
             patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
         ):
@@ -58,7 +58,7 @@ class TestGetTrendingForNiche:
         # the keyword-match shortcut — it must go through GPT scoring
         ambiguous = _trend("tiktok", "time-blocking apps are having a moment", "a workflow trick going viral")
         with (
-            patch.object(svc, "scan_tiktok_trending", AsyncMock(return_value=[ambiguous])),
+            patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[ambiguous])),
             patch.object(svc, "scan_google_trends", AsyncMock(return_value=[])),
             patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
             patch("openai.OpenAI") as mock_openai_cls,
@@ -82,7 +82,7 @@ class TestGetTrendingForNiche:
     async def test_instagram_failure_degrades_gracefully(self):
         svc = TrendDetectionService()
         with (
-            patch.object(svc, "scan_tiktok_trending", AsyncMock(return_value=[
+            patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[
                 _trend("tiktok", "#fitness", "fitness trend"),
             ])),
             patch.object(svc, "scan_google_trends", AsyncMock(return_value=[])),
@@ -100,7 +100,7 @@ class TestGetTrendingForNiche:
         svc = TrendDetectionService()
         before = dict(CREATOR_NICHE)
         with (
-            patch.object(svc, "scan_tiktok_trending", AsyncMock(return_value=[])),
+            patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[])),
             patch.object(svc, "scan_google_trends", AsyncMock(return_value=[])),
             patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
         ):
@@ -110,6 +110,78 @@ class TestGetTrendingForNiche:
             await svc.get_trending_for_niche("some completely unrelated niche")
 
         assert CREATOR_NICHE == before  # single-tenant default config untouched
+
+
+class TestScanTiktokForNiche:
+    """scan_tiktok_for_niche() replaced the broken scan_tiktok_trending() call
+    inside get_trending_for_niche() — /trending/hashtags 404s on the real API
+    even with a valid key, and scan_tiktok_trending()'s fallback is a
+    hardcoded single-tenant (dating/relationships) topic list that must never
+    leak into an arbitrary caller-supplied niche query.
+    """
+
+    async def test_no_key_returns_empty_not_hardcoded_fallback(self):
+        svc = TrendDetectionService()
+        with patch("services.trend_detection.RAPIDAPI_KEY", ""):
+            result = await svc.scan_tiktok_for_niche("fitness")
+        assert result == []
+
+    async def test_parses_real_feed_search_response_shape(self):
+        svc = TrendDetectionService()
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = {
+            "code": 0,
+            "data": {
+                "videos": [
+                    {"title": "Decline core challenge for a strong core", "play_count": 51069024},
+                    {"title": "", "play_count": 100},  # blank title must be skipped
+                ]
+            },
+        }
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get = AsyncMock(return_value=fake_response)
+        with (
+            patch("services.trend_detection.RAPIDAPI_KEY", "fake-key"),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
+            result = await svc.scan_tiktok_for_niche("fitness")
+
+        assert len(result) == 1
+        assert result[0]["source_platform"] == "tiktok"
+        assert result[0]["trend_type"] == "video"
+        assert "core challenge" in result[0]["trend_description"]
+        assert result[0]["volume_raw"] == 51069024
+
+    async def test_never_calls_the_broken_trending_hashtags_endpoint(self):
+        svc = TrendDetectionService()
+        called_urls = []
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = {"data": {"videos": []}}
+
+        async def fake_get(url, **kwargs):
+            called_urls.append(url)
+            return fake_response
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get = fake_get
+        with (
+            patch("services.trend_detection.RAPIDAPI_KEY", "fake-key"),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
+            await svc.scan_tiktok_for_niche("fitness")
+
+        assert called_urls == ["https://tiktok-scraper7.p.rapidapi.com/feed/search"]
+
+    async def test_network_failure_returns_empty_not_hardcoded_fallback(self):
+        svc = TrendDetectionService()
+        with (
+            patch("services.trend_detection.RAPIDAPI_KEY", "fake-key"),
+            patch("httpx.AsyncClient", side_effect=RuntimeError("network down")),
+        ):
+            result = await svc.scan_tiktok_for_niche("fitness")
+        assert result == []
 
 
 class TestFilterByNicheBackwardCompatible:

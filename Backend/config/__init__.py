@@ -177,6 +177,8 @@ def get_settings() -> Settings:
             os.environ["OPENAI_API_KEY"] = _settings.openai_api_key
         if _settings.blotato_api_key:
             os.environ["BLOTATO_API_KEY"] = _settings.blotato_api_key
+        if _settings.rapidapi_key:
+            os.environ["RAPIDAPI_KEY"] = _settings.rapidapi_key
 
     return _settings
 

@@ -1165,6 +1165,11 @@ from api.endpoints import content_recommendation
 app.include_router(content_recommendation.router, tags=["Content Recommendation"])
 logger.success("✓ Content Recommendation API registered")
 
+# Script Generation — turns a recommend_next_content topic into a full production packet
+from api.endpoints import script_generation
+app.include_router(script_generation.router, tags=["Script Generation"])
+logger.success("✓ Script Generation API registered")
+
 # Template Leaderboard (Phase 2: OPS-007)
 from api.endpoints import template_leaderboard
 app.include_router(template_leaderboard.router, tags=["Template Leaderboard"])

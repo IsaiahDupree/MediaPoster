@@ -33,7 +33,7 @@ class TestGetTrendingForNiche:
         ]
         with (
             patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[raw[0]])),
-            patch.object(svc, "scan_google_trends", AsyncMock(return_value=[raw[1]])),
+            patch.object(svc, "scan_google_trends_for_niche", AsyncMock(return_value=[raw[1]])),
             patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
         ):
             ig_service = MagicMock()
@@ -59,7 +59,7 @@ class TestGetTrendingForNiche:
         ambiguous = _trend("tiktok", "time-blocking apps are having a moment", "a workflow trick going viral")
         with (
             patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[ambiguous])),
-            patch.object(svc, "scan_google_trends", AsyncMock(return_value=[])),
+            patch.object(svc, "scan_google_trends_for_niche", AsyncMock(return_value=[])),
             patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
             patch("openai.OpenAI") as mock_openai_cls,
         ):
@@ -85,7 +85,7 @@ class TestGetTrendingForNiche:
             patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[
                 _trend("tiktok", "#fitness", "fitness trend"),
             ])),
-            patch.object(svc, "scan_google_trends", AsyncMock(return_value=[])),
+            patch.object(svc, "scan_google_trends_for_niche", AsyncMock(return_value=[])),
             patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
         ):
             mock_get_ig.return_value = MagicMock(
@@ -101,7 +101,7 @@ class TestGetTrendingForNiche:
         before = dict(CREATOR_NICHE)
         with (
             patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[])),
-            patch.object(svc, "scan_google_trends", AsyncMock(return_value=[])),
+            patch.object(svc, "scan_google_trends_for_niche", AsyncMock(return_value=[])),
             patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
         ):
             mock_get_ig.return_value = MagicMock(
@@ -181,6 +181,60 @@ class TestScanTiktokForNiche:
             patch("httpx.AsyncClient", side_effect=RuntimeError("network down")),
         ):
             result = await svc.scan_tiktok_for_niche("fitness")
+        assert result == []
+
+
+class TestScanGoogleTrendsForNiche:
+    """scan_google_trends_for_niche() replaced the broken scan_google_trends()
+    call inside get_trending_for_niche() — trending_searches() hits Google's
+    dead hottrends/visualize/internal/data endpoint (confirmed 404 directly
+    from Google); interest_over_time() is the modern, confirmed-working
+    replacement.
+    """
+
+    @staticmethod
+    def _mock_trend_req(df):
+        """A TrendReq class mock whose instance's interest_over_time() returns `df`."""
+        mock_instance = MagicMock()
+        mock_instance.interest_over_time = MagicMock(return_value=df)
+        return MagicMock(return_value=mock_instance), mock_instance
+
+    async def test_no_data_for_niche_returns_empty(self):
+        import pandas as pd
+        svc = TrendDetectionService()
+        mock_cls, _ = self._mock_trend_req(pd.DataFrame())
+        with patch("pytrends.request.TrendReq", mock_cls):
+            result = await svc.scan_google_trends_for_niche("fitness")
+        assert result == []
+
+    async def test_parses_real_interest_over_time_shape(self):
+        import pandas as pd
+        svc = TrendDetectionService()
+        df = pd.DataFrame({"fitness": [40, 50, 60, 90], "isPartial": [False, False, False, True]})
+        mock_cls, mock_instance = self._mock_trend_req(df)
+        with patch("pytrends.request.TrendReq", mock_cls):
+            result = await svc.scan_google_trends_for_niche("fitness")
+
+        assert len(result) == 1
+        assert result[0]["source_platform"] == "google"
+        assert result[0]["trend_identifier"] == "fitness"
+        assert result[0]["volume_raw"] == 90  # latest value
+        assert "rising" in result[0]["trend_description"]  # 90 > 1.1x avg(60)
+        mock_instance.build_payload.assert_called_once_with(["fitness"], timeframe="now 7-d")
+
+    async def test_flat_interest_is_not_labeled_rising(self):
+        import pandas as pd
+        svc = TrendDetectionService()
+        df = pd.DataFrame({"fitness": [50, 50, 50, 50]})
+        mock_cls, _ = self._mock_trend_req(df)
+        with patch("pytrends.request.TrendReq", mock_cls):
+            result = await svc.scan_google_trends_for_niche("fitness")
+        assert "rising" not in result[0]["trend_description"]
+
+    async def test_dead_endpoint_failure_returns_empty_not_raises(self):
+        svc = TrendDetectionService()
+        with patch("pytrends.request.TrendReq", side_effect=RuntimeError("Google returned 404")):
+            result = await svc.scan_google_trends_for_niche("fitness")
         assert result == []
 
 

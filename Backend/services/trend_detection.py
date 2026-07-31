@@ -168,8 +168,64 @@ class TrendDetectionService:
 
         return trends
 
+    async def scan_google_trends_for_niche(self, niche: str) -> List[Dict[str, Any]]:
+        """Real Google Trends interest signal for `niche`, via
+        interest_over_time() (the modern /trends/api/explore + widgetdata
+        flow). Used by get_trending_for_niche() instead of
+        scan_google_trends(): that method's trending_searches() call hits
+        Google's old hottrends/visualize/internal/data endpoint, which is
+        dead — confirmed 404 directly from Google, a known pytrends/Google
+        API deprecation, not a transient outage. interest_over_time() is
+        confirmed live and working.
+        """
+        try:
+            from pytrends.request import TrendReq
+
+            pytrends = TrendReq(hl="en-US", tz=360)
+            pytrends.build_payload([niche], timeframe="now 7-d")
+            df = pytrends.interest_over_time()
+            if df is None or df.empty or niche not in df.columns:
+                logger.info(f"[Trends] Google Trends: no interest data for niche={niche!r}")
+                return []
+
+            current = float(df[niche].iloc[-1])
+            baseline = float(df[niche].mean())
+            rising = baseline > 0 and current > baseline * 1.1
+            logger.info(
+                f"[Trends] Google Trends for {niche!r}: current={current:.0f} 7d_avg={baseline:.0f} "
+                f"{'(rising)' if rising else ''}"
+            )
+            return [{
+                "source_platform": "google",
+                "trend_type": "topic",
+                "trend_identifier": niche,
+                "trend_description": (
+                    f"Google Trends interest for '{niche}': current={current:.0f}, "
+                    f"7-day avg={baseline:.0f}{' — rising' if rising else ''}"
+                ),
+                "volume_raw": int(current),
+            }]
+
+        except ImportError:
+            logger.debug("[Trends] pytrends not installed, skipping Google Trends")
+        except Exception as e:
+            logger.warning(f"[Trends] Google Trends scan failed for niche={niche!r}: {e}")
+
+        return []
+
     async def scan_google_trends(self) -> List[Dict[str, Any]]:
-        """Scan Google Trends for rising topics in niche."""
+        """Scan Google Trends for rising topics in niche.
+
+        KNOWN BROKEN: trending_searches() hits Google's old hottrends/
+        visualize/internal/data endpoint, which returns 404 (dead, not an
+        outage) — only used by the pre-existing single-tenant
+        run_scan_cycle() pipeline. get_trending_for_niche() uses
+        scan_google_trends_for_niche() instead, which hits interest_over_time(),
+        confirmed live. Left as-is here for the same reason as
+        scan_tiktok_trending(): fixing run_scan_cycle()'s Google Trends
+        strategy is a separate decision from the niche-query bug this
+        method exists to avoid.
+        """
         trends = []
         try:
             from pytrends.request import TrendReq
@@ -633,7 +689,7 @@ Create a content brief that rides this trend. Return JSON:
 
         No DB persistence and no dependency on the single-tenant CREATOR_NICHE
         global — every call is scoped to the `niche` argument. Combines:
-        - TikTok + Google Trends raw scans (scan_tiktok_trending/scan_google_trends)
+        - TikTok + Google Trends raw scans (scan_tiktok_for_niche/scan_google_trends_for_niche)
         - keyword+GPT relevance filtering against THIS niche (not CREATOR_NICHE)
         - composite scoring (score_trend)
         - Instagram niche-discovery signal (hashtags/accounts) from
@@ -647,7 +703,7 @@ Create a content brief that rides this trend. Return JSON:
 
         raw_trends: List[Dict[str, Any]] = []
         raw_trends.extend(await self.scan_tiktok_for_niche(niche))
-        raw_trends.extend(await self.scan_google_trends())
+        raw_trends.extend(await self.scan_google_trends_for_niche(niche))
 
         relevant = await self.filter_by_niche(raw_trends, niche=niche_cfg)
         for trend in relevant:

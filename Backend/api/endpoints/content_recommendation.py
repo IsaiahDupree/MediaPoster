@@ -35,7 +35,9 @@ async def recommend_next_content(
     """
     brand_voice = None
     target_audience = None
+    primary_goal = None
     resolved_niche = niche
+    resolved_available_minutes = available_minutes
 
     if brand_id is not None:
         result = await db.execute(select(Brand).where(Brand.id == brand_id))
@@ -45,11 +47,16 @@ async def recommend_next_content(
         resolved_niche = resolved_niche or brand.niche
         brand_voice = brand.brand_voice
         target_audience = brand.target_audience
+        primary_goal = brand.primary_goal
+        # per-call override wins; otherwise fall back to the creator's stated capacity
+        resolved_available_minutes = available_minutes if available_minutes is not None \
+            else brand.available_minutes_per_day
 
     service = get_content_recommendation_service()
     return await service.recommend_next_content(
         niche=resolved_niche,
         brand_voice=brand_voice,
         target_audience=target_audience,
-        available_minutes=available_minutes,
+        available_minutes=resolved_available_minutes,
+        primary_goal=primary_goal,
     )

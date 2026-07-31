@@ -1582,6 +1582,11 @@ class Brand(Base):
     target_audience = Column(Text)
     niche = Column(Text)  # e.g. "AI automation", "fitness" — drives trend queries + content recs
 
+    # Goals + constraints (creator-profile memory: personalizes recommend_next_content
+    # without needing them re-passed as raw call args every time)
+    primary_goal = Column(Text)  # e.g. "audience_growth", "revenue", "leads", "authority"
+    available_minutes_per_day = Column(Integer)  # default recommend_next_content's available_minutes
+
     # Metadata
     is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

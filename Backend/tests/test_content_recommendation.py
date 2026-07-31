@@ -100,6 +100,52 @@ class TestRecommendNextContent:
         assert result["recommendation"]["cites_trend"] is False
         assert result["recommendation"]["cites_history"] is True
 
+    async def test_primary_goal_reaches_the_gpt_prompt(self):
+        svc = ContentRecommendationService()
+        gpt_json = (
+            '{"topic": "t", "angle": "a", "format": "f", "platform": "p", "hook": "h", '
+            '"reasoning": "r", "cites_trend": true, "cites_history": true, "confidence": 0.5}'
+        )
+        with (
+            patch.object(svc.trends, "get_trending_for_niche", AsyncMock(return_value=_trending())),
+            patch.object(svc.intel, "analyze_patterns", AsyncMock(return_value=_patterns())),
+            patch("openai.OpenAI") as mock_openai_cls,
+        ):
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = gpt_json
+            mock_client.chat.completions.create.return_value = mock_response
+            mock_openai_cls.return_value = mock_client
+
+            await svc.recommend_next_content(niche="AI automation", primary_goal="revenue")
+
+            sent_messages = mock_client.chat.completions.create.call_args.kwargs["messages"]
+            system_prompt = sent_messages[0]["content"]
+            assert "Creator's primary goal: revenue" in system_prompt
+
+    async def test_no_primary_goal_states_not_specified_in_prompt(self):
+        svc = ContentRecommendationService()
+        gpt_json = (
+            '{"topic": "t", "angle": "a", "format": "f", "platform": "p", "hook": "h", '
+            '"reasoning": "r", "cites_trend": true, "cites_history": true, "confidence": 0.5}'
+        )
+        with (
+            patch.object(svc.trends, "get_trending_for_niche", AsyncMock(return_value=_trending())),
+            patch.object(svc.intel, "analyze_patterns", AsyncMock(return_value=_patterns())),
+            patch("openai.OpenAI") as mock_openai_cls,
+        ):
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = gpt_json
+            mock_client.chat.completions.create.return_value = mock_response
+            mock_openai_cls.return_value = mock_client
+
+            await svc.recommend_next_content(niche="AI automation")
+
+            sent_messages = mock_client.chat.completions.create.call_args.kwargs["messages"]
+            system_prompt = sent_messages[0]["content"]
+            assert "Creator's primary goal: not specified" in system_prompt
+
     async def test_historical_analysis_error_key_is_treated_as_no_history(self):
         svc = ContentRecommendationService()
         with (

@@ -32,10 +32,14 @@ class ContentRecommendationService:
         brand_voice: Optional[Dict[str, Any]] = None,
         target_audience: Optional[str] = None,
         available_minutes: Optional[int] = None,
+        primary_goal: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         `niche` is optional — without it, this degrades to a purely
         historical-performance recommendation (no live trend signal).
+        `primary_goal` (e.g. "audience_growth", "revenue") shapes the GPT
+        synthesis reasoning/format toward that outcome; ignored by the
+        deterministic fallback, which just surfaces the strongest signal.
         """
         trending: Dict[str, Any] = {"trending": [], "niche": niche}
         if niche:
@@ -55,6 +59,7 @@ class ContentRecommendationService:
             brand_voice=brand_voice,
             target_audience=target_audience,
             available_minutes=available_minutes,
+            primary_goal=primary_goal,
         )
 
     async def _synthesize(
@@ -65,6 +70,7 @@ class ContentRecommendationService:
         brand_voice: Optional[Dict[str, Any]],
         target_audience: Optional[str],
         available_minutes: Optional[int],
+        primary_goal: Optional[str] = None,
     ) -> Dict[str, Any]:
         top_trends = trending.get("trending", [])[:5]
         top_topics = patterns.get("top_topics", [])[:5]
@@ -86,7 +92,7 @@ class ContentRecommendationService:
         try:
             rec = await self._gpt_synthesize(
                 top_trends, top_topics, top_hooks, top_tones,
-                brand_voice, target_audience, available_minutes,
+                brand_voice, target_audience, available_minutes, primary_goal,
             )
         except Exception as e:
             logger.warning(f"[Recommend] GPT synthesis failed, falling back to top signal: {e}")
@@ -103,6 +109,7 @@ class ContentRecommendationService:
         brand_voice: Optional[Dict[str, Any]],
         target_audience: Optional[str],
         available_minutes: Optional[int],
+        primary_goal: Optional[str] = None,
     ) -> Dict[str, Any]:
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -122,6 +129,10 @@ rather than forcing a connection that isn't there.
 Brand voice: {voice_desc}
 Target audience: {target_audience or 'not specified'}
 Available time to produce today: {available_minutes if available_minutes is not None else 'not specified'} minutes
+Creator's primary goal: {primary_goal or 'not specified'} — weight the angle,
+format, and CTA implied by `reasoning` toward this goal specifically (e.g.
+audience_growth favors broad-hook discoverable formats; revenue/leads favor a
+clear product/offer tie-in; authority favors depth/credibility over reach).
 
 Return JSON: {{"topic": str, "angle": str, "format": str, "platform": str,
 "hook": str, "reasoning": str, "cites_trend": bool, "cites_history": bool,

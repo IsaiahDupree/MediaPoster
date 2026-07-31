@@ -7,8 +7,12 @@ CRUD API for Brand entities - company/product brands
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel
+
+PrimaryGoal = Literal[
+    "audience_growth", "revenue", "leads", "authority", "community_growth", "product_sales",
+]
 from uuid import UUID
 from datetime import datetime
 import logging
@@ -42,6 +46,8 @@ class BrandCreate(BaseModel):
     core_values: Optional[List[str]] = None
     target_audience: Optional[str] = None
     niche: Optional[str] = None  # e.g. "AI automation" — drives trend queries + content recs
+    primary_goal: Optional[PrimaryGoal] = None
+    available_minutes_per_day: Optional[int] = None
 
 
 class BrandUpdate(BaseModel):
@@ -54,6 +60,8 @@ class BrandUpdate(BaseModel):
     core_values: Optional[List[str]] = None
     target_audience: Optional[str] = None
     niche: Optional[str] = None
+    primary_goal: Optional[PrimaryGoal] = None
+    available_minutes_per_day: Optional[int] = None
     is_active: Optional[bool] = None
 
 
@@ -68,6 +76,8 @@ class BrandResponse(BaseModel):
     core_values: Optional[List[str]]
     target_audience: Optional[str]
     niche: Optional[str]
+    primary_goal: Optional[str]
+    available_minutes_per_day: Optional[int]
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -97,6 +107,8 @@ async def create_brand(
             core_values=brand.core_values,
             target_audience=brand.target_audience,
             niche=brand.niche,
+            primary_goal=brand.primary_goal,
+            available_minutes_per_day=brand.available_minutes_per_day,
             is_active=True
         )
 

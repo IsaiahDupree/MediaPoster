@@ -1160,6 +1160,11 @@ app.include_router(offers.router, tags=["Content Ops Entities"])
 app.include_router(icps.router, tags=["Content Ops Entities"])
 logger.success("✓ Content Ops Entities API registered (Brand, Offer, ICP)")
 
+# Content Recommendation — fuses live niche trends with historical performance
+from api.endpoints import content_recommendation
+app.include_router(content_recommendation.router, tags=["Content Recommendation"])
+logger.success("✓ Content Recommendation API registered")
+
 # Template Leaderboard (Phase 2: OPS-007)
 from api.endpoints import template_leaderboard
 app.include_router(template_leaderboard.router, tags=["Template Leaderboard"])

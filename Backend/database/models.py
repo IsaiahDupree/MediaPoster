@@ -1580,6 +1580,7 @@ class Brand(Base):
     brand_voice = Column(JSONB)  # {tone: str, keywords: List[str], avoid: List[str]}
     core_values = Column(ARRAY(Text))
     target_audience = Column(Text)
+    niche = Column(Text)  # e.g. "AI automation", "fitness" — drives trend queries + content recs
 
     # Metadata
     is_active = Column(Boolean, default=True)

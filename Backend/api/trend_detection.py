@@ -60,6 +60,24 @@ async def recent_alerts(limit: int = Query(10)):
     return await svc.get_trends(min_score=0.6, limit=limit)
 
 
+@router.get("/for-niche")
+async def trending_for_niche(
+    niche: str = Query(..., min_length=1, description="e.g. 'AI automation', 'fitness', 'personal finance'"),
+    limit: int = Query(15, ge=1, le=50),
+):
+    """
+    Live "what's trending right now" for an arbitrary niche — no DB history
+    required, scores real-time TikTok/Google Trends scans plus Instagram
+    niche-discovery signal against the given niche.
+
+    Must be registered before /{trend_id} — a path-param route would otherwise
+    shadow this literal path and treat "for-niche" as a trend_id.
+    """
+    from services.trend_detection import TrendDetectionService
+    svc = TrendDetectionService()
+    return await svc.get_trending_for_niche(niche, limit=limit)
+
+
 @router.get("/{trend_id}")
 async def get_trend(trend_id: str):
     """Get trend details + generated brief if available."""

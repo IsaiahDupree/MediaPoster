@@ -167,19 +167,25 @@ class TrendDetectionService:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def filter_by_niche(
-        self, raw_trends: List[Dict[str, Any]]
+        self, raw_trends: List[Dict[str, Any]], niche: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         Two-stage filter:
         1. Fast keyword matching
         2. GPT relevance scoring for ambiguous ones
+
+        `niche` overrides the module-level CREATOR_NICHE config for this call only
+        — used by get_trending_for_niche() to score against an arbitrary,
+        caller-supplied niche instead of the hardcoded single-tenant config.
+        run_scan_cycle() calls this with no `niche` arg, so its behavior is unchanged.
         """
+        niche_cfg = niche or CREATOR_NICHE
         all_keywords = (
-            CREATOR_NICHE["primary_topics"]
-            + CREATOR_NICHE["secondary_topics"]
-            + CREATOR_NICHE["brand_keywords"]
+            niche_cfg.get("primary_topics", [])
+            + niche_cfg.get("secondary_topics", [])
+            + niche_cfg.get("brand_keywords", [])
         )
-        exclude = CREATOR_NICHE["exclude_topics"]
+        exclude = niche_cfg.get("exclude_topics", [])
 
         filtered = []
         ambiguous = []
@@ -203,7 +209,7 @@ class TrendDetectionService:
 
         # GPT filter for ambiguous trends (batch)
         if ambiguous:
-            gpt_scored = await self._gpt_niche_score(ambiguous[:15])
+            gpt_scored = await self._gpt_niche_score(ambiguous[:15], niche_cfg)
             for trend in gpt_scored:
                 if trend.get("niche_relevance", 0) >= 0.5:
                     filtered.append(trend)
@@ -212,9 +218,10 @@ class TrendDetectionService:
         return filtered
 
     async def _gpt_niche_score(
-        self, trends: List[Dict[str, Any]]
+        self, trends: List[Dict[str, Any]], niche: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """Use GPT to score niche relevance of ambiguous trends."""
+        niche_cfg = niche or CREATOR_NICHE
         try:
             from openai import OpenAI
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -230,8 +237,8 @@ class TrendDetectionService:
                     {
                         "role": "system",
                         "content": f"""You are a social media trend analyst. The creator's niche is:
-Primary: {', '.join(CREATOR_NICHE['primary_topics'])}
-Secondary: {', '.join(CREATOR_NICHE['secondary_topics'])}
+Primary: {', '.join(niche_cfg.get('primary_topics', []))}
+Secondary: {', '.join(niche_cfg.get('secondary_topics', []))}
 
 Score each trend's relevance to this niche from 0.0 to 1.0.
 Return JSON: {{"scores": [{{"index": 0, "relevance": 0.8, "reason": "..."}}]}}""",
@@ -548,6 +555,78 @@ Create a content brief that rides this trend. Return JSON:
         if "exclude_topics" in config:
             CREATOR_NICHE["exclude_topics"] = config["exclude_topics"]
         return {"niche_config": CREATOR_NICHE}
+
+    @staticmethod
+    def _ad_hoc_niche_config(niche: str) -> Dict[str, Any]:
+        """Build a niche config for an arbitrary caller-supplied niche string.
+
+        Unlike CREATOR_NICHE (a hand-curated keyword list for one hardcoded
+        brand), an arbitrary niche has no pre-built keyword list — the niche
+        string itself is passed straight through as both the GPT-facing topic
+        description and the keyword-match term. exclude_topics still applies
+        globally (politics/religion/explicit/gore/gambling stay excluded
+        regardless of niche).
+        """
+        return {
+            "primary_topics": [niche],
+            "secondary_topics": [],
+            "brand_keywords": [niche],
+            "exclude_topics": CREATOR_NICHE.get("exclude_topics", []),
+        }
+
+    async def get_trending_for_niche(self, niche: str, limit: int = 15) -> Dict[str, Any]:
+        """Live, on-demand "what's trending right now" for an arbitrary niche.
+
+        No DB persistence and no dependency on the single-tenant CREATOR_NICHE
+        global — every call is scoped to the `niche` argument. Combines:
+        - TikTok + Google Trends raw scans (scan_tiktok_trending/scan_google_trends)
+        - keyword+GPT relevance filtering against THIS niche (not CREATOR_NICHE)
+        - composite scoring (score_trend)
+        - Instagram niche-discovery signal (hashtags/accounts) from
+          niche_search_service, a separate real RapidAPI-backed source
+        """
+        niche = niche.strip()
+        if not niche:
+            raise ValueError("niche must be a non-empty string")
+
+        niche_cfg = self._ad_hoc_niche_config(niche)
+
+        raw_trends: List[Dict[str, Any]] = []
+        raw_trends.extend(await self.scan_tiktok_trending())
+        raw_trends.extend(await self.scan_google_trends())
+
+        relevant = await self.filter_by_niche(raw_trends, niche=niche_cfg)
+        for trend in relevant:
+            self.score_trend(trend)
+        relevant.sort(key=lambda t: t.get("composite_score", 0), reverse=True)
+
+        instagram_context: Dict[str, Any] = {"hashtags": [], "accounts": []}
+        try:
+            from services.niche_search_service import get_niche_search_service
+            ig_data = await get_niche_search_service().discover_niche(niche)
+            instagram_context = {
+                "hashtags": ig_data.related_hashtags[:10],
+                "accounts": ig_data.top_accounts[:10],
+            }
+        except Exception as e:
+            logger.warning(f"[Trends] Instagram niche discovery failed for {niche!r}: {e}")
+
+        return {
+            "niche": niche,
+            "trending": [
+                {
+                    "identifier": t["trend_identifier"],
+                    "platform": t["source_platform"],
+                    "type": t.get("trend_type", "topic"),
+                    "description": t.get("trend_description", ""),
+                    "score": t.get("composite_score", 0),
+                    "niche_fit": t.get("niche_relevance", 0),
+                }
+                for t in relevant[:limit]
+            ],
+            "instagram_context": instagram_context,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     # ── Private Helpers ──────────────────────────────────────────────────
 

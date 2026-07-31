@@ -41,6 +41,7 @@ class BrandCreate(BaseModel):
     brand_voice: Optional[dict] = None  # {tone, keywords, avoid}
     core_values: Optional[List[str]] = None
     target_audience: Optional[str] = None
+    niche: Optional[str] = None  # e.g. "AI automation" — drives trend queries + content recs
 
 
 class BrandUpdate(BaseModel):
@@ -52,6 +53,7 @@ class BrandUpdate(BaseModel):
     brand_voice: Optional[dict] = None
     core_values: Optional[List[str]] = None
     target_audience: Optional[str] = None
+    niche: Optional[str] = None
     is_active: Optional[bool] = None
 
 
@@ -65,6 +67,7 @@ class BrandResponse(BaseModel):
     brand_voice: Optional[dict]
     core_values: Optional[List[str]]
     target_audience: Optional[str]
+    niche: Optional[str]
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -93,6 +96,7 @@ async def create_brand(
             brand_voice=brand.brand_voice,
             core_values=brand.core_values,
             target_audience=brand.target_audience,
+            niche=brand.niche,
             is_active=True
         )
 

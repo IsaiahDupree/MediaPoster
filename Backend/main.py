@@ -1570,8 +1570,17 @@ from api.endpoints import duplicate_detection
 app.include_router(duplicate_detection.router, tags=["Duplicate Detection"])
 
 # Posted Content Matcher (Cross-reference posted vs local library)
-from api.endpoints import posted_content_matcher
-app.include_router(posted_content_matcher.router, tags=["Posted Content Matcher"])
+# Depends on automation.safari_app_controller, which was deleted in a prior
+# cleanup commit (b1afd8d7, "remove 900+ session docs, test scripts...") along
+# with the rest of Backend/automation/ -- that deletion broke this feature
+# without being caught at the time. Guarded rather than restoring 898 lines of
+# deleted, unverified Safari-automation code unilaterally.
+try:
+    from api.endpoints import posted_content_matcher
+    app.include_router(posted_content_matcher.router, tags=["Posted Content Matcher"])
+    logger.success("✓ Posted Content Matcher API registered")
+except Exception as e:
+    logger.warning(f"⚠️  Posted Content Matcher API registration failed: {e}")
 
 # Video Render (Creative Brief → Video Pipeline)
 from api.endpoints import video_render

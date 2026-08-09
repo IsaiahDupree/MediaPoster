@@ -1170,6 +1170,11 @@ from api.endpoints import script_generation
 app.include_router(script_generation.router, tags=["Script Generation"])
 logger.success("✓ Script Generation API registered")
 
+# Creator Intelligence — real per-creator style breakdown (TikTok-only, see module docstring)
+from api.endpoints import creator_intelligence
+app.include_router(creator_intelligence.router, tags=["Creator Intelligence"])
+logger.success("✓ Creator Intelligence API registered")
+
 # Template Leaderboard (Phase 2: OPS-007)
 from api.endpoints import template_leaderboard
 app.include_router(template_leaderboard.router, tags=["Template Leaderboard"])

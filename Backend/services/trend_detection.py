@@ -106,12 +106,19 @@ class TrendDetectionService:
                         title = (v.get("title") or "").strip()
                         if not title:
                             continue
+                        author = v.get("author") or {}
                         trends.append({
                             "source_platform": "tiktok",
                             "trend_type": "video",
                             "trend_identifier": title[:80],
                             "trend_description": title,
                             "volume_raw": v.get("play_count", 0),
+                            # attribution + a real watchable link, so a caller can see
+                            # who made this and inspect visual/audio style directly —
+                            # not derived/inferred, straight from the API response
+                            "author_handle": author.get("unique_id") or None,
+                            "author_nickname": author.get("nickname") or None,
+                            "video_url": v.get("play") or None,
                         })
             logger.info(f"[Trends] TikTok search for {niche!r}: {len(trends)} videos found")
         except Exception as e:
@@ -731,6 +738,9 @@ Create a content brief that rides this trend. Return JSON:
                     "description": t.get("trend_description", ""),
                     "score": t.get("composite_score", 0),
                     "niche_fit": t.get("niche_relevance", 0),
+                    "author_handle": t.get("author_handle"),
+                    "author_nickname": t.get("author_nickname"),
+                    "video_url": t.get("video_url"),
                 }
                 for t in relevant[:limit]
             ],

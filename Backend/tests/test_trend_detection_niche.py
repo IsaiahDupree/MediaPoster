@@ -52,6 +52,28 @@ class TestGetTrendingForNiche:
         assert result["instagram_context"]["hashtags"][0]["hashtag"] == "aiautomation"
         assert "generated_at" in result
 
+    async def test_author_attribution_and_video_url_pass_through_to_the_response(self):
+        svc = TrendDetectionService()
+        attributed = {
+            **_trend("tiktok", "#quadworkout", "quad workout going viral"),
+            "author_handle": "coach.blue", "author_nickname": "Coach Blue",
+            "video_url": "https://v16.tiktokcdn.com/real-video.mp4",
+        }
+        with (
+            patch.object(svc, "scan_tiktok_for_niche", AsyncMock(return_value=[attributed])),
+            patch.object(svc, "scan_google_trends_for_niche", AsyncMock(return_value=[])),
+            patch("services.niche_search_service.get_niche_search_service") as mock_get_ig,
+        ):
+            mock_get_ig.return_value = MagicMock(
+                discover_niche=AsyncMock(return_value=MagicMock(related_hashtags=[], top_accounts=[]))
+            )
+            result = await svc.get_trending_for_niche("fitness")
+
+        item = result["trending"][0]
+        assert item["author_handle"] == "coach.blue"
+        assert item["author_nickname"] == "Coach Blue"
+        assert item["video_url"] == "https://v16.tiktokcdn.com/real-video.mp4"
+
     async def test_gpt_path_scores_ambiguous_trends(self):
         svc = TrendDetectionService()
         # deliberately no literal "productivity" substring, so this can't take
@@ -152,6 +174,35 @@ class TestScanTiktokForNiche:
         assert result[0]["trend_type"] == "video"
         assert "core challenge" in result[0]["trend_description"]
         assert result[0]["volume_raw"] == 51069024
+
+    async def test_captures_author_attribution_and_video_url(self):
+        svc = TrendDetectionService()
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = {
+            "code": 0,
+            "data": {
+                "videos": [
+                    {"title": "quad workout", "play_count": 100,
+                     "play": "https://v16.tiktokcdn.com/real-video.mp4",
+                     "author": {"unique_id": "coach.blue", "nickname": "Coach Blue"}},
+                    {"title": "no author field on this one", "play_count": 50},
+                ]
+            },
+        }
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get = AsyncMock(return_value=fake_response)
+        with (
+            patch("services.trend_detection.RAPIDAPI_KEY", "fake-key"),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
+            result = await svc.scan_tiktok_for_niche("fitness")
+
+        assert result[0]["author_handle"] == "coach.blue"
+        assert result[0]["author_nickname"] == "Coach Blue"
+        assert result[0]["video_url"] == "https://v16.tiktokcdn.com/real-video.mp4"
+        # missing author on the second item must not crash, just come back None
+        assert result[1]["author_handle"] is None
 
     async def test_never_calls_the_broken_trending_hashtags_endpoint(self):
         svc = TrendDetectionService()

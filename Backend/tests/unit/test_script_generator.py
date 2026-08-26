@@ -228,6 +228,20 @@ class TestScriptGeneration:
         assert "Why People Care: Founders need to bound and stop consequential actions." in prompt
         assert "Debate: How much autonomy to grant before human approval." in prompt
 
+    def test_prompt_hands_off_duration_budget_and_required_cta(self, sample_brief):
+        sample_brief.length_sec = 60
+        sample_brief.cta = {
+            "type": "reply",
+            "text": "Reply CONTROL and map one bounded task.",
+        }
+
+        generator = ScriptGeneratorService()
+        prompt = generator._build_script_prompt(sample_brief)
+
+        assert "Required Word Range: 131-150 spoken words" in prompt
+        assert "Required CTA: Reply CONTROL and map one bounded task." in prompt
+        assert "between 131 and 150 words" in prompt
+
 
 class TestSegmentRegeneration:
     """Test segment regeneration functionality."""

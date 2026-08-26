@@ -179,7 +179,8 @@ Visual Style Options:
 
 Keep scripts:
 - Conversational and direct
-- Under 150 words for 45s shorts
+- Honor the word-count range supplied in the brief
+- Never exceed 150 words for short-form output
 - Front-loaded (hook in first 2 seconds)
 - Action-oriented (clear CTA at end)"""
 
@@ -194,6 +195,15 @@ Keep scripts:
         format_type = brief.format
         length_sec = brief.length_sec
         hook_sec = brief.hook_sec
+        target_words = max(20, min(150, round(length_sec * 2.35)))
+        minimum_words = max(20, target_words - 10)
+        maximum_words = min(150, target_words + 10)
+
+        cta_context = ""
+        if brief.cta:
+            cta_text = str(brief.cta.get("text") or "").strip()
+            if cta_text:
+                cta_context = f"\nRequired CTA: {cta_text}\n"
 
         # Build angle context if available
         angle_context = ""
@@ -236,7 +246,9 @@ Hook: {hook}
 Promise: {promise}
 Unique Lens: {unique_lens}
 Target Length: {length_sec} seconds
+Required Word Range: {minimum_words}-{maximum_words} spoken words
 Hook Duration: {hook_sec} seconds
+{cta_context}
 
 {angle_context}
 {trend_context}
@@ -244,11 +256,11 @@ Hook Duration: {hook_sec} seconds
 Instructions:
 1. Start with a strong hook in the first {hook_sec} seconds
 2. Break the script into 4-6 segments
-3. Keep total duration around {length_sec} seconds
+3. Keep the spoken script between {minimum_words} and {maximum_words} words so the duration stays around {length_sec} seconds
 4. Include on-screen text suggestions for key moments
 5. Mark emphasis words for TTS
 6. Suggest visual styles for each segment
-7. End with a clear call-to-action
+7. End with the required call-to-action when one is supplied
 
 Make it conversational, direct, and optimized for short attention spans."""
 

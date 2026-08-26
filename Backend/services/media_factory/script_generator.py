@@ -211,11 +211,23 @@ Angle Details:
         # Build cluster/trend context if available
         trend_context = ""
         if brief.cluster:
-            trend_context = f"""
-Trend Context:
-- Name: {brief.cluster.name}
-- Why Now: {brief.cluster.why_now or 'N/A'}
-"""
+            trend_lines = [
+                "Trend Context:",
+                f"- Name: {brief.cluster.name}",
+            ]
+            if brief.cluster.what_changed:
+                trend_lines.append(
+                    f"- What Changed: {brief.cluster.what_changed}"
+                )
+            if brief.cluster.why_people_care:
+                trend_lines.append(
+                    f"- Why People Care: {brief.cluster.why_people_care}"
+                )
+            if brief.cluster.what_debate:
+                trend_lines.append(
+                    f"- Debate: {brief.cluster.what_debate}"
+                )
+            trend_context = "\n" + "\n".join(trend_lines) + "\n"
 
         prompt = f"""Generate a {format_type} video script with these requirements:
 

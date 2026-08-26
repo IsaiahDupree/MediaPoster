@@ -16,6 +16,7 @@ from services.media_factory.contracts.content_brief import (
     BriefScoreSchema
 )
 from services.media_factory.contracts.script import ScriptSchema, ScriptBeatSchema
+from services.media_factory.contracts.cluster import ClusterSchema
 
 
 @pytest.fixture
@@ -209,6 +210,23 @@ class TestScriptGeneration:
 
             with pytest.raises(ValueError, match="Invalid JSON response"):
                 await generator.generate_script(sample_brief)
+
+    def test_prompt_uses_current_cluster_contract(self, sample_brief):
+        """Trend context must use fields that ClusterSchema actually exposes."""
+        sample_brief.cluster = ClusterSchema(
+            cluster_id="cluster_control_plane",
+            name="AI agent control planes",
+            what_changed="More agents can act on customer-facing tools.",
+            why_people_care="Founders need to bound and stop consequential actions.",
+            what_debate="How much autonomy to grant before human approval.",
+        )
+
+        generator = ScriptGeneratorService()
+        prompt = generator._build_script_prompt(sample_brief)
+
+        assert "What Changed: More agents can act on customer-facing tools." in prompt
+        assert "Why People Care: Founders need to bound and stop consequential actions." in prompt
+        assert "Debate: How much autonomy to grant before human approval." in prompt
 
 
 class TestSegmentRegeneration:

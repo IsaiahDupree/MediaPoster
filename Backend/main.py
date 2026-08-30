@@ -1709,6 +1709,11 @@ async def media_db_redirect(limit: int = 50, offset: int = 0, analyzed_only: boo
 from api import blotato_router
 app.include_router(blotato_router.router, tags=["Blotato API"])
 
+# Authenticated, idempotent publication boundary used by Airtime. This journals
+# each destination before MediaPoster calls a provider and never uses ACTP.
+from api import control_plane_publications
+app.include_router(control_plane_publications.router)
+
 # AI Chat (Chat with all data)
 from api import ai_chat
 app.include_router(ai_chat.router, tags=["AI Chat"])

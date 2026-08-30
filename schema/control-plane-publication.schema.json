@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isaiahdupree.dev/contracts/control-plane-publication.schema.json",
+  "title": "MediaPoster control-plane publication contracts",
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "attemptRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "contract_type", "content_work_item_id",
+        "production_plan_id", "production_plan_sha256", "destination_id",
+        "attempt_number", "platform", "airtime_account_id", "provider_account_id",
+        "title", "caption", "scheduled_at", "asset", "approval", "qc", "held",
+        "confirm_provider_write"
+      ],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "contract_type": {"const": "publication_attempt_request_v1"},
+        "content_work_item_id": {"type": "string", "minLength": 1},
+        "production_plan_id": {"type": "string", "minLength": 1},
+        "production_plan_sha256": {"$ref": "#/$defs/sha256"},
+        "destination_id": {"type": "string", "minLength": 1},
+        "attempt_number": {"type": "integer", "minimum": 1, "maximum": 20},
+        "platform": {"enum": ["facebook_reels", "instagram_reels", "youtube_shorts", "x", "twitter", "tiktok", "threads", "pinterest"]},
+        "airtime_account_id": {"type": "string", "minLength": 1},
+        "provider_account_id": {"type": "string", "minLength": 1},
+        "account_username": {"type": ["string", "null"]},
+        "title": {"type": "string", "minLength": 1},
+        "caption": {"type": "string", "minLength": 1},
+        "scheduled_at": {"type": "string", "format": "date-time"},
+        "freshness_deadline_at": {"type": ["string", "null"], "format": "date-time"},
+        "asset": {
+          "type": "object", "additionalProperties": false,
+          "required": ["asset_id", "sha256", "bytes", "download_path"],
+          "properties": {
+            "asset_id": {"type": "string", "minLength": 1},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "bytes": {"type": "integer", "minimum": 1, "maximum": 1073741824},
+            "download_path": {"type": "string", "pattern": "^/v1/control-plane/assets/[^/]+/bytes$"}
+          }
+        },
+        "approval": {
+          "type": "object", "additionalProperties": false,
+          "required": ["generation_approval_id", "publication_policy", "approve_scheduled_publication", "approved_at"],
+          "properties": {
+            "generation_approval_id": {"type": "string", "minLength": 1},
+            "publication_policy": {"const": "auto_publish_after_qc"},
+            "approve_scheduled_publication": {"const": true},
+            "approved_at": {"type": "string", "format": "date-time"}
+          }
+        },
+        "qc": {
+          "type": "object", "additionalProperties": false,
+          "required": ["decision", "receipt_sha256", "asset_sha256"],
+          "properties": {
+            "decision": {"const": "passed"},
+            "receipt_sha256": {"$ref": "#/$defs/sha256"},
+            "asset_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "held": {"const": false},
+        "confirm_provider_write": {"const": true}
+      }
+    },
+    "attemptReceipt": {
+      "type": "object",
+      "required": ["schema_version", "contract_type", "attempt_id", "content_work_item_id", "production_plan_id", "destination_id", "attempt_number", "asset_sha256", "qc_receipt_sha256", "generation_approval_id", "state", "receipt_sha256"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "contract_type": {"const": "publication_attempt_receipt_v1"},
+        "attempt_id": {"type": "string", "minLength": 1},
+        "content_work_item_id": {"type": "string", "minLength": 1},
+        "production_plan_id": {"type": "string", "minLength": 1},
+        "destination_id": {"type": "string", "minLength": 1},
+        "attempt_number": {"type": "integer", "minimum": 1},
+        "asset_sha256": {"$ref": "#/$defs/sha256"},
+        "qc_receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "generation_approval_id": {"type": "string", "minLength": 1},
+        "state": {"enum": ["prepared", "downloading", "submitting", "submitted", "processing", "published", "failed", "unknown"]},
+        "receipt_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/attemptRequest"},
+    {"$ref": "#/$defs/attemptReceipt"}
+  ]
+}

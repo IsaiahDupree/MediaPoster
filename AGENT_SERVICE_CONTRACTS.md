@@ -15,13 +15,13 @@ Media production, provider integration, scheduling, analytics, and social publis
 
 ## Inventory summary
 
-- Static API routes: **2233** (1031 potentially mutating)
-- Formal JSON Schema/OpenAPI contracts: **1**
-- Typed application models: **1128**
+- Static API routes: **2237** (1034 potentially mutating)
+- Formal JSON Schema/OpenAPI contracts: **2**
+- Typed application models: **1132**
 - Database objects declared in migrations: **593**
-- Environment-variable names: **191**
+- Environment-variable names: **197**
 - Package manifests with scripts: **3**
-- Source fingerprint: `eeca5fec51910a663499fcd478847bdb6c89c418b4f9f35c179d66c24a2d841e`
+- Source fingerprint: `4065f53e3033906ad229a7832a508392a223bc74415e6c9a12d56ce67708a60b`
 
 This is a static source inventory, not a live health report. Dynamic routes and runtime registrations must be verified through the repository's own health/discovery interface.
 
@@ -31,7 +31,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 |---|---|---|
 | `actp-dashboard` | [`Backend/services/creative_testing_pipeline/ui/package.json`](Backend/services/creative_testing_pipeline/ui/package.json) | build, dev, preview |
 | `mediaposter-motion` | [`MotionCanvas/package.json`](MotionCanvas/package.json) | build, render, start |
-| `repo-agent-contracts-mediaposter-31462` | [`package.json`](package.json) | - |
+| `mediaposter-control-plane-publishing-20260830` | [`package.json`](package.json) | - |
 
 ## HTTP and API surface
 
@@ -1395,6 +1395,10 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/providers/{provider}/schedule` | [`Backend/api/endpoints/blotato_test.py:84`](Backend/api/endpoints/blotato_test.py#L84) | `required` |
 | `POST` | `/providers/{provider}/scrape` | [`Backend/api/endpoints/blotato_test.py:94`](Backend/api/endpoints/blotato_test.py#L94) | `required` |
 | `POST` | `/providers/{provider}/test` | [`Backend/api/endpoints/blotato_test.py:65`](Backend/api/endpoints/blotato_test.py#L65) | `required` |
+| `POST` | `/publication-attempts` | [`Backend/api/control_plane_publications.py:654`](Backend/api/control_plane_publications.py#L654) | `required` |
+| `GET` | `/publication-attempts/{attempt_id}` | [`Backend/api/control_plane_publications.py:671`](Backend/api/control_plane_publications.py#L671) | `read` |
+| `POST` | `/publication-attempts/{attempt_id}/reconcile` | [`Backend/api/control_plane_publications.py:684`](Backend/api/control_plane_publications.py#L684) | `required` |
+| `POST` | `/publication-preflights` | [`Backend/api/control_plane_publications.py:644`](Backend/api/control_plane_publications.py#L644) | `required` |
 | `POST` | `/publish` | [`Backend/api/endpoints/events.py:98`](Backend/api/endpoints/events.py#L98) | `required` |
 | `POST` | `/publish` | [`Backend/api/endpoints/platform_publishing.py:123`](Backend/api/endpoints/platform_publishing.py#L123) | `required` |
 | `POST` | `/publish` | [`Backend/api/endpoints/twitter_api.py:78`](Backend/api/endpoints/twitter_api.py#L78) | `required` |
@@ -2276,6 +2280,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | Contract | Kind | Required fields | Join fields | Hash |
 |---|---|---|---|---|
 | [`Social Intelligence Unified API`](Backend/docs/rapidapi/openapi-unified.yaml)<br>`Backend/docs/rapidapi/openapi-unified.yaml` | `openapi` | - | - | `6e1ab70f9cb5` |
+| [`MediaPoster control-plane publication contracts`](schema/control-plane-publication.schema.json)<br>`schema/control-plane-publication.schema.json` | `json_schema` | - | airtime_account_id, asset_id, attempt_id, content_work_item_id, destination_id, generation_approval_id, production_plan_id, provider_account_id | `0edc6d8dc83f` |
 
 ## Typed application models
 
@@ -2332,11 +2337,13 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `AppRanking` | `python-pydantic` | [`Backend/api/endpoints/trends.py`](Backend/api/endpoints/trends.py) |
 | `ApprovalAction` | `python-pydantic` | [`Backend/api/approval_queue.py`](Backend/api/approval_queue.py) |
 | `ApprovalItemResponse` | `python-pydantic` | [`Backend/api/endpoints/approval_queue.py`](Backend/api/endpoints/approval_queue.py) |
+| `ApprovalReference` | `python-pydantic` | [`Backend/api/control_plane_publications.py`](Backend/api/control_plane_publications.py) |
 | `ApproveClipRequest` | `python-pydantic` | [`Backend/api/endpoints/repurpose.py`](Backend/api/endpoints/repurpose.py) |
 | `ApproveRequest` | `python-pydantic` | [`Backend/api/content_pipeline.py`](Backend/api/content_pipeline.py) |
 | `AssessmentResponse` | `python-pydantic` | [`Backend/services/video_orchestrator/schemas.py`](Backend/services/video_orchestrator/schemas.py) |
 | `AssetClipV2` | `python-pydantic` | [`Backend/services/video_generation/shot_types.py`](Backend/services/video_generation/shot_types.py) |
 | `AssetManifestV1` | `python-pydantic` | [`Backend/services/video_generation/types.py`](Backend/services/video_generation/types.py) |
+| `AssetReference` | `python-pydantic` | [`Backend/api/control_plane_publications.py`](Backend/api/control_plane_publications.py) |
 | `AssetResponse` | `python-pydantic` | [`Backend/services/video_orchestrator/schemas.py`](Backend/services/video_orchestrator/schemas.py) |
 | `AssignMessageRequest` | `python-pydantic` | [`Backend/api/endpoints/inbox.py`](Backend/api/endpoints/inbox.py) |
 | `AssignRequest` | `python-pydantic` | [`Backend/api/endpoints/approval_queue.py`](Backend/api/endpoints/approval_queue.py) |
@@ -2987,6 +2994,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `ProviderHintsSchema` | `python-pydantic` | [`Backend/services/video_orchestrator/schemas.py`](Backend/services/video_orchestrator/schemas.py) |
 | `ProviderInfo` | `python-pydantic` | [`Backend/api/endpoints/video_generation.py`](Backend/api/endpoints/video_generation.py) |
 | `ProviderReferenceSchema` | `python-pydantic` | [`Backend/services/video_orchestrator/schemas.py`](Backend/services/video_orchestrator/schemas.py) |
+| `PublicationAttemptRequest` | `python-pydantic` | [`Backend/api/control_plane_publications.py`](Backend/api/control_plane_publications.py) |
 | `PublishJobSchema` | `python-pydantic` | [`Backend/services/media_factory/contracts/publish_job.py`](Backend/services/media_factory/contracts/publish_job.py) |
 | `PublishNowRequest` | `python-pydantic` | [`Backend/api/endpoints/schedule.py`](Backend/api/endpoints/schedule.py) |
 | `PublishPostRequest` | `python-pydantic` | [`Backend/api/blotato_router.py`](Backend/api/blotato_router.py) |
@@ -3003,6 +3011,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `QAResult` | `python-pydantic` | [`Backend/services/qa_gate_service.py`](Backend/services/qa_gate_service.py) |
 | `QATimelineIssue` | `python-pydantic` | [`Backend/services/sfx_library/types.py`](Backend/services/sfx_library/types.py) |
 | `QATimelineReport` | `python-pydantic` | [`Backend/services/sfx_library/types.py`](Backend/services/sfx_library/types.py) |
+| `QCReference` | `python-pydantic` | [`Backend/api/control_plane_publications.py`](Backend/api/control_plane_publications.py) |
 | `QualityAssessmentResponse` | `python-pydantic` | [`Backend/api/endpoints/voice_cloning_quality.py`](Backend/api/endpoints/voice_cloning_quality.py) |
 | `QualityGateResult` | `python-pydantic` | [`Backend/services/formats/schema.py`](Backend/services/formats/schema.py) |
 | `QualityProfile` | `python-pydantic` | [`Backend/services/formats/schema.py`](Backend/services/formats/schema.py) |
@@ -4012,7 +4021,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 
 Only variable names are documented. Values belong in the repository's approved secret/configuration store.
 
-`ACTP_API_KEY`, `ACTP_CORS_ORIGINS`, `ACTP_LANDING_BASE_URL`, `ACTP_MAX_BODY_SIZE`, `ACTP_VERSION`, `AGENT_DAILY_BUDGET_USD`, `AIRTIME_ACCOUNTS_JSON`, `AI_MAX_TOKENS`, `AI_MODEL`, `AI_PROVIDER`, `AI_TEMPERATURE`, `AI_TIMEOUT`, `ANALYSIS_PROVIDER`, `ANTHROPIC_API_KEY`, `API_URL`, `APP_MODE`, `APP_VERSION`, `ASSEMBLYAI_API_KEY`, `BACKEND_HOST`, `BACKEND_PORT`, `BLOTATO_API_KEY`, `BLOTATO_API_URL`, `BLOTATO_URL`, `BLUESKY_USERNAMES`, `C2_API_KEY`, `C2_AUTH_DISABLED`, `C2_BIND_HOST`, `C2_PORT`, `C2_RELOAD`, `CAPTION_VARIANT_MODEL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CI`, `CLIP_OUTPUT_DIR`, `CLOUD_SUPABASE_ANON_KEY`, `CLOUD_SUPABASE_STORAGE_BUCKET`, `CLOUD_SUPABASE_URL`, `CONTENT_INTEL_URL`, `DATABASE_URL`, `DEFAULT_CAPTION_STYLE`, `DOWNLOAD_PATH`, `ELEVENLABS_API_KEY`, `ENABLE_AI_CAPTION_VARIANTS`, `ENABLE_LOCAL_SCRAPERS`, `ENABLE_RAPIDAPI_ENRICHMENT`, `EVENT_BUS_BACKEND`, `FACEBOOK_AD_ACCOUNT_ID`, `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_NAMES`, `FREESOUND_API_KEY`, `FROM_EMAIL`, `FROM_NAME`, `FRONTEND_PORT`, `GIPHY_API_KEY`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CONVERSION_ID`, `GOOGLE_CONVERSION_LABEL`, `GOOGLE_CREDENTIALS_PATH`, `GOOGLE_DRIVE_API_KEY`, `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_SHEET_ID`, `GOOGLE_VEO3_API_KEY`, `HAILUO_API_KEY`, `HF_API_TOKEN`, `HF_TOKEN`, `HUGGINGFACE_API_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, `HUGGINGFACE_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_GRAPH_ACCOUNT_ID`, `INSTAGRAM_GRAPH_TOKEN`, `INSTAGRAM_USERNAME`, `INSTAGRAM_USERNAMES`, `INSTAGRAM_USER_ID`, `KLING_API_KEY`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_API_KEY`, `LINKEDIN_MODE`, `LOCAL_CLIPS_PATH`, `LOCAL_STORAGE_ENABLED`, `LOCAL_STORAGE_PATH`, `LOCAL_TEMP_PATH`, `LOCAL_THUMBNAILS_PATH`, `LOCAL_VIDEOS_PATH`, `LUMA_API_KEY`, `MEDIAPOSTER_BASE_PATH`, `MEDIA_PIPELINE_URL`, `MEDIUM_API_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `META_PIXEL_ID`, `MINIMAX_API_KEY`, `MODAL_VOICE_API_KEY`, `MODAL_VOICE_ENDPOINT`, `MPLITE_DEFAULT_ACCOUNT_ID`, `MPLITE_KEY`, `MPLITE_URL`, `MUSIC_INDEX_PATH`, `MUSIC_LIBRARY_PATH`, `NANO_BANANA_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `PEXELS_API_KEY`, `PIKA_API_KEY`, `PINTEREST_USERNAMES`, `PIXABAY_API_KEY`, `PORT`, `POSTING_TIMEZONE_OFFSET`, `RAPIDAPI_HOST`, `RAPIDAPI_KEY`, `RAPIDAPI_TIKTOK_TIER`, `REDIS_URL`, `REMOTION_BASE_PATH`, `REMOTION_PROJECT_PATH`, `REMOTION_SERVER_URL`, `REMOTION_URL`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RUNWAY_API_KEY`, `SAFARI_AUTH_TOKEN`, `SAFARI_CONTROL_URL`, `SAFARI_TELEMETRY_URL`, `SAFARI_URL`, `SAME_DAY_CHECK_INTERVAL`, `SFX_MANIFEST_PATH`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_PORT`, `SMTP_USER`, `SNAPCHAT_ACCESS_TOKEN`, `SORA_API_KEY`, `SORA_DEFAULT_SECONDS`, `SORA_DEFAULT_SIZE`, `SORA_MODEL`, `SORA_TIMEOUT`, `STABILITY_API_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_URL`, `TEMP_DIR`, `THREADS_USERNAME`, `THREADS_USERNAMES`, `THREADS_USER_ID`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_API_KEY`, `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET`, `TIKTOK_CAPTCHA_API_URL`, `TIKTOK_PIXEL_ID`, `TIKTOK_USERNAME`, `TIKTOK_USERNAMES`, `TRANSCRIPTION_PROVIDER`, `TREND_FLASH_OUTPUT`, `TWITTER_ACCESS_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_TOKEN_SECRET`, `TWITTER_ACCOUNT_ID`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_BEARER_TOKEN`, `TWITTER_USERNAMES`, `UNSPLASH_ACCESS_KEY`, `USE_SUPABASE_STORAGE`, `VIDEO_PROVIDER`, `VIDEO_RENDERER_ENGINE`, `VIRTUAL_ENV`, `WAITLISTLAB_API_KEY`, `WAITLISTLAB_API_URL`, `WEEKLY_EXECUTOR_CHECK_INTERVAL`, `WEEKLY_PLANNER_INTERVAL`, `YOUTUBE_ACCESS_TOKEN`, `YOUTUBE_API_KEY`, `YOUTUBE_CHANNEL_ID`, `YOUTUBE_CHANNEL_IDS`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, `YOUTUBE_USERNAMES`
+`ACTP_API_KEY`, `ACTP_CORS_ORIGINS`, `ACTP_LANDING_BASE_URL`, `ACTP_MAX_BODY_SIZE`, `ACTP_VERSION`, `AGENT_DAILY_BUDGET_USD`, `AIRTIME_ACCOUNTS_JSON`, `AI_MAX_TOKENS`, `AI_MODEL`, `AI_PROVIDER`, `AI_TEMPERATURE`, `AI_TIMEOUT`, `ANALYSIS_PROVIDER`, `ANTHROPIC_API_KEY`, `API_URL`, `APP_MODE`, `APP_VERSION`, `ASSEMBLYAI_API_KEY`, `BACKEND_HOST`, `BACKEND_PORT`, `BLOTATO_API_KEY`, `BLOTATO_API_URL`, `BLOTATO_URL`, `BLUESKY_USERNAMES`, `C2_API_KEY`, `C2_AUTH_DISABLED`, `C2_BIND_HOST`, `C2_PORT`, `C2_RELOAD`, `CAPTION_VARIANT_MODEL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CI`, `CLIP_OUTPUT_DIR`, `CLOUD_SUPABASE_ANON_KEY`, `CLOUD_SUPABASE_STORAGE_BUCKET`, `CLOUD_SUPABASE_URL`, `CONTENT_INTEL_URL`, `DATABASE_URL`, `DEFAULT_CAPTION_STYLE`, `DOWNLOAD_PATH`, `ELEVENLABS_API_KEY`, `ENABLE_AI_CAPTION_VARIANTS`, `ENABLE_LOCAL_SCRAPERS`, `ENABLE_RAPIDAPI_ENRICHMENT`, `EVENT_BUS_BACKEND`, `FACEBOOK_AD_ACCOUNT_ID`, `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_NAMES`, `FREESOUND_API_KEY`, `FROM_EMAIL`, `FROM_NAME`, `FRONTEND_PORT`, `GIPHY_API_KEY`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CONVERSION_ID`, `GOOGLE_CONVERSION_LABEL`, `GOOGLE_CREDENTIALS_PATH`, `GOOGLE_DRIVE_API_KEY`, `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_SHEET_ID`, `GOOGLE_VEO3_API_KEY`, `HAILUO_API_KEY`, `HF_API_TOKEN`, `HF_TOKEN`, `HUGGINGFACE_API_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, `HUGGINGFACE_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_GRAPH_ACCOUNT_ID`, `INSTAGRAM_GRAPH_TOKEN`, `INSTAGRAM_USERNAME`, `INSTAGRAM_USERNAMES`, `INSTAGRAM_USER_ID`, `KLING_API_KEY`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_API_KEY`, `LINKEDIN_MODE`, `LOCAL_CLIPS_PATH`, `LOCAL_STORAGE_ENABLED`, `LOCAL_STORAGE_PATH`, `LOCAL_TEMP_PATH`, `LOCAL_THUMBNAILS_PATH`, `LOCAL_VIDEOS_PATH`, `LUMA_API_KEY`, `MEDIAPOSTER_BASE_PATH`, `MEDIAPOSTER_CONTROL_PLANE_DB`, `MEDIAPOSTER_CONTROL_PUBLISH_ENABLED`, `MEDIAPOSTER_CONTROL_TOKEN`, `MEDIAPOSTER_EARLY_PUBLISH_GRACE_SECONDS`, `MEDIA_PIPELINE_URL`, `MEDIA_VAULT_CONTROL_TOKEN`, `MEDIA_VAULT_CONTROL_URL`, `MEDIUM_API_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `META_PIXEL_ID`, `MINIMAX_API_KEY`, `MODAL_VOICE_API_KEY`, `MODAL_VOICE_ENDPOINT`, `MPLITE_DEFAULT_ACCOUNT_ID`, `MPLITE_KEY`, `MPLITE_URL`, `MUSIC_INDEX_PATH`, `MUSIC_LIBRARY_PATH`, `NANO_BANANA_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `PEXELS_API_KEY`, `PIKA_API_KEY`, `PINTEREST_USERNAMES`, `PIXABAY_API_KEY`, `PORT`, `POSTING_TIMEZONE_OFFSET`, `RAPIDAPI_HOST`, `RAPIDAPI_KEY`, `RAPIDAPI_TIKTOK_TIER`, `REDIS_URL`, `REMOTION_BASE_PATH`, `REMOTION_PROJECT_PATH`, `REMOTION_SERVER_URL`, `REMOTION_URL`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RUNWAY_API_KEY`, `SAFARI_AUTH_TOKEN`, `SAFARI_CONTROL_URL`, `SAFARI_TELEMETRY_URL`, `SAFARI_URL`, `SAME_DAY_CHECK_INTERVAL`, `SFX_MANIFEST_PATH`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_PORT`, `SMTP_USER`, `SNAPCHAT_ACCESS_TOKEN`, `SORA_API_KEY`, `SORA_DEFAULT_SECONDS`, `SORA_DEFAULT_SIZE`, `SORA_MODEL`, `SORA_TIMEOUT`, `STABILITY_API_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_URL`, `TEMP_DIR`, `THREADS_USERNAME`, `THREADS_USERNAMES`, `THREADS_USER_ID`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_API_KEY`, `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET`, `TIKTOK_CAPTCHA_API_URL`, `TIKTOK_PIXEL_ID`, `TIKTOK_USERNAME`, `TIKTOK_USERNAMES`, `TRANSCRIPTION_PROVIDER`, `TREND_FLASH_OUTPUT`, `TWITTER_ACCESS_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_TOKEN_SECRET`, `TWITTER_ACCOUNT_ID`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_BEARER_TOKEN`, `TWITTER_USERNAMES`, `UNSPLASH_ACCESS_KEY`, `USE_SUPABASE_STORAGE`, `VIDEO_PROVIDER`, `VIDEO_RENDERER_ENGINE`, `VIRTUAL_ENV`, `WAITLISTLAB_API_KEY`, `WAITLISTLAB_API_URL`, `WEEKLY_EXECUTOR_CHECK_INTERVAL`, `WEEKLY_PLANNER_INTERVAL`, `YOUTUBE_ACCESS_TOKEN`, `YOUTUBE_API_KEY`, `YOUTUBE_CHANNEL_ID`, `YOUTUBE_CHANNEL_IDS`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, `YOUTUBE_USERNAMES`
 
 ## Validation and drift
 

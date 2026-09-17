@@ -154,9 +154,12 @@ Backend/.chatgpt-context/
 
 # external-drive symlink (My Passport) - ignore the symlink itself, not just dir contents
 Backend/data/remotion-stickfigure
-/Frontend/  # nested git repo, tracked separately (2026-09-07)
-/Backend/external_libs/riona-ai-agent/  # nested git repo, tracked separately (2026-09-07)
-/dashboard/  # nested git repo, tracked separately (2026-09-07)
+# nested git repo, tracked separately (2026-09-07)
+/Frontend/
+# nested git repo, tracked separately (2026-09-07)
+/Backend/external_libs/riona-ai-agent/
+# nested git repo, tracked separately (2026-09-07)
+/dashboard/
 
 # --- baseline (added by sync 2026-09-07) ---
 .env.*
@@ -192,4 +195,5 @@ id_ed25519*
 .netrc
 .npmrc
 .pypirc
-/Backend/.env.supabase_instructions  # secret-looking filename, untracked (2026-09-07)
+# secret-looking filename, untracked (2026-09-07)
+/Backend/.env.supabase_instructions

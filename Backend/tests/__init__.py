@@ -1,0 +1,3 @@
+"""
+MediaPoster Test Suite
+"""

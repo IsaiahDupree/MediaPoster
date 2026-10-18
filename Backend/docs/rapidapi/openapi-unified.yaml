@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: Social Intelligence Unified API
+  version: 1.0.0
+  description: |
+    Abstracted social data interface across TikTok, Instagram,
+    YouTube, Twitter/X, LinkedIn, and Threads.
+    
+    This is a unified schema that normalizes responses from multiple
+    RapidAPI providers into a consistent format.
+
+servers:
+  - url: https://api.mediaposter.local/v1
+    description: Local development
+
+tags:
+  - name: identity
+    description: User profile operations
+  - name: content
+    description: Posts, videos, reels
+  - name: engagement
+    description: Comments, likes, shares
+  - name: discovery
+    description: Search and trending
+  - name: analytics
+    description: Statistics and demographics
+
+paths:
+  /{platform}/users/{handle}:
+    get:
+      tags: [identity]
+      summary: Get user profile by handle
+      operationId: getUserProfile
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+        - $ref: '#/components/parameters/Handle'
+      responses:
+        '200':
+          description: Normalized user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+  /{platform}/users/{handle}/content:
+    get:
+      tags: [content]
+      summary: List user content (posts/reels/shorts/videos)
+      operationId: listUserContent
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+        - $ref: '#/components/parameters/Handle'
+        - name: content_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContentType'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Paginated content list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentPage'
+
+  /{platform}/content/{content_id}:
+    get:
+      tags: [content]
+      summary: Get single content item by ID
+      operationId: getContent
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Content item with metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItem'
+
+  /{platform}/content/{content_id}/comments:
+    get:
+      tags: [engagement]
+      summary: List comments for content
+      operationId: listComments
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Paginated comments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentPage'
+
+  /{platform}/search:
+    get:
+      tags: [discovery]
+      summary: Search users/content/hashtags
+      operationId: search
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [user, content, hashtag]
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+
+  /{platform}/trending:
+    get:
+      tags: [discovery]
+      summary: Get trending content
+      operationId: getTrending
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+        - name: geo
+          in: query
+          schema:
+            type: string
+            description: Country code (e.g., US, GB)
+      responses:
+        '200':
+          description: Trending content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentPage'
+
+  /{platform}/analytics/user/{handle}:
+    get:
+      tags: [analytics]
+      summary: Get user analytics (where supported)
+      operationId: getUserAnalytics
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+        - $ref: '#/components/parameters/Handle'
+      responses:
+        '200':
+          description: User analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAnalytics'
+
+components:
+  parameters:
+    Platform:
+      name: platform
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Platform'
+    Handle:
+      name: handle
+      in: path
+      required: true
+      schema:
+        type: string
+        description: Username or handle (without @)
+
+  schemas:
+    Platform:
+      type: string
+      enum: [tiktok, instagram, youtube, twitter, linkedin, threads, snapchat]
+
+    ContentType:
+      type: string
+      enum: [post, reel, short, video, story, thread]
+
+    UserProfile:
+      type: object
+      required: [platform, handle, platform_user_id]
+      properties:
+        platform:
+          $ref: '#/components/schemas/Platform'
+        handle:
+          type: string
+        platform_user_id:
+          type: string
+        display_name:
+          type: string
+        bio:
+          type: string
+        avatar_url:
+          type: string
+        follower_count:
+          type: integer
+        following_count:
+          type: integer
+        content_count:
+          type: integer
+        is_verified:
+          type: boolean
+        raw:
+          type: object
+          description: Original provider response
+
+    ContentItem:
+      type: object
+      required: [platform, content_id, content_type]
+      properties:
+        platform:
+          $ref: '#/components/schemas/Platform'
+        content_id:
+          type: string
+        content_type:
+          $ref: '#/components/schemas/ContentType'
+        author_handle:
+          type: string
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        like_count:
+          type: integer
+        comment_count:
+          type: integer
+        view_count:
+          type: integer
+        share_count:
+          type: integer
+        media_urls:
+          type: array
+          items:
+            type: string
+        raw:
+          type: object
+
+    ContentPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentItem'
+        next_cursor:
+          type: string
+
+    Comment:
+      type: object
+      required: [comment_id]
+      properties:
+        comment_id:
+          type: string
+        author_handle:
+          type: string
+        text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        like_count:
+          type: integer
+        raw:
+          type: object
+
+    CommentPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+        next_cursor:
+          type: string
+
+    SearchResults:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProfile'
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentItem'
+        hashtags:
+          type: array
+          items:
+            type: string
+
+    UserAnalytics:
+      type: object
+      properties:
+        follower_history:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              followers:
+                type: integer
+        demographics:
+          type: object
+          additionalProperties: true
+        engagement_rate:
+          type: number
+        quality_score:
+          type: number
+        avg_likes:
+          type: integer
+        avg_comments:
+          type: integer

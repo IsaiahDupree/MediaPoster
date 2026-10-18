@@ -1,0 +1,3622 @@
+"""
+Database-backed Media Processing API
+Persists media to Supabase PostgreSQL using Video and VideoAnalysis models.
+"""
+# Load environment variables at the top of the module
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+import uuid
+import asyncio
+import hashlib
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, List
+from enum import Enum
+
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Query, Depends, Request
+from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.connection import get_db
+from database.models import Video, VideoAnalysis
+from loguru import logger
+from services.event_bus import EventBus, Topics
+
+router = APIRouter(prefix="/api/media-db", tags=["Media Processing (Database)"])
+
+# Default user ID for batch processing
+DEFAULT_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+# Global analysis job tracker
+_analysis_jobs = {}  # job_id -> {status, total, completed, current_video, videos: {id: {status, step, filename}}}
+
+def get_analysis_status():
+    """Get current analysis status."""
+    return _analysis_jobs
+
+def update_video_step(job_id: str, video_id: str, step: str, filename: str = None):
+    """Update individual video analysis step."""
+    if job_id and job_id in _analysis_jobs:
+        if video_id not in _analysis_jobs[job_id]["videos"]:
+            _analysis_jobs[job_id]["videos"][video_id] = {}
+        _analysis_jobs[job_id]["videos"][video_id]["step"] = step
+        _analysis_jobs[job_id]["videos"][video_id]["updated_at"] = datetime.now().isoformat()
+        if filename:
+            _analysis_jobs[job_id]["videos"][video_id]["filename"] = filename
+            _analysis_jobs[job_id]["current_filename"] = filename
+        _analysis_jobs[job_id]["current_video"] = video_id
+        _analysis_jobs[job_id]["current_step"] = step
+
+def update_analysis_status(job_id: str, **kwargs):
+    """Update analysis job status."""
+    if job_id not in _analysis_jobs:
+        _analysis_jobs[job_id] = {
+            "status": "running",
+            "total": 0,
+            "completed": 0,
+            "failed": 0,
+            "current_video": None,
+            "current_step": None,
+            "videos": {},
+            "started_at": datetime.now().isoformat()
+        }
+    _analysis_jobs[job_id].update(kwargs)
+    _analysis_jobs[job_id]["updated_at"] = datetime.now().isoformat()
+
+
+# =============================================================================
+# RESPONSE MODELS
+# =============================================================================
+
+class MediaStatusResponse(BaseModel):
+    """Current status of media processing."""
+    media_id: str
+    filename: str
+    status: str
+    file_path: Optional[str] = None
+    file_size: Optional[int] = None
+    duration_sec: Optional[int] = None
+    resolution: Optional[str] = None
+    thumbnail_path: Optional[str] = None
+    pre_social_score: Optional[float] = None
+    transcript: Optional[str] = None
+    topics: Optional[List[str]] = None
+    hooks: Optional[List[str]] = None  # Detected hooks for search
+    tone: Optional[str] = None  # Content tone for search
+    visual_summary: Optional[str] = None  # Visual analysis summary for search
+    detected_hook: Optional[str] = None  # Main detected hook for search
+    curation_status: Optional[str] = None  # 'pending', 'approved', 'rejected'
+    media_type: Optional[str] = None  # 'video' or 'image'
+    source_type: Optional[str] = None  # 'local', 'sora', 'generated', 'broll_producer', 'tiktok_repurpose'
+    content_format: Optional[str] = None  # 'talking_head', 'broll', 'animated', etc.
+    created_at: str
+    updated_at: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class MediaDetailResponse(BaseModel):
+    """Detailed media information with analysis."""
+    media_id: str
+    filename: str
+    file_path: str
+    media_type: Optional[str] = None
+    file_size: Optional[int] = None
+    duration_sec: Optional[int] = None
+    resolution: Optional[str] = None
+    aspect_ratio: Optional[str] = None
+    thumbnail_path: Optional[str] = None
+    created_at: str
+    # Analysis
+    pre_social_score: Optional[float] = None
+    transcript: Optional[str] = None
+    topics: Optional[List[str]] = None
+    hooks: Optional[List[str]] = None
+    tone: Optional[str] = None
+    pacing: Optional[str] = None
+    visual_analysis: Optional[dict] = None
+    visual_summary: Optional[str] = None  # Extracted from visual_analysis for convenience
+    analyzed_at: Optional[str] = None
+    # Deep analysis fields
+    deep_analysis: Optional[dict] = None
+    frame_analyses: Optional[list] = None
+    platform_content: Optional[list] = None
+    key_moments: Optional[dict] = None
+    detected_hook: Optional[str] = None
+    music_suggestion: Optional[dict] = None
+    pillar_tags: Optional[List[str]] = None
+    format_tags: Optional[List[str]] = None
+    # New 100% analysis fields
+    pain_points: Optional[List[str]] = None
+    emotional_drivers: Optional[List[str]] = None
+    emotional_journey: Optional[dict] = None
+    call_to_action: Optional[dict] = None
+    scene_structure: Optional[list] = None
+    content_type: Optional[str] = None
+    target_audience: Optional[dict] = None
+
+
+class BatchIngestRequest(BaseModel):
+    """Request to ingest multiple files from a directory."""
+    directory_path: str
+    recursive: bool = False
+    resume: bool = True
+
+
+class BatchIngestResponse(BaseModel):
+    """Response for batch ingestion."""
+    job_id: str
+    total_files: int
+    status: str
+    message: str
+
+
+class IngestStatsResponse(BaseModel):
+    """Statistics about ingested media."""
+    total_videos: int
+    analyzed_count: int
+    pending_analysis: int
+    total_size_bytes: int
+    avg_duration_sec: Optional[float] = None
+
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def get_media_type(filename: str) -> str:
+    """Determine media type from filename."""
+    ext = Path(filename).suffix.lower()
+    video_exts = {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm'}
+    return 'video' if ext in video_exts else 'image'
+
+
+def compute_file_hash(data: bytes) -> str:
+    """Compute MD5 hash of file data."""
+    return hashlib.md5(data).hexdigest()
+
+
+def calculate_timeout_for_duration(duration_sec: int, base_timeout: float = 60.0, per_minute_timeout: float = 30.0) -> float:
+    """
+    Calculate appropriate timeout based on video duration.
+    
+    Args:
+        duration_sec: Video duration in seconds
+        base_timeout: Base timeout for short videos (default 60s)
+        per_minute_timeout: Additional timeout per minute of video (default 30s)
+    
+    Returns:
+        Calculated timeout in seconds, minimum 60s, maximum 600s (10 min)
+    """
+    if not duration_sec or duration_sec <= 0:
+        return base_timeout
+    
+    # Calculate: base + (duration_minutes * per_minute_timeout)
+    duration_minutes = duration_sec / 60.0
+    calculated_timeout = base_timeout + (duration_minutes * per_minute_timeout)
+    
+    # Clamp between 60s and 600s (10 minutes max)
+    return max(60.0, min(600.0, calculated_timeout))
+
+
+async def get_video_metadata(file_path: str) -> dict:
+    """Extract video metadata using ffprobe."""
+    import subprocess
+    
+    try:
+        cmd = [
+            'ffprobe', '-v', 'quiet', '-print_format', 'json',
+            '-show_format', '-show_streams', str(file_path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        
+        if result.returncode == 0:
+            import json
+            data = json.loads(result.stdout)
+            
+            duration = None
+            width = None
+            height = None
+            
+            if 'format' in data:
+                duration = int(float(data['format'].get('duration', 0)))
+            
+            for stream in data.get('streams', []):
+                if stream.get('codec_type') == 'video':
+                    width = stream.get('width')
+                    height = stream.get('height')
+                    break
+            
+            resolution = f"{width}x{height}" if width and height else None
+            aspect = f"{width}:{height}" if width and height else None
+            
+            return {
+                'duration_sec': duration,
+                'resolution': resolution,
+                'aspect_ratio': aspect
+            }
+    except Exception as e:
+        print(f"Error extracting metadata: {e}")
+    
+    return {}
+
+
+# =============================================================================
+# ENDPOINTS - READ
+# =============================================================================
+
+@router.get("/list", response_model=List[MediaStatusResponse])
+async def list_media(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=500, le=5000),
+    offset: int = Query(default=0, ge=0),
+    analyzed_only: bool = Query(default=False),
+    media_type: Optional[str] = Query(default=None, description="Filter by media type: 'video' or 'image'"),
+    curation_status: Optional[str] = Query(default=None, description="Filter by curation status: 'uncurated', 'pending', 'approved', 'rejected'"),
+    has_music: Optional[bool] = Query(default=None, description="Filter by background music: true=has music, false=no music, null=any"),
+    format_type: Optional[str] = Query(default=None, description="Filter by format: 'broll_text', 'pure_broll', 'talking_head', 'voiceover'")
+):
+    """
+    List all media from database.
+    """
+    from sqlalchemy import text, or_
+    
+    # Store filters for use later
+    curation_status_filter = curation_status if curation_status else None
+    has_music_filter = has_music  # Can be True, False, or None
+    format_type_filter = format_type  # broll_text, pure_broll, talking_head, voiceover
+    
+    # Build media type filter conditions
+    video_extensions = ['%.mov', '%.mp4', '%.avi', '%.mkv', '%.webm', '%.m4v']
+    image_extensions = ['%.jpg', '%.jpeg', '%.png', '%.gif', '%.heic', '%.webp']
+    
+    # Use SQL-based curation filtering for efficiency
+    if curation_status_filter == 'uncurated':
+        # Uncurated = no analysis record OR curation_status is NULL or 'pending'
+        # Use raw SQL for this complex join query
+        media_type_clause = ""
+        if media_type == 'video':
+            media_type_clause = " AND (" + " OR ".join([f"v.source_uri ILIKE '{ext}'" for ext in video_extensions]) + ")"
+        elif media_type == 'image':
+            media_type_clause = " AND (" + " OR ".join([f"v.source_uri ILIKE '{ext}'" for ext in image_extensions]) + ")"
+        
+        sql = text(f"""
+            SELECT v.* FROM videos v
+            LEFT JOIN video_analysis va ON v.id = va.video_id
+            WHERE (va.curation_status IS NULL OR va.curation_status = 'pending' OR va.video_id IS NULL)
+            {media_type_clause}
+            ORDER BY v.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        result = await db.execute(sql, {"limit": limit, "offset": offset})
+        videos = result.fetchall()
+        # Convert to Video-like objects for consistent processing
+        videos = [type('Video', (), dict(row._mapping))() for row in videos]
+    else:
+        # Standard query for other filters
+        query = select(Video).order_by(Video.created_at.desc())
+        
+        # Filter by media type if specified
+        if media_type == 'video':
+            query = query.where(or_(
+                Video.source_uri.ilike('%.mov'),
+                Video.source_uri.ilike('%.mp4'),
+                Video.source_uri.ilike('%.avi'),
+                Video.source_uri.ilike('%.mkv'),
+                Video.source_uri.ilike('%.webm'),
+                Video.source_uri.ilike('%.m4v')
+            ))
+        elif media_type == 'image':
+            query = query.where(or_(
+                Video.source_uri.ilike('%.jpg'),
+                Video.source_uri.ilike('%.jpeg'),
+                Video.source_uri.ilike('%.png'),
+                Video.source_uri.ilike('%.gif'),
+                Video.source_uri.ilike('%.heic'),
+                Video.source_uri.ilike('%.webp')
+            ))
+        
+        # Increase limit to account for filtering
+        needs_extra_fetch = curation_status_filter or has_music_filter is not None or format_type_filter
+        fetch_limit = limit * 5 if needs_extra_fetch else limit
+        query = query.offset(offset).limit(fetch_limit)
+        
+        result = await db.execute(query)
+        videos = result.scalars().all()
+    
+    response = []
+    for video in videos:
+        # Try to get analysis with raw SQL to handle schema differences
+        # Use a more robust approach that won't break if curation_status column doesn't exist
+        analysis = None
+        curation_status = None
+        try:
+            # Fetch analysis with all searchable fields including audio analysis
+            try:
+                analysis_result = await db.execute(
+                    text("""SELECT video_id, transcript, topics, pre_social_score, curation_status,
+                            hooks, tone, detected_hook, 
+                            visual_analysis->>'visual_summary' as visual_summary,
+                            has_background_music, audio_type, music_confidence
+                        FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"""),
+                    {"vid": str(video.id)}
+                )
+                row = analysis_result.fetchone()
+                if row and len(row) >= 5:
+                    curation_status = row[4] if row[4] is not None else None
+                elif row:
+                    curation_status = None
+                
+                # Apply curation_status filter server-side
+                if curation_status_filter:
+                    if curation_status_filter == 'uncurated':
+                        # Uncurated = NULL or 'pending'
+                        if curation_status not in [None, 'pending']:
+                            continue  # Skip this video
+                    elif curation_status_filter == 'pending':
+                        if curation_status != 'pending':
+                            continue
+                    elif curation_status_filter == 'approved':
+                        if curation_status != 'approved':
+                            continue
+                    elif curation_status_filter == 'rejected':
+                        if curation_status != 'rejected':
+                            continue
+                
+                # Apply has_music filter (index 9 = has_background_music)
+                if has_music_filter is not None and row and len(row) > 9:
+                    video_has_music = row[9]  # has_background_music column
+                    if has_music_filter is True and video_has_music is not True:
+                        continue  # Skip videos without music
+                    elif has_music_filter is False and video_has_music is not False:
+                        continue  # Skip videos with music
+            except Exception as curation_error:
+                # If query fails, try simpler query
+                logger.warning(f"Full analysis query failed for video {video.id}: {curation_error}")
+                try:
+                    analysis_result = await db.execute(
+                        text("SELECT video_id, transcript, topics, pre_social_score FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"),
+                        {"vid": str(video.id)}
+                    )
+                    row = analysis_result.fetchone()
+                    curation_status = None
+                except Exception as e2:
+                    logger.error(f"Failed to fetch analysis (fallback) for video {video.id}: {e2}")
+                    row = None
+                    curation_status = None
+            
+            # Apply curation_status filter for videos without analysis (curation_status = None)
+            # Videos without analysis records are considered "uncurated"
+            if curation_status_filter and curation_status is None:
+                if curation_status_filter == 'uncurated':
+                    # Uncurated includes NULL (no analysis record yet) - include this video
+                    pass
+                elif curation_status_filter in ['pending', 'approved', 'rejected']:
+                    # Skip videos without analysis if filtering for specific status
+                    continue
+            
+            if row:
+                # Ensure topics is a list
+                topics = row[2] if len(row) > 2 and row[2] else None
+                if topics and not isinstance(topics, list):
+                    try:
+                        import json
+                        topics = json.loads(topics) if isinstance(topics, str) else topics
+                    except Exception:
+                        topics = None
+                
+                # Parse hooks array
+                hooks = row[5] if len(row) > 5 and row[5] else None
+                if hooks and not isinstance(hooks, list):
+                    try:
+                        import json
+                        hooks = json.loads(hooks) if isinstance(hooks, str) else hooks
+                    except Exception:
+                        hooks = None
+                
+                analysis = {
+                    "transcript": row[1] if len(row) > 1 and row[1] else None,
+                    "topics": topics,
+                    "pre_social_score": float(row[3]) if len(row) > 3 and row[3] is not None else None,
+                    "hooks": hooks,
+                    "tone": row[6] if len(row) > 6 else None,
+                    "detected_hook": row[7] if len(row) > 7 else None,
+                    "visual_summary": row[8] if len(row) > 8 else None
+                }
+        except Exception as e:
+            # Log error but continue - we can still return the video without analysis
+            # This is a non-fatal error, but we should know about it
+            logger.error(f"Failed to fetch analysis for video {video.id}: {e}", exc_info=True)
+            analysis = None
+            curation_status = None
+        
+        # Only mark as "analyzed" if analysis is COMPLETE (has transcript AND topics AND score)
+        # This prevents false positives from incomplete analysis
+        is_complete_analysis = (
+            analysis and
+            analysis.get("transcript") and
+            len(analysis.get("transcript", "")) > 10 and  # Must have meaningful transcript
+            analysis.get("topics") and
+            len(analysis.get("topics", [])) > 0 and  # Must have at least one topic
+            analysis.get("pre_social_score") is not None  # Must have a score
+        )
+        
+        status = "analyzed" if is_complete_analysis else "ingested"
+        
+        # Log if analysis exists but is incomplete (for debugging)
+        # Only log for VIDEOS - images correctly don't have transcripts
+        is_video = video.file_name and any(
+            video.file_name.lower().endswith(ext) 
+            for ext in ['.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm']
+        )
+        if analysis and not is_complete_analysis and is_video:
+            # Safely get topics length - handle None case
+            topics_list = analysis.get('topics') or []
+            topics_len = len(topics_list) if topics_list else 0
+            logger.debug(
+                f"[Status Check] Video {video.id} has incomplete analysis: "
+                f"transcript={bool(analysis.get('transcript'))}, "
+                f"topics={topics_len}, "
+                f"score={analysis.get('pre_social_score')}"
+            )
+        
+        # Apply format_type filter (b-roll candidates, talking head, etc.)
+        if format_type_filter:
+            from services.format_classifier import FormatClassifier, VideoFormat
+            classifier = FormatClassifier()
+            
+            # Quick classification based on available data
+            has_transcript = bool(transcript and len(transcript) > 50)
+            has_speech = bool(transcript and len(transcript) > 10)  # Simplified: transcript = speech
+            
+            # Check for face/person in visual analysis
+            has_face = False
+            face_presence_pct = 0.0
+            if video.visual_analysis:
+                va = video.visual_analysis
+                people = va.get('people_detected', [])
+                has_face = bool(people) or bool(va.get('has_person'))
+                face_presence_pct = 50.0 if has_face else 0.0
+            
+            classification = classifier.classify_from_analysis(
+                has_face=has_face,
+                face_presence_pct=face_presence_pct,
+                has_speech=has_speech,
+                speech_ratio=0.5 if has_speech else 0.0,
+                has_transcript=has_transcript,
+                transcript_length=len(transcript) if transcript else 0,
+            )
+            
+            # Filter based on format type
+            if format_type_filter == 'broll_text':
+                if classification.format != VideoFormat.BROLL_TEXT_CANDIDATE:
+                    continue
+            elif format_type_filter == 'pure_broll':
+                if classification.format not in [VideoFormat.PURE_BROLL, VideoFormat.MUSIC_ONLY, VideoFormat.SILENT]:
+                    continue
+            elif format_type_filter == 'talking_head':
+                if classification.format != VideoFormat.TALKING_HEAD:
+                    continue
+            elif format_type_filter == 'voiceover':
+                if classification.format != VideoFormat.VOICEOVER:
+                    continue
+        
+        try:
+            # Ensure thumbnail_path is always included, even if None
+            # Frontend can use media_id with media-provider as fallback
+            thumbnail_path = video.thumbnail_path if hasattr(video, 'thumbnail_path') and video.thumbnail_path else None
+            
+            # Safely access analysis fields
+            pre_social_score = None
+            transcript = None
+            topics = None
+            hooks = None
+            tone = None
+            detected_hook = None
+            visual_summary = None
+            if analysis:
+                pre_social_score = analysis.get("pre_social_score") if analysis.get("pre_social_score") is not None else None
+                transcript = analysis.get("transcript") if analysis.get("transcript") else None
+                topics = analysis.get("topics") if analysis.get("topics") else None
+                hooks = analysis.get("hooks") if analysis.get("hooks") else None
+                tone = analysis.get("tone") if analysis.get("tone") else None
+                detected_hook = analysis.get("detected_hook") if analysis.get("detected_hook") else None
+                visual_summary = analysis.get("visual_summary") if analysis.get("visual_summary") else None
+            
+            # Determine media type from file extension
+            file_ext = (video.file_name or '').lower().split('.')[-1] if video.file_name else ''
+            if file_ext in ['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm']:
+                media_type_value = 'video'
+            elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'heic', 'webp', 'heif']:
+                media_type_value = 'image'
+            else:
+                media_type_value = 'video'  # Default to video
+            
+            # Get source_type from video model
+            source_type_value = video.source_type if hasattr(video, 'source_type') else 'local'
+            
+            # Determine content_format from format classification if available
+            content_format_value = None
+            if format_type_filter:
+                content_format_value = format_type_filter  # Use the filter value if filtering
+            
+            response.append(MediaStatusResponse(
+                media_id=str(video.id),  # This is the video_id, which media-provider needs
+                filename=video.file_name or "",
+                status=status,
+                file_path=video.source_uri if hasattr(video, 'source_uri') else None,
+                media_type=media_type_value,
+                file_size=video.file_size if hasattr(video, 'file_size') else None,
+                duration_sec=video.duration_sec if hasattr(video, 'duration_sec') else None,
+                resolution=video.resolution if hasattr(video, 'resolution') else None,
+                thumbnail_path=thumbnail_path,  # Explicitly set, can be None - frontend will use media-provider
+                pre_social_score=pre_social_score,
+                transcript=transcript,
+                topics=topics,
+                hooks=hooks,
+                tone=tone,
+                detected_hook=detected_hook,
+                visual_summary=visual_summary,
+                curation_status=curation_status,  # Will be None if not curated, or 'pending'/'approved'/'rejected' if set
+                source_type=source_type_value,
+                content_format=content_format_value,
+                created_at=video.created_at.isoformat() if video.created_at else "",
+                updated_at=video.updated_at.isoformat() if video.updated_at else None
+            ))
+        except Exception as e:
+            # This is a critical error - we're failing to serialize a video response
+            logger.error(f"CRITICAL: Failed to create response for video {video.id}: {e}", exc_info=True)
+            # Log the full video object for debugging
+            logger.error(f"Video object details: id={video.id}, filename={getattr(video, 'file_name', 'N/A')}, thumbnail_path={getattr(video, 'thumbnail_path', 'N/A')}, source_uri={getattr(video, 'source_uri', 'N/A')}")
+            # Skip this video if we can't serialize it, but log it as an error
+            # This should be investigated - it means we have data integrity issues
+            continue
+        
+        # Stop if we've reached the requested limit (after filtering)
+        if len(response) >= limit:
+            break
+    
+    return response
+
+
+@router.get("/detail/{media_id}", response_model=MediaDetailResponse)
+async def get_media_detail(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get detailed information about a specific media item.
+    Supports lookup by ID or by filename (without extension).
+    """
+    from sqlalchemy import text, or_
+    
+    video = None
+    
+    # Try as UUID first
+    try:
+        video_uuid = uuid.UUID(media_id)
+        query = select(Video).where(Video.id == video_uuid)
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
+    except ValueError as e:
+        logger.debug(f"Silent exception: {e}")
+    
+    # If not found by ID, try by filename
+    if not video:
+        # Try matching filename with or without extension
+        query = select(Video).where(
+            or_(
+                Video.file_name == media_id,
+                Video.file_name == f"{media_id}.mp4",
+                Video.file_name == f"{media_id}.mov",
+                Video.file_name.like(f"{media_id}%")
+            )
+        )
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Determine media type
+    media_type = "video"  # Default
+    if video.source_uri:
+        ext = video.source_uri.lower().split('.')[-1]
+        if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif']:
+            media_type = "image"
+        elif ext in ['mp4', 'mov', 'avi', 'mkv', 'webm']:
+            media_type = "video"
+    
+    # Get analysis with raw SQL - only select columns that exist in the table
+    analysis = None
+    try:
+        analysis_result = await db.execute(
+            text("""SELECT video_id, transcript, topics, hooks, tone, pacing, pre_social_score, 
+                    key_moments, analyzed_at, visual_analysis, deep_analysis, frame_analyses,
+                    platform_content, detected_hook, music_suggestion, pillar_tags, format_tags,
+                    pain_points, emotional_drivers, emotional_journey, call_to_action,
+                    scene_structure, content_type, target_audience
+                    FROM video_analysis WHERE video_id = CAST(:vid AS uuid)"""),
+            {"vid": str(video.id)}
+        )
+        row = analysis_result.fetchone()
+        if row:
+            import json
+            
+            # Helper to parse JSONB fields that might be strings
+            def parse_jsonb(value):
+                if value is None:
+                    return None
+                if isinstance(value, (dict, list)):
+                    return value  # Already parsed
+                if isinstance(value, str):
+                    try:
+                        return json.loads(value)
+                    except (json.JSONDecodeError, TypeError):
+                        return value  # Return as-is if not valid JSON
+                return value
+            
+            # Helper to parse array fields
+            def parse_array(value):
+                if value is None:
+                    return None
+                if isinstance(value, list):
+                    return value
+                if isinstance(value, str):
+                    try:
+                        parsed = json.loads(value)
+                        return parsed if isinstance(parsed, list) else [parsed]
+                    except (json.JSONDecodeError, TypeError):
+                        return [value] if value else []
+                return value if isinstance(value, list) else [value]
+            
+            analysis = {
+                "transcript": row[1],
+                "topics": parse_array(row[2]),  # PostgreSQL array or JSON
+                "hooks": parse_array(row[3]) if row[3] else None,
+                "tone": row[4],
+                "pacing": row[5],
+                "pre_social_score": float(row[6]) if row[6] is not None else None,
+                "key_moments": parse_jsonb(row[7]),
+                "analyzed_at": row[8],
+                "visual_analysis": parse_jsonb(row[9]),
+                "deep_analysis": parse_jsonb(row[10]),
+                "frame_analyses": parse_jsonb(row[11]),
+                "platform_content": parse_jsonb(row[12]),
+                "detected_hook": row[13],
+                "music_suggestion": parse_jsonb(row[14]),
+                "pillar_tags": parse_array(row[15]),
+                "format_tags": parse_array(row[16]),
+                # New 100% analysis fields
+                "pain_points": parse_array(row[17]),
+                "emotional_drivers": parse_array(row[18]),
+                "emotional_journey": parse_jsonb(row[19]),
+                "call_to_action": parse_jsonb(row[20]),
+                "scene_structure": parse_jsonb(row[21]),
+                "content_type": row[22],
+                "target_audience": parse_jsonb(row[23]),
+            }
+    except Exception as e:
+        logger.error(f"Failed to fetch analysis for {video.id}: {e}", exc_info=True)
+    
+    # Ensure all JSONB fields are properly parsed before creating response
+    if analysis:
+        import json
+        try:
+            # Parse any remaining string JSONB fields
+            for key in ['music_suggestion', 'deep_analysis', 'visual_analysis', 'key_moments', 'frame_analyses', 'platform_content', 'emotional_journey', 'call_to_action', 'scene_structure', 'target_audience']:
+                if key in analysis and analysis[key] is not None:
+                    if isinstance(analysis[key], str):
+                        try:
+                            analysis[key] = json.loads(analysis[key])
+                        except (json.JSONDecodeError, TypeError):
+                            logger.warning(f"Could not parse {key} as JSON for video {video.id}, keeping as string")
+        except Exception as e:
+            logger.error(f"Error parsing JSONB fields for video {video.id}: {e}", exc_info=True)
+    
+    try:
+        # Extract visual_summary from visual_analysis if available
+        visual_summary = None
+        if analysis and analysis.get("visual_analysis"):
+            va = analysis["visual_analysis"]
+            if isinstance(va, dict):
+                visual_summary = va.get("visual_summary") or va.get("detailed_description")
+        
+        return MediaDetailResponse(
+        media_id=str(video.id),
+        filename=video.file_name or "",
+        file_path=video.source_uri,
+        media_type=media_type,
+        file_size=video.file_size,
+        duration_sec=video.duration_sec,
+        resolution=video.resolution,
+        aspect_ratio=video.aspect_ratio,
+        thumbnail_path=video.thumbnail_path,
+        created_at=video.created_at.isoformat() if video.created_at else "",
+        pre_social_score=analysis["pre_social_score"] if analysis else None,
+        transcript=analysis["transcript"] if analysis else None,
+        topics=analysis["topics"] if analysis else None,
+        hooks=analysis["hooks"] if analysis else None,
+        tone=analysis["tone"] if analysis else None,
+        pacing=analysis["pacing"] if analysis else None,
+        visual_analysis=analysis["visual_analysis"] if analysis else None,
+        visual_summary=visual_summary,
+        deep_analysis=analysis["deep_analysis"] if analysis else None,  # Always include deep analysis
+        frame_analyses=analysis["frame_analyses"] if analysis else None,
+        platform_content=analysis["platform_content"] if analysis else None,
+        key_moments=analysis["key_moments"] if analysis else None,
+        detected_hook=analysis["detected_hook"] if analysis else None,
+        music_suggestion=analysis["music_suggestion"] if analysis else None,
+        pillar_tags=analysis["pillar_tags"] if analysis else None,
+        format_tags=analysis["format_tags"] if analysis else None,
+        analyzed_at=analysis["analyzed_at"].isoformat() if analysis and analysis["analyzed_at"] else None,
+        # New 100% analysis fields
+        pain_points=analysis["pain_points"] if analysis else None,
+        emotional_drivers=analysis["emotional_drivers"] if analysis else None,
+        emotional_journey=analysis["emotional_journey"] if analysis else None,
+        call_to_action=analysis["call_to_action"] if analysis else None,
+        scene_structure=analysis["scene_structure"] if analysis else None,
+        content_type=analysis["content_type"] if analysis else None,
+        target_audience=analysis["target_audience"] if analysis else None,
+        )
+    except Exception as e:
+        logger.error(f"Failed to create MediaDetailResponse for video {video.id}: {e}", exc_info=True)
+        logger.error(f"Analysis data: {analysis}")
+        raise HTTPException(status_code=500, detail=f"Failed to serialize media detail: {str(e)}")
+
+
+@router.get("/stats")
+async def get_stats(db: AsyncSession = Depends(get_db)):
+    """
+    Get ingestion statistics including analyzing count.
+    
+    Returns:
+    - Database stats: Videos that have been ingested into the database
+    - Folder stats: Actual files in IphoneImport folder (if available)
+    """
+    from sqlalchemy import func
+    import os
+    
+    # =====================================================================
+    # DATABASE STATS (Ingested videos only)
+    # =====================================================================
+    # Total videos in database
+    total_query = select(func.count(Video.id))
+    total_result = await db.execute(total_query)
+    total_videos = total_result.scalar() or 0
+    
+    # Analyzed count
+    analyzed_query = select(func.count(VideoAnalysis.video_id))
+    analyzed_result = await db.execute(analyzed_query)
+    analyzed_count = analyzed_result.scalar() or 0
+    
+    # Total size (handle missing column gracefully)
+    total_size = 0
+    try:
+        size_query = select(func.sum(Video.file_size))
+        size_result = await db.execute(size_query)
+        total_size = size_result.scalar() or 0
+    except Exception:
+        await db.rollback()  # Rollback failed transaction before continuing
+    
+    # Average duration
+    avg_duration = None
+    try:
+        duration_query = select(func.avg(Video.duration_sec))
+        duration_result = await db.execute(duration_query)
+        avg_duration = duration_result.scalar()
+    except Exception:
+        await db.rollback()
+    
+    # Get currently analyzing count from job tracker
+    analyzing_count = 0
+    for job in _analysis_jobs.values():
+        if job.get("status") == "running":
+            analyzing_count += job.get("total", 0) - job.get("completed", 0) - job.get("failed", 0)
+    
+    # =====================================================================
+    # CURATION STATS
+    # =====================================================================
+    curation_stats = {"approved": 0, "rejected": 0, "uncurated": 0}
+    try:
+        from sqlalchemy import text
+        # Count approved
+        approved_result = await db.execute(
+            text("SELECT COUNT(*) FROM video_analysis WHERE curation_status = 'approved'")
+        )
+        curation_stats["approved"] = approved_result.scalar() or 0
+        
+        # Count rejected
+        rejected_result = await db.execute(
+            text("SELECT COUNT(*) FROM video_analysis WHERE curation_status = 'rejected'")
+        )
+        curation_stats["rejected"] = rejected_result.scalar() or 0
+        
+        # Uncurated = total videos - approved - rejected
+        # This includes videos with no analysis record, pending, or NULL curation_status
+        curation_stats["uncurated"] = total_videos - curation_stats["approved"] - curation_stats["rejected"]
+    except Exception as e:
+        logger.warning(f"Could not get curation stats: {e}")
+        await db.rollback()
+    
+    # =====================================================================
+    # FOLDER STATS (Media Import folder - My Passport or local fallback)
+    # =====================================================================
+    from config.paths import get_iphone_import_dir
+    folder_stats = None
+    iphone_import_dir = get_iphone_import_dir()
+    if iphone_import_dir.exists():
+        try:
+            video_extensions = {'.mp4', '.mov', '.MOV', '.MP4', '.avi', '.mkv', '.m4v', '.webm'}
+            image_extensions = {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.webp', '.bmp'}
+            all_extensions = video_extensions | image_extensions
+            
+            folder_file_count = 0
+            folder_total_size = 0
+            
+            for root, _, files in os.walk(iphone_import_dir):
+                for file in files:
+                    ext = Path(file).suffix.lower()
+                    if ext in all_extensions:
+                        try:
+                            full_path = os.path.join(root, file)
+                            size = os.path.getsize(full_path)
+                            folder_file_count += 1
+                            folder_total_size += size
+                        except (OSError, PermissionError):
+                            pass  # Skip files we can't access
+            
+            folder_stats = {
+                "folder_path": str(iphone_import_dir),
+                "total_files": folder_file_count,
+                "total_size_bytes": folder_total_size,
+                "total_size_gb": round(folder_total_size / (1024**3), 2)
+            }
+        except Exception as e:
+            logger.warning(f"Could not scan IphoneImport folder: {e}")
+    
+    result = {
+        "total_videos": total_videos,
+        "analyzed_count": analyzed_count,
+        "analyzing_count": analyzing_count,
+        "pending_analysis": total_videos - analyzed_count,
+        "total_size_bytes": total_size,
+        "avg_duration_sec": float(avg_duration) if avg_duration else None,
+        "folder_stats": folder_stats,
+        "curation_stats": curation_stats  # Curation counts for Quick Curate page
+    }
+    
+    return result
+
+
+@router.get("/analysis-status")
+async def get_analysis_job_status():
+    """
+    Get detailed status of all analysis jobs including individual video progress.
+    """
+    jobs = []
+    for job_id, job in _analysis_jobs.items():
+        # Get recent video statuses (last 10)
+        videos_dict = job.get("videos", {})
+        recent_videos = []
+        completed_videos = []
+        
+        for vid, info in list(videos_dict.items())[-20:]:
+            if isinstance(info, dict):
+                video_info = {
+                    "id": vid,
+                    "step": info.get("step", "unknown"),
+                    "filename": info.get("filename", ""),
+                    "status": info.get("status", "processing")
+                }
+                recent_videos.append(video_info)
+            elif info == "completed":
+                completed_videos.append({"id": vid, "status": "completed", "filename": ""})
+            else:
+                recent_videos.append({"id": vid, "status": str(info)})
+        
+        jobs.append({
+            "job_id": job_id,
+            "status": job.get("status"),
+            "total": job.get("total", 0),
+            "completed": job.get("completed", 0),
+            "failed": job.get("failed", 0),
+            "current_video": job.get("current_video"),
+            "current_step": job.get("current_step"),
+            "current_filename": job.get("current_filename"),
+            "recent_videos": recent_videos,
+            "completed_videos": completed_videos[-5:],  # Last 5 completed
+            "started_at": job.get("started_at"),
+            "updated_at": job.get("updated_at")
+        })
+    
+    return {
+        "active_jobs": len([j for j in jobs if j["status"] == "running"]),
+        "jobs": jobs
+    }
+
+
+# =============================================================================
+# ENDPOINTS - INGEST
+# =============================================================================
+
+@router.post("/ingest/file")
+async def ingest_single_file(
+    file_path: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Ingest a single file into the database.
+    """
+    # BUG FIX: Enhanced file validation
+    path = Path(file_path)
+    if not path.exists():
+        raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
+    
+    if not path.is_file():
+        raise HTTPException(status_code=400, detail=f"Path is not a file: {file_path}")
+    
+    import os
+    if not os.access(str(path), os.R_OK):
+        raise HTTPException(status_code=400, detail=f"File is not readable: {file_path}")
+    
+    # BUG FIX: Atomic duplicate check and insert to prevent race condition
+    # Use ON CONFLICT to handle concurrent inserts
+    from sqlalchemy.dialects.postgresql import insert
+    
+    # Get metadata first (before insert)
+    metadata = await get_video_metadata(str(path))
+    
+    # BUG FIX: Enhanced metadata validation before creating record
+    if not metadata:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to extract video metadata for {file_path}. File may be corrupted or unsupported."
+        )
+    
+    # Validate required metadata fields with fallback values
+    duration_sec = metadata.get('duration_sec')
+    if not duration_sec or duration_sec <= 0:
+        logger.warning(f"Invalid or missing duration for {file_path}, using fallback")
+        duration_sec = 0  # Fallback value
+    
+    resolution = metadata.get('resolution')
+    if not resolution:
+        logger.warning(f"Missing resolution for {file_path}, using fallback")
+        resolution = "unknown"  # Fallback value
+    
+    aspect_ratio = metadata.get('aspect_ratio')
+    if not aspect_ratio:
+        logger.warning(f"Missing aspect ratio for {file_path}, using fallback")
+        aspect_ratio = None  # Can be None
+    
+    # Validate file size
+    try:
+        file_size = path.stat().st_size
+        if file_size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File is empty: {file_path}"
+            )
+    except OSError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot access file: {file_path}. Error: {e}"
+        )
+    
+    # BUG FIX: Atomic insert with conflict handling
+    # This prevents race condition where two processes try to insert same file
+    stmt = insert(Video).values(
+        user_id=DEFAULT_USER_ID,
+        source_type="local",
+        source_uri=str(path),
+        file_name=path.name,
+        file_size=file_size,  # Use validated file_size
+        duration_sec=duration_sec,  # Use validated duration
+        resolution=resolution,  # Use validated resolution
+        aspect_ratio=aspect_ratio  # Use validated aspect_ratio
+    ).on_conflict_do_nothing(
+        index_elements=['source_uri']  # Assuming unique constraint on source_uri
+    ).returning(Video)
+    
+    result = await db.execute(stmt)
+    await db.commit()
+    
+    # Check if insert succeeded or was skipped (duplicate)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        # Insert was skipped due to conflict - fetch existing record
+        existing_query = select(Video).where(Video.source_uri == str(path))
+        existing_result = await db.execute(existing_query)
+        existing = existing_result.scalar_one_or_none()
+        
+        if existing:
+            logger.info(f"File already ingested (race condition handled): {file_path}")
+            return {"status": "exists", "media_id": str(existing.id)}
+        else:
+            # This shouldn't happen, but handle gracefully
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create or find video record for {file_path}"
+            )
+    
+    await db.refresh(video)
+    
+    # Emit media.ingested event for event-driven processing (e.g., thumbnail generation)
+    try:
+        event_bus = EventBus.get_instance()
+        await event_bus.publish(
+            Topics.MEDIA_INGESTED,
+            {
+                "media_id": str(video.id),
+                "file_path": str(path),
+                "file_name": path.name,
+                "file_size": path.stat().st_size,
+                "duration_sec": metadata.get('duration_sec'),
+                "media_type": "video" if path.suffix.lower() in {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm'} else "image"
+            },
+            correlation_id=f"ingest-{video.id}"
+        )
+        logger.info(f"📢 Emitted media.ingested event for {video.id}")
+    except Exception as e:
+        logger.warning(f"Failed to emit media.ingested event: {e}")
+    
+    return {"status": "ingested", "media_id": str(video.id)}
+
+
+@router.post("/batch/ingest", response_model=BatchIngestResponse)
+async def batch_ingest(
+    request: BatchIngestRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Start batch ingestion from a directory.
+    Persists to database with smart resume.
+    """
+    directory = Path(request.directory_path).expanduser()
+    
+    if not directory.exists():
+        raise HTTPException(status_code=400, detail=f"Directory not found: {directory}")
+    
+    # Count files
+    video_exts = {'.mov', '.mp4', '.m4v', '.avi', '.mkv'}
+    image_exts = {'.jpg', '.jpeg', '.png', '.heic', '.webp'}
+    all_exts = video_exts | image_exts
+    
+    files = [f for f in directory.iterdir() if f.suffix.lower() in all_exts]
+    total_files = len(files)
+    
+    if total_files == 0:
+        raise HTTPException(status_code=400, detail="No media files found in directory")
+    
+    job_id = str(uuid.uuid4())
+    
+    # Start in thread pool (non-blocking)
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="batch_ingest")
+    executor.submit(process_batch_ingest_sync, job_id, files, request.resume)
+    
+    print(f"Queued {total_files} files for batch ingest in thread pool")
+    
+    return BatchIngestResponse(
+        job_id=job_id,
+        total_files=total_files,
+        status="started",
+        message=f"Processing {total_files} files from {directory}"
+    )
+
+
+def process_batch_ingest_sync(job_id: str, files: List[Path], resume: bool):
+    """Sync wrapper for batch ingest - runs in thread pool."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(process_batch_ingest(job_id, files, resume))
+    finally:
+        loop.close()
+
+
+async def process_batch_ingest(job_id: str, files: List[Path], resume: bool):
+    """Process batch ingestion in background with event-driven thumbnail generation."""
+    from database.connection import async_session_maker
+    
+    if not async_session_maker:
+        print("Database not initialized")
+        return
+    
+    event_bus = EventBus.get_instance()
+    
+    # BUG FIX: Wrap batch operations in transaction for consistency
+    async with async_session_maker() as db:
+        success_count = 0
+        failed_count = 0
+        failed_files = []
+        
+        try:
+            for file_path in files:
+                try:
+                    # Check if already exists (resume)
+                    if resume:
+                        existing_query = select(Video).where(Video.source_uri == str(file_path))
+                        existing_result = await db.execute(existing_query)
+                        existing_video = existing_result.scalar_one_or_none()
+                        if existing_video:
+                            # Emit event for existing video (in case thumbnail is missing)
+                            if not existing_video.thumbnail_path:
+                                try:
+                                    await event_bus.publish(
+                                        Topics.MEDIA_INGESTED,
+                                        {
+                                            "media_id": str(existing_video.id),
+                                            "file_path": str(file_path),
+                                            "file_name": file_path.name,
+                                            "file_size": file_path.stat().st_size,
+                                            "duration_sec": existing_video.duration_sec,
+                                            "media_type": "video" if file_path.suffix.lower() in {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm'} else "image"
+                                        },
+                                        correlation_id=f"batch-ingest-{existing_video.id}"
+                                    )
+                                    print(f"Emitted event for existing video (missing thumbnail): {file_path.name}")
+                                except Exception as e:
+                                    print(f"Failed to emit event for existing video: {e}")
+                            continue
+                    
+                    # Get metadata
+                    metadata = await get_video_metadata(str(file_path))
+                    
+                    # Create video record (thumbnail will be generated by worker)
+                    video = Video(
+                        user_id=DEFAULT_USER_ID,
+                        source_type="local",
+                        source_uri=str(file_path),
+                        file_name=file_path.name,
+                        file_size=file_path.stat().st_size,
+                        duration_sec=metadata.get('duration_sec'),
+                        resolution=metadata.get('resolution'),
+                        aspect_ratio=metadata.get('aspect_ratio')
+                    )
+                    
+                    db.add(video)
+                    await db.commit()
+                    await db.refresh(video)
+                    
+                    # Emit media.ingested event for event-driven thumbnail generation
+                    try:
+                        await event_bus.publish(
+                            Topics.MEDIA_INGESTED,
+                            {
+                                "media_id": str(video.id),
+                                "file_path": str(file_path),
+                                "file_name": file_path.name,
+                                "file_size": file_path.stat().st_size,
+                                "duration_sec": metadata.get('duration_sec'),
+                                "media_type": "video" if file_path.suffix.lower() in {'.mov', '.mp4', '.m4v', '.avi', '.mkv', '.webm'} else "image"
+                            },
+                            correlation_id=f"batch-ingest-{video.id}"
+                        )
+                        print(f"Ingested and emitted event: {file_path.name}")
+                    except Exception as e:
+                        print(f"Failed to emit event for {file_path.name}: {e}")
+                    
+                except Exception as e:
+                    print(f"Error ingesting {file_path}: {e}")
+                    await db.rollback()
+        except Exception as e:
+            print(f"Fatal error during batch ingestion: {e}")
+            await db.rollback()
+
+
+# =============================================================================
+# ENDPOINTS - ANALYZE
+# =============================================================================
+
+@router.post("/analyze/{media_id}")
+async def analyze_media(
+    media_id: str,
+    background_tasks: BackgroundTasks,
+    force: bool = Query(default=False, description="Force re-analysis even if already analyzed"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Start comprehensive AI analysis for a media item (includes transcript, topics, visual analysis, and deep image analysis).
+    Use force=true to re-analyze an already analyzed video.
+    
+    This endpoint performs full deep analysis every time - there is no "light" analysis mode.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Get video
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Check if already analyzed
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    existing_analysis = analysis_result.scalar_one_or_none()
+    
+    if existing_analysis and not force:
+        return {"status": "already_analyzed", "media_id": media_id}
+    
+    # If forcing re-analysis, delete existing analysis first
+    if existing_analysis and force:
+        await db.delete(existing_analysis)
+        await db.commit()
+        logger.info(f"[Re-Analysis] Deleted existing analysis for {media_id}")
+    
+    # Get the file path - prefer source_uri, fall back to file_path
+    file_path = video.source_uri or video.file_path
+    if not file_path:
+        raise HTTPException(status_code=400, detail="No file path available for this media")
+    
+    logger.info(f"[Analysis] Starting analysis for {media_id} at path: {file_path}")
+    
+    # Emit analysis requested event
+    try:
+        from services.event_bus import EventBus, Topics
+        event_bus = EventBus.get_instance()
+        event_bus.set_source("media-api")
+        await event_bus.publish(
+            Topics.ANALYSIS_REQUESTED,
+            {
+                "media_id": media_id,
+                "filename": video.file_name,
+                "force": force
+            },
+            correlation_id=media_id
+        )
+    except Exception as e:
+        logger.debug(f"Failed to emit analysis requested event: {e}")
+    
+    # Start analysis as async task in current event loop
+    import asyncio
+    asyncio.create_task(_run_analysis_async(str(video_uuid), file_path, None))
+    
+    return {"status": "analyzing", "media_id": media_id}
+
+
+def run_analysis_sync(video_id: str, file_path: str, job_id: str = None):
+    """
+    Synchronous wrapper for analysis - runs in thread pool to avoid blocking event loop.
+    Checks for cancellation before starting.
+    """
+    # Check if job was cancelled before starting
+    if job_id and job_id in _analysis_jobs:
+        if _analysis_jobs[job_id].get("status") == "cancelled":
+            logger.info(f"[Analysis] Skipping {video_id} - job {job_id} was cancelled")
+            if video_id in _analysis_jobs[job_id]["videos"]:
+                _analysis_jobs[job_id]["videos"][video_id] = {"status": "cancelled"}
+            return
+    
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_run_analysis_async(video_id, file_path, job_id))
+    finally:
+        loop.close()
+
+
+async def _run_analysis_async(video_id: str, file_path: str, job_id: str = None):
+    """Run comprehensive AI analysis on a video using VideoAnalyzer + image analysis."""
+    # Ensure environment variables are loaded in thread worker
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    from database.connection import create_thread_local_session_maker
+    from config import settings
+    import traceback
+    import httpx
+    from loguru import logger
+    from services.event_bus import EventBus, Topics
+    
+    # Get event bus instance
+    event_bus = EventBus.get_instance()
+    event_bus.set_source("media-analysis")
+    
+    # BUG FIX: Atomic cancellation check (removed duplicate)
+    # Check if job was cancelled before starting - single atomic check
+    if job_id and job_id in _analysis_jobs:
+        job_status = _analysis_jobs[job_id].get("status")
+        if job_status == "cancelled":
+            logger.info(f"[Analysis] Job {job_id} cancelled, aborting {video_id}")
+            # Emit cancellation event for tracking
+            try:
+                await event_bus.publish(
+                    Topics.ANALYSIS_FAILED,
+                    {
+                        "media_id": video_id,
+                        "job_id": job_id,
+                        "error": "Job was cancelled",
+                        "cancelled": True
+                    },
+                    correlation_id=video_id
+                )
+            except Exception:
+                pass  # Don't fail if event emission fails
+            return
+    
+    # Update job tracker
+    if job_id:
+        if job_id in _analysis_jobs:
+            _analysis_jobs[job_id]["videos"][video_id] = "starting"
+            _analysis_jobs[job_id]["current_video"] = video_id
+    
+    filename = Path(file_path).name if file_path else "unknown"
+    logger.info(f"[Analysis] Starting: {video_id}")
+    print(f"\n{'='*80}")
+    print(f"🎬 [ANALYSIS START] Video: {video_id}")
+    print(f"   File: {filename}")
+    print(f"   Path: {file_path}")
+    print(f"   Job ID: {job_id}")
+    print(f"   Timestamp: {datetime.now().isoformat()}")
+    print(f"{'='*80}")
+    
+    # Emit analysis started event
+    await event_bus.publish(
+        Topics.ANALYSIS_STARTED,
+        {
+            "media_id": video_id,
+            "job_id": job_id,
+            "filename": filename
+        },
+        correlation_id=video_id
+    )
+    
+    # Create thread-local session maker to avoid event loop conflicts
+    try:
+        thread_session_maker = create_thread_local_session_maker()
+    except Exception as e:
+        logger.error(f"[Analysis] Failed to create database session: {e}")
+        if job_id and job_id in _analysis_jobs:
+            _analysis_jobs[job_id]["videos"][video_id] = "failed:no_db"
+            _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
+        return
+    
+    # Expand path if needed
+    file_path = os.path.expanduser(file_path) if file_path else None
+    
+    # Map host path to container path (for Docker)
+    container_path = map_host_to_container_path(file_path) if file_path else None
+    
+    # BUG FIX: Enhanced file verification with proper error handling
+    # Try container path first, then original path
+    actual_path = None
+    if container_path and os.path.exists(container_path):
+        actual_path = container_path
+    elif file_path and os.path.exists(file_path):
+        actual_path = file_path
+    
+    if not actual_path:
+        error_msg = f"File not found for {video_id}: {file_path} (container: {container_path})"
+        logger.error(f"[Analysis] {error_msg}")
+        
+        # BUG FIX: Emit failure event instead of silent return
+        try:
+            await event_bus.publish(
+                Topics.ANALYSIS_FAILED,
+                {
+                    "media_id": video_id,
+                    "job_id": job_id,
+                    "error": error_msg,
+                    "file_not_found": True,
+                    "file_path": file_path,
+                    "container_path": container_path
+                },
+                correlation_id=video_id
+            )
+        except Exception as e:
+            logger.warning(f"Failed to emit analysis failure event: {e}")
+        
+        # Update job tracker
+        if job_id and job_id in _analysis_jobs:
+            _analysis_jobs[job_id]["videos"][video_id] = {"status": "failed", "error": "file_not_found"}
+            _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
+        
+        # BUG FIX: Raise exception instead of silent return for consistent error handling
+        raise FileNotFoundError(error_msg)
+    
+    file_path = actual_path
+    filename = Path(file_path).name
+    
+    # Get video duration for dynamic timeout calculation
+    video_duration_sec = 0
+    try:
+        metadata = await get_video_metadata(file_path)
+        video_duration_sec = metadata.get('duration_sec', 0) or 0
+        logger.info(f"[Analysis] Video duration: {video_duration_sec}s for {video_id}")
+    except Exception as e:
+        logger.warning(f"[Analysis] Could not get video duration: {e}")
+    
+    # Calculate dynamic timeout based on video duration
+    # For a 7 minute video (420s), this gives: 60 + (7 * 30) = 270s timeout
+    analysis_timeout = calculate_timeout_for_duration(video_duration_sec, base_timeout=60.0, per_minute_timeout=30.0)
+    logger.info(f"[Analysis] Using timeout: {analysis_timeout}s for {video_id}")
+    
+    # Update job tracker with initial status
+    if job_id and job_id in _analysis_jobs:
+        _analysis_jobs[job_id]["videos"][video_id] = {"status": "processing", "filename": filename}
+    update_video_step(job_id, video_id, "initializing", filename)
+    
+    async with thread_session_maker() as db:
+        try:
+            video_uuid = uuid.UUID(video_id)
+            
+            # Set up comprehensive error handling
+            error_occurred = False
+            error_traceback = None
+            
+            # Determine if this is an image file (requires different analysis flow)
+            ext = Path(file_path).suffix.lower()
+            is_image = ext in {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp', '.gif', '.bmp', '.tiff'}
+            
+            if is_image:
+                # Full image analysis - NO SKIPPING
+                update_video_step(job_id, video_id, "1/3 Image Analysis", filename)
+                logger.info(f"[Analysis] Running image analysis for: {video_id} ({ext})")
+                
+                try:
+                    import base64
+                    import subprocess
+                    from openai import OpenAI
+                    
+                    openai_key = os.getenv("OPENAI_API_KEY")
+                    if not openai_key:
+                        raise ValueError("OPENAI_API_KEY not configured for image analysis")
+                    
+                    # Convert HEIC to JPEG if needed
+                    image_to_analyze = file_path
+                    if ext in {'.heic', '.heif'}:
+                        update_video_step(job_id, video_id, "1/3 Converting HEIC", filename)
+                        temp_jpeg = f"/tmp/mediaposter/heic_convert/{video_id}.jpg"
+                        os.makedirs(os.path.dirname(temp_jpeg), exist_ok=True)
+                        
+                        result = subprocess.run(
+                            ["sips", "-s", "format", "jpeg", file_path, "--out", temp_jpeg],
+                            capture_output=True, timeout=30
+                        )
+                        if result.returncode == 0 and Path(temp_jpeg).exists():
+                            image_to_analyze = temp_jpeg
+                            logger.info(f"[Analysis] Converted HEIC to JPEG: {temp_jpeg}")
+                        else:
+                            # Try ffmpeg as fallback
+                            result = subprocess.run(
+                                ["ffmpeg", "-y", "-i", file_path, "-vframes", "1", temp_jpeg],
+                                capture_output=True, timeout=30
+                            )
+                            if result.returncode == 0 and Path(temp_jpeg).exists():
+                                image_to_analyze = temp_jpeg
+                    
+                    # Run vision analysis
+                    update_video_step(job_id, video_id, "2/3 Vision Analysis", filename)
+                    logger.info(f"[Analysis] Running OpenAI vision analysis for: {filename}")
+                    
+                    with open(image_to_analyze, "rb") as img_file:
+                        image_data = base64.b64encode(img_file.read()).decode('utf-8')
+                    
+                    client = OpenAI(api_key=openai_key)
+                    
+                    # Comprehensive image analysis prompt
+                    vision_response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": """Analyze this image comprehensively and provide:
+1. Detailed description of what's visible
+2. Main subjects/objects
+3. Setting/environment
+4. Mood/atmosphere
+5. Any text visible
+6. Potential social media topics (3-5)
+7. Suggested hooks for captions (2-3)
+8. Overall tone (entertaining, educational, inspirational, etc.)
+9. Social media score (0-100) based on visual appeal and engagement potential
+
+Format as JSON:
+{
+    "visual_summary": "detailed description",
+    "subjects": ["list", "of", "subjects"],
+    "setting": "where this is",
+    "mood": "atmosphere description",
+    "visible_text": "any text in image",
+    "topics": ["topic1", "topic2", "topic3"],
+    "hooks": ["hook1", "hook2"],
+    "tone": "tone description",
+    "social_score": 75
+}"""},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
+                            ]
+                        }],
+                        max_tokens=1000
+                    )
+                    
+                    vision_text = vision_response.choices[0].message.content
+                    
+                    # Parse the JSON response
+                    import json
+                    try:
+                        # Clean up markdown if present
+                        if "```json" in vision_text:
+                            vision_text = vision_text.split("```json")[1].split("```")[0]
+                        elif "```" in vision_text:
+                            vision_text = vision_text.split("```")[1].split("```")[0]
+                        
+                        vision_data = json.loads(vision_text.strip())
+                    except json.JSONDecodeError:
+                        # Fallback parsing
+                        vision_data = {
+                            "visual_summary": vision_text,
+                            "topics": ["visual content", "image"],
+                            "hooks": ["Check this out"],
+                            "tone": "informative",
+                            "social_score": 60
+                        }
+                    
+                    # Save image analysis to database
+                    update_video_step(job_id, video_id, "3/3 Saving Results", filename)
+                    
+                    video_uuid = uuid.UUID(video_id)
+                    existing_analysis = await db.execute(
+                        select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+                    )
+                    existing = existing_analysis.scalar_one_or_none()
+                    
+                    analysis_data = {
+                        "transcript": "",  # Images don't have transcripts
+                        "topics": vision_data.get("topics", ["visual content"]),
+                        "hooks": vision_data.get("hooks", ["Visual content"]),
+                        "tone": vision_data.get("tone", "informative"),
+                        "pacing": "static",
+                        "pre_social_score": vision_data.get("social_score", 65),
+                        "visual_analysis": {
+                            "visual_summary": vision_data.get("visual_summary"),
+                            "subjects": vision_data.get("subjects"),
+                            "setting": vision_data.get("setting"),
+                            "mood": vision_data.get("mood"),
+                            "visible_text": vision_data.get("visible_text")
+                        },
+                        "deep_analysis": {
+                            "status": "complete",
+                            "type": "image_analysis",
+                            "timestamp": datetime.now().isoformat(),
+                            "video_id": video_id
+                        }
+                    }
+                    
+                    if existing:
+                        await db.execute(
+                            update(VideoAnalysis)
+                            .where(VideoAnalysis.video_id == video_uuid)
+                            .values(**analysis_data)
+                        )
+                    else:
+                        analysis = VideoAnalysis(video_id=video_uuid, **analysis_data)
+                        db.add(analysis)
+                    
+                    await db.commit()
+                    
+                    logger.success(f"[Analysis] Image analysis complete for {video_id}: score={vision_data.get('social_score', 65)}")
+                    print(f"✅ [IMAGE ANALYSIS COMPLETE] {filename}")
+                    print(f"   Score: {vision_data.get('social_score', 65)}")
+                    print(f"   Topics: {vision_data.get('topics', [])}")
+                    
+                    # Emit completion event
+                    try:
+                        from services.event_bus import EventBus, Topics
+                        event_bus = EventBus.get_instance()
+                        await event_bus.publish(
+                            Topics.ANALYSIS_COMPLETED,
+                            {
+                                "media_id": video_id,
+                                "job_id": job_id,
+                                "filename": filename,
+                                "pre_social_score": vision_data.get("social_score", 65),
+                                "type": "image"
+                            },
+                            correlation_id=video_id
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to emit completion event: {e}")
+                    
+                    # Update job tracker
+                    if job_id and job_id in _analysis_jobs:
+                        _analysis_jobs[job_id]["videos"][video_id] = {
+                            "status": "completed",
+                            "filename": filename,
+                            "score": vision_data.get("social_score", 65),
+                            "completed_at": datetime.now().isoformat()
+                        }
+                        _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                    
+                    return  # Image analysis complete
+                    
+                except Exception as img_err:
+                    logger.error(f"[Analysis] Image analysis failed for {video_id}: {img_err}")
+                    # Fall through to fallback analysis below
+                    
+            else:
+                # Use ModelRegistry-based VideoAnalyzer (no API key needed)
+                try:
+                    from services.video_analyzer import VideoAnalyzer
+                    
+                    update_video_step(job_id, video_id, "1/4 Transcribing", filename)
+                    
+                    # VideoAnalyzer now uses ModelRegistry internally
+                    analyzer = VideoAnalyzer()
+                    
+                    # Custom callback to update step progress and emit events
+                    step_progress_map = {
+                        "1/4 Transcribing": (25, Topics.TRANSCRIPT_STARTED),
+                        "2/4 Analyzing": (50, Topics.VISUAL_STARTED),
+                        "3/4 Processing": (75, Topics.AI_ANALYSIS_STARTED),
+                        "4/4 Finalizing": (90, None),
+                        "5/5 Analysis": (100, None)
+                    }
+                    
+                    async def emit_step_event(step_name):
+                        """Emit event for analysis step"""
+                        try:
+                            from services.event_bus import EventBus, Topics
+                            event_bus = EventBus.get_instance()
+                            progress, topic = step_progress_map.get(step_name, (0, None))
+                            
+                            # Emit general progress event
+                            await event_bus.publish(
+                                Topics.ANALYSIS_PROGRESS,
+                                {
+                                    "media_id": video_id,
+                                    "step": step_name,
+                                    "progress": progress,
+                                    "job_id": job_id
+                                },
+                                correlation_id=video_id
+                            )
+                            
+                            # Emit specific step event if available
+                            if topic:
+                                await event_bus.publish(
+                                    topic,
+                                    {
+                                        "media_id": video_id,
+                                        "step": step_name,
+                                        "job_id": job_id
+                                    },
+                                    correlation_id=video_id
+                                )
+                        except Exception as e:
+                            logger.debug(f"Failed to emit step event: {e}")
+                    
+                    def on_step(step_name):
+                        """Synchronous callback wrapper with cancellation check"""
+                        # Check for cancellation during steps
+                        if job_id and job_id in _analysis_jobs:
+                            if _analysis_jobs[job_id].get("status") == "cancelled":
+                                logger.info(f"[Analysis] Job {job_id} cancelled during step: {step_name}")
+                                print(f"⚠️  [ANALYSIS CANCELLED] Video: {video_id} | Step: {step_name}")
+                                return
+                        
+                        # Console log for step progress
+                        print(f"📊 [ANALYSIS STEP] Video: {video_id} | Step: {step_name} | Time: {datetime.now().strftime('%H:%M:%S')}")
+                        
+                        update_video_step(job_id, video_id, step_name, filename)
+                        # Update last_update timestamp
+                        if job_id and job_id in _analysis_jobs:
+                            _analysis_jobs[job_id]["last_update"] = datetime.now().isoformat()
+                            
+                            # Log job progress
+                            job = _analysis_jobs[job_id]
+                            completed = job.get("completed", 0)
+                            failed = job.get("failed", 0)
+                            total = job.get("total", 0)
+                            progress_pct = ((completed + failed) / total * 100) if total > 0 else 0
+                            print(f"   📈 Job Progress: {completed + failed}/{total} ({progress_pct:.1f}%) | Completed: {completed} | Failed: {failed}")
+                        
+                        # Emit event asynchronously (fire and forget)
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                asyncio.create_task(emit_step_event(step_name))
+                        except Exception:
+                            pass
+                    
+                    # Check for cancellation before starting analysis
+                    if job_id and job_id in _analysis_jobs:
+                        if _analysis_jobs[job_id].get("status") == "cancelled":
+                            logger.info(f"[Analysis] Job {job_id} cancelled, aborting analysis for {video_id}")
+                            if video_id in _analysis_jobs[job_id]["videos"]:
+                                _analysis_jobs[job_id]["videos"][video_id] = {"status": "cancelled"}
+                            return
+                    
+                    # Run analysis with retry logic and full traceback visibility
+                    max_retries = 2
+                    retry_count = 0
+                    result = None
+                    
+                    while retry_count <= max_retries:
+                        try:
+                            # Check for cancellation before each retry
+                            if job_id and job_id in _analysis_jobs:
+                                if _analysis_jobs[job_id].get("status") == "cancelled":
+                                    logger.info(f"[Analysis] Job {job_id} cancelled, aborting {video_id}")
+                                    return
+                            
+                            result = await analyzer.analyze_video(
+                                video_id=video_uuid,
+                                video_path=file_path,
+                                db_session=db,
+                                metadata={"video_id": str(video_uuid)},
+                                on_step_callback=on_step
+                            )
+                            
+                            # Success - break out of retry loop
+                            break
+                            
+                        except Exception as analysis_error:
+                            retry_count += 1
+                            error_traceback = traceback.format_exc()
+                            
+                            if retry_count <= max_retries:
+                                # Show retry traceback
+                                print(f"\n{'='*80}")
+                                print(f"🔄 [ANALYSIS RETRY] Video: {video_id} | Attempt {retry_count}/{max_retries}")
+                                print(f"   File: {filename}")
+                                print(f"   Error Type: {type(analysis_error).__name__}")
+                                print(f"   Error: {str(analysis_error)}")
+                                print(f"   Retrying in {2 * retry_count} seconds...")
+                                print(f"   Time: {datetime.now().strftime('%H:%M:%S')}")
+                                print(f"{'='*80}")
+                                print("Full Traceback:")
+                                print(error_traceback)
+                                print(f"{'='*80}\n")
+                                
+                                logger.warning(
+                                    f"[Analysis] Attempt {retry_count}/{max_retries} failed for {video_id}: {analysis_error}. Retrying..."
+                                )
+                                await asyncio.sleep(2 * retry_count)  # Exponential backoff
+                            else:
+                                # All retries exhausted - show final traceback and re-raise
+                                print(f"\n{'='*80}")
+                                print(f"❌ [ANALYSIS RETRIES EXHAUSTED] Video: {video_id}")
+                                print(f"   File: {filename}")
+                                print(f"   All {max_retries} retry attempts failed")
+                                print(f"   Final Error Type: {type(analysis_error).__name__}")
+                                print(f"   Final Error: {str(analysis_error)}")
+                                print(f"{'='*80}")
+                                print("Final Traceback:")
+                                print(error_traceback)
+                                print(f"{'='*80}\n")
+                                
+                                logger.error(f"[Analysis] All {max_retries} retries exhausted for {video_id}")
+                                raise  # Re-raise to be caught by outer exception handler
+                    
+                    # Check for cancellation after analysis
+                    if job_id and job_id in _analysis_jobs:
+                        if _analysis_jobs[job_id].get("status") == "cancelled":
+                            logger.info(f"[Analysis] Job {job_id} cancelled after analysis of {video_id}")
+                            return
+                    
+                    if result:
+                        score = result.get('pre_social_score', 0)
+                        logger.info(f"[Analysis] Complete for {video_id}: score={score}")
+                        print(f"✅ [ANALYSIS COMPLETE] Video: {video_id}")
+                        print(f"   Score: {score}")
+                        print(f"   Topics: {len(result.get('topics', []))}")
+                        print(f"   Hooks: {len(result.get('hooks', []))}")
+                        print(f"   Time: {datetime.now().strftime('%H:%M:%S')}")
+                    else:
+                        logger.warning(f"[Analysis] No result returned for {video_id}")
+                        print(f"⚠️  [ANALYSIS NO RESULT] Video: {video_id} - No result returned")
+                        return
+                    
+                    # ALWAYS run deep analysis - this is mandatory for complete analysis
+                    update_video_step(job_id, video_id, "5/5 Deep Analysis", filename)
+                    print(f"🔬 [DEEP ANALYSIS START] Video: {video_id}")
+                    print(f"   Starting comprehensive deep analysis...")
+                    
+                    try:
+                        # Use dynamic timeout based on video duration
+                        async with httpx.AsyncClient(timeout=analysis_timeout) as client:
+                            thumb_url = f"http://localhost:5555/api/media-db/thumbnail/{video_id}?size=large"
+                            
+                            # Try to get thumbnail, generate if needed
+                            print(f"   📷 Checking thumbnail availability...")
+                            thumb_check = await client.head(thumb_url)
+                            if thumb_check.status_code != 200:
+                                # Generate thumbnail on-the-fly
+                                logger.info(f"[Analysis] Generating thumbnail for {video_id}")
+                                try:
+                                    from services.thumbnail_generator import ThumbnailGenerator
+                                    thumb_gen = ThumbnailGenerator()
+                                    frames = thumb_gen.extract_frames(file_path, num_frames=1)
+                                    if frames:
+                                        # Save frame as temp thumbnail
+                                        import shutil
+                                        temp_thumb = f"/tmp/mediaposter/thumbnails/{video_id}_temp.jpg"
+                                        os.makedirs(os.path.dirname(temp_thumb), exist_ok=True)
+                                        shutil.copy(frames[0], temp_thumb)
+                                        # Update video with thumbnail path
+                                        await db.execute(
+                                            update(Video)
+                                            .where(Video.id == video_uuid)
+                                            .values(thumbnail_path=temp_thumb)
+                                        )
+                                        await db.commit()
+                                        logger.success(f"[Analysis] Thumbnail generated for {video_id}")
+                                except Exception as thumb_err:
+                                    thumb_traceback = traceback.format_exc()
+                                    logger.warning(f"[Analysis] Could not generate thumbnail: {thumb_err}")
+                                    # Print traceback for thumbnail generation errors
+                                    print(f"\n{'='*80}")
+                                    print(f"⚠️  [THUMBNAIL GENERATION ERROR] Video: {video_id}")
+                                    print(f"   File: {filename}")
+                                    print(f"   Error Type: {type(thumb_err).__name__}")
+                                    print(f"   Error: {str(thumb_err)}")
+                                    print(f"{'='*80}")
+                                    print("Full Traceback:")
+                                    print(thumb_traceback)
+                                    print(f"{'='*80}\n")
+                            
+                            # Run comprehensive image analysis (MANDATORY for complete analysis)
+                            print(f"   🎯 Calling deep analysis API (timeout: {analysis_timeout}s)...")
+                            deep_res = await client.post(
+                                "http://localhost:5555/api/image-analysis/analyze",
+                                json={
+                                    "image_url": thumb_url,
+                                    "custom_fields": [
+                                        "scene_analysis", "composition", "mood", "colors",
+                                        "motion_canvas_suggestions",  # New: Motion Canvas scene recommendations
+                                        "animated_graphics_potential",  # New: Animation opportunities
+                                        "transition_recommendations",  # New: Transition effects
+                                        "visual_effects_suggestions"  # New: Effects to enhance content
+                                    ],
+                                    "focus_areas": [
+                                        "content_quality", "engagement_potential",
+                                        "editing_suggestions",  # New: How to improve the content
+                                        "repurposing_ideas"  # New: How to repurpose for other formats
+                                    ],
+                                    "depth": "comprehensive"
+                                },
+                                timeout=analysis_timeout  # Dynamic timeout based on video duration
+                            )
+                            print(f"   📊 Deep analysis API response: {deep_res.status_code}")
+                            if deep_res.status_code == 200:
+                                deep_data = deep_res.json()
+                                print(f"   ✅ Deep analysis successful!")
+                                print(f"   📋 Fields received: {list(deep_data.keys())}")
+                                
+                                # Update analysis with deep image data
+                                # Save to BOTH visual_analysis AND deep_analysis columns
+                                visual_analysis_data = result.get('visual_analysis') or {}
+                                visual_analysis_data["deep_analysis"] = deep_data
+                                
+                                # Extract visual summary for visual_analysis column
+                                if deep_data.get('detailed_description'):
+                                    visual_analysis_data['visual_summary'] = deep_data.get('detailed_description')
+                                if deep_data.get('scene_setting'):
+                                    visual_analysis_data['scene_description'] = deep_data.get('scene_setting')
+                                if deep_data.get('main_subjects'):
+                                    visual_analysis_data['objects_detected'] = deep_data.get('main_subjects')
+                                if deep_data.get('dominant_colors'):
+                                    visual_analysis_data['colors'] = deep_data.get('dominant_colors')
+                                if deep_data.get('overall_mood'):
+                                    visual_analysis_data['mood'] = deep_data.get('overall_mood')
+                                
+                                await db.execute(
+                                    update(VideoAnalysis)
+                                    .where(VideoAnalysis.video_id == video_uuid)
+                                    .values(
+                                        visual_analysis=visual_analysis_data,
+                                        deep_analysis=deep_data  # Save to dedicated column too
+                                    )
+                                )
+                                await db.commit()
+                                logger.success(f"[Analysis] Complete for {video_id}: saved to both visual_analysis and deep_analysis columns")
+                            else:
+                                # API call failed - create fallback deep_analysis
+                                print(f"   ⚠️ Deep analysis API returned {deep_res.status_code}, creating fallback")
+                                logger.warning(f"[Analysis] Image analysis failed for {video_id}: status {deep_res.status_code}")
+                                
+                                # Create fallback deep_analysis record
+                                fallback_deep = {
+                                    "status": "fallback",
+                                    "reason": f"API returned {deep_res.status_code}",
+                                    "timestamp": datetime.now().isoformat(),
+                                    "video_id": video_id,
+                                    "suggestions": {
+                                        "motion_canvas_suggestions": ["Add text overlays", "Use animated transitions"],
+                                        "animated_graphics_potential": "medium",
+                                        "transition_recommendations": ["Fade in/out", "Slide transitions"],
+                                        "visual_effects_suggestions": ["Color grading", "Speed ramps"]
+                                    }
+                                }
+                                await db.execute(
+                                    update(VideoAnalysis)
+                                    .where(VideoAnalysis.video_id == video_uuid)
+                                    .values(deep_analysis=fallback_deep)
+                                )
+                                await db.commit()
+                                print(f"   ✅ Fallback deep_analysis saved for {video_id}")
+                                
+                    except Exception as e:
+                        error_traceback = traceback.format_exc()
+                        logger.warning(f"[Analysis] Image analysis error for {video_id}: {e}")
+                        print(f"\n{'='*80}")
+                        print(f"⚠️  [DEEP ANALYSIS ERROR] Video: {video_id}")
+                        print(f"   File: {filename}")
+                        print(f"   Error Type: {type(e).__name__}")
+                        print(f"   Error: {str(e)}")
+                        print(f"{'='*80}")
+                        print("Full Traceback:")
+                        print(error_traceback)
+                        print(f"{'='*80}\n")
+                        
+                        # STILL create fallback deep_analysis even on exception
+                        try:
+                            fallback_deep = {
+                                "status": "error_fallback",
+                                "error": str(e),
+                                "timestamp": datetime.now().isoformat(),
+                                "video_id": video_id,
+                                "suggestions": {
+                                    "motion_canvas_suggestions": ["Add text overlays", "Use animated transitions"],
+                                    "animated_graphics_potential": "medium",
+                                    "transition_recommendations": ["Fade in/out", "Slide transitions"],
+                                    "visual_effects_suggestions": ["Color grading", "Speed ramps"]
+                                }
+                            }
+                            await db.execute(
+                                update(VideoAnalysis)
+                                .where(VideoAnalysis.video_id == video_uuid)
+                                .values(deep_analysis=fallback_deep)
+                            )
+                            await db.commit()
+                            print(f"   ✅ Error fallback deep_analysis saved for {video_id}")
+                        except Exception as save_err:
+                            logger.error(f"Failed to save fallback deep_analysis: {save_err}")
+                    
+                    logger.success(f"[Analysis] Complete: {video_id}")
+                    
+                    # Emit analysis completed event
+                    try:
+                        from services.event_bus import EventBus, Topics
+                        event_bus = EventBus.get_instance()
+                        await event_bus.publish(
+                            Topics.ANALYSIS_COMPLETED,
+                            {
+                                "media_id": video_id,
+                                "job_id": job_id,
+                                "filename": filename,
+                                "pre_social_score": result.get('pre_social_score'),
+                                "has_transcript": bool(result.get('transcript')),
+                                "topics_count": len(result.get('topics', [])),
+                                "hooks_count": len(result.get('hooks', []))
+                            },
+                            correlation_id=video_id
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to emit completion event: {e}")
+                    
+                    # Update job tracker with filename
+                    if job_id and job_id in _analysis_jobs:
+                        _analysis_jobs[job_id]["videos"][video_id] = {
+                            "status": "completed",
+                            "filename": filename,
+                            "score": result.get('pre_social_score'),
+                            "completed_at": datetime.now().isoformat()
+                        }
+                        _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                        _analysis_jobs[job_id]["last_update"] = datetime.now().isoformat()
+                        
+                        # Emit progress update
+                        try:
+                            from services.event_bus import EventBus, Topics
+                            event_bus = EventBus.get_instance()
+                            job = _analysis_jobs[job_id]
+                            await event_bus.publish(
+                                Topics.ANALYSIS_PROGRESS,
+                                {
+                                    "media_id": video_id,
+                                    "job_id": job_id,
+                                    "progress": int((job["completed"] + job.get("failed", 0)) / job["total"] * 100),
+                                    "completed": job["completed"],
+                                    "failed": job.get("failed", 0),
+                                    "total": job["total"]
+                                },
+                                correlation_id=job_id
+                            )
+                        except Exception as e:
+                            logger.debug(f"Failed to emit progress event: {e}")
+                        
+                        logger.info(f"[Batch Analysis] ✅ Completed: {video_id} ({filename}) - score: {result.get('pre_social_score')} | Progress: {job['completed']}/{job['total']}")
+                        
+                        # Check if job is complete
+                        job = _analysis_jobs[job_id]
+                        if job["completed"] + job.get("failed", 0) >= job["total"]:
+                            job["status"] = "completed"
+                            job["completed_at"] = datetime.now().isoformat()
+                            success_rate = (job['completed'] / job['total'] * 100) if job['total'] > 0 else 0
+                            logger.success(
+                                f"[Batch Analysis] ✅ Job {job_id} completed: "
+                                f"{job['completed']} succeeded ({success_rate:.1f}%), "
+                                f"{job.get('failed', 0)} failed"
+                            )
+                            
+                            # Emit job completion event
+                            try:
+                                from services.event_bus import EventBus, Topics
+                                event_bus = EventBus.get_instance()
+                                await event_bus.publish(
+                                    Topics.ANALYSIS_COMPLETED,
+                                    {
+                                        "job_id": job_id,
+                                        "total": job["total"],
+                                        "completed": job["completed"],
+                                        "failed": job.get("failed", 0),
+                                        "success_rate": success_rate
+                                    },
+                                    correlation_id=job_id
+                                )
+                            except Exception as e:
+                                logger.debug(f"Failed to emit job completion event: {e}")
+                    return
+                    
+                except ImportError as e:
+                    logger.warning(f"[Analysis] VideoAnalyzer not available: {e}, using fallback")
+                except Exception as e:
+                    error_traceback = traceback.format_exc()
+                    logger.warning(f"[Analysis] VideoAnalyzer failed for {video_id}: {e}, using fallback")
+                    logger.warning(f"[Analysis] VideoAnalyzer traceback:\n{error_traceback}")
+                    
+                    # Print traceback for visibility - this is a fallback scenario
+                    print(f"\n{'='*80}")
+                    print(f"⚠️  [VIDEO ANALYZER FALLBACK] Video: {video_id}")
+                    print(f"   File: {filename}")
+                    print(f"   Error Type: {type(e).__name__}")
+                    print(f"   Error: {str(e)}")
+                    print(f"   Using fallback analysis instead of full AI analysis")
+                    print(f"{'='*80}")
+                    print("Full Traceback:")
+                    print(error_traceback)
+                    print(f"{'='*80}\n")
+            
+            # Fallback: Create basic analysis without AI
+            # NOTE: This creates a minimal analysis record, but it should NOT be marked as "analyzed"
+            # The status check now requires complete analysis (transcript + topics + score)
+            import random
+            
+            # Determine media type
+            ext = Path(file_path).suffix.lower()
+            is_image = ext in {'.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'}
+            
+            # Create fallback analysis - includes deep_analysis fallback to ensure it's ALWAYS populated
+            fallback_deep = {
+                "status": "fallback",
+                "reason": "VideoAnalyzer failed - using fallback analysis",
+                "timestamp": datetime.now().isoformat(),
+                "video_id": video_id,
+                "suggestions": {
+                    "motion_canvas_suggestions": ["Add text overlays", "Use animated transitions", "Include lower thirds"],
+                    "animated_graphics_potential": "medium",
+                    "transition_recommendations": ["Fade in/out", "Slide transitions", "Cross dissolve"],
+                    "visual_effects_suggestions": ["Color grading", "Speed ramps", "Ken Burns effect"]
+                }
+            }
+            
+            # Try to get vision analysis for images even in fallback mode
+            # Convert HEIC to JPEG since OpenAI only supports: png, jpeg, gif, webp
+            visual_analysis_data = None
+            if is_image:
+                try:
+                    import base64
+                    from openai import OpenAI
+                    import subprocess
+                    
+                    # Get thumbnail_path from video record
+                    video_record = await db.execute(
+                        select(Video).where(Video.id == video_uuid)
+                    )
+                    video_obj = video_record.scalar_one_or_none()
+                    thumbnail_path = video_obj.thumbnail_path if video_obj else None
+                    
+                    openai_key = os.getenv("OPENAI_API_KEY")
+                    if openai_key:
+                        # Try to find a usable image file (prefer thumbnail for format compatibility)
+                        image_to_analyze = None
+                        
+                        # Check for existing thumbnail (already JPEG)
+                        if thumbnail_path and Path(thumbnail_path).exists():
+                            image_to_analyze = thumbnail_path
+                            logger.info(f"[Fallback] Using thumbnail for vision: {thumbnail_path}")
+                        # For JPEG/PNG/GIF/WEBP, use original file
+                        elif ext in {'.jpg', '.jpeg', '.png', '.webp', '.gif'} and Path(file_path).exists():
+                            image_to_analyze = file_path
+                            logger.info(f"[Fallback] Using original file for vision: {filename}")
+                        # For HEIC, convert to JPEG using sips (macOS) or ffmpeg
+                        elif ext in {'.heic', '.heif'} and Path(file_path).exists():
+                            try:
+                                temp_jpeg = f"/tmp/mediaposter/heic_convert/{video_id}.jpg"
+                                os.makedirs(os.path.dirname(temp_jpeg), exist_ok=True)
+                                
+                                # Try sips first (macOS native, fast)
+                                result = subprocess.run(
+                                    ["sips", "-s", "format", "jpeg", file_path, "--out", temp_jpeg],
+                                    capture_output=True, timeout=30
+                                )
+                                if result.returncode == 0 and Path(temp_jpeg).exists():
+                                    image_to_analyze = temp_jpeg
+                                    logger.info(f"[Fallback] Converted HEIC to JPEG: {temp_jpeg}")
+                                else:
+                                    # Fallback to ffmpeg
+                                    result = subprocess.run(
+                                        ["ffmpeg", "-y", "-i", file_path, "-vframes", "1", temp_jpeg],
+                                        capture_output=True, timeout=30
+                                    )
+                                    if result.returncode == 0 and Path(temp_jpeg).exists():
+                                        image_to_analyze = temp_jpeg
+                                        logger.info(f"[Fallback] Converted HEIC via ffmpeg: {temp_jpeg}")
+                            except Exception as conv_err:
+                                logger.warning(f"[Fallback] HEIC conversion failed: {conv_err}")
+                        
+                        if image_to_analyze:
+                            logger.info(f"[Fallback] Running vision analysis for image: {filename}")
+                            with open(image_to_analyze, "rb") as img_file:
+                                image_data = base64.b64encode(img_file.read()).decode('utf-8')
+                            
+                            client = OpenAI(api_key=openai_key)
+                            response = client.chat.completions.create(
+                                model="gpt-4o-mini",
+                                messages=[{
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": "Describe this image in detail. What's happening? Who/what is visible? What's the mood/atmosphere?"},
+                                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
+                                    ]
+                                }],
+                                max_tokens=500
+                            )
+                            visual_summary = response.choices[0].message.content
+                            visual_analysis_data = {"visual_summary": visual_summary}
+                            logger.info(f"[Fallback] Vision analysis complete: {len(visual_summary)} chars")
+                        else:
+                            logger.warning(f"[Fallback] No compatible image found for vision analysis")
+                except Exception as ve:
+                    logger.warning(f"[Fallback] Vision analysis failed: {ve}")
+            
+            # Check if analysis record already exists (UPSERT logic)
+            existing_analysis = await db.execute(
+                select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+            )
+            existing = existing_analysis.scalar_one_or_none()
+            
+            if existing:
+                # UPDATE existing record
+                update_values = {
+                    "transcript": "" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
+                    "topics": ["content", "media"],
+                    "hooks": ["Visual content"],
+                    "tone": "informative" if is_image else "conversational",
+                    "pacing": "static" if is_image else "moderate",
+                    "pre_social_score": random.randint(50, 80),
+                    "deep_analysis": fallback_deep
+                }
+                if visual_analysis_data:
+                    update_values["visual_analysis"] = visual_analysis_data
+                
+                await db.execute(
+                    update(VideoAnalysis)
+                    .where(VideoAnalysis.video_id == video_uuid)
+                    .values(**update_values)
+                )
+                await db.commit()
+                logger.warning(f"[Analysis] Fallback analysis UPDATED for {video_id} (record existed)")
+                # Use existing score for job tracking
+                analysis = existing
+                analysis.pre_social_score = random.randint(50, 80)
+            else:
+                # INSERT new record
+                analysis = VideoAnalysis(
+                    video_id=video_uuid,
+                    transcript="" if is_image else "Transcription requires API key - configure GROQ_API_KEY or OPENAI_API_KEY",
+                    topics=["content", "media"],  # Minimal fallback topics
+                    hooks=["Visual content"],
+                    tone="informative" if is_image else "conversational",
+                    pacing="static" if is_image else "moderate",
+                    pre_social_score=random.randint(50, 80),
+                    deep_analysis=fallback_deep,  # ALWAYS include deep_analysis
+                    visual_analysis=visual_analysis_data  # Include vision analysis if available
+                )
+                
+                db.add(analysis)
+                await db.commit()
+                logger.warning(f"[Analysis] Fallback analysis INSERTED for {video_id}")
+            print(f"⚠️  [FALLBACK ANALYSIS] Video: {video_id} - Saved fallback analysis WITH deep_analysis")
+            
+            # Emit analysis completed event (fallback)
+            try:
+                from services.event_bus import EventBus, Topics
+                event_bus = EventBus.get_instance()
+                await event_bus.publish(
+                    Topics.ANALYSIS_COMPLETED,
+                    {
+                        "media_id": video_id,
+                        "job_id": job_id,
+                        "filename": filename,
+                        "pre_social_score": analysis.pre_social_score,
+                        "fallback": True
+                    },
+                    correlation_id=video_id
+                )
+            except Exception as e:
+                logger.debug(f"Failed to emit completion event: {e}")
+            
+            # Update job tracker with filename (fallback analysis)
+            if job_id and job_id in _analysis_jobs:
+                _analysis_jobs[job_id]["videos"][video_id] = {
+                    "status": "completed",
+                    "filename": filename,
+                    "score": analysis.pre_social_score
+                }
+                _analysis_jobs[job_id]["completed"] = _analysis_jobs[job_id].get("completed", 0) + 1
+                logger.info(f"[Batch Analysis] ✅ Completed (fallback): {video_id} ({filename})")
+                # Check if job is complete
+                job = _analysis_jobs[job_id]
+                if job["completed"] + job.get("failed", 0) >= job["total"]:
+                    job["status"] = "completed"
+                    logger.success(f"[Batch Analysis] Job {job_id} completed: {job['completed']} succeeded, {job.get('failed', 0)} failed")
+            
+        except Exception as e:
+            # Full traceback logging for debugging
+            error_traceback = traceback.format_exc()
+            logger.error(f"[Analysis] ❌ FAILED for {video_id} ({filename}): {e}")
+            logger.error(f"[Analysis] Full traceback:\n{error_traceback}")
+            
+            # Print traceback to console for visibility and debugging
+            print(f"\n{'='*80}")
+            print(f"❌ [ANALYSIS FAILURE] Video: {video_id}")
+            print(f"   File: {filename}")
+            print(f"   Error Type: {type(e).__name__}")
+            print(f"   Error: {str(e)}")
+            print(f"{'='*80}")
+            print("Full Traceback:")
+            print(error_traceback)
+            print(f"{'='*80}\n")
+            
+            await db.rollback()
+            
+            # Emit analysis failed event with full traceback
+            try:
+                from services.event_bus import EventBus, Topics
+                event_bus = EventBus.get_instance()
+                await event_bus.publish(
+                    Topics.ANALYSIS_FAILED,
+                    {
+                        "media_id": video_id,
+                        "job_id": job_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "traceback": error_traceback,
+                        "filename": filename
+                    },
+                    correlation_id=video_id
+                )
+            except Exception as fail_event_err:
+                logger.debug(f"Failed to emit failure event: {fail_event_err}")
+            
+            # Update job tracker with detailed error info
+            if job_id and job_id in _analysis_jobs:
+                error_summary = f"failed:{type(e).__name__}:{str(e)[:100]}"
+                _analysis_jobs[job_id]["videos"][video_id] = {
+                    "status": "failed",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "traceback": error_traceback,
+                    "filename": filename
+                }
+                _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
+                
+                # Log failure summary
+                job = _analysis_jobs[job_id]
+                logger.error(
+                    f"[Batch Analysis] ❌ Failed: {video_id} ({filename}) | "
+                    f"Progress: {job['completed']}/{job['total']} completed, "
+                    f"{job.get('failed', 0)}/{job['total']} failed"
+                )
+                
+                # Check if job is complete (even with failures)
+                if job["completed"] + job.get("failed", 0) >= job["total"]:
+                    job["status"] = "completed"
+                    success_rate = (job['completed'] / job['total'] * 100) if job['total'] > 0 else 0
+                    logger.success(
+                        f"[Batch Analysis] Job {job_id} completed: "
+                        f"{job['completed']} succeeded ({success_rate:.1f}%), "
+                        f"{job.get('failed', 0)} failed"
+                    )
+            
+            # Don't re-raise - continue processing other videos even if one fails
+            # This ensures the batch job completes even with individual failures
+            logger.info(f"[Analysis] Continuing batch job despite failure of {video_id}")
+
+
+@router.post("/batch/analyze")
+async def batch_analyze(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=500, le=5000),
+    include_incomplete: bool = Query(default=True, description="Include videos with incomplete analysis"),
+    force: bool = Query(default=False, description="Force re-analyze ALL videos including already analyzed ones")
+):
+    """
+    Analyze all unanalyzed videos that have valid source files.
+    Also re-analyzes videos with incomplete analysis (no transcript/topics).
+    Use force=true to re-analyze ALL videos including already analyzed ones.
+    """
+    from sqlalchemy import and_, not_, exists, or_
+    from loguru import logger
+    
+    # Video file extensions to include
+    VIDEO_EXTENSIONS = ['.mov', '.mp4', '.avi', '.mkv', '.webm', '.m4v', '.wmv', '.flv', '.3gp']
+    
+    # Build extension filter - source_uri must end with a video extension
+    ext_filters = [Video.source_uri.ilike(f'%{ext}') for ext in VIDEO_EXTENSIONS]
+    
+    if force:
+        # Force mode: Include ALL videos regardless of analysis status
+        logger.info(f"[Batch Analyze] Force mode enabled - will re-analyze ALL videos")
+        query = select(Video).where(
+            and_(
+                Video.source_uri.isnot(None),
+                Video.source_uri != '',
+                or_(*ext_filters)  # Must be a video file extension
+            )
+        ).order_by(Video.created_at.desc()).limit(limit)
+    elif include_incomplete:
+        # Subquery for videos that have COMPLETE analysis (transcript or topics)
+        complete_analysis_subquery = select(VideoAnalysis.video_id).where(
+            or_(
+                VideoAnalysis.transcript.isnot(None),
+                VideoAnalysis.topics.isnot(None)
+            )
+        )
+        # Include videos without analysis OR with incomplete analysis
+        query = select(Video).where(
+            and_(
+                not_(Video.id.in_(complete_analysis_subquery)),
+                Video.source_uri.isnot(None),
+                Video.source_uri != '',
+                or_(*ext_filters)  # Must be a video file extension
+            )
+        ).order_by(Video.created_at.desc()).limit(limit)
+    else:
+        # Original behavior: only videos without any analysis record
+        subquery = select(VideoAnalysis.video_id)
+        query = select(Video).where(
+            and_(
+                not_(Video.id.in_(subquery)),
+                Video.source_uri.isnot(None),
+                Video.source_uri != '',
+                or_(*ext_filters)  # Must be a video file extension
+            )
+        ).order_by(Video.created_at.desc()).limit(limit)
+    
+    result = await db.execute(query)
+    videos = result.scalars().all()
+    
+    from loguru import logger
+    logger.info(f"[Batch Analyze] Query returned {len(videos)} unanalyzed videos")
+    
+    if not videos:
+        return {"status": "no_pending", "count": 0}
+    
+    # Filter to only actual video files with existing files (skip images)
+    VIDEO_EXTENSIONS = {'.mov', '.mp4', '.avi', '.mkv', '.webm', '.m4v', '.wmv', '.flv', '.3gp'}
+    valid_videos = []
+    skipped_images = 0
+    skipped_not_found = 0
+    
+    for video in videos:
+        file_path = os.path.expanduser(video.source_uri) if video.source_uri else None
+        container_path = map_host_to_container_path(file_path) if file_path else None
+        
+        # Check file extension - skip images
+        ext = Path(file_path).suffix.lower() if file_path else ''
+        if ext not in VIDEO_EXTENSIONS:
+            skipped_images += 1
+            continue
+        
+        if (container_path and os.path.exists(container_path)) or (file_path and os.path.exists(file_path)):
+            valid_videos.append(video)
+        else:
+            skipped_not_found += 1
+            if skipped_not_found <= 3:
+                logger.warning(f"[Batch Analyze] File not found: {file_path}")
+    
+    logger.info(f"[Batch Analyze] Valid: {len(valid_videos)}, Skipped images: {skipped_images}, Not found: {skipped_not_found}")
+    
+    if skipped_images > 0:
+        print(f"Skipped {skipped_images} non-video files")
+    
+    if not valid_videos:
+        return {"status": "no_valid_files", "count": 0, "message": "No videos with valid source files found"}
+    
+    # Create job tracker
+    job_id = str(uuid.uuid4())
+    _analysis_jobs[job_id] = {
+        "status": "running",
+        "total": len(valid_videos),
+        "completed": 0,
+        "failed": 0,
+        "current_video": None,
+        "videos": {},
+        "started_at": datetime.now().isoformat()
+    }
+    
+    from loguru import logger
+    logger.info(f"[Batch Analysis] Job {job_id}: Starting analysis of {len(valid_videos)} videos")
+    
+    # Start batch analysis as async tasks (non-blocking, same process)
+    # Using asyncio.create_task instead of ThreadPoolExecutor to avoid import issues
+    async def run_batch():
+        for video in valid_videos:
+            # Check if job was cancelled before starting
+            if _analysis_jobs[job_id].get("status") == "cancelled":
+                logger.info(f"[Batch Analysis] Job {job_id} cancelled, stopping")
+                break
+            
+            _analysis_jobs[job_id]["videos"][str(video.id)] = "processing"
+            try:
+                await _run_analysis_async(str(video.id), video.source_uri, job_id)
+            except Exception as e:
+                logger.error(f"[Batch Analysis] Error analyzing {video.id}: {e}")
+                _analysis_jobs[job_id]["videos"][str(video.id)] = f"failed:{str(e)[:50]}"
+                _analysis_jobs[job_id]["failed"] = _analysis_jobs[job_id].get("failed", 0) + 1
+    
+    asyncio.create_task(run_batch())
+    
+    logger.info(f"[Batch Analysis] Job {job_id}: Started async analysis of {len(valid_videos)} videos")
+    
+    return {"status": "started", "count": len(valid_videos), "job_id": job_id}
+
+
+@router.post("/batch/cancel")
+async def cancel_batch_analysis():
+    """
+    Cancel all running batch analysis jobs.
+    Marks jobs as cancelled and stops queuing new videos.
+    """
+    cancelled_count = 0
+    cancelled_jobs = []
+    
+    # Find all running jobs and mark them as cancelled
+    for job_id, job in _analysis_jobs.items():
+        if job.get("status") in ["running", "queued"]:
+            job["status"] = "cancelled"
+            job["cancelled_at"] = datetime.now().isoformat()
+            cancelled_count += 1
+            cancelled_jobs.append(job_id)
+            logger.info(f"[Batch Analysis] Cancelled job: {job_id}")
+    
+    if cancelled_count > 0:
+        logger.success(f"[Batch Analysis] Cancelled {cancelled_count} analysis job(s)")
+        return {
+            "success": True,
+            "cancelled": cancelled_count,
+            "job_ids": cancelled_jobs,
+            "message": f"Cancelled {cancelled_count} analysis job(s)"
+        }
+    else:
+        return {
+            "success": False,
+            "cancelled": 0,
+            "message": "No running analysis jobs to cancel"
+        }
+
+
+@router.post("/batch/cancel/{job_id}")
+async def cancel_specific_batch_analysis(job_id: str):
+    """
+    Cancel a specific batch analysis job by ID.
+    """
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
+    job = _analysis_jobs[job_id]
+    
+    if job.get("status") in ["completed", "cancelled", "failed"]:
+        return {
+            "success": False,
+            "message": f"Job {job_id} is already {job.get('status')}",
+            "status": job.get("status")
+        }
+    
+    # Mark job as cancelled
+    job["status"] = "cancelled"
+    job["cancelled_at"] = datetime.now().isoformat()
+    
+    # Mark all queued/processing videos as cancelled
+    for video_id, video_status in job.get("videos", {}).items():
+        if isinstance(video_status, dict):
+            if video_status.get("status") in ["queued", "processing", "starting"]:
+                video_status["status"] = "cancelled"
+        elif video_status in ["queued", "processing", "starting"]:
+            job["videos"][video_id] = {"status": "cancelled"}
+    
+    logger.info(f"[Batch Analysis] Cancelled job: {job_id}")
+    
+    return {
+        "success": True,
+        "job_id": job_id,
+        "message": f"Job {job_id} cancelled",
+        "status": "cancelled"
+    }
+
+
+@router.get("/batch/analyze/status/{job_id}")
+async def get_batch_analysis_status(job_id: str):
+    """Get status of a batch analysis job."""
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = _analysis_jobs[job_id]
+    
+    # Calculate completion percentage
+    total = job.get("total", 0)
+    completed = job.get("completed", 0)
+    failed = job.get("failed", 0)
+    in_progress = total - completed - failed
+    
+    job["completion_percent"] = ((completed + failed) / total * 100) if total > 0 else 0
+    job["success_rate"] = (completed / total * 100) if total > 0 else 0
+    job["in_progress"] = in_progress
+    
+    return job
+
+
+@router.get("/batch/analyze/test-completion")
+async def test_analysis_completion(
+    db: AsyncSession = Depends(get_db),
+    job_id: Optional[str] = Query(None, description="Job ID to test (optional)")
+):
+    """
+    Test endpoint to verify 100% analysis completion.
+    Checks all videos in a batch job and reports completion status with full traceback on failures.
+    """
+    from sqlalchemy import select, func, exists
+    
+    if job_id and job_id in _analysis_jobs:
+        # Check specific job
+        job = _analysis_jobs[job_id]
+        video_ids = list(job.get("videos", {}).keys())
+        
+        # Query database for actual analysis status
+        results = []
+        for video_id in video_ids:
+            try:
+                video_uuid = uuid.UUID(video_id)
+                analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+                analysis_result = await db.execute(analysis_query)
+                analysis = analysis_result.scalar_one_or_none()
+                
+                has_transcript = analysis and analysis.transcript
+                has_topics = analysis and analysis.topics
+                has_platform_content = analysis and analysis.platform_content
+                
+                job_status = job["videos"].get(video_id, {})
+                if isinstance(job_status, dict):
+                    job_status_str = job_status.get("status", "unknown")
+                    error_info = job_status.get("error")
+                    traceback_info = job_status.get("traceback")
+                else:
+                    job_status_str = str(job_status)
+                    error_info = None
+                    traceback_info = None
+                
+                results.append({
+                    "video_id": video_id,
+                    "has_analysis": analysis is not None,
+                    "has_transcript": has_transcript,
+                    "has_topics": has_topics,
+                    "has_platform_content": has_platform_content,
+                    "complete": has_transcript and has_topics and has_platform_content,
+                    "job_status": job_status_str,
+                    "error": error_info,
+                    "traceback": traceback_info
+                })
+            except Exception as e:
+                import traceback
+                results.append({
+                    "video_id": video_id,
+                    "error": str(e),
+                    "traceback": traceback.format_exc(),
+                    "job_status": job["videos"].get(video_id, "unknown")
+                })
+        
+        complete_count = sum(1 for r in results if r.get("complete", False))
+        failed_count = sum(1 for r in results if "error" in r or r.get("job_status", "").startswith("failed"))
+        total_count = len(results)
+        
+        return {
+            "job_id": job_id,
+            "total_videos": total_count,
+            "complete": complete_count,
+            "failed": failed_count,
+            "incomplete": total_count - complete_count - failed_count,
+            "completion_rate": (complete_count / total_count * 100) if total_count > 0 else 0,
+            "success_rate": ((complete_count) / total_count * 100) if total_count > 0 else 0,
+            "details": results
+        }
+    else:
+        # Check all videos without analysis
+        query = select(func.count(Video.id)).where(
+            ~exists().where(VideoAnalysis.video_id == Video.id)
+        )
+        result = await db.execute(query)
+        unanalyzed_count = result.scalar() or 0
+        
+        return {
+            "message": "No specific job provided",
+            "unanalyzed_videos": unanalyzed_count,
+            "note": "Provide job_id query parameter to check specific batch job completion"
+        }
+
+
+# =============================================================================
+# ENDPOINTS - THUMBNAIL
+# =============================================================================
+
+def map_host_to_container_path(host_path: str) -> str:
+    """Map host filesystem paths to Docker container paths.
+    
+    Maps ~/Documents/IphoneImport to /media/IphoneImport (Docker volume mount)
+    """
+    if not host_path:
+        return host_path
+    # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/IphoneImport
+    import re
+    # Handle expanded home directory paths
+    pattern = r'^/Users/[^/]+/Documents/IphoneImport/(.*)$'
+    match = re.match(pattern, host_path)
+    if match:
+        return f"/media/IphoneImport/{match.group(1)}"
+    # Handle ~ paths (shouldn't happen but just in case)
+    if host_path.startswith('~/Documents/IphoneImport/'):
+        return host_path.replace('~/Documents/IphoneImport/', '/media/IphoneImport/')
+    return host_path
+
+
+@router.api_route("/thumbnail/{media_id}", methods=["GET", "HEAD"])
+async def get_thumbnail(
+    media_id: str,
+    size: str = Query(default="medium", pattern="^(small|medium|large)$"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get thumbnail for a media item.
+    Supports HEAD requests for checking if thumbnail exists.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Get thumbnail path - check both original and mapped paths
+    if video.thumbnail_path:
+        thumb_path = video.thumbnail_path
+        if Path(thumb_path).exists():
+            return FileResponse(thumb_path, media_type="image/jpeg")
+    
+    # Try to generate on-the-fly from source file
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    # Check if source exists (try container path first, then original)
+    actual_source = None
+    if container_source and Path(container_source).exists():
+        actual_source = container_source
+    elif source_path and Path(source_path).exists():
+        actual_source = source_path
+    
+    if actual_source:
+        from services.thumbnail_service import generate_thumbnail
+        thumb_path = generate_thumbnail(actual_source, size)
+        if thumb_path:
+            # Update database with thumbnail path
+            video.thumbnail_path = thumb_path
+            await db.commit()
+            return FileResponse(thumb_path, media_type="image/jpeg")
+    
+    raise HTTPException(status_code=404, detail="Thumbnail not available")
+
+
+@router.get("/video/{media_id}")
+async def stream_video(
+    media_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Stream video file for playback with range request support.
+    """
+    from fastapi.responses import StreamingResponse
+    
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Try container-mapped path first, then original path
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    actual_path = None
+    if container_source and Path(container_source).exists():
+        actual_path = container_source
+    elif source_path and Path(source_path).exists():
+        actual_path = source_path
+    
+    if not actual_path:
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    # Determine media type
+    ext = Path(actual_path).suffix.lower()
+    media_type_map = {
+        '.mp4': 'video/mp4',
+        '.mov': 'video/quicktime',
+        '.m4v': 'video/x-m4v',
+        '.avi': 'video/x-msvideo',
+        '.mkv': 'video/x-matroska',
+        '.webm': 'video/webm'
+    }
+    media_type = media_type_map.get(ext, 'video/mp4')
+    
+    file_path = Path(actual_path)
+    file_size = file_path.stat().st_size
+    
+    # Check for range header (needed for video seeking/streaming)
+    range_header = request.headers.get("range")
+    
+    if range_header:
+        # Parse range header
+        range_match = range_header.replace("bytes=", "").split("-")
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] else file_size - 1
+        
+        # Ensure valid range
+        if start >= file_size:
+            raise HTTPException(status_code=416, detail="Range not satisfiable")
+        
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+        
+        def iterfile():
+            with open(file_path, "rb") as f:
+                f.seek(start)
+                remaining = content_length
+                chunk_size = 1024 * 1024  # 1MB chunks
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+        
+        return StreamingResponse(
+            iterfile(),
+            status_code=206,
+            media_type=media_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+                "Cache-Control": "public, max-age=3600",
+            }
+        )
+    else:
+        # No range header - return full file
+        return FileResponse(
+            actual_path, 
+            media_type=media_type,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+
+
+# =============================================================================
+# ENDPOINTS - TRANSCODED VIDEO (Browser-compatible H.264)
+# =============================================================================
+
+@router.get("/video-stream/{media_id}")
+async def stream_transcoded_video(
+    media_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Stream video transcoded to H.264 for browser compatibility.
+    HEVC/ProRes videos are transcoded on-the-fly to H.264.
+    """
+    from fastapi.responses import StreamingResponse
+    import subprocess
+    import tempfile
+    
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Get the source file path
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    actual_path = None
+    if container_source and Path(container_source).exists():
+        actual_path = container_source
+    elif source_path and Path(source_path).exists():
+        actual_path = source_path
+    
+    if not actual_path:
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    # Check if we have a cached transcoded version
+    cache_dir = Path("/tmp/mediaposter/transcoded")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_path = cache_dir / f"{media_id}.mp4"
+    
+    if not cached_path.exists():
+        # Transcode using ffmpeg - use temp file to avoid serving incomplete files
+        temp_path = cache_dir / f"{media_id}.tmp.mp4"
+        try:
+            cmd = [
+                "ffmpeg", "-y", "-i", str(actual_path),
+                "-c:v", "libx264",  # H.264 codec
+                "-preset", "veryfast",   # Faster encoding for large files
+                "-crf", "23",        # Quality (lower = better, 18-28 typical)
+                "-pix_fmt", "yuv420p",  # Force 8-bit color (browsers don't support 10-bit H.264)
+                "-c:a", "aac",       # AAC audio
+                "-b:a", "128k",      # Audio bitrate
+                "-movflags", "+faststart",  # Web optimized
+                "-max_muxing_queue_size", "1024",
+                str(temp_path)
+            ]
+            
+            # Longer timeout for large files (10 minutes)
+            process = subprocess.run(cmd, capture_output=True, timeout=600)
+            
+            if process.returncode != 0:
+                # Clean up temp file and fallback to original
+                if temp_path.exists():
+                    temp_path.unlink()
+                logger.warning(f"Transcoding failed for {media_id}: {process.stderr.decode()[:200]}")
+                return FileResponse(
+                    actual_path,
+                    media_type="video/quicktime",
+                    headers={"Accept-Ranges": "bytes"}
+                )
+            
+            # Rename temp to final only after successful transcoding
+            temp_path.rename(cached_path)
+            
+        except subprocess.TimeoutExpired:
+            # Clean up and fallback
+            if temp_path.exists():
+                temp_path.unlink()
+            logger.warning(f"Transcoding timeout for {media_id}")
+            return FileResponse(
+                actual_path,
+                media_type="video/quicktime",
+                headers={"Accept-Ranges": "bytes"}
+            )
+        except Exception as e:
+            # Clean up and fallback
+            if temp_path.exists():
+                temp_path.unlink()
+            logger.error(f"Transcoding error for {media_id}: {e}")
+            return FileResponse(
+                actual_path,
+                media_type="video/quicktime",
+                headers={"Accept-Ranges": "bytes"}
+                )
+    
+    # Serve the transcoded file with range support
+    file_size = cached_path.stat().st_size
+    range_header = request.headers.get("range")
+    
+    if range_header:
+        range_match = range_header.replace("bytes=", "").split("-")
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] else file_size - 1
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+        
+        def iterfile():
+            with open(cached_path, "rb") as f:
+                f.seek(start)
+                remaining = content_length
+                # Larger chunk size (2MB) for faster initial buffering
+                chunk_size = 2 * 1024 * 1024
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+        
+        return StreamingResponse(
+            iterfile(),
+            status_code=206,
+            media_type="video/mp4",
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+                "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+            }
+        )
+    
+    return FileResponse(
+        str(cached_path),
+        media_type="video/mp4",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+        }
+    )
+
+
+# =============================================================================
+# ENDPOINTS - IMAGE
+# =============================================================================
+
+@router.get("/image/{media_id}")
+async def serve_image(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Serve full-size image file for display.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Try container-mapped path first, then original path
+    source_path = video.source_uri
+    container_source = map_host_to_container_path(source_path) if source_path else None
+    
+    actual_path = None
+    if container_source and Path(container_source).exists():
+        actual_path = container_source
+    elif source_path and Path(source_path).exists():
+        actual_path = source_path
+    
+    if not actual_path:
+        raise HTTPException(status_code=404, detail="Image file not found")
+    
+    # Determine media type
+    ext = Path(actual_path).suffix.lower()
+    media_type_map = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.heic': 'image/heic',
+        '.heif': 'image/heif',
+    }
+    media_type = media_type_map.get(ext, 'image/jpeg')
+    
+    return FileResponse(
+        actual_path, 
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
+
+
+# =============================================================================
+# ENDPOINTS - DELETE
+# =============================================================================
+
+@router.delete("/{media_id}")
+async def delete_media(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a media item from database."""
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    query = select(Video).where(Video.id == video_uuid)
+    result = await db.execute(query)
+    video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    await db.delete(video)
+    await db.commit()
+    
+    return {"message": "Media deleted", "media_id": media_id}
+
+
+# =============================================================================
+# HEALTH CHECK
+# =============================================================================
+
+@router.get("/health")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """Health check with database stats."""
+    from sqlalchemy import func
+    
+    try:
+        total_query = select(func.count(Video.id))
+        total_result = await db.execute(total_query)
+        total_videos = total_result.scalar() or 0
+        
+        return {
+            "status": "healthy",
+            "service": "media-processing-db",
+            "database": "connected",
+            "timestamp": datetime.now().isoformat(),
+            "stats": {
+                "total_videos": total_videos
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "service": "media-processing-db",
+            "database": "error",
+            "error": str(e)
+        }
+
+
+# =============================================================================
+# ENDPOINTS - ANALYSIS STORAGE & RETRIEVAL
+# =============================================================================
+
+class AnalysisSaveRequest(BaseModel):
+    """Request to save comprehensive analysis"""
+    transcript: Optional[str] = None
+    transcript_analysis: Optional[dict] = None
+    topics: Optional[List[str]] = None
+    hooks: Optional[List[str]] = None
+    tone: Optional[str] = None
+    pacing: Optional[str] = None
+    key_moments: Optional[dict] = None
+    visual_analysis: Optional[dict] = None
+    frame_analyses: Optional[list] = None
+    music_suggestion: Optional[dict] = None
+    platform_content: Optional[list] = None
+    deep_analysis: Optional[dict] = None
+    pre_social_score: Optional[float] = None
+    
+    model_config = {"from_attributes": True}
+
+
+class PostScoreUpdateRequest(BaseModel):
+    """Request to update post-social score after analytics"""
+    post_social_score: float
+    metrics: Optional[dict] = None  # Raw metrics used to calculate score
+    
+    model_config = {"from_attributes": True}
+
+
+@router.get("/analysis/{media_id}")
+async def get_analysis(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get full analysis for a media item including pre/post social scores.
+    Returns all stored analysis data that can be used across the app.
+    Supports lookup by ID or by filename.
+    """
+    from sqlalchemy import or_
+    
+    video = None
+    video_uuid = None
+    
+    # Try as UUID first
+    try:
+        video_uuid = uuid.UUID(media_id)
+        query = select(Video).where(Video.id == video_uuid)
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
+    except ValueError as e:
+        logger.debug(f"Silent exception: {e}")
+    
+    # If not found by ID, try by filename
+    if not video:
+        query = select(Video).where(
+            or_(
+                Video.file_name == media_id,
+                Video.file_name == f"{media_id}.mp4",
+                Video.file_name == f"{media_id}.mov",
+                Video.file_name.like(f"{media_id}%")
+            )
+        )
+        result = await db.execute(query)
+        video = result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    video_uuid = video.id
+    
+    # Get analysis
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if not analysis:
+        return {
+            "media_id": media_id,
+            "has_analysis": False,
+            "message": "No analysis available. Run analysis first."
+        }
+    
+    # Build platform_content from deep_analysis if not already present
+    # This ensures AI-generated captions are available for publishing
+    platform_content = analysis.platform_content or []
+    
+    # If no platform_content but we have deep_analysis with suggested_caption,
+    # create platform_content entries for each platform
+    if not platform_content and analysis.deep_analysis:
+        deep = analysis.deep_analysis
+        suggested_caption = deep.get("suggested_caption") or deep.get("description") or ""
+        suggested_hashtags = deep.get("suggested_hashtags") or []
+        title = deep.get("title") or ""
+        
+        if suggested_caption or title:
+            # Create entries for common platforms using AI-generated content
+            for platform in ["tiktok", "instagram", "youtube", "twitter", "threads"]:
+                platform_content.append({
+                    "platform": platform,
+                    "title": title,
+                    "description": suggested_caption,
+                    "caption": suggested_caption,
+                    "hashtags": suggested_hashtags,
+                })
+    
+    return {
+        "media_id": media_id,
+        "has_analysis": True,
+        "transcript": analysis.transcript,
+        "topics": analysis.topics or [],
+        "hooks": analysis.hooks or [],
+        "tone": analysis.tone,
+        "pacing": analysis.pacing,
+        "key_moments": analysis.key_moments,
+        "pre_social_score": float(analysis.pre_social_score) if analysis.pre_social_score else None,
+        "analysis_version": analysis.analysis_version,
+        "analyzed_at": analysis.analyzed_at.isoformat() if analysis.analyzed_at else None,
+        "visual_analysis": analysis.visual_analysis,
+        "deep_analysis": analysis.deep_analysis,  # Always include deep analysis if available
+        "platform_content": platform_content,  # Include platform-specific content for publishing
+    }
+
+
+@router.put("/analysis/{media_id}")
+async def save_analysis(
+    media_id: str,
+    request: AnalysisSaveRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save or update comprehensive analysis for a media item.
+    This persists the analysis so it can be retrieved from other pages.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Check video exists
+    video_query = select(Video).where(Video.id == video_uuid)
+    video_result = await db.execute(video_query)
+    video = video_result.scalar_one_or_none()
+    
+    if not video:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    # Get or create analysis
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if analysis:
+        # Update existing - save all fields
+        if request.transcript is not None:
+            analysis.transcript = request.transcript
+        # if request.transcript_analysis is not None:
+        #     analysis.transcript_analysis = request.transcript_analysis  # Column doesn't exist in DB
+        if request.topics is not None:
+            analysis.topics = request.topics
+        if request.hooks is not None:
+            analysis.hooks = request.hooks
+        if request.tone is not None:
+            analysis.tone = request.tone
+        if request.pacing is not None:
+            analysis.pacing = request.pacing
+        if request.key_moments is not None:
+            analysis.key_moments = request.key_moments
+        # JSONB columns - these DO exist in the database
+        if request.visual_analysis is not None:
+            analysis.visual_analysis = request.visual_analysis
+        if request.frame_analyses is not None:
+            analysis.frame_analyses = request.frame_analyses
+        if request.music_suggestion is not None:
+            analysis.music_suggestion = request.music_suggestion
+        if request.platform_content is not None:
+            analysis.platform_content = request.platform_content
+        if request.deep_analysis is not None:
+            analysis.deep_analysis = request.deep_analysis
+        if request.pre_social_score is not None:
+            analysis.pre_social_score = request.pre_social_score
+        analysis.analysis_version = "3.0"
+    else:
+        # Create new with all fields
+        analysis = VideoAnalysis(
+            video_id=video_uuid,
+            transcript=request.transcript,
+            # transcript_analysis=request.transcript_analysis,  # Column doesn't exist in DB
+            topics=request.topics,
+            hooks=request.hooks,
+            tone=request.tone,
+            pacing=request.pacing,
+            key_moments=request.key_moments,
+            # JSONB columns - these DO exist in the database
+            visual_analysis=request.visual_analysis,
+            frame_analyses=request.frame_analyses,
+            music_suggestion=request.music_suggestion,
+            platform_content=request.platform_content,
+            deep_analysis=request.deep_analysis,
+            pre_social_score=request.pre_social_score,
+            analysis_version="3.0"
+        )
+        db.add(analysis)
+    
+    await db.commit()
+    
+    return {
+        "status": "saved",
+        "media_id": media_id,
+        "pre_social_score": analysis.pre_social_score,
+        "updated_at": datetime.now().isoformat()
+    }
+
+
+@router.put("/analysis/{media_id}/post-score")
+async def update_post_social_score(
+    media_id: str,
+    request: PostScoreUpdateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update the post-social score after getting analytics back.
+    This is called after content is posted and metrics are collected.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Get analysis
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if not analysis:
+        raise HTTPException(status_code=404, detail="No analysis found for this media")
+    
+    # Update post score
+    analysis.post_social_score = request.post_social_score
+    analysis.post_social_updated_at = datetime.now()
+    
+    # Store metrics in deep_analysis if provided
+    if request.metrics:
+        existing_deep = analysis.deep_analysis or {}
+        existing_deep["post_metrics"] = request.metrics
+        analysis.deep_analysis = existing_deep
+    
+    await db.commit()
+    
+    return {
+        "status": "updated",
+        "media_id": media_id,
+        "pre_social_score": analysis.pre_social_score,
+        "post_social_score": analysis.post_social_score,
+        "score_delta": (analysis.post_social_score - analysis.pre_social_score) if analysis.pre_social_score else None,
+        "updated_at": analysis.post_social_updated_at.isoformat()
+    }
+
+
+class CurationRequest(BaseModel):
+    """Request to update curation status"""
+    curation_status: str  # 'pending', 'approved', 'rejected'
+
+
+@router.put("/curate/{media_id}")
+async def update_curation_status(
+    media_id: str,
+    request: CurationRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update curation status for a media item (approve/reject for posting).
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    # Get or create analysis record to store curation
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if analysis:
+        # Update curation status in dedicated column
+        analysis.curation_status = request.curation_status
+        analysis.curated_at = datetime.now()
+    else:
+        # Create new analysis with curation
+        analysis = VideoAnalysis(
+            video_id=video_uuid,
+            curation_status=request.curation_status,
+            curated_at=datetime.now(),
+            analysis_version="3.0"
+        )
+        db.add(analysis)
+    
+    await db.commit()
+    
+    return {
+        "status": "updated",
+        "media_id": media_id,
+        "curation_status": request.curation_status
+    }
+
+
+@router.get("/analysis/{media_id}/scores")
+async def get_social_scores(
+    media_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get just the pre and post social scores for a media item.
+    Lightweight endpoint for dashboards and lists.
+    """
+    try:
+        video_uuid = uuid.UUID(media_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid media ID format")
+    
+    analysis_query = select(VideoAnalysis).where(VideoAnalysis.video_id == video_uuid)
+    analysis_result = await db.execute(analysis_query)
+    analysis = analysis_result.scalar_one_or_none()
+    
+    if not analysis:
+        return {
+            "media_id": media_id,
+            "pre_social_score": None,
+            "post_social_score": None,
+            "has_analysis": False
+        }
+    
+    return {
+        "media_id": media_id,
+        "pre_social_score": analysis.pre_social_score,
+        "post_social_score": analysis.post_social_score,
+        "post_social_updated_at": analysis.post_social_updated_at.isoformat() if analysis.post_social_updated_at else None,
+        "has_analysis": True,
+        "score_delta": (analysis.post_social_score - analysis.pre_social_score) if (analysis.post_social_score and analysis.pre_social_score) else None
+    }
+
+
+# =============================================================================
+# ENDPOINTS - METADATA BACKFILL
+# =============================================================================
+
+@router.post("/backfill-metadata")
+async def backfill_metadata(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=500, le=5000, description="Max videos to process"),
+    force: bool = Query(default=False, description="Re-extract even if metadata exists")
+):
+    """
+    Backfill missing metadata (duration, resolution, aspect_ratio) for existing videos.
+    Uses ffprobe to extract metadata from source files.
+    """
+    import subprocess
+    import json
+    
+    # Find videos with missing metadata
+    if force:
+        query = select(Video).limit(limit)
+    else:
+        query = select(Video).where(
+            (Video.duration_sec == None) | 
+            (Video.duration_sec == 0) |
+            (Video.resolution == None)
+        ).limit(limit)
+    
+    result = await db.execute(query)
+    videos = result.scalars().all()
+    
+    updated = 0
+    failed = 0
+    skipped = 0
+    
+    for video in videos:
+        source_path = video.source_uri
+        if not source_path or not Path(source_path).exists():
+            skipped += 1
+            continue
+        
+        try:
+            # Extract metadata using ffprobe
+            cmd = [
+                'ffprobe', '-v', 'quiet', '-print_format', 'json',
+                '-show_format', '-show_streams', source_path
+            ]
+            proc = subprocess.run(cmd, capture_output=True, timeout=30)
+            
+            if proc.returncode != 0:
+                failed += 1
+                continue
+            
+            data = json.loads(proc.stdout)
+            
+            # Extract duration
+            duration = None
+            if 'format' in data:
+                duration = int(float(data['format'].get('duration', 0)))
+            
+            # Extract resolution and aspect ratio from video stream
+            width = None
+            height = None
+            for stream in data.get('streams', []):
+                if stream.get('codec_type') == 'video':
+                    width = stream.get('width')
+                    height = stream.get('height')
+                    break
+            
+            resolution = f"{width}x{height}" if width and height else None
+            aspect_ratio = f"{width}:{height}" if width and height else None
+            
+            # Also get file size if missing
+            file_size = video.file_size
+            if not file_size:
+                file_size = Path(source_path).stat().st_size
+            
+            # Update video record
+            update_values = {}
+            if duration and (not video.duration_sec or video.duration_sec == 0 or force):
+                update_values['duration_sec'] = duration
+            if resolution and (not video.resolution or force):
+                update_values['resolution'] = resolution
+            if aspect_ratio and (not video.aspect_ratio or force):
+                update_values['aspect_ratio'] = aspect_ratio
+            if file_size and (not video.file_size or force):
+                update_values['file_size'] = file_size
+            
+            if update_values:
+                await db.execute(
+                    update(Video).where(Video.id == video.id).values(**update_values)
+                )
+                updated += 1
+                logger.info(f"Updated metadata for {video.file_name}: {update_values}")
+            else:
+                skipped += 1
+                
+        except Exception as e:
+            logger.error(f"Failed to extract metadata for {video.file_name}: {e}")
+            failed += 1
+    
+    await db.commit()
+    
+    return {
+        "status": "completed",
+        "updated": updated,
+        "failed": failed,
+        "skipped": skipped,
+        "total_processed": len(videos)
+    }
+
+
+@router.post("/generate-thumbnails")
+async def generate_thumbnails_batch(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=500, le=5000, description="Max videos to process")
+):
+    """
+    Generate thumbnails for videos that are missing them.
+    """
+    from services.thumbnail_service import generate_thumbnail
+    
+    # Find videos without thumbnails
+    query = select(Video).where(
+        (Video.thumbnail_path == None) | (Video.thumbnail_path == '')
+    ).limit(limit)
+    
+    result = await db.execute(query)
+    videos = result.scalars().all()
+    
+    generated = 0
+    failed = 0
+    skipped = 0
+    
+    for video in videos:
+        source_path = video.source_uri
+        if not source_path or not Path(source_path).exists():
+            skipped += 1
+            continue
+        
+        try:
+            thumb_path = generate_thumbnail(source_path, "medium")
+            if thumb_path:
+                video.thumbnail_path = thumb_path
+                generated += 1
+                logger.info(f"Generated thumbnail for {video.file_name}")
+            else:
+                failed += 1
+        except Exception as e:
+            logger.error(f"Failed to generate thumbnail for {video.file_name}: {e}")
+            failed += 1
+    
+    await db.commit()
+    
+    return {
+        "status": "completed",
+        "generated": generated,
+        "failed": failed,
+        "skipped": skipped,
+        "total_processed": len(videos)
+    }

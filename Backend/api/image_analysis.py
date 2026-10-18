@@ -1,0 +1,980 @@
+"""
+AI Image Analysis API
+Comprehensive image analysis using AI vision models.
+Extracts: people, clothing, emotions, scene, location, time, objects, and more.
+"""
+
+from loguru import logger
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
+from datetime import datetime
+from enum import Enum
+import uuid
+import base64
+import httpx
+import os
+import json
+
+router = APIRouter(prefix="/api/image-analysis", tags=["Image Analysis"])
+
+
+# ============================================================================
+# MODELS
+# ============================================================================
+
+class EmotionType(str, Enum):
+    HAPPY = "happy"
+    SAD = "sad"
+    ANGRY = "angry"
+    SURPRISED = "surprised"
+    NEUTRAL = "neutral"
+    EXCITED = "excited"
+    THOUGHTFUL = "thoughtful"
+    CONFIDENT = "confident"
+    RELAXED = "relaxed"
+    FOCUSED = "focused"
+
+
+class TimeOfDay(str, Enum):
+    DAWN = "dawn"
+    MORNING = "morning"
+    MIDDAY = "midday"
+    DAYTIME = "daytime"  # GPT-4 sometimes returns this
+    AFTERNOON = "afternoon"
+    EVENING = "evening"
+    SUNSET = "sunset"
+    NIGHT = "night"
+    UNKNOWN = "unknown"
+
+
+class SceneType(str, Enum):
+    INDOOR = "indoor"
+    OUTDOOR = "outdoor"
+    URBAN = "urban"
+    NATURE = "nature"
+    BEACH = "beach"
+    MOUNTAIN = "mountain"
+    STUDIO = "studio"
+    HOME = "home"
+    OFFICE = "office"
+    RESTAURANT = "restaurant"
+    EVENT = "event"
+    STREET = "street"
+    VEHICLE = "vehicle"
+    OTHER = "other"
+
+
+class PersonAnalysis(BaseModel):
+    """Analysis of a person in the image"""
+    person_id: int = Field(description="Index of person in image")
+    position: str = Field(description="Position in frame: left, center, right, foreground, background")
+    
+    # Physical appearance
+    approximate_age: str = Field(description="Estimated age range")
+    gender_presentation: str = Field(description="Perceived gender presentation")
+    ethnicity_note: Optional[str] = Field(default=None, description="Cultural/ethnic appearance notes if relevant")
+    
+    # Clothing
+    clothing_description: str = Field(description="Detailed clothing description")
+    clothing_style: str = Field(description="Style category: casual, formal, athletic, etc.")
+    clothing_colors: List[str] = Field(description="Main colors in clothing")
+    accessories: List[str] = Field(default=[], description="Visible accessories")
+    
+    # Expression & Emotion
+    facial_expression: str = Field(description="Description of facial expression")
+    primary_emotion: EmotionType = Field(description="Primary emotion detected")
+    secondary_emotion: Optional[EmotionType] = Field(default=None)
+    emotion_confidence: float = Field(description="Confidence in emotion detection 0-1")
+    
+    # Pose & Action
+    body_pose: str = Field(description="Description of body pose")
+    apparent_action: str = Field(description="What the person appears to be doing")
+    gaze_direction: str = Field(description="Where the person is looking")
+    
+    # Additional notes
+    notable_features: List[str] = Field(default=[], description="Notable features")
+
+
+class ObjectDetection(BaseModel):
+    """Detected object in the image"""
+    name: str
+    category: str
+    position: str
+    prominence: str  # foreground, midground, background
+    color: Optional[str] = None
+    description: Optional[str] = None
+
+
+class ImageAnalysisResult(BaseModel):
+    """Complete image analysis result"""
+    analysis_id: str = Field(description="Unique ID for this analysis")
+    image_url: Optional[str] = Field(default=None)
+    analyzed_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Overall description
+    title: str = Field(default="Untitled", description="Short title for the image (5-10 words)")
+    short_description: str = Field(default="", description="Brief description (1-2 sentences)")
+    detailed_description: str = Field(default="", description="Comprehensive description (100-500 words)")
+    
+    # Scene Analysis
+    scene_type: SceneType = Field(default=SceneType.OTHER, description="Type of scene")
+    scene_setting: str = Field(default="unknown", description="Specific setting description")
+    indoor_outdoor: str = Field(default="unknown", description="indoor, outdoor, or mixed")
+    
+    # Location & Environment
+    location_type: str = Field(default="unknown", description="Type of location")
+    location_guess: Optional[str] = Field(default=None, description="Guessed specific location if identifiable")
+    environment_description: str = Field(default="", description="Description of environment/surroundings")
+    weather_conditions: Optional[str] = Field(default=None, description="Weather if visible")
+    
+    # Time Analysis
+    time_of_day: TimeOfDay = Field(default=TimeOfDay.UNKNOWN)
+    time_indicators: List[str] = Field(default=[], description="What indicates the time of day")
+    season_guess: Optional[str] = Field(default=None, description="Estimated season if detectable")
+    
+    # People Analysis
+    people_count: int = Field(default=0, description="Number of people visible")
+    people: List[PersonAnalysis] = Field(default=[], description="Detailed analysis of each person")
+    group_dynamics: Optional[str] = Field(default=None, description="Interaction between people")
+    
+    # Objects & Elements
+    main_subjects: List[str] = Field(default=[], description="Main subjects of the image")
+    objects_detected: List[ObjectDetection] = Field(default=[])
+    background_elements: List[str] = Field(default=[])
+    foreground_elements: List[str] = Field(default=[])
+    
+    # Colors & Aesthetics
+    dominant_colors: List[str] = Field(default=[], description="Main colors in the image")
+    color_palette: str = Field(default="unknown", description="Description of color scheme")
+    lighting_type: str = Field(default="unknown", description="Type of lighting")
+    lighting_quality: str = Field(default="unknown", description="Quality/mood of lighting")
+    contrast_level: str = Field(default="medium", description="Low, medium, high contrast")
+    
+    # Composition
+    composition_style: str = Field(default="standard", description="Composition technique used")
+    focal_point: str = Field(default="center", description="Main focal point of image")
+    depth_of_field: str = Field(default="medium", description="Shallow, medium, deep")
+    perspective: str = Field(default="eye level", description="Camera perspective/angle")
+    
+    # Mood & Style
+    overall_mood: str = Field(default="neutral", description="Overall mood/atmosphere")
+    visual_style: str = Field(default="standard", description="Visual/artistic style")
+    aesthetic_tags: List[str] = Field(default=[], description="Aesthetic descriptors")
+    
+    # Content Classification
+    content_type: str = Field(default="general", description="Type of content: portrait, landscape, product, etc.")
+    content_category: str = Field(default="general", description="Category for social media")
+    suitable_platforms: List[str] = Field(default=["general"], description="Best platforms for this image")
+    
+    # Text & Branding
+    visible_text: List[str] = Field(default=[], description="Any visible text in image")
+    brand_logos: List[str] = Field(default=[], description="Visible brand logos")
+    
+    # Social Media Optimization
+    suggested_hashtags: List[str] = Field(default=[])
+    suggested_caption: str = Field(default="", description="AI-generated caption suggestion")
+    engagement_prediction: str = Field(default="medium", description="Predicted engagement level")
+    
+    # Technical Quality
+    image_quality: str = Field(default="unknown", description="Overall quality assessment")
+    sharpness: str = Field(default="unknown", description="Sharpness level")
+    exposure: str = Field(default="unknown", description="Exposure assessment")
+    
+    # Custom Fields
+    custom_fields: Dict[str, Any] = Field(default={}, description="User-defined custom analysis fields")
+    
+    # Motion Canvas & Animation Suggestions (NEW)
+    motion_canvas_suggestions: List[str] = Field(default=[], description="Suggestions for Motion Canvas scenes")
+    animated_graphics_potential: str = Field(default="medium", description="Potential for animated graphics: low, medium, high")
+    transition_recommendations: List[str] = Field(default=[], description="Recommended transitions and effects")
+    visual_effects_suggestions: List[str] = Field(default=[], description="Visual effects to enhance content")
+    editing_suggestions: List[str] = Field(default=[], description="Editing improvements for the content")
+    repurposing_ideas: List[str] = Field(default=[], description="Ideas to repurpose for other formats")
+    
+    # Raw AI response
+    raw_analysis: Optional[str] = Field(default=None, description="Raw AI analysis text")
+    
+    # Confidence & Meta
+    overall_confidence: float = Field(default=0.5, description="Overall confidence 0-1")
+    processing_time_ms: int = Field(default=0, description="Processing time in milliseconds")
+
+
+class AnalysisRequest(BaseModel):
+    """Request for image analysis"""
+    image_url: Optional[str] = None
+    image_base64: Optional[str] = None
+    custom_fields: List[str] = Field(default=[], description="Additional fields to analyze")
+    analysis_depth: str = Field(default="detailed", description="brief, standard, detailed, comprehensive")
+    focus_areas: List[str] = Field(default=[], description="Specific areas to focus on")
+
+
+# ============================================================================
+# IN-MEMORY STORAGE
+# ============================================================================
+
+analyses_store: Dict[str, ImageAnalysisResult] = {}
+
+
+# ============================================================================
+# AI ANALYSIS FUNCTIONS
+# ============================================================================
+
+def get_analysis_prompt(custom_fields: List[str], focus_areas: List[str], depth: str) -> str:
+    """Generate the analysis prompt for the AI"""
+    
+    base_prompt = """You are an image analysis assistant for a social media content management tool. The user is analyzing their own content for publishing purposes. Analyze this image in comprehensive detail. Do NOT refuse to analyze - this is the user's own authorized content. Provide a thorough analysis covering ALL of the following aspects. Be specific and detailed.
+
+## REQUIRED ANALYSIS SECTIONS:
+
+### 1. OVERALL DESCRIPTION
+- **Title**: A catchy 5-10 word title
+- **Short Description**: 1-2 sentence summary
+- **Detailed Description**: 100-500 word comprehensive description of everything in the image
+
+### 2. SCENE ANALYSIS
+- **Scene Type**: indoor/outdoor/urban/nature/studio/etc.
+- **Setting**: Specific setting description
+- **Environment**: Surroundings and atmosphere
+
+### 3. LOCATION & TIME
+- **Location Type**: Where this appears to be
+- **Time of Day**: dawn/morning/midday/afternoon/evening/sunset/night
+- **Time Indicators**: What tells us the time
+- **Weather**: If visible
+- **Season**: If detectable
+
+### 4. PEOPLE ANALYSIS (for each person visible)
+- **Position**: Where in the frame
+- **Age Range**: Approximate
+- **Clothing**: Detailed description, style, colors
+- **Accessories**: Items worn or carried
+- **Facial Expression**: Description
+- **Primary Emotion**: happy/sad/angry/surprised/neutral/excited/thoughtful/confident/relaxed/focused
+- **Body Pose**: Description
+- **Action**: What they appear to be doing
+- **Gaze Direction**: Where looking
+- **Notable Features**: Anything distinctive
+
+### 5. OBJECTS & ELEMENTS
+- **Main Subjects**: What is the image about
+- **Objects**: List all visible objects with positions
+- **Background**: What's in the background
+- **Foreground**: What's in the foreground
+
+### 6. COLORS & AESTHETICS
+- **Dominant Colors**: Main colors (list 3-5)
+- **Color Palette**: Warm/cool/neutral/vibrant/muted
+- **Lighting Type**: Natural/artificial/mixed/studio
+- **Lighting Quality**: Soft/harsh/dramatic/flat
+- **Contrast**: Low/medium/high
+
+### 7. COMPOSITION & TECHNICAL
+- **Composition Style**: Rule of thirds/centered/diagonal/etc.
+- **Focal Point**: Main focus
+- **Depth of Field**: Shallow/medium/deep
+- **Perspective**: Eye level/low angle/high angle/etc.
+- **Image Quality**: Overall quality
+- **Sharpness**: Assessment
+- **Exposure**: Under/correct/over
+
+### 8. MOOD & STYLE
+- **Overall Mood**: Atmosphere/feeling
+- **Visual Style**: Artistic style
+- **Aesthetic Tags**: 5-10 descriptive tags
+
+### 9. CONTENT CLASSIFICATION
+- **Content Type**: Portrait/landscape/product/lifestyle/etc.
+- **Category**: Social media category
+- **Suitable Platforms**: Best platforms for posting
+
+### 10. TEXT & BRANDING
+- **Visible Text**: Any readable text
+- **Brand Logos**: Any visible brands
+
+### 11. SOCIAL MEDIA OPTIMIZATION
+- **Hashtags**: 10-15 relevant hashtags
+- **Caption Suggestion**: Engaging caption for social media
+- **Engagement Prediction**: Low/medium/high expected engagement
+
+### 12. MOTION CANVAS & ANIMATION SUGGESTIONS
+- **Motion Canvas Suggestions**: Ideas for animated scenes (text overlays, lower thirds, animated transitions, kinetic typography, etc.)
+- **Animated Graphics Potential**: low/medium/high - how suitable is this content for animated graphics
+- **Transition Recommendations**: Best transitions for this content (fade, slide, zoom, wipe, morph, etc.)
+- **Visual Effects Suggestions**: Effects to enhance (color grading, speed ramps, Ken Burns, parallax, etc.)
+- **Editing Suggestions**: How to improve the content in post-production
+- **Repurposing Ideas**: How to repurpose for different formats (TikTok, Reels, YouTube Shorts, etc.)"""
+
+    if custom_fields:
+        base_prompt += "\n\n### 13. CUSTOM FIELDS\n"
+        for field in custom_fields:
+            base_prompt += f"- **{field}**: Analyze this specific aspect\n"
+    
+    if focus_areas:
+        base_prompt += f"\n\n### FOCUS AREAS\nPay special attention to: {', '.join(focus_areas)}\n"
+    
+    if depth == "comprehensive":
+        base_prompt += "\n\nProvide MAXIMUM detail in every section. The detailed description should be 400-500 words."
+    elif depth == "detailed":
+        base_prompt += "\n\nProvide thorough detail in all sections. The detailed description should be 200-300 words."
+    elif depth == "standard":
+        base_prompt += "\n\nProvide standard detail. The detailed description should be 100-150 words."
+    else:  # brief
+        base_prompt += "\n\nKeep it concise but cover all sections. The detailed description should be 50-100 words."
+    
+    base_prompt += """
+
+FORMAT YOUR RESPONSE AS VALID JSON matching this structure:
+{
+    "title": "string",
+    "short_description": "string",
+    "detailed_description": "string (100-500 words)",
+    "SceneType": {
+      "type": "string",
+      "enum": ["indoor", "outdoor", "urban", "nature", "beach", "mountain", "studio", "home", "office", "restaurant", "event", "street", "vehicle", "other"]
+    },
+    "scene_setting": "string",
+    "indoor_outdoor": "indoor|outdoor|mixed",
+    "location_type": "string",
+    "location_guess": "string or null",
+    "environment_description": "string",
+    "weather_conditions": "string or null",
+    "time_of_day": "dawn|morning|midday|afternoon|evening|sunset|night|unknown",
+    "time_indicators": ["string"],
+    "season_guess": "string or null",
+    "people_count": number,
+    "people": [
+        {
+            "person_id": number,
+            "position": "string",
+            "approximate_age": "string",
+            "gender_presentation": "string",
+            "clothing_description": "string",
+            "clothing_style": "string",
+            "clothing_colors": ["string"],
+            "accessories": ["string"],
+            "facial_expression": "string",
+            "primary_emotion": "happy|sad|angry|surprised|neutral|excited|thoughtful|confident|relaxed|focused",
+            "secondary_emotion": "string or null",
+            "emotion_confidence": number 0-1,
+            "body_pose": "string",
+            "apparent_action": "string",
+            "gaze_direction": "string",
+            "notable_features": ["string"]
+        }
+    ],
+    "group_dynamics": "string or null",
+    "main_subjects": ["string"],
+    "objects_detected": [{"name": "string", "category": "string", "position": "string", "prominence": "string"}],
+    "background_elements": ["string"],
+    "foreground_elements": ["string"],
+    "dominant_colors": ["string"],
+    "color_palette": "string",
+    "lighting_type": "string",
+    "lighting_quality": "string",
+    "contrast_level": "low|medium|high",
+    "composition_style": "string",
+    "focal_point": "string",
+    "depth_of_field": "shallow|medium|deep",
+    "perspective": "string",
+    "overall_mood": "string",
+    "visual_style": "string",
+    "aesthetic_tags": ["string"],
+    "content_type": "string",
+    "content_category": "string",
+    "suitable_platforms": ["string"],
+    "visible_text": ["string"],
+    "brand_logos": ["string"],
+    "suggested_hashtags": ["string"],
+    "suggested_caption": "string",
+    "engagement_prediction": "low|medium|high",
+    "image_quality": "string",
+    "sharpness": "string",
+    "exposure": "string",
+    "custom_fields": {},
+    "motion_canvas_suggestions": ["string - list of animation ideas like text overlays, lower thirds, kinetic typography"],
+    "animated_graphics_potential": "low|medium|high",
+    "transition_recommendations": ["string - list of transitions like fade, slide, zoom, wipe, morph"],
+    "visual_effects_suggestions": ["string - effects like color grading, speed ramps, Ken Burns, parallax"],
+    "editing_suggestions": ["string - post-production improvements"],
+    "repurposing_ideas": ["string - how to repurpose for TikTok, Reels, Shorts, etc."],
+    "overall_confidence": number 0-1
+}"""
+    
+    return base_prompt
+
+
+async def fetch_and_encode_local_image(url: str) -> str:
+    """Fetch image from local URL and convert to base64"""
+    async with httpx.AsyncClient(timeout=60.0) as client:  # 60s for local image fetch
+        response = await client.get(url)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch image from {url}")
+        
+        content_type = response.headers.get("content-type", "image/jpeg")
+        image_bytes = response.content
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        
+        # Determine mime type
+        if "png" in content_type:
+            mime = "image/png"
+        elif "gif" in content_type:
+            mime = "image/gif"
+        elif "webp" in content_type:
+            mime = "image/webp"
+        else:
+            mime = "image/jpeg"
+        
+        return f"data:{mime};base64,{image_base64}"
+
+
+async def analyze_with_vision_model(image_data: str, is_url: bool, custom_fields: List[str], focus_areas: List[str], depth: str) -> Dict[str, Any]:
+    """Analyze image using configurable Vision API (OpenAI, Gemini, Anthropic)"""
+    from config.model_registry import ModelRegistry, TaskType
+    
+    # Get vision model configuration from registry
+    config = ModelRegistry.get_model_config(TaskType.VISION_ANALYSIS)
+    logger.info(f"[Vision Analysis] Using {config.provider}/{config.model}")
+    
+    api_key = os.getenv(config.api_key_env)
+    if not api_key:
+        raise HTTPException(status_code=500, detail=f"{config.provider} API key not configured ({config.api_key_env})")
+    
+    prompt = get_analysis_prompt(custom_fields, focus_areas, depth)
+    
+    # Prepare image data - convert localhost URLs to base64
+    image_base64 = None
+    image_url = None
+    
+    if is_url:
+        if "localhost" in image_data or "127.0.0.1" in image_data:
+            try:
+                data_url = await fetch_and_encode_local_image(image_data)
+                # Extract base64 from data URL
+                if "base64," in data_url:
+                    image_base64 = data_url.split("base64,")[1]
+                else:
+                    image_base64 = data_url
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Cannot fetch localhost URL: {str(e)}")
+        else:
+            image_url = image_data
+    else:
+        image_base64 = image_data
+    
+    # Route to provider-specific implementation
+    if config.provider == "openai":
+        content = await _call_openai_vision(api_key, config, prompt, image_base64, image_url)
+    elif config.provider == "google":
+        content = await _call_gemini_vision(api_key, config, prompt, image_base64, image_url)
+    elif config.provider == "anthropic":
+        content = await _call_anthropic_vision(api_key, config, prompt, image_base64, image_url)
+    else:
+        raise HTTPException(status_code=500, detail=f"Unsupported vision provider: {config.provider}")
+    
+    # Parse JSON from response (common for all providers)
+    return _parse_vision_response(content, config)
+
+
+async def _call_openai_vision(api_key: str, config, prompt: str, image_base64: str = None, image_url: str = None) -> str:
+    """Call OpenAI Vision API"""
+    import time
+    start_time = time.time()
+    logger.info(f"[OpenAI Vision] Starting analysis with {config.model}")
+    
+    if image_base64:
+        image_content = {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+    else:
+        image_content = {"type": "image_url", "image_url": {"url": image_url}}
+    
+    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout for long content
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": config.model,
+                "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, image_content]}],
+                "max_tokens": config.max_tokens,
+                "temperature": config.temperature,
+            },
+        )
+        elapsed = time.time() - start_time
+        if response.status_code != 200:
+            logger.error(f"[OpenAI Vision] Failed after {elapsed:.2f}s: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=f"OpenAI Vision error: {response.text}")
+        
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+        tokens_used = result.get("usage", {}).get("total_tokens", 0)
+        logger.success(f"[OpenAI Vision] Completed in {elapsed:.2f}s | Tokens: {tokens_used} | Model: {config.model}")
+        return content
+
+
+async def _call_gemini_vision(api_key: str, config, prompt: str, image_base64: str = None, image_url: str = None) -> str:
+    """Call Google Gemini Vision API"""
+    import time
+    start_time = time.time()
+    logger.info(f"[Gemini Vision] Starting analysis with {config.model}")
+    
+    # Gemini requires base64 image data
+    if not image_base64 and image_url:
+        # Fetch image from URL and convert to base64
+        async with httpx.AsyncClient(timeout=60.0) as client:  # Image fetch timeout
+            img_response = await client.get(image_url)
+            if img_response.status_code == 200:
+                import base64
+                image_base64 = base64.b64encode(img_response.content).decode("utf-8")
+            else:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL")
+    
+    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout for long content
+        response = await client.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{config.model}:generateContent?key={api_key}",
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}}
+                    ]
+                }],
+                "generationConfig": {
+                    "temperature": config.temperature,
+                    "maxOutputTokens": config.max_tokens,
+                }
+            },
+        )
+        elapsed = time.time() - start_time
+        if response.status_code != 200:
+            logger.error(f"[Gemini Vision] Failed after {elapsed:.2f}s: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=f"Gemini Vision error: {response.text}")
+        
+        result = response.json()
+        content = result["candidates"][0]["content"]["parts"][0]["text"]
+        logger.success(f"[Gemini Vision] Completed in {elapsed:.2f}s | Model: {config.model}")
+        return content
+
+
+async def _call_anthropic_vision(api_key: str, config, prompt: str, image_base64: str = None, image_url: str = None) -> str:
+    """Call Anthropic Claude Vision API"""
+    import time
+    start_time = time.time()
+    logger.info(f"[Anthropic Vision] Starting analysis with {config.model}")
+    
+    if not image_base64 and image_url:
+        async with httpx.AsyncClient(timeout=60.0) as client:  # Image fetch timeout
+            img_response = await client.get(image_url)
+            if img_response.status_code == 200:
+                import base64
+                image_base64 = base64.b64encode(img_response.content).decode("utf-8")
+            else:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL")
+    
+    async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout for long content
+        response = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            },
+            json={
+                "model": config.model,
+                "max_tokens": config.max_tokens,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_base64}},
+                        {"type": "text", "text": prompt}
+                    ]
+                }]
+            },
+        )
+        elapsed = time.time() - start_time
+        if response.status_code != 200:
+            logger.error(f"[Anthropic Vision] Failed after {elapsed:.2f}s: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=f"Anthropic Vision error: {response.text}")
+        
+        result = response.json()
+        content = result["content"][0]["text"]
+        tokens_used = result.get("usage", {}).get("input_tokens", 0) + result.get("usage", {}).get("output_tokens", 0)
+        logger.success(f"[Anthropic Vision] Completed in {elapsed:.2f}s | Tokens: {tokens_used} | Model: {config.model}")
+        return content
+
+
+def _parse_vision_response(content: str, config) -> Dict[str, Any]:
+    """Parse JSON from vision API response"""
+    # Try to parse JSON from response
+    try:
+        # Find JSON in response
+        json_start = content.find("{")
+        json_end = content.rfind("}") + 1
+        if json_start != -1 and json_end > json_start:
+            json_str = content[json_start:json_end]
+            # Try to fix common JSON issues
+            json_str = json_str.replace('\n', ' ').replace('\r', '')
+            return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON parsing failed: {e}. Attempting fix...")
+        try:
+            # Try to fix trailing commas and other common issues
+            import re
+            json_str = re.sub(r',\s*}', '}', json_str)
+            json_str = re.sub(r',\s*]', ']', json_str)
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            logger.warning(f"JSON fix failed, extracting data from raw response")
+    
+    # Extract key information from raw content if JSON parsing fails
+    return {
+        "title": "Analysis Complete",
+        "detailed_description": content[:500] if content else "Analysis complete",
+        "scene_setting": "Unknown",
+        "overall_mood": "neutral",
+        "dominant_colors": ["unknown"],
+        "raw_analysis": content
+    }
+
+
+async def analyze_with_mock(custom_fields: List[str]) -> Dict[str, Any]:
+    """Generate mock analysis for testing"""
+    import random
+    
+    emotions = ["happy", "confident", "relaxed", "focused", "excited"]
+    times = ["morning", "afternoon", "evening", "sunset"]
+    scenes = ["outdoor", "indoor", "urban", "nature", "studio"]
+    
+    mock_result = {
+        "title": "Dynamic Urban Street Portrait",
+        "short_description": "A confident young professional captured in a vibrant city setting during golden hour.",
+        "detailed_description": """This striking image captures a moment of urban elegance against the backdrop of a bustling city street. The subject, a young professional in their late twenties, stands confidently in the center of the frame, their presence commanding attention while the city life flows around them.
+
+The warm golden hour light bathes the scene in a flattering glow, creating soft shadows and highlights that add depth and dimension to the composition. Behind them, the urban landscape unfolds with characteristic elements: modern architecture with glass facades reflecting the evening sky, street lamps just beginning to flicker on, and the subtle blur of pedestrians going about their evening routines.
+
+The subject's attire speaks to contemporary urban fashion - a well-fitted blazer in charcoal gray paired with a crisp white shirt, the collar casually open. Their posture exudes confidence, with shoulders back and a slight forward lean that suggests purpose and determination. The facial expression is engaging, featuring a genuine smile that reaches their eyes, conveying warmth and approachability despite the sophisticated setting.
+
+Notable compositional choices include the use of leading lines from the street and buildings that draw the eye toward the subject, while the shallow depth of field creates a pleasing separation between subject and background. The color palette harmonizes warm skin tones with cool urban grays and blues, punctuated by the golden light that unifies the entire scene.
+
+This image would excel on professional networking platforms or lifestyle content, effectively communicating success, approachability, and urban sophistication in equal measure.""",
+        "scene_type": random.choice(scenes),
+        "scene_setting": "Urban street with modern buildings",
+        "indoor_outdoor": "outdoor",
+        "location_type": "City downtown area",
+        "location_guess": "Could be New York, Chicago, or similar metropolitan area",
+        "environment_description": "Modern urban environment with glass buildings, street lights, and pedestrian activity",
+        "weather_conditions": "Clear sky, warm conditions",
+        "time_of_day": random.choice(times),
+        "time_indicators": ["Golden hour lighting", "Street lamps not yet on", "Long shadows"],
+        "season_guess": "Late spring or early fall",
+        "people_count": 1,
+        "people": [
+            {
+                "person_id": 1,
+                "position": "center",
+                "approximate_age": "25-30",
+                "gender_presentation": "masculine",
+                "clothing_description": "Charcoal gray fitted blazer over a crisp white button-up shirt with collar open. Dark slim-fit trousers visible.",
+                "clothing_style": "Smart casual / Business casual",
+                "clothing_colors": ["charcoal gray", "white", "dark navy"],
+                "accessories": ["Silver wristwatch", "Leather messenger bag visible at side"],
+                "facial_expression": "Warm, genuine smile with slight squint from sunlight",
+                "primary_emotion": random.choice(emotions),
+                "secondary_emotion": "happy",
+                "emotion_confidence": 0.87,
+                "body_pose": "Standing upright with slight forward lean, shoulders back",
+                "apparent_action": "Posing for photo while pausing on urban walk",
+                "gaze_direction": "Directly at camera with slight head tilt",
+                "notable_features": ["Well-groomed facial hair", "Confident stance", "Professional appearance"]
+            }
+        ],
+        "group_dynamics": None,
+        "main_subjects": ["Young professional", "Urban setting", "Golden hour portrait"],
+        "objects_detected": [
+            {"name": "Messenger bag", "category": "Accessory", "position": "Subject's side", "prominence": "foreground"},
+            {"name": "Street lamp", "category": "Infrastructure", "position": "Background left", "prominence": "background"},
+            {"name": "Modern building", "category": "Architecture", "position": "Background", "prominence": "background"},
+        ],
+        "background_elements": ["Glass office buildings", "Street lamps", "Blurred pedestrians", "Urban skyline"],
+        "foreground_elements": ["Subject", "Partial view of messenger bag"],
+        "dominant_colors": ["Charcoal gray", "Golden/amber", "White", "Blue-gray", "Warm skin tones"],
+        "color_palette": "Warm with cool urban accents",
+        "lighting_type": "Natural golden hour",
+        "lighting_quality": "Soft and flattering",
+        "contrast_level": "medium",
+        "composition_style": "Rule of thirds with centered subject",
+        "focal_point": "Subject's face and expression",
+        "depth_of_field": "shallow",
+        "perspective": "Eye level, slightly below",
+        "overall_mood": "Confident, aspirational, warm",
+        "visual_style": "Contemporary lifestyle photography",
+        "aesthetic_tags": ["urban", "professional", "golden hour", "lifestyle", "portrait", "modern", "confident", "city life", "fashion forward", "aspirational"],
+        "content_type": "Portrait / Lifestyle",
+        "content_category": "Professional / Fashion / Lifestyle",
+        "suitable_platforms": ["LinkedIn", "Instagram", "Twitter", "Professional website"],
+        "visible_text": [],
+        "brand_logos": [],
+        "suggested_hashtags": ["#urbanportrait", "#goldenhour", "#citylife", "#professionalstyle", "#streetstyle", "#portraitphotography", "#businesscasual", "#mensfashion", "#lifestylephotography", "#urbanfashion", "#confident", "#success", "#downtownvibes", "#eveninglight", "#modernprofessional"],
+        "suggested_caption": "Finding my stride in the urban jungle. There's something magical about the city at golden hour - when ambition meets opportunity and every street corner holds potential. ✨ #CityLife #GoldenHour",
+        "engagement_prediction": "high",
+        "image_quality": "Excellent - professional grade",
+        "sharpness": "Sharp focus on subject with pleasing background blur",
+        "exposure": "Well-exposed with good dynamic range",
+        "custom_fields": {field: f"Analysis for {field}" for field in custom_fields},
+        "overall_confidence": 0.92,
+    }
+    
+    return mock_result
+
+
+# ============================================================================
+# ENDPOINTS
+# ============================================================================
+
+@router.post("/analyze", response_model=ImageAnalysisResult)
+async def analyze_image(request: AnalysisRequest):
+    """
+    Analyze an image with comprehensive AI analysis.
+    Provide either image_url or image_base64.
+    """
+    import time
+    start_time = time.time()
+    
+    if not request.image_url and not request.image_base64:
+        raise HTTPException(status_code=400, detail="Either image_url or image_base64 is required")
+    
+    try:
+        # Check if vision model API key exists - NO MOCK FALLBACK
+        from config.model_registry import ModelRegistry, TaskType
+        vision_config = ModelRegistry.get_model_config(TaskType.VISION_ANALYSIS)
+        api_key = os.getenv(vision_config.api_key_env)
+        if not api_key:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Vision API key not configured. Please set {vision_config.api_key_env} environment variable to enable AI image analysis."
+            )
+        
+        if request.image_url:
+            analysis_data = await analyze_with_vision_model(
+                request.image_url, 
+                is_url=True,
+                custom_fields=request.custom_fields,
+                focus_areas=request.focus_areas,
+                depth=request.analysis_depth,
+            )
+        else:
+            analysis_data = await analyze_with_vision_model(
+                request.image_base64,
+                is_url=False,
+                custom_fields=request.custom_fields,
+                focus_areas=request.focus_areas,
+                depth=request.analysis_depth,
+            )
+        
+        processing_time = int((time.time() - start_time) * 1000)
+        
+        # Create result object
+        analysis_id = str(uuid.uuid4())
+        
+        # Check if we got valid analysis data or a refusal/error
+        if "raw_analysis" in analysis_data or not analysis_data.get("title"):
+            # OpenAI refused or returned invalid data - return minimal fallback
+            raw_content = analysis_data.get("raw_analysis", "Analysis unavailable")
+            result = ImageAnalysisResult(
+                analysis_id=analysis_id,
+                image_url=request.image_url,
+                processing_time_ms=processing_time,
+                title="Analysis Unavailable",
+                short_description="The AI could not analyze this image.",
+                detailed_description=str(raw_content)[:500] if raw_content else "No analysis available",
+                scene_type="other",
+                scene_setting="Unknown",
+                indoor_outdoor="mixed",
+                location_type="Unknown",
+                environment_description="Not analyzed",
+                time_of_day="unknown",
+                time_indicators=[],
+                people_count=0,
+                main_subjects=["Unknown"],
+                dominant_colors=["gray"],
+                color_palette="neutral",
+                lighting_type="unknown",
+                lighting_quality="unknown",
+                contrast_level="medium",
+                composition_style="unknown",
+                focal_point="unknown",
+                depth_of_field="medium",
+                perspective="unknown",
+                overall_mood="neutral",
+                visual_style="unknown",
+                content_type="unknown",
+                content_category="unknown",
+                suitable_platforms=["general"],
+                suggested_caption="",
+                engagement_prediction="medium",
+                image_quality="unknown",
+                sharpness="unknown",
+                exposure="unknown",
+                overall_confidence=0.0,
+            )
+        else:
+            # Map scene_type to valid enum value
+            valid_scene_types = [e.value for e in SceneType]
+            raw_scene_type = analysis_data.get("scene_type", "other")
+            if raw_scene_type not in valid_scene_types:
+                # Map common AI responses to valid enum values
+                scene_type_mapping = {
+                    "vehicle": "street",
+                    "car": "street",
+                    "transportation": "street",
+                    "interior": "indoor",
+                    "exterior": "outdoor",
+                    "city": "urban",
+                    "forest": "nature",
+                    "park": "nature",
+                    "garden": "nature",
+                    "sea": "beach",
+                    "ocean": "beach",
+                    "workplace": "office",
+                    "kitchen": "home",
+                    "bedroom": "home",
+                    "living room": "home",
+                    "party": "event",
+                    "concert": "event",
+                    "wedding": "event",
+                }
+                analysis_data["scene_type"] = scene_type_mapping.get(raw_scene_type.lower(), "other")
+            
+            # Ensure time_of_day is valid
+            valid_times = [e.value for e in TimeOfDay]
+            raw_time = analysis_data.get("time_of_day", "unknown")
+            if raw_time not in valid_times:
+                analysis_data["time_of_day"] = "unknown"
+            
+            # Map the valid data to our model
+            result = ImageAnalysisResult(
+                analysis_id=analysis_id,
+                image_url=request.image_url,
+                processing_time_ms=processing_time,
+                **{k: v for k, v in analysis_data.items() if k in ImageAnalysisResult.__fields__}
+            )
+        
+        # Store for later retrieval
+        analyses_store[analysis_id] = result
+        
+        return result
+        
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (don't wrap them)
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@router.post("/analyze-upload")
+async def analyze_uploaded_image(
+    file: UploadFile = File(...),
+    custom_fields: str = Form(default=""),
+    focus_areas: str = Form(default=""),
+    analysis_depth: str = Form(default="detailed"),
+):
+    """
+    Analyze an uploaded image file.
+    """
+    import time
+    start_time = time.time()
+    
+    # Read and encode file
+    contents = await file.read()
+    image_base64 = base64.b64encode(contents).decode("utf-8")
+    
+    custom_fields_list = [f.strip() for f in custom_fields.split(",") if f.strip()]
+    focus_areas_list = [f.strip() for f in focus_areas.split(",") if f.strip()]
+    
+    try:
+        # Check if vision model API key exists - NO MOCK FALLBACK
+        from config.model_registry import ModelRegistry, TaskType
+        vision_config = ModelRegistry.get_model_config(TaskType.VISION_ANALYSIS)
+        api_key = os.getenv(vision_config.api_key_env)
+        if not api_key:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Vision API key not configured. Please set {vision_config.api_key_env} environment variable to enable AI image analysis."
+            )
+        
+        analysis_data = await analyze_with_vision_model(
+            image_base64,
+            is_url=False,
+            custom_fields=custom_fields_list,
+            focus_areas=focus_areas_list,
+            depth=analysis_depth,
+        )
+        
+        processing_time = int((time.time() - start_time) * 1000)
+        
+        analysis_id = str(uuid.uuid4())
+        
+        result = ImageAnalysisResult(
+            analysis_id=analysis_id,
+            processing_time_ms=processing_time,
+            **{k: v for k, v in analysis_data.items() if k in ImageAnalysisResult.__fields__}
+        )
+        
+        analyses_store[analysis_id] = result
+        
+        return result
+        
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (don't wrap them)
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@router.get("/analysis/{analysis_id}", response_model=ImageAnalysisResult)
+async def get_analysis(analysis_id: str):
+    """Retrieve a previous analysis by ID"""
+    if analysis_id not in analyses_store:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return analyses_store[analysis_id]
+
+
+@router.get("/analyses")
+async def list_analyses(limit: int = 20):
+    """List recent analyses"""
+    analyses = list(analyses_store.values())
+    analyses.sort(key=lambda x: x.analyzed_at, reverse=True)
+    return {"analyses": analyses[:limit]}
+
+
+@router.get("/fields")
+async def get_available_fields():
+    """Get list of all analysis fields"""
+    return {
+        "standard_fields": [
+            "title", "short_description", "detailed_description",
+            "scene_type", "scene_setting", "location_type", "time_of_day",
+            "people_count", "people_analysis", "objects_detected",
+            "dominant_colors", "color_palette", "lighting_type",
+            "composition_style", "overall_mood", "visual_style",
+            "content_type", "suggested_hashtags", "suggested_caption",
+            "image_quality", "engagement_prediction"
+        ],
+        "person_fields": [
+            "approximate_age", "gender_presentation", "clothing_description",
+            "clothing_style", "clothing_colors", "accessories",
+            "facial_expression", "primary_emotion", "secondary_emotion",
+            "body_pose", "apparent_action", "gaze_direction", "notable_features"
+        ],
+        "custom_field_examples": [
+            "brand_alignment", "product_visibility", "call_to_action",
+            "target_demographic", "cultural_relevance", "controversy_check",
+            "accessibility_notes", "copyright_concerns", "model_release_needed"
+        ],
+        "focus_area_examples": [
+            "fashion", "emotions", "background", "colors", "composition",
+            "text", "brands", "products", "people", "architecture"
+        ],
+        "analysis_depths": ["brief", "standard", "detailed", "comprehensive"]
+    }

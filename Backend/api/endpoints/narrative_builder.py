@@ -1,0 +1,1582 @@
+"""
+Narrative Builder API Endpoints
+Provides signals, recommendations, and scheduling support for AI-powered content strategy
+"""
+import os
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timedelta
+from sqlalchemy import create_engine, text
+from loguru import logger
+import json
+
+from services.event_bus import EventBus, Topics
+import openai
+
+router = APIRouter(prefix="/api/narrative-builder", tags=["Narrative Builder"])
+
+# OpenAI client for AI-powered features
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai_client = openai.OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
+
+_engine = None
+
+def get_engine():
+    """Get or create SQLAlchemy engine with connection pooling."""
+    global _engine
+    if _engine is None:
+        _engine = create_engine(
+            DATABASE_URL,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=30,
+            pool_recycle=1800,
+            pool_pre_ping=True,
+        )
+    return _engine
+
+
+# =============================================================================
+# MODELS
+# =============================================================================
+
+class NarrativeGoal(BaseModel):
+    goal: str
+    cta_type: str = "follow"
+    pillars: List[str] = []
+    audience: Optional[str] = "creators and businesses"
+    time_horizon: Optional[str] = "next_7_days"
+    platforms: Optional[List[str]] = ["tiktok", "instagram", "youtube"]
+    max_posts_per_day: Optional[int] = 3
+    content_mix: Optional[Dict[str, int]] = None
+
+
+class SignalMetrics(BaseModel):
+    creative_fatigue: float
+    topic_momentum: List[Dict[str, Any]]
+    retention_health: Dict[str, float]
+    sentiment_health: Dict[str, Any]
+    conversion_signals: Dict[str, float]
+    tone_distribution: List[Dict[str, Any]]
+    pacing_distribution: List[Dict[str, Any]]
+    posting_frequency: List[Dict[str, Any]]
+
+
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
+
+@router.get("/signals")
+async def get_narrative_signals():
+    """Get all signal metrics for the narrative builder dashboard."""
+    try:
+        engine = get_engine()
+        
+        with engine.connect() as conn:
+            # 1. Creative Fatigue - % of content used in last 30 days
+            total_content = conn.execute(text("""
+                SELECT COUNT(*) FROM video_analysis
+            """)).scalar() or 1
+            
+            used_content = conn.execute(text("""
+                SELECT COUNT(DISTINCT COALESCE(clip_id, media_project_id)) 
+                FROM scheduled_posts 
+                WHERE scheduled_time > NOW() - INTERVAL '30 days'
+                AND (clip_id IS NOT NULL OR media_project_id IS NOT NULL)
+            """)).scalar() or 0
+            
+            creative_fatigue = round((used_content / total_content) * 100, 1) if total_content > 0 else 0
+            
+            # 2. Topic Momentum - trending topics based on analysis
+            topic_results = conn.execute(text("""
+                SELECT 
+                    unnest(topics) as topic,
+                    COUNT(*) as count,
+                    AVG(pre_social_score) as avg_score
+                FROM video_analysis
+                WHERE topics IS NOT NULL AND array_length(topics, 1) > 0
+                GROUP BY topic
+                ORDER BY count DESC
+                LIMIT 10
+            """)).fetchall()
+            
+            topic_momentum = []
+            for row in topic_results:
+                # Determine trend based on score
+                score = float(row[2]) if row[2] else 50
+                trend = 'up' if score > 60 else 'down' if score < 40 else 'stable'
+                topic_momentum.append({
+                    'topic': row[0],
+                    'count': row[1],
+                    'score': round(score, 1),
+                    'trend': trend
+                })
+            
+            # 3. Retention Health - based on video scores
+            retention_stats = conn.execute(text("""
+                SELECT 
+                    AVG(pre_social_score) as avg_score,
+                    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY pre_social_score) as p25,
+                    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY pre_social_score) as p75
+                FROM video_analysis
+                WHERE pre_social_score IS NOT NULL
+            """)).fetchone()
+            
+            avg_score = float(retention_stats[0]) if retention_stats[0] else 50
+            retention_health = {
+                'hook_rate': round(min(avg_score * 1.2, 100), 1),  # Estimate hook rate
+                'avg_viewed': round(avg_score, 1),
+                'completion_rate': round(avg_score * 0.7, 1)  # Estimate completion
+            }
+            
+            # 4. Sentiment Health - from posted content engagement
+            engagement_stats = conn.execute(text("""
+                SELECT 
+                    AVG(CASE WHEN likes > 0 THEN 1 ELSE 0 END) * 100 as like_rate,
+                    AVG(CASE WHEN comments > 0 THEN 1 ELSE 0 END) * 100 as comment_rate,
+                    AVG(engagement_rate) as avg_engagement
+                FROM posted_content
+                WHERE views > 0
+            """)).fetchone()
+            
+            # Estimate sentiment from engagement
+            like_rate = float(engagement_stats[0]) if engagement_stats[0] else 50
+            sentiment_health = {
+                'positive': round(min(like_rate + 20, 80), 1),
+                'neutral': round(max(100 - like_rate - 20, 15), 1),
+                'negative': round(max(10 - like_rate/10, 5), 1),
+                'top_themes': ['helpful', 'informative', 'want more', 'tutorial request']
+            }
+            
+            # 5. Conversion Signals
+            conversion_stats = conn.execute(text("""
+                SELECT 
+                    AVG(engagement_rate) * 100 as avg_engagement,
+                    AVG(CASE WHEN comments > 0 THEN comments::float / NULLIF(views, 0) * 100 ELSE 0 END) as comment_rate
+                FROM posted_content
+                WHERE views > 0
+            """)).fetchone()
+            
+            conversion_signals = {
+                'ctr': round(float(conversion_stats[0]) if conversion_stats[0] else 2.5, 2),
+                'high_intent_rate': round(float(conversion_stats[1]) if conversion_stats[1] else 8.0, 2)
+            }
+            
+            # 6. Tone Distribution
+            tone_results = conn.execute(text("""
+                SELECT tone, COUNT(*) as count
+                FROM video_analysis
+                WHERE tone IS NOT NULL AND tone != ''
+                GROUP BY tone
+                ORDER BY count DESC
+                LIMIT 8
+            """)).fetchall()
+            
+            tone_distribution = [{'tone': row[0], 'count': row[1]} for row in tone_results]
+            
+            # 7. Pacing Distribution
+            pacing_results = conn.execute(text("""
+                SELECT pacing, COUNT(*) as count
+                FROM video_analysis
+                WHERE pacing IS NOT NULL AND pacing != ''
+                AND pacing NOT LIKE 'Unknown%'
+                GROUP BY pacing
+                ORDER BY count DESC
+            """)).fetchall()
+            
+            pacing_distribution = [{'pacing': row[0], 'count': row[1]} for row in pacing_results]
+            
+            # 8. Posting Frequency
+            frequency_results = conn.execute(text("""
+                SELECT 
+                    DATE(scheduled_time) as post_date,
+                    COUNT(*) as post_count,
+                    platform
+                FROM scheduled_posts
+                WHERE scheduled_time > NOW() - INTERVAL '14 days'
+                AND scheduled_time < NOW() + INTERVAL '14 days'
+                GROUP BY DATE(scheduled_time), platform
+                ORDER BY post_date
+            """)).fetchall()
+            
+            posting_frequency = [
+                {'date': str(row[0]), 'count': row[1], 'platform': row[2]} 
+                for row in frequency_results
+            ]
+        
+            return {
+            'creative_fatigue': creative_fatigue,
+            'topic_momentum': topic_momentum,
+            'retention_health': retention_health,
+            'sentiment_health': sentiment_health,
+            'conversion_signals': conversion_signals,
+            'tone_distribution': tone_distribution,
+            'pacing_distribution': pacing_distribution,
+            'posting_frequency': posting_frequency
+        }
+    except Exception as e:
+        import traceback
+        from loguru import logger
+        logger.error(f"Error in get_narrative_signals: {e}\n{traceback.format_exc()}")
+        # Return empty/default data instead of 500 error
+        return {
+            'creative_fatigue': 0,
+            'topic_momentum': [],
+            'retention_health': {'hook_rate': 0, 'avg_viewed': 0, 'completion_rate': 0},
+            'sentiment_health': {'positive': 0, 'neutral': 0, 'negative': 0, 'top_themes': []},
+            'conversion_signals': {'ctr': 0, 'high_intent_rate': 0},
+            'tone_distribution': [],
+            'pacing_distribution': [],
+            'posting_frequency': []
+        }
+
+
+@router.get("/candidates")
+async def get_candidate_pool(
+    limit: int = 50,
+    status: Optional[str] = None,
+    pillar: Optional[str] = None
+):
+    """Get candidate media items for scheduling with enriched data."""
+    try:
+        engine = get_engine()
+        
+        with engine.connect() as conn:
+            # Get videos with analysis - ONLY approved content
+            result = conn.execute(text("""
+                SELECT 
+                    v.id,
+                    COALESCE(v.title, v.file_name) as title,
+                    v.duration_sec,
+                    v.thumbnail_path,
+                    v.aspect_ratio,
+                    va.pre_social_score,
+                    va.hooks,
+                    va.topics,
+                    va.tone,
+                    va.pacing,
+                    va.transcript,
+                    va.analyzed_at
+                FROM videos v
+                INNER JOIN video_analysis va ON v.id = va.video_id
+                WHERE va.pre_social_score IS NOT NULL
+                  AND va.curation_status = 'approved'
+                  AND (
+                      LOWER(v.file_name) LIKE '%.mov' OR
+                      LOWER(v.file_name) LIKE '%.mp4' OR
+                      LOWER(v.file_name) LIKE '%.m4v' OR
+                      LOWER(v.file_name) LIKE '%.avi' OR
+                      LOWER(v.file_name) LIKE '%.mkv' OR
+                      LOWER(v.file_name) LIKE '%.webm'
+                  )
+                ORDER BY va.pre_social_score DESC NULLS LAST
+                LIMIT :limit
+            """), {'limit': limit}).fetchall()
+            
+            candidates = []
+            for i, row in enumerate(result):
+                # Row mapping:
+                # 0: id, 1: title (AI or file_name fallback), 2: duration_sec, 3: thumbnail_path, 4: aspect_ratio
+                # 5: pre_social_score, 6: hooks, 7: topics, 8: tone, 9: pacing
+                # 10: transcript, 11: analyzed_at
+                
+                total_posts = 0  # Default since creative_asset_metrics doesn't exist
+                
+                # Determine status based on post count
+                if total_posts == 0:
+                    item_status = 'fresh'
+                elif total_posts <= 3:
+                    item_status = 'tested'
+                else:
+                    item_status = 'saturated'
+                
+                # Convert thumbnail path
+                thumb_path = row[3]
+                if thumb_path and thumb_path.startswith("/tmp/mediaposter/thumbnails/"):
+                    thumb_filename = thumb_path.split("/")[-1]
+                    thumb_path = f"/thumbnails/{thumb_filename}"
+                
+                # Get pillar from topics
+                topics = row[7] or []
+                pillar = topics[0] if topics else 'general'
+                
+                # Calculate novelty score (100 = never posted, decays)
+                novelty_score = max(100 - (total_posts * 25), 10)
+                cooldown_ok = True  # Default since we don't have metrics table
+                
+                candidates.append({
+                    'id': str(row[0]),
+                    'index': i + 1,
+                    'title': row[1] or 'Untitled',
+                    'duration_sec': row[2],
+                    'thumbnail_path': thumb_path,
+                    'aspect_ratio': row[4],
+                    'score': int(row[5]) if row[5] else 0,
+                    'hooks': row[6] or [],
+                    'topics': topics,
+                    'tone': row[8],
+                    'pacing': row[9],
+                    'transcript': row[10][:200] if row[10] else None,
+                    'analyzed_at': str(row[11]) if row[11] else None,
+                    'status': item_status,
+                    'post_count': total_posts,
+                    'novelty_score': novelty_score,
+                    'cooldown_ok': cooldown_ok,
+                    'pillar': pillar,
+                    'format': 'video',
+                })
+            
+            # Calculate status counts
+            status_counts = {
+                'fresh': len([c for c in candidates if c['status'] == 'fresh']),
+                'tested': len([c for c in candidates if c['status'] == 'tested']),
+                'saturated': len([c for c in candidates if c['status'] == 'saturated']),
+            }
+            
+            return {
+                'candidates': candidates,
+                'total': len(candidates),
+                'status_counts': status_counts
+            }
+    except Exception as e:
+        import traceback
+        from loguru import logger
+        logger.error(f"Error in get_candidate_pool: {e}\n{traceback.format_exc()}")
+        # Return empty/default data instead of 500 error
+        return {
+            'candidates': [],
+            'total': 0,
+            'status_counts': {'fresh': 0, 'tested': 0, 'saturated': 0}
+        }
+
+
+@router.post("/generate-recommendations")
+async def generate_recommendations(goal: NarrativeGoal):
+    """Generate AI-powered content recommendations based on narrative goal."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Get candidate pool
+        result = conn.execute(text("""
+            SELECT 
+                v.id,
+                COALESCE(v.title, v.file_name) as title,
+                v.duration_sec,
+                v.thumbnail_path,
+                va.pre_social_score,
+                va.hooks,
+                va.topics,
+                va.tone,
+                va.pacing,
+                COALESCE(sp.schedule_count, 0) as schedule_count
+            FROM videos v
+            INNER JOIN video_analysis va ON v.id = va.video_id
+            LEFT JOIN (
+                SELECT COALESCE(clip_id, media_project_id) as content_ref, COUNT(*) as schedule_count
+                FROM scheduled_posts
+                WHERE clip_id IS NOT NULL OR media_project_id IS NOT NULL
+                GROUP BY COALESCE(clip_id, media_project_id)
+            ) sp ON v.id = sp.content_ref
+            WHERE va.pre_social_score IS NOT NULL
+            AND va.curation_status = 'approved'
+            AND (
+                LOWER(v.file_name) LIKE '%.mov' OR
+                LOWER(v.file_name) LIKE '%.mp4' OR
+                LOWER(v.file_name) LIKE '%.m4v' OR
+                LOWER(v.file_name) LIKE '%.avi'
+            )
+            AND (sp.schedule_count IS NULL OR sp.schedule_count < 5)
+            ORDER BY va.pre_social_score DESC
+            LIMIT 30
+        """)).fetchall()
+        
+        recommendations = []
+        suggested_times = ['9:00 AM', '12:00 PM', '3:00 PM', '6:00 PM', '8:00 PM']
+        
+        for i, row in enumerate(result[:10]):
+            score = float(row[4]) if row[4] else 50
+            topics = row[6] or []
+            hooks = row[5] or []
+            schedule_count = row[9] or 0
+            
+            # Calculate scores
+            # Narrative alignment - how well topics match pillars
+            pillar_match = sum(1 for t in topics if any(p in t.lower() for p in goal.pillars))
+            narrative_score = min(60 + (pillar_match * 15), 100)
+            
+            # Predicted performance based on historical score
+            predicted_performance = min(score + 10, 100)
+            
+            # Sentiment fit - higher for fresher content
+            sentiment_fit = 90 - (schedule_count * 10) if schedule_count < 5 else 50
+            
+            # Novelty score
+            novelty_score = 100 - (schedule_count * 20) if schedule_count < 5 else 20
+            
+            # Overall score (weighted average)
+            overall_score = int(
+                (narrative_score * 0.3) +
+                (predicted_performance * 0.35) +
+                (sentiment_fit * 0.15) +
+                (novelty_score * 0.2)
+            )
+            
+            # Generate reasoning
+            reasoning = []
+            if pillar_match > 0:
+                reasoning.append(f"Aligns with {pillar_match} of your narrative pillars")
+            reasoning.append(f"Historical performance score: {int(score)}/100")
+            if schedule_count == 0:
+                reasoning.append("Fresh content - never posted before")
+            elif schedule_count <= 2:
+                reasoning.append(f"Light usage ({schedule_count}x) - room to grow")
+            
+            # Convert thumbnail path
+            thumb_path = row[3]
+            if thumb_path and thumb_path.startswith("/tmp/mediaposter/thumbnails/"):
+                thumb_filename = thumb_path.split("/")[-1]
+                thumb_path = f"/thumbnails/{thumb_filename}"
+            
+            recommendations.append({
+                'id': f'rec-{i}',
+                'media': {
+                    'id': str(row[0]),
+                    'title': row[1] or 'Untitled',
+                    'duration_sec': row[2],
+                    'thumbnail_path': thumb_path,
+                    'score': int(score),
+                    'hooks': hooks,
+                    'topics': topics,
+                    'tone': row[7],
+                    'status': 'fresh' if schedule_count == 0 else 'tested' if schedule_count <= 3 else 'saturated',
+                    'post_count': schedule_count,
+                },
+                'narrative_score': int(narrative_score),
+                'predicted_performance': int(predicted_performance),
+                'sentiment_fit': int(sentiment_fit),
+                'novelty_score': int(novelty_score),
+                'overall_score': overall_score,
+                'reasoning': reasoning,
+                'suggested_caption': hooks[0] if hooks else f"Check out this {topics[0] if topics else 'content'}!",
+                'suggested_time': suggested_times[i % len(suggested_times)],
+                'platforms': goal.platforms,
+            })
+        
+        # Sort by overall score
+        recommendations.sort(key=lambda x: x['overall_score'], reverse=True)
+        
+        # Add rank
+        for i, rec in enumerate(recommendations):
+            rec['rank'] = i + 1
+        
+        # Save recommendations to database
+        try:
+            # Clear old recommendations
+            conn.execute(text("DELETE FROM narrative_recommendations WHERE created_at < NOW() - INTERVAL '7 days'"))
+            
+            # Insert new recommendations
+            for rec in recommendations:
+                conn.execute(text("""
+                    INSERT INTO narrative_recommendations (
+                        video_id, rank, narrative_score, predicted_performance,
+                        sentiment_fit, novelty_score, overall_score, reasoning,
+                        suggested_caption, suggested_time, platforms, goal_text
+                    ) VALUES (
+                        :video_id, :rank, :narrative, :performance,
+                        :sentiment, :novelty, :overall, :reasoning,
+                        :caption, :time, :platforms, :goal
+                    )
+                    ON CONFLICT (video_id) DO UPDATE SET
+                        rank = EXCLUDED.rank,
+                        narrative_score = EXCLUDED.narrative_score,
+                        predicted_performance = EXCLUDED.predicted_performance,
+                        overall_score = EXCLUDED.overall_score,
+                        updated_at = NOW()
+                """), {
+                    'video_id': rec['media']['id'],
+                    'rank': rec['rank'],
+                    'narrative': rec['narrative_score'],
+                    'performance': rec['predicted_performance'],
+                    'sentiment': rec['sentiment_fit'],
+                    'novelty': rec['novelty_score'],
+                    'overall': rec['overall_score'],
+                    'reasoning': ', '.join(rec['reasoning']),
+                    'caption': rec['suggested_caption'],
+                    'time': rec['suggested_time'],
+                    'platforms': rec['platforms'],
+                    'goal': goal.goal[:200],
+                })
+            conn.commit()
+        except Exception as e:
+            print(f"Warning: Could not save recommendations: {e}")
+    
+    return {
+        'recommendations': recommendations,
+        'goal_summary': {
+            'goal': goal.goal[:100] + '...' if len(goal.goal) > 100 else goal.goal,
+            'cta': goal.cta_type,
+            'pillars': goal.pillars,
+            'platforms': goal.platforms,
+            'time_horizon': goal.time_horizon,
+        }
+    }
+
+
+@router.get("/saved-recommendations")
+async def get_saved_recommendations():
+    """Get previously saved recommendations."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT 
+                cr.video_id, cr.rank, cr.narrative_score, cr.predicted_performance,
+                cr.sentiment_fit, cr.novelty_score, cr.overall_score, cr.reasoning,
+                cr.suggested_caption, cr.suggested_time, cr.platforms, cr.goal_text,
+                cr.created_at,
+                COALESCE(v.title, v.file_name) as title, v.duration_sec, v.thumbnail_path,
+                va.pre_social_score, va.hooks, va.topics, va.tone
+            FROM narrative_recommendations cr
+            JOIN videos v ON cr.video_id = v.id
+            JOIN video_analysis va ON v.id = va.video_id
+            ORDER BY cr.rank
+            LIMIT 20
+        """)).fetchall()
+        
+        recommendations = []
+        for row in result:
+            thumb_path = row[15]
+            if thumb_path and thumb_path.startswith("/tmp/mediaposter/thumbnails/"):
+                thumb_filename = thumb_path.split("/")[-1]
+                thumb_path = f"/thumbnails/{thumb_filename}"
+            
+            hooks = row[17] or []
+            topics = row[18] or []
+            
+            recommendations.append({
+                'id': f'rec-{row[1]}',
+                'media': {
+                    'id': str(row[0]),
+                    'title': row[13] or 'Untitled',
+                    'duration_sec': row[14],
+                    'thumbnail_path': thumb_path,
+                    'score': int(row[16]) if row[16] else 0,
+                    'hooks': hooks,
+                    'topics': topics,
+                    'tone': row[19],
+                    'status': 'recommended',
+                    'post_count': 0,
+                },
+                'narrative_score': row[2],
+                'predicted_performance': row[3],
+                'sentiment_fit': row[4],
+                'novelty_score': row[5],
+                'overall_score': row[6],
+                'reasoning': row[7].split(', ') if row[7] else [],
+                'suggested_caption': row[8],
+                'suggested_time': row[9],
+                'platforms': row[10] or [],
+                'rank': row[1],
+                'saved_at': str(row[12]) if row[12] else None,
+            })
+        
+        return {
+            'recommendations': recommendations,
+            'count': len(recommendations),
+        }
+
+
+# =============================================================================
+# PHASE 3: NARRATIVE GOALS MANAGEMENT
+# =============================================================================
+
+class NarrativeGoalCreate(BaseModel):
+    goal_statement: str
+    primary_cta: str = 'follow'
+    target_audience: Optional[str] = None
+    time_horizon: str = 'next_7_days'
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    target_followers: Optional[int] = None
+    target_engagement_rate: Optional[float] = None
+    target_conversions: Optional[int] = None
+
+
+@router.get("/goals")
+async def list_narrative_goals(status: str = 'active'):
+    """List narrative goals for mainline content."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("""
+                SELECT id, goal_statement, primary_cta, target_audience,
+                       time_horizon, start_date, end_date,
+                       target_followers, target_engagement_rate, target_conversions,
+                       status, created_at, updated_at
+                FROM narrative_goals
+                WHERE status = :status
+                ORDER BY created_at DESC
+            """), {'status': status}).fetchall()
+            
+            goals = []
+            for row in result:
+                goals.append({
+                    'id': str(row[0]),
+                    'goal_statement': row[1],
+                    'primary_cta': row[2],
+                    'target_audience': row[3],
+                    'time_horizon': row[4],
+                    'start_date': str(row[5]) if row[5] else None,
+                    'end_date': str(row[6]) if row[6] else None,
+                    'target_followers': row[7],
+                    'target_engagement_rate': float(row[8]) if row[8] else None,
+                    'target_conversions': row[9],
+                    'status': row[10],
+                    'created_at': str(row[11]) if row[11] else None
+                })
+            
+            return {'goals': goals, 'count': len(goals)}
+        except Exception as e:
+            return {'goals': [], 'count': 0, 'error': str(e)}
+
+
+@router.post("/goals")
+async def create_narrative_goal(goal: NarrativeGoalCreate):
+    """Create a new narrative goal."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("""
+                INSERT INTO narrative_goals (
+                    goal_statement, primary_cta, target_audience,
+                    time_horizon, start_date, end_date,
+                    target_followers, target_engagement_rate, target_conversions
+                ) VALUES (
+                    :goal_statement, :primary_cta, :target_audience,
+                    :time_horizon, :start_date, :end_date,
+                    :target_followers, :target_engagement_rate, :target_conversions
+                )
+                RETURNING id
+            """), {
+                'goal_statement': goal.goal_statement,
+                'primary_cta': goal.primary_cta,
+                'target_audience': goal.target_audience,
+                'time_horizon': goal.time_horizon,
+                'start_date': goal.start_date,
+                'end_date': goal.end_date,
+                'target_followers': goal.target_followers,
+                'target_engagement_rate': goal.target_engagement_rate,
+                'target_conversions': goal.target_conversions
+            })
+            
+            goal_id = str(result.fetchone()[0])
+            conn.commit()
+            
+            # Emit NARRATIVE_GOAL_UPDATED event
+            try:
+                import asyncio
+                event_bus = EventBus.get_instance()
+                asyncio.create_task(event_bus.publish(Topics.NARRATIVE_GOAL_UPDATED, {
+                    "goal_id": goal_id,
+                    "action": "created",
+                    "goal_statement": goal.goal_statement,
+                    "primary_cta": goal.primary_cta,
+                    "time_horizon": goal.time_horizon,
+                }))
+                logger.info(f"[PubSub] Emitted NARRATIVE_GOAL_UPDATED for {goal_id}")
+            except Exception as e:
+                logger.warning(f"[PubSub] Failed to emit NARRATIVE_GOAL_UPDATED: {e}")
+            
+            return {'id': goal_id, 'goal_statement': goal.goal_statement, 'message': 'Goal created'}
+        except Exception as e:
+            return {'error': str(e), 'message': 'Could not create goal. Run migrations first.'}
+
+
+@router.patch("/goals/{goal_id}")
+async def update_narrative_goal(goal_id: str, updates: Dict[str, Any]):
+    """Update a narrative goal."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Build dynamic update query
+        set_clauses = []
+        params = {'id': goal_id}
+        
+        for key, value in updates.items():
+            if key in ['name', 'description', 'goal_type', 'target_metric', 'status']:
+                set_clauses.append(f"{key} = :{key}")
+                params[key] = value
+            elif key in ['target_value', 'current_value', 'progress_percent', 'priority']:
+                set_clauses.append(f"{key} = :{key}")
+                params[key] = float(value) if value else None
+            elif key in ['content_pillars', 'platform_mix', 'posting_cadence']:
+                set_clauses.append(f"{key} = :{key}::jsonb")
+                params[key] = json.dumps(value)
+        
+        if not set_clauses:
+            return {'error': 'No valid fields to update'}
+        
+        set_clauses.append("updated_at = NOW()")
+        
+        conn.execute(text(f"""
+            UPDATE narrative_goals 
+            SET {', '.join(set_clauses)}
+            WHERE id = :id
+        """), params)
+        conn.commit()
+        
+        return {'id': goal_id, 'updated': list(updates.keys())}
+
+
+# =============================================================================
+# PILLARS MANAGEMENT
+# =============================================================================
+
+class PillarCreate(BaseModel):
+    goal_id: str
+    name: str
+    description: Optional[str] = None
+    pillar_type: str = 'value'  # value, proof, cta
+    color: str = '#3b82f6'
+    keywords: Optional[List[str]] = []
+    target_percentage: float = 20.0
+    min_posts_per_week: int = 1
+    max_posts_per_week: int = 5
+
+
+@router.get("/pillars/{goal_id}")
+async def get_pillars(goal_id: str):
+    """Get pillars for a narrative goal."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT id, name, description, pillar_type, color, keywords,
+                   target_percentage, min_posts_per_week, max_posts_per_week, is_active
+            FROM narrative_pillars WHERE goal_id = :goal_id
+            ORDER BY target_percentage DESC
+        """), {"goal_id": goal_id}).fetchall()
+        
+        pillars = []
+        for row in result:
+            pillars.append({
+                'id': str(row[0]),
+                'name': row[1],
+                'description': row[2],
+                'pillar_type': row[3],
+                'color': row[4],
+                'keywords': list(row[5]) if row[5] else [],
+                'target_percentage': float(row[6]) if row[6] else 20.0,
+                'min_posts_per_week': row[7] or 1,
+                'max_posts_per_week': row[8] or 5,
+                'is_active': row[9] if row[9] is not None else True
+            })
+        
+        return {'pillars': pillars, 'count': len(pillars), 'goal_id': goal_id}
+
+
+@router.post("/pillars")
+async def create_pillar(pillar: PillarCreate):
+    """Create a narrative pillar for a goal."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("""
+                INSERT INTO narrative_pillars (
+                    goal_id, name, description, pillar_type, color, keywords,
+                    target_percentage, min_posts_per_week, max_posts_per_week
+                ) VALUES (
+                    :goal_id, :name, :description, :pillar_type, :color, :keywords,
+                    :target_percentage, :min_posts_per_week, :max_posts_per_week
+                )
+                RETURNING id
+            """), {
+                'goal_id': pillar.goal_id,
+                'name': pillar.name,
+                'description': pillar.description,
+                'pillar_type': pillar.pillar_type,
+                'color': pillar.color,
+                'keywords': pillar.keywords,
+                'target_percentage': pillar.target_percentage,
+                'min_posts_per_week': pillar.min_posts_per_week,
+                'max_posts_per_week': pillar.max_posts_per_week
+            })
+            
+            pillar_id = str(result.fetchone()[0])
+            conn.commit()
+            
+            return {'id': pillar_id, 'name': pillar.name, 'message': 'Pillar created'}
+        except Exception as e:
+            return {'error': str(e), 'message': 'Could not create pillar'}
+
+
+# =============================================================================
+# AI-POWERED PILLAR MATCHING
+# =============================================================================
+
+async def match_content_to_pillar_ai(content: Dict, pillars: List[Dict]) -> Dict:
+    """Use AI to match content to the best pillar based on semantic understanding."""
+    if not openai_client or not pillars:
+        # Fallback to keyword matching
+        return match_content_to_pillar_keywords(content, pillars)
+    
+    pillar_descriptions = "\n".join([
+        f"- {p['name']}: {p.get('description', '')} (keywords: {', '.join(p.get('keywords', []))})"
+        for p in pillars
+    ])
+    
+    content_summary = f"""
+Title: {content.get('title', 'Unknown')}
+Topics: {', '.join(content.get('topics', []))}
+Hooks: {', '.join(content.get('hooks', [])[:3]) if content.get('hooks') else 'None'}
+Tone: {content.get('tone', 'Unknown')}
+"""
+    
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a content strategist. Match content to the most appropriate pillar. Return ONLY the pillar name, nothing else."},
+                {"role": "user", "content": f"Available pillars:\n{pillar_descriptions}\n\nContent:\n{content_summary}\n\nWhich pillar does this content best fit? Return ONLY the pillar name."}
+            ],
+            max_tokens=50,
+            temperature=0.3
+        )
+        
+        matched_pillar = response.choices[0].message.content.strip()
+        
+        # Find the matching pillar
+        for p in pillars:
+            if p['name'].lower() in matched_pillar.lower() or matched_pillar.lower() in p['name'].lower():
+                return {'pillar': p['name'], 'pillar_id': p.get('id'), 'method': 'ai', 'confidence': 0.9}
+        
+        # Fallback if no match found
+        return match_content_to_pillar_keywords(content, pillars)
+    except Exception as e:
+        logger.warning(f"AI pillar matching failed: {e}, falling back to keywords")
+        return match_content_to_pillar_keywords(content, pillars)
+
+
+def match_content_to_pillar_keywords(content: Dict, pillars: List[Dict]) -> Dict:
+    """Fallback: Match content to pillar using keyword overlap."""
+    content_text = " ".join([
+        content.get('title', ''),
+        " ".join(content.get('topics', [])),
+        " ".join(content.get('hooks', [])[:3]) if content.get('hooks') else ''
+    ]).lower()
+    
+    best_match = None
+    best_score = 0
+    
+    for pillar in pillars:
+        keywords = pillar.get('keywords', [])
+        score = sum(1 for kw in keywords if kw.lower() in content_text)
+        if score > best_score:
+            best_score = score
+            best_match = pillar
+    
+    if best_match:
+        return {'pillar': best_match['name'], 'pillar_id': best_match.get('id'), 'method': 'keywords', 'confidence': min(best_score / 3, 1.0)}
+    
+    # Default to first pillar if no match
+    if pillars:
+        return {'pillar': pillars[0]['name'], 'pillar_id': pillars[0].get('id'), 'method': 'default', 'confidence': 0.3}
+    
+    return {'pillar': 'general', 'pillar_id': None, 'method': 'none', 'confidence': 0}
+
+
+@router.post("/match-pillars")
+async def batch_match_pillars(goal_id: str, content_ids: List[str] = None):
+    """Match content to pillars using AI for a goal. If content_ids not provided, matches all candidates."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        # Get pillars for this goal
+        pillars_result = conn.execute(text("""
+            SELECT id, name, description, keywords FROM narrative_pillars 
+            WHERE goal_id = :goal_id AND is_active = true
+        """), {"goal_id": goal_id}).fetchall()
+        
+        pillars = [
+            {'id': str(r[0]), 'name': r[1], 'description': r[2], 'keywords': list(r[3]) if r[3] else []}
+            for r in pillars_result
+        ]
+        
+        if not pillars:
+            return {'error': 'No pillars found for this goal', 'matches': []}
+        
+        # Get content to match
+        if content_ids:
+            content_result = conn.execute(text("""
+                SELECT v.id, COALESCE(v.title, v.file_name) as title, va.topics, va.hooks, va.tone
+                FROM videos v
+                INNER JOIN video_analysis va ON v.id = va.video_id
+                WHERE v.id = ANY(:ids) AND va.curation_status = 'approved'
+            """), {"ids": content_ids}).fetchall()
+        else:
+            content_result = conn.execute(text("""
+                SELECT v.id, COALESCE(v.title, v.file_name) as title, va.topics, va.hooks, va.tone
+                FROM videos v
+                INNER JOIN video_analysis va ON v.id = va.video_id
+                WHERE va.curation_status = 'approved'
+                  AND va.pre_social_score >= 50
+                  AND (LOWER(v.file_name) LIKE '%.mov' OR LOWER(v.file_name) LIKE '%.mp4')
+                LIMIT 50
+            """)).fetchall()
+        
+        matches = []
+        for row in content_result:
+            content = {
+                'id': str(row[0]),
+                'title': row[1],
+                'topics': list(row[2]) if row[2] else [],
+                'hooks': list(row[3]) if row[3] else [],
+                'tone': row[4]
+            }
+            
+            match_result = await match_content_to_pillar_ai(content, pillars)
+            matches.append({
+                'content_id': content['id'],
+                'title': content['title'],
+                **match_result
+            })
+        
+        return {
+            'goal_id': goal_id,
+            'pillars': [p['name'] for p in pillars],
+            'matches': matches,
+            'count': len(matches)
+        }
+
+
+# =============================================================================
+# SCHEDULE 7-DAY PLAN
+# =============================================================================
+
+class SchedulePlanRequest(BaseModel):
+    platforms: List[str] = ["tiktok", "instagram"]
+    posts_per_day: int = 3
+    start_date: Optional[str] = None  # ISO format, defaults to tomorrow
+    time_slots: List[str] = ["09:00", "12:00", "18:00"]
+    goal_id: Optional[str] = None
+
+
+@router.post("/schedule-7-day-plan")
+async def schedule_seven_day_plan(request: SchedulePlanRequest):
+    """Generate and schedule a 7-day content plan to actual scheduled_posts."""
+    engine = get_engine()
+    
+    # Parse start date
+    if request.start_date:
+        start_date = datetime.fromisoformat(request.start_date)
+    else:
+        start_date = datetime.now() + timedelta(days=1)
+        start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    scheduled_posts = []
+    errors = []
+    
+    with engine.connect() as conn:
+        # Get approved video candidates (excluding already scheduled)
+        candidates_result = conn.execute(text("""
+            SELECT v.id, COALESCE(v.title, v.file_name) as title, va.pre_social_score, va.topics, va.hooks
+            FROM videos v
+            INNER JOIN video_analysis va ON v.id = va.video_id
+            WHERE va.pre_social_score >= 50
+              AND va.curation_status = 'approved'
+              AND (
+                  LOWER(v.file_name) LIKE '%.mov' OR
+                  LOWER(v.file_name) LIKE '%.mp4' OR
+                  LOWER(v.file_name) LIKE '%.m4v'
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM scheduled_posts sp 
+                  WHERE (sp.content_id = v.id::text OR sp.clip_id = v.id)
+                    AND sp.status IN ('scheduled', 'publishing', 'posted', 'published')
+              )
+            ORDER BY va.pre_social_score DESC
+            LIMIT :limit
+        """), {"limit": 7 * request.posts_per_day * len(request.platforms)}).fetchall()
+        
+        candidates = list(candidates_result)
+        logger.info(f"[Schedule 7-day] Found {len(candidates)} available video candidates")
+        
+        if not candidates:
+            return {"error": "No available video candidates to schedule", "scheduled": [], "count": 0}
+        
+        # Get Blotato accounts for each platform from config
+        from config.blotato_accounts import BLOTATO_ACCOUNTS
+        platform_accounts = {}
+        for platform in request.platforms:
+            # Find first account for this platform (BLOTATO_ACCOUNTS is a list of BlotatoAccount)
+            for acc in BLOTATO_ACCOUNTS:
+                if acc.platform == platform and acc.is_active:
+                    platform_accounts[platform] = {
+                        "id": str(acc.blotato_id),
+                        "handle": f"@{acc.username}"
+                    }
+                    break
+        
+        if not platform_accounts:
+            return {"error": "No active accounts found for requested platforms", "scheduled": [], "count": 0}
+        
+        # Schedule posts
+        candidate_idx = 0
+        for day_offset in range(7):
+            day_date = start_date + timedelta(days=day_offset)
+            
+            for slot_idx, time_slot in enumerate(request.time_slots[:request.posts_per_day]):
+                if candidate_idx >= len(candidates):
+                    break
+                
+                # Alternate platforms
+                platform = request.platforms[slot_idx % len(request.platforms)]
+                if platform not in platform_accounts:
+                    platform = list(platform_accounts.keys())[0]
+                
+                account = platform_accounts[platform]
+                candidate = candidates[candidate_idx]
+                candidate_idx += 1
+                
+                # Parse time slot
+                hour, minute = map(int, time_slot.split(":"))
+                scheduled_time = day_date.replace(hour=hour, minute=minute)
+                
+                # Get first hook as caption
+                hooks = list(candidate[4]) if candidate[4] else []
+                caption = hooks[0] if hooks else candidate[1]
+                
+                try:
+                    result = conn.execute(text("""
+                        INSERT INTO scheduled_posts (
+                            clip_id, content_id, platform, platform_account_id,
+                            scheduled_time, status, source, title, caption
+                        ) VALUES (
+                            :clip_id, :content_id, :platform, :account_id,
+                            :scheduled_time, 'scheduled', 'narrative_builder', :title, :caption
+                        )
+                        RETURNING id
+                    """), {
+                        "clip_id": candidate[0],
+                        "content_id": str(candidate[0]),
+                        "platform": platform,
+                        "account_id": account["id"],
+                        "scheduled_time": scheduled_time,
+                        "title": candidate[1],
+                        "caption": caption[:500] if caption else None
+                    })
+                    
+                    post_id = str(result.fetchone()[0])
+                    scheduled_posts.append({
+                        "post_id": post_id,
+                        "content_id": str(candidate[0]),
+                        "title": candidate[1],
+                        "platform": platform,
+                        "account": account["handle"],
+                        "scheduled_time": scheduled_time.isoformat(),
+                        "day": day_date.strftime("%A"),
+                        "slot": time_slot
+                    })
+                except Exception as e:
+                    errors.append({"content_id": str(candidate[0]), "error": str(e)})
+        
+        conn.commit()
+    
+    # Emit event
+    if scheduled_posts:
+        try:
+            import asyncio
+            event_bus = EventBus.get_instance()
+            asyncio.create_task(event_bus.publish(Topics.NARRATIVE_PLAN_GENERATED, {
+                "scheduled_count": len(scheduled_posts),
+                "post_ids": [p["post_id"] for p in scheduled_posts],
+                "platforms": list(set(p["platform"] for p in scheduled_posts)),
+                "date_range": f"{start_date.date()} to {(start_date + timedelta(days=6)).date()}"
+            }))
+        except Exception as e:
+            logger.warning(f"Failed to emit event: {e}")
+    
+    logger.info(f"[Schedule 7-day] Scheduled {len(scheduled_posts)} posts, {len(errors)} errors")
+    
+    return {
+        "scheduled": scheduled_posts,
+        "count": len(scheduled_posts),
+        "errors": errors,
+        "date_range": {
+            "start": start_date.isoformat(),
+            "end": (start_date + timedelta(days=6)).isoformat()
+        },
+        "platforms_used": list(platform_accounts.keys())
+    }
+
+
+# =============================================================================
+# PHASE 3: 7-DAY LOOKAHEAD PLANNING (AI-POWERED)
+# =============================================================================
+
+@router.get("/plan/7-day")
+async def get_seven_day_plan(use_demo: bool = True):
+    """Generate a 7-day content plan based on goals, rules, and opportunities."""
+    engine = get_engine()
+    
+    # Initialize all variables with defaults
+    goals = []
+    rules = []
+    opportunities = []
+    candidates = []
+    mainline_accounts = []
+    
+    try:
+        with engine.connect() as conn:
+            # 1. Get active goals
+            try:
+                goals = list(conn.execute(text("""
+                    SELECT id, goal_statement, primary_cta, target_audience, time_horizon
+                    FROM narrative_goals WHERE status = 'active'
+                    ORDER BY created_at DESC LIMIT 3
+                """)).fetchall())
+                logger.info(f"[7-day plan] Loaded {len(goals)} active goals")
+            except Exception as e:
+                logger.warning(f"narrative_goals query failed: {e}")
+                conn.rollback()  # Prevent transaction abort cascade
+            
+            # 2. Get applicable KB rules
+            try:
+                rules_result = conn.execute(text("""
+                    SELECT id, rule_type, recommendation, expected_lift, confidence
+                    FROM kb_rules WHERE status = 'active'
+                    ORDER BY confidence DESC LIMIT 10
+                """)).fetchall()
+                rules = [{'id': str(r[0]), 'type': r[1], 'recommendation': r[2], 
+                         'lift': float(r[3]) if r[3] else 0, 'confidence': float(r[4]) if r[4] else 0}
+                        for r in rules_result]
+            except Exception as e:
+                logger.debug(f"kb_rules query failed: {e}")
+                conn.rollback()
+            
+            # 3. Get trend opportunities
+            try:
+                opp_result = conn.execute(text("""
+                    SELECT id, title, opportunity_score, priority, recommended_actions
+                    FROM trend_opportunities 
+                    WHERE status = 'new' AND window_end > NOW()
+                    ORDER BY opportunity_score DESC LIMIT 5
+                """)).fetchall()
+                opportunities = [{'id': str(o[0]), 'title': o[1], 'score': float(o[2]) if o[2] else 0,
+                                'priority': o[3], 'actions': o[4] or []}
+                               for o in opp_result]
+            except Exception as e:
+                logger.debug(f"trend_opportunities query failed: {e}")
+                conn.rollback()
+            
+            # 4. Get candidate content - APPROVED VIDEOS only, exclude scheduled/posted
+            try:
+                result = conn.execute(text("""
+                    SELECT v.id, COALESCE(v.title, v.file_name) as title, va.pre_social_score, va.topics
+                    FROM videos v
+                    INNER JOIN video_analysis va ON v.id = va.video_id
+                    WHERE va.pre_social_score >= 50
+                      AND va.curation_status = 'approved'
+                      AND (
+                          LOWER(v.file_name) LIKE '%.mov' OR
+                          LOWER(v.file_name) LIKE '%.mp4' OR
+                          LOWER(v.file_name) LIKE '%.m4v' OR
+                          LOWER(v.file_name) LIKE '%.avi' OR
+                          LOWER(v.file_name) LIKE '%.mkv' OR
+                          LOWER(v.file_name) LIKE '%.webm'
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1 FROM scheduled_posts sp 
+                          WHERE (sp.content_id = v.id::text OR sp.clip_id = v.id)
+                            AND sp.status IN ('scheduled', 'publishing', 'posted', 'published')
+                      )
+                    ORDER BY va.pre_social_score DESC
+                    LIMIT 30
+                """))
+                candidates = list(result.fetchall())
+                logger.info(f"[7-day plan] Found {len(candidates)} approved candidates (excluding scheduled/posted)")
+            except Exception as e:
+                logger.warning(f"candidates query failed: {e}")
+                conn.rollback()
+            
+            # 5. Get MAINLINE accounts
+            try:
+                accounts = conn.execute(text("""
+                    SELECT id, platform, handle FROM social_accounts
+                    WHERE account_role = 'MAINLINE' AND is_active = true
+                """)).fetchall()
+                mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
+            except Exception as e:
+                logger.debug(f"mainline accounts query failed: {e}")
+                conn.rollback()
+                # Fallback if account_role doesn't exist
+                try:
+                    accounts = conn.execute(text("""
+                        SELECT id, platform, handle FROM social_accounts WHERE is_active = true
+                    """)).fetchall()
+                    mainline_accounts = [{'id': str(a[0]), 'platform': a[1], 'handle': a[2]} for a in accounts]
+                except Exception as e2:
+                    logger.debug(f"fallback accounts query failed: {e2}")
+                    conn.rollback()
+    except Exception as e:
+        logger.error(f"[7-day plan] Database error: {e}")
+    
+    # Log final state before plan generation
+    logger.info(f"[7-day plan] Final state: {len(candidates)} candidates, {len(goals)} goals, use_demo={use_demo}")
+    
+    # Generate demo content if no real data and use_demo is True
+    if use_demo and not candidates:
+        demo_content = [
+            ('demo-1', 'Morning Routine Tips', 92, ['lifestyle', 'productivity'], 'tiktok'),
+            ('demo-2', 'Quick Recipe: 5-Min Breakfast', 88, ['food', 'cooking'], 'instagram'),
+            ('demo-3', 'Workspace Setup Tour', 85, ['tech', 'productivity'], 'youtube'),
+            ('demo-4', 'Day in My Life Vlog', 82, ['lifestyle', 'vlog'], 'tiktok'),
+            ('demo-5', 'Product Review: New Gadget', 80, ['tech', 'review'], 'youtube'),
+            ('demo-6', 'Fitness Challenge Update', 78, ['fitness', 'health'], 'instagram'),
+            ('demo-7', 'Behind the Scenes', 76, ['creative', 'bts'], 'tiktok'),
+            ('demo-8', 'Q&A Session Highlights', 74, ['engagement', 'community'], 'instagram'),
+            ('demo-9', 'Tutorial: Quick Edit Tips', 72, ['education', 'editing'], 'youtube'),
+            ('demo-10', 'Weekend Recap', 70, ['lifestyle', 'vlog'], 'tiktok'),
+            ('demo-11', 'Trending Sound Challenge', 68, ['trend', 'viral'], 'tiktok'),
+            ('demo-12', 'Mini Documentary', 66, ['storytelling', 'creative'], 'youtube'),
+            ('demo-13', 'Collaboration Teaser', 64, ['collab', 'promo'], 'instagram'),
+            ('demo-14', 'Tips & Tricks Compilation', 62, ['education', 'tips'], 'tiktok'),
+        ]
+        candidates = demo_content
+        
+        # Demo rules
+        if not rules:
+            rules = [
+                {'id': 'rule-1', 'type': 'hook', 'recommendation': 'Start with a question hook', 'lift': 15, 'confidence': 0.85},
+                {'id': 'rule-2', 'type': 'timing', 'recommendation': 'Post between 6-9 PM for max engagement', 'lift': 12, 'confidence': 0.78},
+                {'id': 'rule-3', 'type': 'format', 'recommendation': 'Keep videos under 60 seconds', 'lift': 10, 'confidence': 0.72},
+            ]
+        
+        # Demo opportunities
+        if not opportunities:
+            opportunities = [
+                {'id': 'trend-1', 'title': 'Trending Audio: Viral Sound', 'score': 85, 'priority': 'high', 'actions': ['Use trending sound', 'Create duet']},
+            ]
+        
+        # Demo accounts
+        if not mainline_accounts:
+            mainline_accounts = [
+                {'id': 'acc-1', 'platform': 'tiktok', 'handle': '@mainaccount'},
+                {'id': 'acc-2', 'platform': 'instagram', 'handle': '@mainaccount'},
+            ]
+    
+    # 6. Generate 7-day plan
+    plan_days = []
+    candidate_idx = 0
+    posts_per_day = 3  # Default
+    platforms = ['tiktok', 'instagram']  # Default platforms
+    
+    logger.info(f"[7-day plan] Building plan with {len(candidates)} candidates")
+    
+    for day_offset in range(7):
+        day_date = datetime.now() + timedelta(days=day_offset)
+        day_name = day_date.strftime('%A')
+        
+        day_posts = []
+        for post_num in range(min(posts_per_day, 3)):
+            if candidate_idx < len(candidates):
+                cand = candidates[candidate_idx]
+                candidate_idx += 1
+                
+                # Handle both DB rows and demo tuples
+                if isinstance(cand, tuple):
+                    content_id = cand[0]
+                    content_title = cand[1]
+                    content_score = cand[2] if len(cand) > 2 else 70
+                    topics = cand[3] if len(cand) > 3 else []
+                    platform = cand[4] if len(cand) > 4 else platforms[post_num % len(platforms)]
+                else:
+                    content_id = str(cand[0])
+                    content_title = cand[1]
+                    content_score = int(cand[2]) if cand[2] else 0
+                    topics = cand[3] or []
+                    platform = platforms[post_num % len(platforms)]
+                
+                # Determine time slot
+                time_slots = ['9:00 AM', '12:00 PM', '6:00 PM']
+                time_slot = time_slots[post_num % len(time_slots)]
+                
+                # Check if trend-reactive slot
+                trend_slot = day_offset == 0 and post_num == 0 and opportunities
+                
+                post = {
+                    'slot': post_num + 1,
+                    'content_id': str(content_id),
+                    'content_title': content_title,
+                    'content_score': content_score,
+                    'topics': topics,
+                    'platform': platform,
+                    'suggested_time': time_slot,
+                    'type': 'trend_reactive' if trend_slot else 'planned',
+                    'trend_opportunity': opportunities[0] if trend_slot else None,
+                    'applicable_rules': [r for r in rules if r.get('type') in ['hook', 'timing']][:2]
+                }
+                day_posts.append(post)
+        
+        plan_days.append({
+            'date': day_date.strftime('%Y-%m-%d'),
+            'day_name': day_name,
+            'posts': day_posts,
+            'total_posts': len(day_posts)
+        })
+    
+    return {
+        'plan': plan_days,
+        'total_posts': sum(d['total_posts'] for d in plan_days),
+        'goals_applied': [{'id': str(g[0]), 'name': g[1]} for g in goals] if goals else [],
+        'rules_applied': len(rules),
+        'trend_opportunities': len(opportunities),
+        'mainline_accounts': mainline_accounts,
+        'generated_at': datetime.now().isoformat()
+    }
+
+
+# =============================================================================
+# PHASE 3: KNOWLEDGE BASE RULES INTEGRATION
+# =============================================================================
+
+@router.get("/applicable-rules")
+async def get_applicable_rules(platform: Optional[str] = None, content_type: Optional[str] = None):
+    """Get KB rules applicable to current content planning."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            query = """
+                SELECT id, rule_type, name, conditions, recommendation,
+                       expected_lift, confidence, source_experiment_id
+                FROM kb_rules
+                WHERE status = 'active'
+            """
+            params = {}
+            
+            if platform:
+                query += " AND (conditions->>'platform' IS NULL OR conditions->'platform' ? :platform)"
+                params['platform'] = platform
+            
+            query += " ORDER BY confidence DESC, expected_lift DESC LIMIT 20"
+            
+            result = conn.execute(text(query), params).fetchall()
+            
+            rules = []
+            for row in result:
+                rules.append({
+                    'id': str(row[0]),
+                    'rule_type': row[1],
+                    'name': row[2],
+                    'conditions': row[3] or {},
+                    'recommendation': row[4],
+                    'expected_lift': float(row[5]) if row[5] else None,
+                    'confidence': float(row[6]) if row[6] else None,
+                    'source_experiment_id': str(row[7]) if row[7] else None
+                })
+            
+            return {'rules': rules, 'count': len(rules)}
+        except Exception as e:
+            return {'rules': [], 'count': 0, 'error': str(e)}
+
+
+# =============================================================================
+# PHASE 3: TREND OPPORTUNITY INTEGRATION
+# =============================================================================
+
+@router.get("/trend-opportunities")
+async def get_trend_opportunities_for_narrative():
+    """Get trend opportunities relevant to mainline narrative."""
+    engine = get_engine()
+    
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("""
+                SELECT id, title, description, opportunity_score, relevance_to_brand,
+                       content_fit, priority, window_start, window_end, recommended_actions,
+                       matching_asset_ids
+                FROM trend_opportunities
+                WHERE status = 'new' AND window_end > NOW()
+                AND relevance_to_brand >= 30
+                ORDER BY opportunity_score DESC
+                LIMIT 10
+            """)).fetchall()
+            
+            opportunities = []
+            for row in result:
+                opportunities.append({
+                    'id': str(row[0]),
+                    'title': row[1],
+                    'description': row[2],
+                    'opportunity_score': float(row[3]) if row[3] else 0,
+                    'relevance_to_brand': float(row[4]) if row[4] else 0,
+                    'content_fit': float(row[5]) if row[5] else 0,
+                    'priority': row[6],
+                    'window': {
+                        'start': row[7].isoformat() if row[7] else None,
+                        'end': row[8].isoformat() if row[8] else None
+                    },
+                    'recommended_actions': row[9] or [],
+                    'matching_assets': [str(a) for a in (row[10] or [])]
+                })
+            
+            return {'opportunities': opportunities, 'count': len(opportunities)}
+        except Exception as e:
+            return {'opportunities': [], 'count': 0, 'error': str(e)}
+
+
+@router.post("/schedule-from-plan")
+async def schedule_from_plan(plan_items: List[Dict[str, Any]]):
+    """Schedule posts from the 7-day plan to MAINLINE accounts."""
+    engine = get_engine()
+    scheduled = []
+    
+    with engine.connect() as conn:
+        for item in plan_items:
+            try:
+                # Get a MAINLINE account for the platform
+                account = conn.execute(text("""
+                    SELECT id FROM social_accounts
+                    WHERE platform = :platform AND account_role = 'MAINLINE' AND is_active = true
+                    LIMIT 1
+                """), {'platform': item.get('platform', 'tiktok')}).fetchone()
+                
+                if not account:
+                    # Fallback to any active account
+                    account = conn.execute(text("""
+                        SELECT id FROM social_accounts
+                        WHERE platform = :platform AND is_active = true
+                        LIMIT 1
+                    """), {'platform': item.get('platform', 'tiktok')}).fetchone()
+                
+                if account:
+                    result = conn.execute(text("""
+                        INSERT INTO scheduled_posts (
+                            blotato_account_id, platform, clip_id, scheduled_time,
+                            status, source
+                        ) VALUES (
+                            :account_id, :platform, :clip_id, :scheduled_time,
+                            'scheduled', 'NARRATIVE'
+                        )
+                        RETURNING id
+                    """), {
+                        'account_id': account[0],
+                        'platform': item.get('platform', 'tiktok'),
+                        'clip_id': item.get('content_id'),
+                        'scheduled_time': item.get('scheduled_at')
+                    })
+                    
+                    scheduled.append({
+                        'post_id': str(result.fetchone()[0]),
+                        'content_id': item.get('content_id'),
+                        'platform': item.get('platform')
+                    })
+            except Exception as e:
+                continue
+        
+        conn.commit()
+    
+    # Emit NARRATIVE_PLAN_GENERATED event
+    if scheduled:
+        try:
+            import asyncio
+            event_bus = EventBus.get_instance()
+            asyncio.create_task(event_bus.publish(Topics.NARRATIVE_PLAN_GENERATED, {
+                "scheduled_count": len(scheduled),
+                "post_ids": [s['post_id'] for s in scheduled],
+                "platforms": list(set(s['platform'] for s in scheduled)),
+            }))
+            logger.info(f"[PubSub] Emitted NARRATIVE_PLAN_GENERATED with {len(scheduled)} posts")
+        except Exception as e:
+            logger.warning(f"[PubSub] Failed to emit NARRATIVE_PLAN_GENERATED: {e}")
+    
+    return {'scheduled': scheduled, 'count': len(scheduled)}
+
+
+@router.get("/content-stats")
+async def get_content_stats():
+    """Get overall content statistics for the narrative builder."""
+    try:
+        engine = get_engine()
+        
+        with engine.connect() as conn:
+            # Overall stats
+            stats = conn.execute(text("""
+                SELECT 
+                    COUNT(*) as total_analyzed,
+                    AVG(pre_social_score) as avg_score,
+                    COUNT(*) FILTER (WHERE pre_social_score >= 60) as approved,
+                    COUNT(*) FILTER (WHERE pre_social_score >= 70) as high_performers
+                FROM video_analysis
+            """)).fetchone()
+            
+            # Scheduled stats
+            scheduled_stats = conn.execute(text("""
+                SELECT 
+                    COUNT(*) as total_scheduled,
+                    COUNT(*) FILTER (WHERE status = 'scheduled') as pending,
+                    COUNT(*) FILTER (WHERE status = 'published') as posted,
+                    COUNT(DISTINCT COALESCE(clip_id, media_project_id)) as unique_content
+                FROM scheduled_posts
+            """)).fetchone()
+            
+            # Posted content performance
+            performance = conn.execute(text("""
+                SELECT 
+                    SUM(views) as total_views,
+                    SUM(likes) as total_likes,
+                    AVG(engagement_rate) as avg_engagement
+                FROM posted_content
+                WHERE views > 0
+            """)).fetchone()
+        
+            return {
+            'content': {
+                'total_analyzed': stats[0] or 0,
+                'avg_score': round(float(stats[1]), 1) if stats[1] else 0,
+                'approved': stats[2] or 0,
+                'high_performers': stats[3] or 0,
+            },
+            'scheduling': {
+                'total_scheduled': scheduled_stats[0] or 0,
+                'pending': scheduled_stats[1] or 0,
+                'posted': scheduled_stats[2] or 0,
+                'unique_content': scheduled_stats[3] or 0,
+            },
+            'performance': {
+                'total_views': int(performance[0]) if performance[0] else 0,
+                'total_likes': int(performance[1]) if performance[1] else 0,
+                'avg_engagement': round(float(performance[2]) * 100, 2) if performance[2] else 0,
+            }
+        }
+    except Exception as e:
+        import traceback
+        from loguru import logger
+        logger.error(f"Error in get_content_stats: {e}\n{traceback.format_exc()}")
+        # Return empty/default data instead of 500 error
+        return {
+            'content': {
+                'total_analyzed': 0,
+                'avg_score': 0,
+                'approved': 0,
+                'high_performers': 0,
+            },
+            'scheduling': {
+                'total_scheduled': 0,
+                'pending': 0,
+                'posted': 0,
+                'unique_content': 0,
+            },
+            'performance': {
+                'total_views': 0,
+                'total_likes': 0,
+                'avg_engagement': 0,
+            }
+        }

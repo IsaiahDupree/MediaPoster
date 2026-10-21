@@ -10,6 +10,7 @@ from aiohttp import web
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts import (
     bulk_scheduler,
+    daily_publisher,
     direct_publish_test,
     full_workflow_ingest_analyze_publish,
     post_scheduler_monitor,
@@ -164,3 +165,11 @@ async def test_legacy_scheduler_helpers_do_not_create_queue_rows_or_generic_copy
     assert await schedule_test_videos.schedule_video(None, {"media_id": "1", "filename": "x"}, datetime.now(timezone.utc)) is False
     account = schedule_7_day_posts.BlotatoAccount(blotato_id=710, username="owner", platform="tiktok")
     assert schedule_7_day_posts.schedule_post(None, {"id": "1"}, "tiktok", account, datetime.now(timezone.utc)) is False
+
+
+def test_daily_publisher_object_cannot_start_services_or_trigger_delivery():
+    publisher = daily_publisher.DailyPublisher()
+    assert publisher.run() is False
+    assert publisher.trigger_publish() is False
+    assert publisher.backend_started is False
+    assert publisher.supabase_started is False

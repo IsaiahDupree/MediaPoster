@@ -197,6 +197,9 @@ class DailyPublisher:
     
     def run(self):
         """Main execution flow."""
+        self.log("airtime_required: legacy service startup and delivery are disabled", "ERROR")
+        return False
+
         self.log("=" * 50)
         self.log(f"Daily Publisher - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         self.log("=" * 50)

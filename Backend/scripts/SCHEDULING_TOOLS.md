@@ -314,3 +314,5 @@ The additional legacy paths `schedule_test_videos.py`, `schedule_7_day_posts.py`
 created local schedule rows, inserted directly into the legacy schedule database, or started
 services and triggered due-post processing. Their caption helper no longer returns generic
 fallback copy. Schedule and delivery work belongs in Airtime.
+`daily_publisher.py` also blocks programmatic `DailyPublisher.run()` and `trigger_publish()` calls,
+so importing and invoking the class cannot start services or process due posts.

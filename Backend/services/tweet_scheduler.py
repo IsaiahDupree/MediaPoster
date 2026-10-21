@@ -20,11 +20,8 @@ Usage:
     )
 """
 
-import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
-from uuid import uuid4
 from enum import Enum
 
 from services.event_bus import EventBus, Topics
@@ -98,109 +95,8 @@ class TweetScheduler:
         hashtags: Optional[List[str]] = None,
         start_delay_minutes: int = 0
     ) -> Dict[str, Any]:
-        """
-        Schedule a tweet campaign (ARCH-004).
-
-        Tweets are scheduled at regular intervals (2-hour intervals for 12/day).
-        Each tweet includes offer URL with tracking parameters if provided.
-
-        Args:
-            pipeline_id: Pipeline ID for correlation
-            theme: Content theme for tweet generation
-            tweets_per_day: Number of tweets per day (default 12 = 2-hour intervals)
-            offer_url: URL to include in tweets for tracking
-            duration_days: How many days to run campaign (default 1)
-            base_message: Optional base message to include in all tweets
-            hashtags: Optional list of hashtags to include
-            start_delay_minutes: Minutes to delay before first tweet (default 0)
-
-        Returns:
-            Dict with campaign_id, scheduled_count, and tweet_schedule
-        """
-        campaign_id = f"tweet-campaign-{uuid4().hex[:8]}"
-        now = datetime.now(timezone.utc)
-
-        logger.info(
-            f"[{campaign_id}] Scheduling {tweets_per_day} tweets/day for {duration_days} days: {theme}"
-        )
-
-        # Calculate interval between tweets (minutes)
-        interval_minutes = int((24 * 60) / tweets_per_day)
-
-        # Generate tweet schedule
-        tweet_schedule = []
-        total_tweets = tweets_per_day * duration_days
-
-        for tweet_num in range(1, total_tweets + 1):
-            # Calculate scheduled time
-            delay = timedelta(
-                minutes=start_delay_minutes + (interval_minutes * (tweet_num - 1))
-            )
-            scheduled_time = now + delay
-
-            tweet = {
-                "tweet_id": f"{campaign_id}_tweet{tweet_num}",
-                "campaign_id": campaign_id,
-                "pipeline_id": pipeline_id,
-                "tweet_num": tweet_num,
-                "scheduled_at": scheduled_time.isoformat(),
-                "status": TweetStatus.SCHEDULED.value,
-                "theme": theme,
-                "offer_url": offer_url,
-                "base_message": base_message,
-                "hashtags": hashtags or [],
-                "created_at": now.isoformat()
-            }
-            tweet_schedule.append(tweet)
-
-        # Store campaign
-        self._active_campaigns[campaign_id] = {
-            "campaign_id": campaign_id,
-            "pipeline_id": pipeline_id,
-            "theme": theme,
-            "tweets_per_day": tweets_per_day,
-            "duration_days": duration_days,
-            "offer_url": offer_url,
-            "status": "scheduled",
-            "created_at": now.isoformat(),
-            "total_tweets": total_tweets,
-            "scheduled_tweets": tweet_schedule
-        }
-
-        # Store scheduled tweets for quick lookup
-        self._scheduled_tweets[campaign_id] = tweet_schedule
-
-        # Schedule actual tweet posting via event bus
-        for tweet in tweet_schedule:
-            await self._schedule_tweet_event(tweet)
-
-        # Emit campaign scheduled event
-        await self.event_bus.publish(
-            "twitter.campaign.scheduled",
-            {
-                "campaign_id": campaign_id,
-                "pipeline_id": pipeline_id,
-                "tweets_scheduled": len(tweet_schedule),
-                "first_tweet_time": tweet_schedule[0]["scheduled_at"],
-                "last_tweet_time": tweet_schedule[-1]["scheduled_at"]
-            },
-            correlation_id=pipeline_id,
-            source="TweetScheduler"
-        )
-
-        logger.info(
-            f"[{campaign_id}] ✅ Scheduled {len(tweet_schedule)} tweets across {duration_days} day(s)"
-        )
-
-        return {
-            "campaign_id": campaign_id,
-            "pipeline_id": pipeline_id,
-            "scheduled_count": len(tweet_schedule),
-            "first_tweet": tweet_schedule[0]["scheduled_at"] if tweet_schedule else None,
-            "last_tweet": tweet_schedule[-1]["scheduled_at"] if tweet_schedule else None,
-            "interval_minutes": interval_minutes,
-            "tweet_schedule": tweet_schedule
-        }
+        """Reject legacy in-memory scheduling; Airtime owns scheduling."""
+        raise RuntimeError("airtime_required: legacy in-memory Twitter scheduling is disabled; use Airtime.")
 
     async def _schedule_tweet_event(self, tweet: Dict[str, Any]) -> None:
         """
@@ -208,35 +104,11 @@ class TweetScheduler:
 
         Uses async task scheduling to delay tweet posting until scheduled_at time.
         """
-        try:
-            scheduled_time = datetime.fromisoformat(tweet["scheduled_at"])
-            now = datetime.now(timezone.utc)
-            delay_seconds = (scheduled_time - now).total_seconds()
-
-            if delay_seconds <= 0:
-                # Tweet is due now or overdue
-                await self._post_tweet(tweet)
-            else:
-                # Schedule tweet posting in the future
-                asyncio.create_task(
-                    self._post_tweet_delayed(tweet, delay_seconds)
-                )
-                logger.debug(
-                    f"Scheduled tweet {tweet['tweet_id']} in {delay_seconds:.1f}s"
-                )
-
-        except Exception as e:
-            logger.error(f"Failed to schedule tweet {tweet['tweet_id']}: {e}")
+        raise RuntimeError("airtime_required: legacy in-memory Twitter scheduling is disabled; use Airtime.")
 
     async def _post_tweet_delayed(self, tweet: Dict[str, Any], delay_seconds: float) -> None:
         """Post a tweet after a delay."""
-        try:
-            await asyncio.sleep(delay_seconds)
-            await self._post_tweet(tweet)
-        except asyncio.CancelledError:
-            logger.debug(f"Tweet {tweet['tweet_id']} posting cancelled")
-        except Exception as e:
-            logger.error(f"Failed to post delayed tweet {tweet['tweet_id']}: {e}")
+        raise RuntimeError("airtime_required: legacy delayed Twitter publishing is disabled; use Airtime.")
 
     async def _post_tweet(self, tweet: Dict[str, Any]) -> None:
         """
@@ -244,59 +116,7 @@ class TweetScheduler:
 
         Constructs tweet text from theme/message/hashtags and posts it.
         """
-        tweet_id = tweet.get("tweet_id")
-        campaign_id = tweet.get("campaign_id")
-
-        try:
-            # Build tweet text
-            text = self._build_tweet_text(tweet)
-
-            logger.info(f"[{campaign_id}] 📤 Posting tweet {tweet_id}: {text[:60]}...")
-
-            if self._twitter_service:
-                # Post via Twitter service
-                result = await self._twitter_service.post_tweet(text)
-
-                if result.get("success"):
-                    tweet["status"] = TweetStatus.SENT.value
-                    tweet["posted_at"] = datetime.now(timezone.utc).isoformat()
-
-                    # Emit success event
-                    await self.event_bus.publish(
-                        "twitter.tweet.sent",
-                        {
-                            "tweet_id": tweet_id,
-                            "campaign_id": campaign_id,
-                            "pipeline_id": tweet.get("pipeline_id"),
-                            "platform_id": result.get("id"),
-                            "posted_at": tweet["posted_at"]
-                        },
-                        source="TweetScheduler"
-                    )
-                    logger.info(f"[{campaign_id}] ✅ Tweet {tweet_id} posted successfully")
-                else:
-                    raise Exception(result.get("error", "Unknown error"))
-            else:
-                # No Twitter service available - log only
-                tweet["status"] = TweetStatus.SCHEDULED.value
-                logger.warning(f"[{campaign_id}] No Twitter service available, cannot post tweet")
-
-        except Exception as e:
-            logger.error(f"[{campaign_id}] ❌ Failed to post tweet {tweet_id}: {e}")
-            tweet["status"] = TweetStatus.FAILED.value
-            tweet["error"] = str(e)
-
-            # Emit failure event
-            await self.event_bus.publish(
-                "twitter.tweet.failed",
-                {
-                    "tweet_id": tweet_id,
-                    "campaign_id": campaign_id,
-                    "pipeline_id": tweet.get("pipeline_id"),
-                    "error": str(e)
-                },
-                source="TweetScheduler"
-            )
+        raise RuntimeError("airtime_required: legacy direct Twitter publishing is disabled; use Airtime.")
 
     def _build_tweet_text(self, tweet: Dict[str, Any]) -> str:
         """
@@ -308,34 +128,7 @@ class TweetScheduler:
         - Offer URL (with tracking if available)
         - Hashtags
         """
-        theme = tweet.get("theme", "Check this out")
-        offer_url = tweet.get("offer_url", "")
-        base_message = tweet.get("base_message")
-        hashtags = tweet.get("hashtags", [])
-        tweet_num = tweet.get("tweet_num", 1)
-
-        # Create tweet text
-        parts = []
-
-        if base_message:
-            parts.append(base_message)
-        else:
-            parts.append(f"🔥 {theme}")
-
-        if offer_url:
-            parts.append(f"🎯 {offer_url}")
-
-        # Add hashtags
-        if hashtags:
-            parts.append(" ".join([f"#{tag}" for tag in hashtags[:3]]))
-
-        text = "\n".join(parts)
-
-        # Twitter limit is 280 chars, truncate if needed
-        if len(text) > 280:
-            text = text[:277] + "..."
-
-        return text
+        raise RuntimeError("script_hub_required: legacy Twitter copy assembly is disabled; use ScriptHub.")
 
     async def _handle_tweet_sent(self, event) -> None:
         """Handle tweet sent event."""

@@ -339,8 +339,11 @@ Sora/tweet/Blotato helpers fail closed, so importing the classes does not bypass
 
 The legacy `TwitterCampaignService` raw-model generation methods now return a
 `script_hub_required` failure, and its local scheduling and due-post methods are blocked with
-`airtime_required`. The `TwitterOfferScheduler` and `TwitterCampaignScheduler` cannot start or
-enter their Safari/DB polling loops. The active `/api/twitter-campaign` write endpoints return
+`airtime_required`. The in-memory `TweetScheduler` cannot create a scheduled campaign or delayed
+post tasks, assemble theme copy, or report an in-memory schedule as successful. The
+`TwitterOfferScheduler` and `TwitterCampaignScheduler` cannot start or enter their Safari/DB
+polling loops. If a worker propagates `script_hub_required`, the orchestrator now fails the owning
+pipeline immediately instead of leaving a timed-out step active. The active `/api/twitter-campaign` write endpoints return
 HTTP 409 with the matching migration code before generation, DB access, queueing or provider
 calls. Read-only campaign product/style/analytics endpoints remain a separate audit surface.
 Twitter publishing and scheduling must flow through ScriptHub approval and Airtime. A local

@@ -171,6 +171,7 @@ class MasterOrchestrator:
         self.event_bus.subscribe("blotato.publish.completed", self._handle_publish_completed)
         self.event_bus.subscribe("blotato.publish.failed", self._handle_publish_failed)
         self.event_bus.subscribe("twitter.campaign.scheduled", self._handle_twitter_scheduled)
+        self.event_bus.subscribe("twitter.campaign.failed", self._handle_twitter_failed)
         logger.info("📫 Orchestrator subscribed to subsystem events")
 
     async def start(self) -> None:
@@ -650,6 +651,23 @@ class MasterOrchestrator:
         )
 
         await self._complete_pipeline(pipeline_id)
+
+    async def _handle_twitter_failed(self, event: Event) -> None:
+        """Fail the owning pipeline immediately when legacy Twitter work is blocked."""
+        payload = event.payload
+        pipeline_id = payload.get("pipeline_id")
+        if not pipeline_id or pipeline_id not in self.active_pipelines:
+            return
+
+        error = payload.get("error", "Twitter campaign scheduling failed")
+        self._cancel_step_timeout(pipeline_id, "twitter_campaign")
+        await self._db_update_pipeline_step(
+            pipeline_id,
+            "twitter_campaign",
+            "failed",
+            error=error,
+        )
+        await self._fail_pipeline(pipeline_id, error)
 
     def _start_step_timeout(self, pipeline_id: str, step_name: str) -> None:
         """Start a timeout monitor for a pipeline step."""

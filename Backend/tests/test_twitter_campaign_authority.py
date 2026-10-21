@@ -10,6 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from services.twitter_campaign_service import TwitterCampaignService
 from services.daily_automation.twitter_scheduler import TwitterOfferScheduler
 from services.twitter_campaign_scheduler import TwitterCampaignScheduler
+from services.tweet_scheduler import TweetScheduler
+from services.event_bus import Event, EventBus
+from services.master_orchestrator import MasterOrchestrator, PipelineConfig
+from services.workers.twitter_campaign_worker import TwitterCampaignWorker
 from routers import twitter_campaign as twitter_routes
 
 REQUEST_STATE = web.AppKey("request_state", dict)
@@ -81,6 +85,48 @@ async def test_legacy_campaign_scheduler_cannot_start_or_run_db_polling_loop(loc
         await scheduler.start()
     with pytest.raises(RuntimeError, match="airtime_required"):
         await scheduler._run_loop()
+    assert local_provider_boundary["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_legacy_tweet_scheduler_cannot_claim_campaign_or_create_delayed_posts(local_provider_boundary):
+    scheduler = object.__new__(TweetScheduler)
+    with pytest.raises(RuntimeError, match="airtime_required"):
+        await scheduler.schedule_tweet_campaign("pipeline-1", "theme")
+    with pytest.raises(RuntimeError, match="airtime_required"):
+        await scheduler._schedule_tweet_event({})
+    with pytest.raises(RuntimeError, match="airtime_required"):
+        await scheduler._post_tweet_delayed({}, 0)
+    with pytest.raises(RuntimeError, match="airtime_required"):
+        await scheduler._post_tweet({})
+    with pytest.raises(RuntimeError, match="script_hub_required"):
+        scheduler._build_tweet_text({"theme": "unapproved theme"})
+    assert local_provider_boundary["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_script_hub_block_is_propagated_as_pipeline_failure(local_provider_boundary):
+    EventBus.reset_instance()
+    bus = EventBus.get_instance()
+    orchestrator = MasterOrchestrator(event_bus=bus, use_db=False)
+    orchestrator.active_pipelines["pipeline-1"] = {
+        "pipeline_id": "pipeline-1",
+        "config": PipelineConfig(theme="test", schedule_tweets=True),
+        "correlation_id": "correlation-1",
+        "current_step": "twitter_campaign",
+        "outputs": {},
+    }
+    worker = TwitterCampaignWorker(event_bus=bus)
+    await worker._handle_schedule_request(Event(
+        topic="twitter.campaign.schedule_requested",
+        payload={"pipeline_id": "pipeline-1", "theme": "test"},
+        correlation_id="correlation-1",
+    ))
+
+    failed = orchestrator.completed_pipelines["pipeline-1"]
+    assert failed["status"] == "failed"
+    assert "script_hub_required" in failed["error"]
+    assert "pipeline-1" not in orchestrator.active_pipelines
     assert local_provider_boundary["count"] == 0
 
 

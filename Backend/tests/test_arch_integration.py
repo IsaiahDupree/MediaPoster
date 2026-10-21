@@ -116,41 +116,26 @@ class TestARCH004TweetScheduler:
         return TweetScheduler.get_instance(event_bus=event_bus)
 
     @pytest.mark.asyncio
-    async def test_schedule_tweet_campaign(self, scheduler):
-        """Test scheduling a tweet campaign with proper intervals."""
-        result = await scheduler.schedule_tweet_campaign(
-            pipeline_id="pipeline-test",
-            theme="AI automation",
-            tweets_per_day=12,
-            duration_days=1
-        )
-
-        assert result["campaign_id"] is not None
-        assert result["scheduled_count"] == 12
-        assert len(result["tweet_schedule"]) == 12
-
-        # Verify 2-hour intervals (24 hours / 12 tweets = 2 hours)
-        tweet_times = [datetime.fromisoformat(t["scheduled_at"]) for t in result["tweet_schedule"]]
-        for i in range(len(tweet_times) - 1):
-            interval = (tweet_times[i + 1] - tweet_times[i]).total_seconds() / 60
-            assert abs(interval - 120) < 2  # Allow 2 minute tolerance
+    async def test_schedule_tweet_campaign_fails_closed(self, scheduler):
+        """Legacy campaign scheduling must not claim Airtime-owned work."""
+        with pytest.raises(RuntimeError, match="airtime_required"):
+            await scheduler.schedule_tweet_campaign(
+                pipeline_id="pipeline-test",
+                theme="AI automation",
+                tweets_per_day=12,
+                duration_days=1
+            )
+        assert scheduler._active_campaigns == {}
+        assert scheduler._scheduled_tweets == {}
 
     @pytest.mark.asyncio
-    async def test_tweet_campaign_status(self, scheduler):
-        """Test retrieving campaign status."""
-        result = await scheduler.schedule_tweet_campaign(
-            pipeline_id="pipeline-test",
-            theme="Test",
-            tweets_per_day=3,
-            duration_days=1
-        )
-        campaign_id = result["campaign_id"]
-
-        status = scheduler.get_campaign_status(campaign_id)
-
-        assert status["campaign_id"] == campaign_id
-        assert status["total_tweets"] == 3
-        assert status["scheduled_count"] == 3
+    async def test_tweet_campaign_status_has_no_fabricated_scheduled_campaign(self, scheduler):
+        """Blocked legacy scheduling leaves no success-shaped in-memory record."""
+        with pytest.raises(RuntimeError, match="airtime_required"):
+            await scheduler.schedule_tweet_campaign(
+                pipeline_id="pipeline-test", theme="Test", tweets_per_day=3, duration_days=1
+            )
+        assert scheduler.get_campaign_status("legacy-campaign") == {"error": "Campaign not found"}
 
 
 class TestARCH005OfferTrafficTracker:
@@ -251,14 +236,15 @@ class TestARCHIntegration:
         assert pipeline["status"] == "generating_video"
 
         # ARCH-004: Schedule tweets
-        tweet_result = await scheduler.schedule_tweet_campaign(
-            pipeline_id=pipeline_id,
-            theme=config.theme,
-            tweets_per_day=config.tweets_per_day,
-            offer_url=config.offer_url,
-            duration_days=1
-        )
-        assert tweet_result["scheduled_count"] == 12
+        with pytest.raises(RuntimeError, match="airtime_required"):
+            await scheduler.schedule_tweet_campaign(
+                pipeline_id=pipeline_id,
+                theme=config.theme,
+                tweets_per_day=config.tweets_per_day,
+                offer_url=config.offer_url,
+                duration_days=1
+            )
+        assert scheduler._active_campaigns == {}
 
         # ARCH-005: Create tracked link for offer
         tracked_url = await tracker.create_tracked_link(

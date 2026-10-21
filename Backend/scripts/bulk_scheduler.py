@@ -6,7 +6,7 @@ Leverages existing MediaPoster infrastructure (BlotatoAPI, target dataclasses,
 account registry) to schedule content from any media source to any platform.
 
 Usage Examples:
-    # Schedule local videos to TikTok, 30 min apart
+    # Legacy non-dry-run writes now exit with airtime_required
     python bulk_scheduler.py --source /path/to/videos --platform tiktok --account isaiah_dupree --spacing 30
 
     # Schedule Google Drive folder to Instagram as reels, 2 hours apart
@@ -18,7 +18,7 @@ Usage Examples:
     # Schedule to multiple platforms at once
     python bulk_scheduler.py --source /path/to/videos --platform tiktok,instagram --account isaiah_dupree,the_isaiah_dupree --spacing 30
 
-    # Immediate publish (no scheduling)
+    # Direct publication is disabled; use Airtime
     python bulk_scheduler.py --source /path/to/video.mp4 --platform tiktok --account 710 --now
 
     # Dry run to preview what would be scheduled
@@ -34,7 +34,6 @@ import asyncio
 import json
 import os
 import sys
-import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
@@ -101,6 +100,10 @@ BLOTATO_POST_RATE = 30    # 30 requests/minute
 BLOTATO_MEDIA_RATE = 10   # 10 requests/minute
 
 
+class AirtimeRequiredError(RuntimeError):
+    """Raised when a legacy command attempts a social-provider write."""
+
+
 # =============================================================================
 # DATA CLASSES
 # =============================================================================
@@ -123,7 +126,7 @@ class ScheduleEntry:
     platform: str
     account_id: str
     account_username: str
-    scheduled_time: datetime
+    scheduled_time: Optional[datetime]
     caption: str = ""
     title: str = ""
     target_config: Dict[str, Any] = field(default_factory=dict)
@@ -392,24 +395,12 @@ def generate_title(platform: str, filename: str, title: str = "", use_filename: 
 # SCHEDULING ENGINE
 # =============================================================================
 
-async def make_gdrive_public(file_id: str) -> bool:
-    """Make a Google Drive file publicly accessible."""
-    try:
-        result = subprocess.run(
-            ["gdrive", "permissions", "share", file_id, "--role", "reader", "--type", "anyone"],
-            capture_output=True, text=True, timeout=15
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
 async def schedule_entries(
     entries: List[ScheduleEntry],
     api: BlotatoAPI,
     dry_run: bool = False,
 ) -> ScheduleResult:
-    """Execute the scheduling of all entries via Blotato API."""
+    """Preview entries locally; provider writes belong to Airtime."""
     result = ScheduleResult(total=len(entries))
     
     if dry_run:
@@ -417,10 +408,10 @@ async def schedule_entries(
         print(f"🔍 DRY RUN — {len(entries)} posts would be scheduled:")
         print(f"{'='*60}")
         for i, entry in enumerate(entries):
-            local_time = entry.scheduled_time.astimezone()
             print(f"  [{i+1}] {entry.media.filename[:50]}")
             print(f"      → {entry.platform} @{entry.account_username}")
-            print(f"      📅 {local_time.strftime('%b %d %I:%M %p')}")
+            local_time = entry.scheduled_time.astimezone() if entry.scheduled_time else None
+            print(f"      📅 {local_time.strftime('%b %d %I:%M %p') if local_time else 'Immediate'}")
             if entry.caption:
                 print(f"      💬 {entry.caption[:60]}...")
             if entry.title:
@@ -429,151 +420,14 @@ async def schedule_entries(
                 "filename": entry.media.filename,
                 "platform": entry.platform,
                 "account": entry.account_username,
-                "scheduled": entry.scheduled_time.isoformat(),
+                "scheduled": entry.scheduled_time.isoformat() if entry.scheduled_time else None,
                 "status": "dry_run",
             })
-        result.scheduled = len(entries)
         return result
-    
-    import httpx
-    
-    async with httpx.AsyncClient() as client:
-        headers = {
-            "Authorization": f"Bearer {api.api_key}",
-            "Content-Type": "application/json",
-        }
-        
-        for i, entry in enumerate(entries):
-            local_time = entry.scheduled_time.astimezone()
-            print(f"\n[{i+1}/{len(entries)}] {entry.media.filename[:50]}")
-            print(f"  🎯 {entry.platform} @{entry.account_username}")
-            print(f"  📅 {local_time.strftime('%b %d %I:%M %p')}")
-            
-            # Step 1: Resolve media URL
-            media_url = entry.media.blotato_media_url
-            
-            if not media_url:
-                # Need to upload to Blotato
-                source_url = entry.media.gdrive_url or entry.media.path
-                
-                if entry.media.gdrive_id:
-                    # Ensure GDrive file is public
-                    await make_gdrive_public(entry.media.gdrive_id)
-                
-                if source_url.startswith("http"):
-                    try:
-                        print(f"  ⬆️  Uploading to Blotato...")
-                        resp = await client.post(
-                            f"{api.BASE_URL}/media",
-                            headers=headers,
-                            json={"url": source_url},
-                            timeout=120,
-                        )
-                        if resp.status_code == 429:
-                            print(f"  ⚠️  Media rate limited, waiting 60s...")
-                            await asyncio.sleep(60)
-                            resp = await client.post(
-                                f"{api.BASE_URL}/media",
-                                headers=headers,
-                                json={"url": source_url},
-                                timeout=120,
-                            )
-                        resp.raise_for_status()
-                        data = resp.json()
-                        media_url = data.get("url") or data.get("mediaUrl") or source_url
-                        entry.media.blotato_media_url = media_url
-                        print(f"  ✅ Media uploaded")
-                    except Exception as e:
-                        print(f"  ❌ Media upload failed: {e}")
-                        media_url = source_url  # Fallback to direct URL
-                else:
-                    print(f"  ❌ Local files need a cloud URL. Upload to GDrive first.")
-                    entry.status = "failed"
-                    entry.error = "Local file needs cloud URL"
-                    result.failed += 1
-                    result.entries.append({
-                        "filename": entry.media.filename,
-                        "platform": entry.platform,
-                        "status": "failed",
-                        "error": entry.error,
-                    })
-                    continue
-            
-            # Step 2: Build target
-            target = build_target(entry.platform, **entry.target_config)
-            
-            # Step 3: Build post payload
-            content = PostContent(
-                text=entry.caption,
-                platform=Platform(entry.platform),
-                media_urls=[media_url],
-            )
-            
-            payload = {
-                "post": {
-                    "accountId": entry.account_id,
-                    "content": content.to_dict(),
-                    "target": target.to_dict(),
-                }
-            }
-            
-            # Add scheduling (omit for immediate publish)
-            if entry.scheduled_time:
-                payload["scheduledTime"] = entry.scheduled_time.isoformat()
-            
-            # Step 4: Submit to Blotato
-            try:
-                resp = await client.post(
-                    f"{api.BASE_URL}/posts",
-                    headers=headers,
-                    json=payload,
-                    timeout=60,
-                )
-                
-                if resp.status_code == 429:
-                    print(f"  ⚠️  Post rate limited, waiting 60s...")
-                    await asyncio.sleep(60)
-                    resp = await client.post(
-                        f"{api.BASE_URL}/posts",
-                        headers=headers,
-                        json=payload,
-                        timeout=60,
-                    )
-                
-                resp.raise_for_status()
-                resp_data = resp.json()
-                entry.submission_id = resp_data.get("postSubmissionId")
-                entry.status = "scheduled"
-                result.scheduled += 1
-                print(f"  ✅ Scheduled! ID: {entry.submission_id}")
-                
-            except Exception as e:
-                entry.status = "failed"
-                entry.error = str(e)
-                result.failed += 1
-                print(f"  ❌ Failed: {e}")
-            
-            result.entries.append({
-                "filename": entry.media.filename,
-                "platform": entry.platform,
-                "account": entry.account_username,
-                "scheduled": entry.scheduled_time.isoformat(),
-                "submission_id": entry.submission_id,
-                "status": entry.status,
-                "error": entry.error,
-            })
-            
-            # Rate limit pause between requests (Blotato: 30 posts/min, 10 media/min)
-            await asyncio.sleep(3)
-    
-    # Summary
-    if result.entries:
-        scheduled_entries = [e for e in result.entries if e["status"] == "scheduled"]
-        if scheduled_entries:
-            result.first_post = scheduled_entries[0]["scheduled"]
-            result.last_post = scheduled_entries[-1]["scheduled"]
-    
-    return result
+
+    raise AirtimeRequiredError(
+        "airtime_required: direct Blotato scheduling is disabled; submit through Airtime"
+    )
 
 
 # =============================================================================
@@ -686,6 +540,10 @@ def list_all_accounts():
 
 async def main():
     args = parse_args()
+
+    if not args.dry_run and not args.list_accounts:
+        print("❌ airtime_required: direct Blotato scheduling is disabled; submit approved content through Airtime")
+        return 2
     
     if args.list_accounts:
         list_all_accounts()
@@ -693,7 +551,7 @@ async def main():
     
     # Initialize Blotato API
     api = BlotatoAPI()
-    if not api.api_key:
+    if not api.api_key and not args.dry_run:
         print("❌ BLOTATO_API_KEY not set. Export it or add to Backend/.env")
         sys.exit(1)
     
@@ -817,12 +675,19 @@ async def main():
     
     # Execute
     print(f"\n🚀 Scheduling {len(entries)} posts...")
-    sched_result = await schedule_entries(entries, api, dry_run=args.dry_run)
+    try:
+        sched_result = await schedule_entries(entries, api, dry_run=args.dry_run)
+    except AirtimeRequiredError as exc:
+        print(f"❌ {exc}")
+        return 2
     
     # Summary
     print(f"\n{'='*60}")
-    print(f"✅ Scheduled: {sched_result.scheduled}")
-    print(f"❌ Failed: {sched_result.failed}")
+    if args.dry_run:
+        print(f"✅ Previewed: {sched_result.total} (0 provider writes)")
+    else:
+        print(f"✅ Scheduled: {sched_result.scheduled}")
+        print(f"❌ Failed: {sched_result.failed}")
     
     if sched_result.first_post:
         first = datetime.fromisoformat(sched_result.first_post).astimezone()
@@ -838,4 +703,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()) or 0)

@@ -126,20 +126,6 @@ def get_approved_analyzed_videos(limit=10):
 # =============================================================================
 
 def ingest_video(video_path):
-    """Ingest video to media-db and return media_id."""
-    try:
-        res = requests.post(
-            f"{API_URL}/api/media-db/ingest/file",
-            params={"file_path": video_path},
-            timeout=60
-        )
-        if res.status_code == 200:
-            data = res.json()
-            return data.get('id') or data.get('media_id') or data.get('media', {}).get('id')
-        else:
-            log(f"Ingest failed: {res.text[:100]}", C.R)
-    except Exception as e:
-        log(f"Ingest error: {e}", C.R)
     return None
 
 
@@ -148,20 +134,7 @@ def ingest_video(video_path):
 # =============================================================================
 
 def analyze_video(media_id):
-    """Run analysis on video to get hooks, topics, transcript."""
-    try:
-        log(f"   Analyzing video (this may take 30-60 seconds)...", C.Y)
-        res = requests.post(
-            f"{API_URL}/api/media-db/analyze/{media_id}",
-            timeout=120
-        )
-        if res.status_code == 200:
-            return True
-        else:
-            log(f"   Analysis failed: {res.text[:100]}", C.R)
-    except Exception as e:
-        log(f"   Analysis error: {e}", C.R)
-    return False
+    return None
 
 def get_analysis_data(media_id):
     """Get analysis data for a video."""
@@ -199,84 +172,7 @@ def clean_title(title):
 
 
 def generate_title_caption(media_id, analysis_data):
-    """
-    Generate AI title and caption using analysis context.
-    Uses hooks, topics, and transcript from the analysis.
-    """
-    try:
-        # Build request with analysis context
-        payload = {
-            "platform": "tiktok",
-            "tone": analysis_data.get('tone', 'engaging'),
-            "include_hashtags": True,
-            "include_hook": True
-        }
-        
-        # Add hooks from analysis
-        hooks = analysis_data.get('hooks', [])
-        if hooks:
-            payload['hooks'] = hooks[:3]
-        
-        res = requests.post(
-            f"{API_URL}/api/analysis/generate-captions/{media_id}",
-            json=payload,
-            timeout=60
-        )
-        
-        if res.status_code == 200:
-            data = res.json()
-            title = data.get("title", "")
-            caption = data.get("captions", {}).get("tiktok", "")
-            
-            # Clean title - remove filename patterns
-            title = clean_title(title)
-            
-            # If title is empty or too short, generate from topics/hooks
-            if len(title) < 10:
-                topics = analysis_data.get('topics', [])
-                hooks = analysis_data.get('hooks', [])
-                
-                if hooks and len(hooks) > 0:
-                    # Use first hook as title
-                    title = hooks[0][:TIKTOK_TITLE_LIMIT]
-                elif topics and len(topics) > 0:
-                    title = f"Discover: {', '.join(topics[:2])}"
-                else:
-                    title = "Must Watch Content!"
-            
-            # Enforce TikTok limits
-            if len(title) > TIKTOK_TITLE_LIMIT:
-                title = title[:TIKTOK_TITLE_LIMIT-3] + "..."
-            
-            if len(caption) > TIKTOK_CAPTION_LIMIT:
-                caption = caption[:TIKTOK_CAPTION_LIMIT-3] + "..."
-            
-            # Ensure caption has hashtags
-            if '#' not in caption:
-                caption += "\n\n#fyp #viral #trending"
-            
-            return {"title": title, "caption": caption}
-            
-    except Exception as e:
-        log(f"   Caption generation error: {e}", C.R)
-    
-    # Fallback using analysis data directly
-    topics = analysis_data.get('topics', [])
-    hooks = analysis_data.get('hooks', [])
-    
-    if hooks:
-        title = hooks[0][:TIKTOK_TITLE_LIMIT]
-    elif topics:
-        title = f"Discover: {', '.join(topics[:2])}"[:TIKTOK_TITLE_LIMIT]
-    else:
-        title = "Must Watch Content!"
-    
-    caption = f"Check this out! #fyp #viral"
-    if topics:
-        hashtags = ' '.join([f"#{t.replace(' ', '').lower()}" for t in topics[:3]])
-        caption = f"Amazing content about {', '.join(topics[:2])}! {hashtags} #fyp #viral"
-    
-    return {"title": title, "caption": caption}
+    return None
 
 
 # =============================================================================
@@ -284,43 +180,7 @@ def generate_title_caption(media_id, analysis_data):
 # =============================================================================
 
 def publish_video(media_id, title, caption):
-    """
-    Publish video via full-publish flow with Google Drive.
-    Then poll for the public URL using the status endpoint.
-    """
-    try:
-        text = f"{title}\n\n{caption}"
-        
-        # Use regular full-publish endpoint (faster, no blocking poll)
-        res = requests.post(
-            f"{API_URL}/api/blotato/posts/full-publish",
-            json={
-                "media_id": media_id,
-                "blotato_account_id": TIKTOK_ACCOUNT_ID,
-                "platform": "tiktok",
-                "username": TIKTOK_USERNAME,
-                "text": text,
-                "cleanup_gdrive": True
-            },
-            timeout=120
-        )
-        
-        if res.status_code == 200:
-            data = res.json()
-            post_id = data.get("post_submission_id")
-            
-            return {
-                "success": data.get("success", False),
-                "post_id": post_id,
-                "url": None,  # Will poll for URL after
-                "error": data.get("error")
-            }
-        else:
-            return {"success": False, "error": f"HTTP {res.status_code}: {res.text[:200]}"}
-    except requests.exceptions.Timeout:
-        return {"success": False, "error": "Timeout during upload"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    return {"success": False, "error": "airtime_required"}
 
 
 def poll_for_post_url(post_submission_id, max_attempts=12, delay=10):
@@ -399,146 +259,9 @@ def get_post_polling_status(post_id):
 # =============================================================================
 
 def main():
-    print("\n" + "="*70)
-    print(f"{C.BOLD}{C.C}🎬 PUBLISH APPROVED+ANALYZED VIDEOS TO TIKTOK{C.END}")
-    print("="*70)
-    print(f"Account: {TIKTOK_ACCOUNT_ID} (@{TIKTOK_USERNAME})")
-    print(f"Title Limit: {TIKTOK_TITLE_LIMIT} chars | Caption Limit: {TIKTOK_CAPTION_LIMIT} chars")
-    print(f"Filter: Video + Analyzed + Approved (with valid file paths)")
-    print("="*70)
-    
-    # Step 1: Get approved+analyzed videos from API
-    log_step(1, "Fetching approved+analyzed videos from API")
-    
-    videos = get_approved_analyzed_videos(limit=5)
-    
-    if not videos:
-        log("❌ No approved+analyzed videos found with valid file paths!", C.R)
-        log("Make sure you have videos that are:", C.Y)
-        log("  - Media type: Video (.mov, .mp4)", C.Y)
-        log("  - Analysis status: Analyzed", C.Y)
-        log("  - Curation status: Approved", C.Y)
-        log("  - Have valid file_path in database", C.Y)
-        return
-    
-    log(f"✅ Found {len(videos)} videos ready to publish", C.G)
-    
-    print(f"\n{C.BOLD}Videos to publish:{C.END}")
-    for i, v in enumerate(videos):
-        topics = v.get('topics', [])[:2]
-        log(f"  {i+1}. {v['title']} (score: {v['score']})", C.W)
-        log(f"     Topics: {topics}", C.W)
-    
-    # Process each video
-    results = []
-    
-    for idx, video in enumerate(videos):
-        print(f"\n{'─'*70}")
-        print(f"{C.BOLD}Video {idx+1}/{len(videos)}: {video['title']}{C.END}")
-        print(f"{'─'*70}")
-        
-        media_id = video['id']
-        
-        # Show analysis data
-        log_step(2, "Using existing analysis data")
-        hooks = video.get('hooks', [])
-        topics = video.get('topics', [])
-        log(f"   Hooks: {hooks[:2] if hooks else 'None'}", C.W)
-        log(f"   Topics: {topics[:3] if topics else 'None'}", C.W)
-        log(f"   Tone: {video.get('tone', 'N/A')}", C.W)
-        
-        # Generate title & caption using analysis
-        log_step(3, "Generating AI title & caption from analysis")
-        
-        content = generate_title_caption(media_id, video)
-        title = content['title']
-        caption = content['caption']
-        
-        log(f"📝 Title ({len(title)} chars): {title}", C.G)
-        log(f"📝 Caption preview: {caption[:100]}...", C.G)
-        
-        # Publish
-        log_step(4, "Publishing via Google Drive + Blotato")
-        
-        log(f"📤 Uploading video to Google Drive...", C.M)
-        log(f"   File: {video['file_path']}", C.W)
-        
-        result = publish_video(media_id, title, caption)
-        
-        result['video'] = video['title']
-        result['title'] = title
-        result['media_id'] = media_id
-        result['topics'] = topics
-        
-        if result['success']:
-            log(f"✅ Published successfully!", C.G)
-            
-            post_id = result.get('post_id')
-            url = result.get('url')
-            
-            if post_id:
-                log(f"📋 Blotato Post ID: {post_id}", C.W)
-            
-            # If we didn't get URL from the response, poll for it
-            if not url and post_id:
-                log(f"📊 Polling Blotato for TikTok URL...", C.Y)
-                url = poll_for_post_url(post_id, max_attempts=6, delay=10)
-                result['url'] = url
-            
-            if url:
-                log(f"🔗 TikTok URL: {url}", C.C)
-            else:
-                log(f"⚠️ URL not available yet (post may still be processing)", C.Y)
-            
-            # Show steps if available
-            steps = result.get('steps', {})
-            if steps:
-                log(f"   Steps completed: {list(steps.keys())}", C.W)
-        else:
-            log(f"❌ Publish failed: {result.get('error', 'Unknown')[:150]}", C.R)
-        
-        results.append(result)
-        
-        # Wait between posts (15 seconds)
-        if idx < len(videos) - 1:
-            log(f"\n⏳ Waiting 15 seconds before next video...", C.Y)
-            time.sleep(15)
-    
-    # Final summary
-    print("\n" + "="*70)
-    print(f"{C.BOLD}FINAL RESULTS{C.END}")
-    print("="*70)
-    
-    success = sum(1 for r in results if r.get('success'))
-    failed = len(results) - success
-    
-    print(f"\n{C.G}✅ Success: {success}/{len(results)}{C.END}")
-    print(f"{C.R}❌ Failed: {failed}/{len(results)}{C.END}")
-    
-    print(f"\n{'─'*70}")
-    print("POST DETAILS:")
-    print(f"{'─'*70}")
-    
-    for i, r in enumerate(results):
-        icon = "✅" if r.get('success') else "❌"
-        print(f"\n{icon} Video {i+1}: {r.get('video', 'Unknown')}")
-        print(f"   Title: {r.get('title', 'N/A')}")
-        print(f"   Topics: {r.get('topics', [])[:2]}")
-        
-        if r.get('success'):
-            if r.get('url'):
-                print(f"   {C.C}🔗 URL: {r['url']}{C.END}")
-            if r.get('post_id'):
-                print(f"   📋 Post ID: {r['post_id']}")
-            if r.get('polling_url'):
-                print(f"   {C.C}📊 Polling: {r['polling_url']}{C.END}")
-        else:
-            print(f"   {C.R}Error: {r.get('error', 'Unknown')[:100]}{C.END}")
-    
-    print("\n" + "="*70)
-    print(f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*70 + "\n")
+    print("script_hub_required: legacy MediaPoster publishing is disabled; use ScriptHub and Airtime")
+    return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main() or 0)

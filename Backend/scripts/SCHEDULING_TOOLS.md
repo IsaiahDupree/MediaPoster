@@ -2,7 +2,9 @@
 
 Standalone CLI tools for scheduling and planning content — **no backend server required**.
 
-All scripts connect directly to the Supabase PostgreSQL database. The `PostScheduler` background worker handles actual publishing when posts become due.
+Some legacy scripts in this checkout connect to Supabase or the local MediaPoster API. The audited generation and provider-write entrypoints are blocked; this document describes migration context, not an approved path for production scheduling. Airtime owns active scheduling and provider writes.
+
+> **Migration boundary:** This directory is a legacy MediaPoster checkout. Airtime in `content-creation-suite` is the sole social scheduling and provider-write authority. `bulk_scheduler.py` is now preview-only; its non-dry-run path returns `airtime_required`. Legacy caption-generation and direct Blotato commands are blocked. Do not use these scripts to create drafts or queue/provider writes.
 
 ---
 
@@ -13,7 +15,7 @@ All scripts connect directly to the Supabase PostgreSQL database. The `PostSched
 | `schedule_videos.py` | Schedule new videos from a folder | New batch of videos ready to post |
 | `plan_content.py` | Analyze schedule, find gaps, plan strategy | "When should I post next?" |
 | `schedule_from_guide.py` | Parse a publishing guide markdown | Bulk schedule with rich metadata |
-| `bulk_scheduler.py` | Direct Blotato API scheduling | Immediate publish, bypass DB |
+| `bulk_scheduler.py` | Local-only schedule preview | Preview legacy rows; provider writes blocked |
 | `watch_folder.py` | Auto-ingest daemon for new videos | Drop video in folder → auto-scheduled |
 | `publish_monitor.py` | Live publish monitoring & notifications | Track publish progress, get alerts |
 
@@ -154,10 +156,10 @@ Full description text here...
 
 ## bulk_scheduler.py
 
-Direct Blotato API scheduling (bypasses DB — posts are not tracked by PostScheduler).
+Dry-run preview only. Direct Blotato scheduling is blocked; submit eligible work through Airtime.
 
 ```bash
-# Schedule folder to TikTok, 30 min apart
+# Preview a folder schedule to TikTok, 30 min apart
 python scripts/bulk_scheduler.py --source ~/videos --platform tiktok \
   --account isaiah_dupree --spacing 30
 
@@ -165,7 +167,7 @@ python scripts/bulk_scheduler.py --source ~/videos --platform tiktok \
 python scripts/bulk_scheduler.py --source ~/videos \
   --platform tiktok,instagram --account 710,807 --spacing 30
 
-# Immediate publish
+# Direct publish is blocked; use Airtime
 python scripts/bulk_scheduler.py --source ~/video.mp4 \
   --platform tiktok --account 710 --now
 
@@ -300,3 +302,9 @@ python scripts/plan_content.py analyze
 python scripts/plan_content.py upcoming --days 1
 python scripts/plan_content.py accounts
 ```
+
+Legacy entrypoints `publish_approved_videos.py`, `full_workflow_ingest_analyze_publish.py`,
+`direct_publish_test.py`, and `test_full_publish_flow.py` now exit with an Airtime authority
+message before reading media, calling APIs, saving content, or publishing. They are retained
+for migration reference; use ScriptHub for generation/approval and Airtime for schedule and
+provider writes.

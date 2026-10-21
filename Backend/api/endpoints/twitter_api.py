@@ -104,6 +104,8 @@ async def publish_tweet(
         HTTPException 400: Invalid request (text too long, etc.)
         HTTPException 500: Publishing failed
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for provider publishing."})
+
     try:
         # Get Twitter adapter
         adapters = registry.get_adapters_for_platform("twitter")
@@ -230,6 +232,8 @@ async def publish_thread(
         HTTPException 400: Invalid thread (tweet too long, etc.)
         HTTPException 500: Publishing failed
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for provider publishing."})
+
     try:
         # Get Twitter adapter
         adapters = registry.get_adapters_for_platform("twitter")

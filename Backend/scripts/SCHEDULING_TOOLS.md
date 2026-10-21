@@ -368,3 +368,7 @@ to assert zero provider requests. Deployed revisions and external callers remain
 ## Mounted scheduling API migration boundary (2026-10-21)
 
 The active legacy `/api/schedule` mutation routes (create, update, delete, reschedule, record-posted, publish-now, scheduled publish, and process-due) and `/api/external` submit/bulk/smart scheduling routes now return HTTP 409 `airtime_required` before their side effects. The external schedule-row helper is also disabled before database access. GET schedule/calendar/account/status/health discovery remains available. Use Airtime for schedule mutations and provider writes; verify remote callers and deployed revisions separately.
+
+## Other mounted publishing and queue migration boundary (2026-10-21)
+
+Legacy `/api/platform/publish`, `/api/twitter/publish`, `/api/twitter/publish-thread`, `/api/publishing/schedule`, and publishing-queue mutation routes now return HTTP 409 `airtime_required` before adapters, database mutations, or event publication. The old queue's unimplemented processor and fabricated queue/analytics summaries now return HTTP 501 `capability_unavailable`. Use Airtime for scheduling/provider writes; use an implemented, evidence-backed source for queue and analytics discovery.

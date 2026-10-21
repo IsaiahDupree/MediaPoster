@@ -145,6 +145,8 @@ def publish_video(
         }
         ```
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for provider publishing."})
+
     publisher = get_publisher(db)
     
     # Convert string UUIDs if provided

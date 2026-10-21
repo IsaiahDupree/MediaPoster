@@ -91,6 +91,8 @@ async def schedule_post(
     db: AsyncSession = Depends(get_db)
 ):
     """Schedule a clip or media project for publishing"""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for scheduling and provider publishing."})
+
     from database.models import MediaCreationProject
     
     # Check if scheduling a media project or a clip

@@ -51,21 +51,16 @@ def get_publishing_queue(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db)
 ):
-    """Get publishing queue (simple endpoint for /api/publishing/queue)"""
-    return {"items": [], "count": 0}
+    """Legacy queue data is unavailable; do not report an empty success."""
+    raise HTTPException(status_code=501, detail={"error": "capability_unavailable", "message": "Use Airtime queue discovery."})
 
 
 @router.get("/analytics")
 def get_publishing_analytics(
     db: Session = Depends(get_db)
 ):
-    """Get publishing analytics summary"""
-    return {
-        "total_published": 0,
-        "total_scheduled": 0,
-        "success_rate": 100,
-        "platforms": {}
-    }
+    """Legacy queue analytics are unavailable; do not return fabricated metrics."""
+    raise HTTPException(status_code=501, detail={"error": "capability_unavailable", "message": "Queue analytics are not implemented."})
 
 
 @router.post("/add")
@@ -75,6 +70,8 @@ def add_to_queue(
     http_request: Request = None  # For correlation ID
 ):
     """Add item to publishing queue"""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for queue and schedule mutations."})
+
     # BUG FIX: Use standardized validation utilities
     from utils.input_validation import (
         validate_platform,
@@ -158,6 +155,8 @@ def bulk_schedule(
     db: Session = Depends(get_db)
 ):
     """Add multiple items to queue"""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for queue and schedule mutations."})
+
     service = PublishingQueueService(db)
     
     items_data = [item.dict() for item in request.items]
@@ -221,6 +220,8 @@ def retry_item(
     db: Session = Depends(get_db)
 ):
     """Retry a failed queue item"""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for queue and schedule mutations."})
+
     service = PublishingQueueService(db)
     
     success = service.retry_failed_item(item_id)
@@ -241,6 +242,8 @@ def reschedule_item(
     db: Session = Depends(get_db)
 ):
     """Reschedule a queued item"""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for queue and schedule mutations."})
+
     service = PublishingQueueService(db)
     
     success = service.reschedule_item(item_id, new_time)
@@ -264,6 +267,8 @@ def cancel_item(
     db: Session = Depends(get_db)
 ):
     """Cancel a queued item"""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for queue and schedule mutations."})
+
     service = PublishingQueueService(db)
     
     success = service.cancel_item(item_id)
@@ -284,6 +289,8 @@ def process_queue(
     Process next items in queue
     This endpoint would typically be called by a scheduler/cron job
     """
+    raise HTTPException(status_code=501, detail={"error": "capability_unavailable", "message": "Legacy queue processing does not publish; use Airtime."})
+
     service = PublishingQueueService(db)
     
     items = service.get_next_items(limit=limit, platform=platform)

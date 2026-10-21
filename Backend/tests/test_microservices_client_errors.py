@@ -18,6 +18,7 @@ async def service_url():
     app = web.Application()
     app.router.add_post("/titles", titles)
     app.router.add_post("/blocked", blocked)
+    app.router.add_post("/api/generate/title", blocked)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -50,6 +51,18 @@ async def test_non_success_status_is_not_converted_to_empty_list(service_url):
     assert error.value.status_code == 409
     assert error.value.service == "ai"
     assert error.value.endpoint == "/blocked"
+
+
+@pytest.mark.asyncio
+async def test_title_wrapper_does_not_turn_policy_block_into_empty_success(service_url):
+    client = MicroservicesClient()
+    client.services["ai"] = service_url
+
+    with pytest.raises(ServiceCallError) as error:
+        await client.generate_titles("example content")
+
+    assert error.value.status_code == 409
+    assert error.value.endpoint == "/api/generate/title"
 
 
 @pytest.mark.asyncio

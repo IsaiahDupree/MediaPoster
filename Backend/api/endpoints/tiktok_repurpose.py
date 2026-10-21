@@ -231,6 +231,8 @@ async def schedule_crossposts(request: CrosspostRequest):
     - Threads: 243 (@the_isaiah_dupree)
     - Twitter: 571 (@IsaiahDupree7)
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     service = get_repurpose_service()
     
     try:
@@ -291,6 +293,8 @@ async def run_full_pipeline(request: FullPipelineRequest):
     }
     ```
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     service = get_repurpose_service()
     
     try:

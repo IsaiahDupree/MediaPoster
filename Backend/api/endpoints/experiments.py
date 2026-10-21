@@ -1306,6 +1306,8 @@ class VariantScheduleRequest(BaseModel):
 @router.post("/schedule-variant")
 async def schedule_experiment_variant(request: VariantScheduleRequest):
     """Schedule a variant for posting with fairness controls."""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     engine = get_engine()
     
     with engine.connect() as conn:

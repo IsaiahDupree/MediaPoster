@@ -372,3 +372,7 @@ The active legacy `/api/schedule` mutation routes (create, update, delete, resch
 ## Other mounted publishing and queue migration boundary (2026-10-21)
 
 Legacy `/api/platform/publish`, `/api/twitter/publish`, `/api/twitter/publish-thread`, `/api/publishing/schedule`, and publishing-queue mutation routes now return HTTP 409 `airtime_required` before adapters, database mutations, or event publication. The old queue's unimplemented processor and fabricated queue/analytics summaries now return HTTP 501 `capability_unavailable`. Use Airtime for scheduling/provider writes; use an implemented, evidence-backed source for queue and analytics discovery.
+
+## Planner materialization migration boundary (2026-10-21)
+
+Mounted adaptive schedule materialization, narrative-plan scheduling, experiment-variant scheduling, and TikTok repurpose cross-post/full-pipeline routes also return HTTP 409 `airtime_required` before database or media side effects. They cannot materialize `scheduled_posts` outside Airtime, even when reached through older planning integrations.

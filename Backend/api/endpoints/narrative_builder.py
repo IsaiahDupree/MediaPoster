@@ -970,6 +970,8 @@ class SchedulePlanRequest(BaseModel):
 @router.post("/schedule-7-day-plan")
 async def schedule_seven_day_plan(request: SchedulePlanRequest):
     """Generate and schedule a 7-day content plan to actual scheduled_posts."""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     engine = get_engine()
     
     # Parse start date
@@ -1435,6 +1437,8 @@ async def get_trend_opportunities_for_narrative():
 @router.post("/schedule-from-plan")
 async def schedule_from_plan(plan_items: List[Dict[str, Any]]):
     """Schedule posts from the 7-day plan to MAINLINE accounts."""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     engine = get_engine()
     scheduled = []
     

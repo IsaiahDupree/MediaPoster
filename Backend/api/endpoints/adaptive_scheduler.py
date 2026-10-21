@@ -241,6 +241,8 @@ async def materialize_schedule():
     Write the adaptive schedule into the scheduled_posts DB table.
     PostScheduler picks them up and publishes via BackgroundPublisher -> Blotato -> Platform.
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     from services.adaptive_scheduler_service import get_adaptive_scheduler
     service = get_adaptive_scheduler()
     created = service.materialize_schedule_to_db()

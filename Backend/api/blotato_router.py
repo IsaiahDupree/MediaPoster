@@ -37,6 +37,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/blotato", tags=["Blotato"])
 
 
+def _airtime_required() -> None:
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "error": "airtime_required",
+            "message": "Direct Blotato publishing and media writes are disabled; use the canonical ScriptHub/StoryRail/Airtime flow.",
+        },
+    )
+
+
+def _foundry_required() -> None:
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "error": "foundry_required",
+            "message": "Legacy Blotato video generation and deletion are disabled; use Foundry's governed production flow.",
+        },
+    )
+
+
 # =============================================================================
 # REQUEST MODELS
 # =============================================================================
@@ -237,6 +257,7 @@ async def publish_post(request: PublishPostRequest):
     
     Rate Limit: 30 requests/minute
     """
+    _airtime_required()
     try:
         client = BlotatoAPI()
         
@@ -342,6 +363,7 @@ async def publish_to_multiple_platforms(request: MultiPlatformPostRequest):
     
     Returns results for each platform.
     """
+    _airtime_required()
     results = {}
     
     for platform_str in request.platforms:
@@ -402,6 +424,7 @@ async def bulk_publish(request: BulkPublishRequest):
     Each account can have its own caption/text.
     Returns results for each account.
     """
+    _airtime_required()
     results = []
     
     for account in request.accounts:
@@ -549,6 +572,7 @@ async def full_publish(request: FullPublishRequest, background_tasks: Background
     4. Publish to platform via /v2/posts
     5. Delete from Google Drive after success
     """
+    _airtime_required()
     from pathlib import Path
     import httpx
     
@@ -712,6 +736,7 @@ async def full_publish_with_tracking(request: FullPublishWithTrackingRequest):
     This endpoint waits for the post to be published and returns the public URL.
     Use this when you need the platform URL for analytics.
     """
+    _airtime_required()
     from pathlib import Path
     import httpx
     
@@ -824,6 +849,7 @@ async def upload_media(request: UploadMediaRequest):
     Rate Limit: 10 requests/minute
     Max File Size: 200MB
     """
+    _airtime_required()
     try:
         client = BlotatoAPI()
         result = await client.upload_media(request.url)
@@ -854,6 +880,7 @@ async def create_video(request: CreateVideoRequest):
     
     Rate Limit: 1 request/minute
     """
+    _foundry_required()
     try:
         client = BlotatoAPI()
         
@@ -935,6 +962,7 @@ async def create_pov_video(
     animate: bool = Query(default=False),
 ):
     """Create a POV (Point of View) style video."""
+    _foundry_required()
     request = CreateVideoRequest(
         script=script,
         style=style,
@@ -960,6 +988,7 @@ async def create_slideshow_video(
     - text (optional): Exact quote text
     - textToImagePrompt (optional): Custom image prompt
     """
+    _foundry_required()
     request = CreateVideoRequest(
         script="1",
         style=style,
@@ -978,6 +1007,7 @@ async def create_narrated_video(
     caption_position: Optional[str] = Query(default="bottom"),
 ):
     """Create a narrated video with AI voice."""
+    _foundry_required()
     request = CreateVideoRequest(
         script=script,
         style=style,
@@ -1013,6 +1043,7 @@ async def get_video_status(video_id: str):
 @router.delete("/videos/{video_id}")
 async def delete_video(video_id: str):
     """Delete a video."""
+    _foundry_required()
     try:
         client = BlotatoAPI()
         result = await client.delete_video(video_id)

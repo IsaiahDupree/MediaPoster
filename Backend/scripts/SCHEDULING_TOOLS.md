@@ -349,3 +349,13 @@ calls. Read-only campaign product/style/analytics endpoints remain a separate au
 Twitter publishing and scheduling must flow through ScriptHub approval and Airtime. A local
 source/LaunchAgent search did not establish whether external or deployed callers still invoke
 these legacy paths.
+
+## Legacy Blotato API boundary
+
+The mounted `/api/blotato` router previously exposed direct single, multi-platform, bulk and
+full-flow publishing, media upload, paid video generation and video deletion. Those write routes
+now return HTTP 409 before constructing provider clients, resolving local media, starting a
+BackgroundPublisher, or calling Blotato. Publishing and media writes return
+`airtime_required`; generation and deletion return `foundry_required`. Read-only account, health
+and video-status routes remain separate. The route/helper tests use a real loopback HTTP server
+to assert zero provider requests. Deployed revisions and external callers remain unknown.

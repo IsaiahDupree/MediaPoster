@@ -21,7 +21,7 @@ Media production, provider integration, scheduling, analytics, and social publis
 - Database objects declared in migrations: **637**
 - Environment-variable names: **281**
 - Package manifests with scripts: **7**
-- Source fingerprint: `7611f7a13c1c756311c4772686fac60ff33ed513c4a6ac6fc48eb08c37e42683`
+- Source fingerprint: `a0c24d2d8f28716e238fe4f05d63b6a135876ba5aa8fff7a2c39d038bb085d2d`
 
 This is a static source inventory, not a live health report. Dynamic routes and runtime registrations must be verified through the repository's own health/discovery interface.
 
@@ -80,7 +80,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/account/{account_id}/summary` | [`Backend/api/endpoints/post_social_score.py:226`](Backend/api/endpoints/post_social_score.py#L226) | `read` |
 | `GET` | `/account/{account_id}/trends` | [`Backend/api/endpoints/social_analytics.py:409`](Backend/api/endpoints/social_analytics.py#L409) | `read` |
 | `GET` | `/accounts` | [`Backend/api/analytics_compare.py:332`](Backend/api/analytics_compare.py#L332) | `read` |
-| `GET` | `/accounts` | [`Backend/api/blotato_router.py:206`](Backend/api/blotato_router.py#L206) | `read` |
+| `GET` | `/accounts` | [`Backend/api/blotato_router.py:226`](Backend/api/blotato_router.py#L226) | `read` |
 | `GET` | `/accounts` | [`Backend/api/endpoints/blotato_test.py:105`](Backend/api/endpoints/blotato_test.py#L105) | `read` |
 | `GET` | `/accounts` | [`Backend/api/endpoints/competitor_api.py:47`](Backend/api/endpoints/competitor_api.py#L47) | `read` |
 | `GET` | `/accounts` | [`Backend/api/endpoints/competitor_audit.py:325`](Backend/api/endpoints/competitor_audit.py#L325) | `read` |
@@ -133,7 +133,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/adapt/full` | [`Backend/api/endpoints/adaptive_scheduler.py:383`](Backend/api/endpoints/adaptive_scheduler.py#L383) | `required` |
 | `POST` | `/add` | [`Backend/api/endpoints/publishing_queue.py:71`](Backend/api/endpoints/publishing_queue.py#L71) | `required` |
 | `GET` | `/agents` | [`Backend/api/endpoints/agent_events.py:260`](Backend/api/endpoints/agent_events.py#L260) | `read` |
-| `GET` | `/ai-models` | [`Backend/api/blotato_router.py:1225`](Backend/api/blotato_router.py#L1225) | `read` |
+| `GET` | `/ai-models` | [`Backend/api/blotato_router.py:1256`](Backend/api/blotato_router.py#L1256) | `read` |
 | `POST` | `/ai/generate` | [`Backend/api/endpoints/adaptive_scheduler.py:572`](Backend/api/endpoints/adaptive_scheduler.py#L572) | `required` |
 | `GET` | `/alerts` | [`Backend/api/endpoints/content_runway.py:219`](Backend/api/endpoints/content_runway.py#L219) | `read` |
 | `GET` | `/alerts` | [`Backend/api/endpoints/trends.py:470`](Backend/api/endpoints/trends.py#L470) | `read` |
@@ -175,11 +175,11 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/analytics/posts/{post_id}/retention` | [`Backend/api/endpoints/publishing_analytics.py:390`](Backend/api/endpoints/publishing_analytics.py#L390) | `read` |
 | `POST` | `/analytics/refresh-all` | [`Backend/api/endpoints/posted_content.py:394`](Backend/api/endpoints/posted_content.py#L394) | `required` |
 | `GET` | `/analytics/round/{round_id}` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:610`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L610) | `read` |
-| `GET` | `/analytics/scheduled` | [`Backend/routers/twitter_campaign.py:283`](Backend/routers/twitter_campaign.py#L283) | `read` |
+| `GET` | `/analytics/scheduled` | [`Backend/routers/twitter_campaign.py:223`](Backend/routers/twitter_campaign.py#L223) | `read` |
 | `GET` | `/analytics/scheduled` | [`Backend/routers/visual_campaign.py:166`](Backend/routers/visual_campaign.py#L166) | `read` |
-| `GET` | `/analytics/summary` | [`Backend/routers/twitter_campaign.py:275`](Backend/routers/twitter_campaign.py#L275) | `read` |
+| `GET` | `/analytics/summary` | [`Backend/routers/twitter_campaign.py:215`](Backend/routers/twitter_campaign.py#L215) | `read` |
 | `GET` | `/analytics/top-themes` | [`Backend/api/endpoints/orchestrator.py:428`](Backend/api/endpoints/orchestrator.py#L428) | `read` |
-| `GET` | `/analytics/tweets` | [`Backend/routers/twitter_campaign.py:256`](Backend/routers/twitter_campaign.py#L256) | `read` |
+| `GET` | `/analytics/tweets` | [`Backend/routers/twitter_campaign.py:196`](Backend/routers/twitter_campaign.py#L196) | `read` |
 | `GET` | `/analytics/{creative_id}/peak-engagement` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:834`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L834) | `read` |
 | `GET` | `/analytics/{creative_id}/retention` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:827`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L827) | `read` |
 | `GET` | `/analytics/{creative_id}/stream` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:782`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L782) | `read` |
@@ -808,7 +808,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/generate` | [`Backend/api/endpoints/ugc_content.py:75`](Backend/api/endpoints/ugc_content.py#L75) | `required` |
 | `POST` | `/generate` | [`Backend/api/endpoints/voice_cloning.py:279`](Backend/api/endpoints/voice_cloning.py#L279) | `required` |
 | `POST` | `/generate` | [`Backend/api/routes/sora_automation.py:96`](Backend/api/routes/sora_automation.py#L96) | `required` |
-| `POST` | `/generate` | [`Backend/routers/twitter_campaign.py:87`](Backend/routers/twitter_campaign.py#L87) | `required` |
+| `POST` | `/generate` | [`Backend/routers/twitter_campaign.py:79`](Backend/routers/twitter_campaign.py#L79) | `required` |
 | `POST` | `/generate` | [`Backend/routers/visual_campaign.py:38`](Backend/routers/visual_campaign.py#L38) | `required` |
 | `POST` | `/generate-batch` | [`Backend/api/comment_automation.py:539`](Backend/api/comment_automation.py#L539) | `required` |
 | `POST` | `/generate-brief` | [`Backend/api/endpoints/creative_briefs.py:295`](Backend/api/endpoints/creative_briefs.py#L295) | `required` |
@@ -868,7 +868,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/hashtags/top` | [`Backend/api/endpoints/social_analytics.py:596`](Backend/api/endpoints/social_analytics.py#L596) | `read` |
 | `POST` | `/hashtags/top` | [`Backend/api/endpoints/trend_queries_api.py:194`](Backend/api/endpoints/trend_queries_api.py#L194) | `required` |
 | `GET` | `/hashtags/{platform}/top` | [`Backend/api/endpoints/trends.py:139`](Backend/api/endpoints/trends.py#L139) | `read` |
-| `GET` | `/health` | [`Backend/api/blotato_router.py:188`](Backend/api/blotato_router.py#L188) | `read` |
+| `GET` | `/health` | [`Backend/api/blotato_router.py:208`](Backend/api/blotato_router.py#L208) | `read` |
 | `GET` | `/health` | [`Backend/api/endpoints/ai_titles.py:270`](Backend/api/endpoints/ai_titles.py#L270) | `read` |
 | `GET` | `/health` | [`Backend/api/endpoints/app_config.py:26`](Backend/api/endpoints/app_config.py#L26) | `read` |
 | `GET` | `/health` | [`Backend/api/endpoints/approval_queue.py:392`](Backend/api/endpoints/approval_queue.py#L392) | `read` |
@@ -1125,7 +1125,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/media-creation/content-types` | [`Frontend/src/app/media-creation/page.tsx:47`](Frontend/src/app/media-creation/page.tsx#L47) | `read` |
 | `GET` | `/media-creation/projects` | [`Frontend/src/app/media-creation/page.tsx:55`](Frontend/src/app/media-creation/page.tsx#L55) | `read` |
 | `POST` | `/media-creation/projects` | [`Frontend/src/app/media-creation/page.tsx:64`](Frontend/src/app/media-creation/page.tsx#L64) | `required` |
-| `POST` | `/media/upload` | [`Backend/api/blotato_router.py:816`](Backend/api/blotato_router.py#L816) | `required` |
+| `POST` | `/media/upload` | [`Backend/api/blotato_router.py:841`](Backend/api/blotato_router.py#L841) | `required` |
 | `GET` | `/media/{identifier}` | [`Backend/api/endpoints/instagram_api.py:103`](Backend/api/endpoints/instagram_api.py#L103) | `read` |
 | `GET` | `/memories` | [`Backend/api/endpoints/agent_panel.py:514`](Backend/api/endpoints/agent_panel.py#L514) | `read` |
 | `POST` | `/memories` | [`Backend/api/endpoints/agent_panel.py:558`](Backend/api/endpoints/agent_panel.py#L558) | `required` |
@@ -1306,7 +1306,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/platform/{platform}/disable` | [`Backend/api/endpoints/engagement_control.py:94`](Backend/api/endpoints/engagement_control.py#L94) | `required` |
 | `POST` | `/platform/{platform}/enable` | [`Backend/api/endpoints/engagement_control.py:83`](Backend/api/endpoints/engagement_control.py#L83) | `required` |
 | `GET` | `/platforms` | [`Backend/api/approval_queue.py:518`](Backend/api/approval_queue.py#L518) | `read` |
-| `GET` | `/platforms` | [`Backend/api/blotato_router.py:1095`](Backend/api/blotato_router.py#L1095) | `read` |
+| `GET` | `/platforms` | [`Backend/api/blotato_router.py:1126`](Backend/api/blotato_router.py#L1126) | `read` |
 | `GET` | `/platforms` | [`Backend/api/caption_variants.py:74`](Backend/api/caption_variants.py#L74) | `read` |
 | `GET` | `/platforms` | [`Backend/api/endpoints/ai_titles.py:260`](Backend/api/endpoints/ai_titles.py#L260) | `read` |
 | `GET` | `/platforms` | [`Backend/api/endpoints/platform_matching.py:220`](Backend/api/endpoints/platform_matching.py#L220) | `read` |
@@ -1349,13 +1349,13 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/posts` | [`Backend/api/endpoints/calendar.py:72`](Backend/api/endpoints/calendar.py#L72) | `read` |
 | `GET` | `/posts` | [`Backend/api/endpoints/platform_publishing.py:262`](Backend/api/endpoints/platform_publishing.py#L262) | `read` |
 | `GET` | `/posts` | [`Backend/api/endpoints/social_analytics.py:456`](Backend/api/endpoints/social_analytics.py#L456) | `read` |
-| `POST` | `/posts` | [`Backend/api/blotato_router.py:230`](Backend/api/blotato_router.py#L230) | `required` |
-| `POST` | `/posts/bulk` | [`Backend/api/blotato_router.py:397`](Backend/api/blotato_router.py#L397) | `required` |
+| `POST` | `/posts` | [`Backend/api/blotato_router.py:250`](Backend/api/blotato_router.py#L250) | `required` |
+| `POST` | `/posts/bulk` | [`Backend/api/blotato_router.py:419`](Backend/api/blotato_router.py#L419) | `required` |
 | `GET` | `/posts/by-origin` | [`Backend/api/endpoints/calendar.py:297`](Backend/api/endpoints/calendar.py#L297) | `read` |
-| `POST` | `/posts/full-publish` | [`Backend/api/blotato_router.py:542`](Backend/api/blotato_router.py#L542) | `required` |
-| `POST` | `/posts/full-publish-tracked` | [`Backend/api/blotato_router.py:700`](Backend/api/blotato_router.py#L700) | `required` |
-| `POST` | `/posts/multi-platform` | [`Backend/api/blotato_router.py:338`](Backend/api/blotato_router.py#L338) | `required` |
-| `GET` | `/posts/status/{submission_id}` | [`Backend/api/blotato_router.py:797`](Backend/api/blotato_router.py#L797) | `read` |
+| `POST` | `/posts/full-publish` | [`Backend/api/blotato_router.py:565`](Backend/api/blotato_router.py#L565) | `required` |
+| `POST` | `/posts/full-publish-tracked` | [`Backend/api/blotato_router.py:724`](Backend/api/blotato_router.py#L724) | `required` |
+| `POST` | `/posts/multi-platform` | [`Backend/api/blotato_router.py:359`](Backend/api/blotato_router.py#L359) | `required` |
+| `GET` | `/posts/status/{submission_id}` | [`Backend/api/blotato_router.py:822`](Backend/api/blotato_router.py#L822) | `read` |
 | `POST` | `/posts/{cascade_id}/approve` | [`Backend/api/cascade_publisher.py:101`](Backend/api/cascade_publisher.py#L101) | `required` |
 | `POST` | `/posts/{cascade_id}/skip` | [`Backend/api/cascade_publisher.py:114`](Backend/api/cascade_publisher.py#L114) | `required` |
 | `DELETE` | `/posts/{post_id}` | [`Backend/api/endpoints/calendar.py:177`](Backend/api/endpoints/calendar.py#L177) | `required` |
@@ -1375,15 +1375,15 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/process` | [`Backend/api/endpoints/publishing_queue.py:277`](Backend/api/endpoints/publishing_queue.py#L277) | `required` |
 | `POST` | `/process` | [`Backend/api/endpoints/repurpose.py:104`](Backend/api/endpoints/repurpose.py#L104) | `required` |
 | `POST` | `/process` | [`Backend/api/endpoints/youtube_automation.py:57`](Backend/api/endpoints/youtube_automation.py#L57) | `required` |
-| `POST` | `/process-due` | [`Backend/routers/twitter_campaign.py:151`](Backend/routers/twitter_campaign.py#L151) | `required` |
+| `POST` | `/process-due` | [`Backend/routers/twitter_campaign.py:94`](Backend/routers/twitter_campaign.py#L94) | `required` |
 | `POST` | `/process-now` | [`Backend/api/endpoints/post_scheduler_api.py:80`](Backend/api/endpoints/post_scheduler_api.py#L80) | `required` |
 | `POST` | `/process/batch` | [`Backend/api/endpoints/publishing_controls.py:395`](Backend/api/endpoints/publishing_controls.py#L395) | `required` |
 | `POST` | `/produce` | [`Backend/api/endpoints/broll_producer.py:92`](Backend/api/endpoints/broll_producer.py#L92) | `required` |
 | `POST` | `/produce/async` | [`Backend/api/endpoints/broll_producer.py:155`](Backend/api/endpoints/broll_producer.py#L155) | `required` |
 | `GET` | `/products` | [`Backend/api/endpoints/adaptive_scheduler.py:229`](Backend/api/endpoints/adaptive_scheduler.py#L229) | `read` |
-| `GET` | `/products` | [`Backend/routers/twitter_campaign.py:163`](Backend/routers/twitter_campaign.py#L163) | `read` |
-| `GET` | `/products/{slug}` | [`Backend/routers/twitter_campaign.py:186`](Backend/routers/twitter_campaign.py#L186) | `read` |
-| `GET` | `/products/{slug}/cycle` | [`Backend/routers/twitter_campaign.py:207`](Backend/routers/twitter_campaign.py#L207) | `read` |
+| `GET` | `/products` | [`Backend/routers/twitter_campaign.py:103`](Backend/routers/twitter_campaign.py#L103) | `read` |
+| `GET` | `/products/{slug}` | [`Backend/routers/twitter_campaign.py:126`](Backend/routers/twitter_campaign.py#L126) | `read` |
+| `GET` | `/products/{slug}/cycle` | [`Backend/routers/twitter_campaign.py:147`](Backend/routers/twitter_campaign.py#L147) | `read` |
 | `GET` | `/profile/videos` | [`Backend/api/endpoints/tiktok_analytics.py:126`](Backend/api/endpoints/tiktok_analytics.py#L126) | `read` |
 | `GET` | `/profile/{identifier}` | [`Backend/api/endpoints/instagram_api.py:71`](Backend/api/endpoints/instagram_api.py#L71) | `read` |
 | `GET` | `/profiles` | [`Backend/api/endpoints/voice_cloning.py:146`](Backend/api/endpoints/voice_cloning.py#L146) | `read` |
@@ -1564,7 +1564,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/run` | [`Backend/api/endpoints/content_gap_api.py:31`](Backend/api/endpoints/content_gap_api.py#L31) | `required` |
 | `POST` | `/run` | [`Backend/api/endpoints/trend_flash.py:202`](Backend/api/endpoints/trend_flash.py#L202) | `required` |
 | `POST` | `/run-batch` | [`Backend/api/endpoints/analysis_scheduler.py:93`](Backend/api/endpoints/analysis_scheduler.py#L93) | `required` |
-| `POST` | `/run-daily` | [`Backend/routers/twitter_campaign.py:133`](Backend/routers/twitter_campaign.py#L133) | `required` |
+| `POST` | `/run-daily` | [`Backend/routers/twitter_campaign.py:89`](Backend/routers/twitter_campaign.py#L89) | `required` |
 | `POST` | `/run-daily` | [`Backend/routers/visual_campaign.py:90`](Backend/routers/visual_campaign.py#L90) | `required` |
 | `POST` | `/run-format/{format_id}` | [`Backend/api/endpoints/format_discovery.py:135`](Backend/api/endpoints/format_discovery.py#L135) | `required` |
 | `GET` | `/run/{run_id}` | [`Backend/api/endpoints/agent_events.py:117`](Backend/api/endpoints/agent_events.py#L117) | `read` |
@@ -1612,7 +1612,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/schedule` | [`Backend/api/endpoints/publishing.py:87`](Backend/api/endpoints/publishing.py#L87) | `required` |
 | `POST` | `/schedule` | [`Backend/api/endpoints/twitter_posting.py:204`](Backend/api/endpoints/twitter_posting.py#L204) | `required` |
 | `POST` | `/schedule` | [`Backend/api/routes/sora_automation.py:236`](Backend/api/routes/sora_automation.py#L236) | `required` |
-| `POST` | `/schedule` | [`Backend/routers/twitter_campaign.py:112`](Backend/routers/twitter_campaign.py#L112) | `required` |
+| `POST` | `/schedule` | [`Backend/routers/twitter_campaign.py:84`](Backend/routers/twitter_campaign.py#L84) | `required` |
 | `POST` | `/schedule` | [`Backend/routers/visual_campaign.py:67`](Backend/routers/visual_campaign.py#L67) | `required` |
 | `POST` | `/schedule-7-day-plan` | [`Backend/api/endpoints/narrative_builder.py:970`](Backend/api/endpoints/narrative_builder.py#L970) | `required` |
 | `POST` | `/schedule-checkbacks/{post_id}` | [`Backend/api/endpoints/platform_publishing.py:420`](Backend/api/endpoints/platform_publishing.py#L420) | `required` |
@@ -1638,11 +1638,11 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/scheduler/status` | [`Backend/api/endpoints/competitor_api.py:468`](Backend/api/endpoints/competitor_api.py#L468) | `read` |
 | `GET` | `/scheduler/status` | [`Backend/api/endpoints/schedule.py:1178`](Backend/api/endpoints/schedule.py#L1178) | `read` |
 | `GET` | `/scheduler/status` | [`Backend/api/endpoints/trend_intelligence.py:814`](Backend/api/endpoints/trend_intelligence.py#L814) | `read` |
-| `GET` | `/scheduler/status` | [`Backend/routers/twitter_campaign.py:72`](Backend/routers/twitter_campaign.py#L72) | `read` |
+| `GET` | `/scheduler/status` | [`Backend/routers/twitter_campaign.py:64`](Backend/routers/twitter_campaign.py#L64) | `read` |
 | `POST` | `/scheduler/stop` | [`Backend/api/endpoints/agent_panel.py:192`](Backend/api/endpoints/agent_panel.py#L192) | `required` |
 | `POST` | `/scheduler/stop` | [`Backend/api/endpoints/trend_intelligence.py:793`](Backend/api/endpoints/trend_intelligence.py#L793) | `required` |
 | `POST` | `/scheduler/stop` | [`Backend/api/routes/sora_automation.py:278`](Backend/api/routes/sora_automation.py#L278) | `required` |
-| `POST` | `/scheduler/stop` | [`Backend/routers/twitter_campaign.py:59`](Backend/routers/twitter_campaign.py#L59) | `required` |
+| `POST` | `/scheduler/stop` | [`Backend/routers/twitter_campaign.py:51`](Backend/routers/twitter_campaign.py#L51) | `required` |
 | `POST` | `/scheduler/sync-all` | [`Backend/api/endpoints/competitor_api.py:475`](Backend/api/endpoints/competitor_api.py#L475) | `required` |
 | `POST` | `/scheduler/sync/{username}` | [`Backend/api/endpoints/competitor_api.py:493`](Backend/api/endpoints/competitor_api.py#L493) | `required` |
 | `POST` | `/scheduler/task/{task_id}/interval` | [`Backend/api/endpoints/agent_panel.py:266`](Backend/api/endpoints/agent_panel.py#L266) | `required` |
@@ -1896,8 +1896,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/story/generate-single` | [`Backend/api/endpoints/sora_daily.py:243`](Backend/api/endpoints/sora_daily.py#L243) | `required` |
 | `GET` | `/stream/{audio_id}` | [`Backend/api/endpoints/audio_api.py:87`](Backend/api/endpoints/audio_api.py#L87) | `read` |
 | `GET` | `/stream/{media_id}` | [`Backend/api/endpoints/media_provider.py:72`](Backend/api/endpoints/media_provider.py#L72) | `read` |
-| `GET` | `/style` | [`Backend/routers/twitter_campaign.py:226`](Backend/routers/twitter_campaign.py#L226) | `read` |
-| `PUT` | `/style` | [`Backend/routers/twitter_campaign.py:234`](Backend/routers/twitter_campaign.py#L234) | `required` |
+| `GET` | `/style` | [`Backend/routers/twitter_campaign.py:166`](Backend/routers/twitter_campaign.py#L166) | `read` |
+| `PUT` | `/style` | [`Backend/routers/twitter_campaign.py:174`](Backend/routers/twitter_campaign.py#L174) | `required` |
 | `GET` | `/styles` | [`Backend/api/endpoints/ai_titles.py:243`](Backend/api/endpoints/ai_titles.py#L243) | `read` |
 | `GET` | `/styles` | [`Backend/api/endpoints/ai_video_generation.py:701`](Backend/api/endpoints/ai_video_generation.py#L701) | `read` |
 | `GET` | `/styles` | [`Backend/api/subtitles.py:44`](Backend/api/subtitles.py#L44) | `read` |
@@ -2100,8 +2100,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/video-ready` | [`Backend/services/video_ready_pipeline.py:931`](Backend/services/video_ready_pipeline.py#L931) | `required` |
 | `GET` | `/video-stats` | [`Backend/api/endpoints/batch_analysis.py:83`](Backend/api/endpoints/batch_analysis.py#L83) | `read` |
 | `GET` | `/video-stream/{media_id}` | [`Backend/api/media_processing_db.py:2857`](Backend/api/media_processing_db.py#L2857) | `read` |
-| `GET` | `/video-styles` | [`Backend/api/blotato_router.py:1183`](Backend/api/blotato_router.py#L1183) | `read` |
-| `GET` | `/video-templates` | [`Backend/api/blotato_router.py:1194`](Backend/api/blotato_router.py#L1194) | `read` |
+| `GET` | `/video-styles` | [`Backend/api/blotato_router.py:1214`](Backend/api/blotato_router.py#L1214) | `read` |
+| `GET` | `/video-templates` | [`Backend/api/blotato_router.py:1225`](Backend/api/blotato_router.py#L1225) | `read` |
 | `GET` | `/video/comments` | [`Backend/api/endpoints/tiktok_analytics.py:83`](Backend/api/endpoints/tiktok_analytics.py#L83) | `read` |
 | `POST` | `/video/create` | [`Backend/api/explainer_video.py:243`](Backend/api/explainer_video.py#L243) | `required` |
 | `GET` | `/video/jobs` | [`Backend/api/explainer_video.py:295`](Backend/api/explainer_video.py#L295) | `read` |
@@ -2117,16 +2117,16 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/videos` | [`Backend/api/endpoints/viral_analysis.py:23`](Backend/api/endpoints/viral_analysis.py#L23) | `read` |
 | `GET` | `/videos` | [`Backend/api/endpoints/youtube_analytics.py:73`](Backend/api/endpoints/youtube_analytics.py#L73) | `read` |
 | `GET` | `/videos-needing-reanalysis` | [`Backend/api/endpoints/analysis_health.py:333`](Backend/api/endpoints/analysis_health.py#L333) | `read` |
-| `POST` | `/videos/create` | [`Backend/api/blotato_router.py:845`](Backend/api/blotato_router.py#L845) | `required` |
+| `POST` | `/videos/create` | [`Backend/api/blotato_router.py:871`](Backend/api/blotato_router.py#L871) | `required` |
 | `POST` | `/videos/generate-thumbnails-batch` | [`Frontend/src/app/video-library/page.tsx:82`](Frontend/src/app/video-library/page.tsx#L82) | `required` |
-| `POST` | `/videos/narrated` | [`Backend/api/blotato_router.py:973`](Backend/api/blotato_router.py#L973) | `required` |
+| `POST` | `/videos/narrated` | [`Backend/api/blotato_router.py:1002`](Backend/api/blotato_router.py#L1002) | `required` |
 | `GET` | `/videos/pool` | [`Backend/api/endpoints/adaptive_scheduler.py:210`](Backend/api/endpoints/adaptive_scheduler.py#L210) | `read` |
-| `POST` | `/videos/pov` | [`Backend/api/blotato_router.py:929`](Backend/api/blotato_router.py#L929) | `required` |
+| `POST` | `/videos/pov` | [`Backend/api/blotato_router.py:956`](Backend/api/blotato_router.py#L956) | `required` |
 | `POST` | `/videos/scan` | [`Frontend/src/components/videos/AddSourceModal.tsx:48`](Frontend/src/components/videos/AddSourceModal.tsx#L48) | `required` |
-| `POST` | `/videos/slideshow` | [`Backend/api/blotato_router.py:949`](Backend/api/blotato_router.py#L949) | `required` |
-| `DELETE` | `/videos/{video_id}` | [`Backend/api/blotato_router.py:1013`](Backend/api/blotato_router.py#L1013) | `required` |
+| `POST` | `/videos/slideshow` | [`Backend/api/blotato_router.py:977`](Backend/api/blotato_router.py#L977) | `required` |
+| `DELETE` | `/videos/{video_id}` | [`Backend/api/blotato_router.py:1043`](Backend/api/blotato_router.py#L1043) | `required` |
 | `DELETE` | `/videos/{video_id}` | [`Backend/api/endpoints/storage.py:284`](Backend/api/endpoints/storage.py#L284) | `required` |
-| `GET` | `/videos/{video_id}` | [`Backend/api/blotato_router.py:991`](Backend/api/blotato_router.py#L991) | `read` |
+| `GET` | `/videos/{video_id}` | [`Backend/api/blotato_router.py:1021`](Backend/api/blotato_router.py#L1021) | `read` |
 | `POST` | `/videos/{video_id}/analyze` | [`Backend/api/endpoints/enhanced_analysis.py:94`](Backend/api/endpoints/enhanced_analysis.py#L94) | `required` |
 | `POST` | `/videos/{video_id}/analyze` | [`Backend/api/endpoints/viral_analysis.py:117`](Backend/api/endpoints/viral_analysis.py#L117) | `required` |
 | `POST` | `/videos/{video_id}/analyze-sync` | [`Backend/api/endpoints/viral_analysis.py:175`](Backend/api/endpoints/viral_analysis.py#L175) | `required` |
@@ -2135,13 +2135,13 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/videos/{video_id}/metrics` | [`Backend/api/endpoints/viral_analysis.py:445`](Backend/api/endpoints/viral_analysis.py#L445) | `read` |
 | `GET` | `/videos/{video_id}/timeline` | [`Backend/api/endpoints/viral_analysis.py:368`](Backend/api/endpoints/viral_analysis.py#L368) | `read` |
 | `GET` | `/videos/{video_id}/validate` | [`Backend/api/endpoints/enhanced_analysis.py:110`](Backend/api/endpoints/enhanced_analysis.py#L110) | `read` |
-| `GET` | `/videos/{video_id}/wait` | [`Backend/api/blotato_router.py:1025`](Backend/api/blotato_router.py#L1025) | `read` |
+| `GET` | `/videos/{video_id}/wait` | [`Backend/api/blotato_router.py:1056`](Backend/api/blotato_router.py#L1056) | `read` |
 | `GET` | `/videos/{video_id}/words` | [`Backend/api/endpoints/viral_analysis.py:216`](Backend/api/endpoints/viral_analysis.py#L216) | `read` |
 | `GET` | `/view-modes` | [`Backend/api/endpoints/calendar.py:491`](Backend/api/endpoints/calendar.py#L491) | `read` |
 | `POST` | `/vision/analyze-structured` | [`Backend/api/endpoints/enhanced_analysis.py:292`](Backend/api/endpoints/enhanced_analysis.py#L292) | `required` |
 | `POST` | `/vision/detect-motion` | [`Backend/api/endpoints/enhanced_analysis.py:382`](Backend/api/endpoints/enhanced_analysis.py#L382) | `required` |
 | `POST` | `/vision/detect-scenes` | [`Backend/api/endpoints/enhanced_analysis.py:339`](Backend/api/endpoints/enhanced_analysis.py#L339) | `required` |
-| `GET` | `/voices` | [`Backend/api/blotato_router.py:1059`](Backend/api/blotato_router.py#L1059) | `read` |
+| `GET` | `/voices` | [`Backend/api/blotato_router.py:1090`](Backend/api/blotato_router.py#L1090) | `read` |
 | `POST` | `/wake` | [`Backend/api/endpoints/sleep.py:98`](Backend/api/endpoints/sleep.py#L98) | `required` |
 | `GET` | `/wake-events` | [`Backend/api/endpoints/sleep.py:245`](Backend/api/endpoints/sleep.py#L245) | `read` |
 | `DELETE` | `/wake/{trigger_id}` | [`Backend/api/endpoints/sleep.py:185`](Backend/api/endpoints/sleep.py#L185) | `required` |

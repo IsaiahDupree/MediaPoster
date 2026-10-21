@@ -45,15 +45,7 @@ class UpdateStyleRequest(BaseModel):
 
 @router.post("/scheduler/start")
 async def start_scheduler():
-    """Start the Twitter campaign scheduler."""
-    try:
-        scheduler = await start_twitter_campaign_scheduler()
-        return {
-            "status": "started",
-            "message": "Twitter campaign scheduler is now running"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Legacy Twitter scheduling is disabled; use Airtime."})
 
 
 @router.post("/scheduler/stop")
@@ -86,74 +78,22 @@ async def get_scheduler_status():
 
 @router.post("/generate")
 async def generate_tweets(request: GenerateTweetsRequest, background_tasks: BackgroundTasks):
-    """Generate tweets for one or all products."""
-    service = get_campaign_service()
-    
-    if request.product_slug:
-        product = service.get_product_by_slug(request.product_slug)
-        if not product:
-            raise HTTPException(status_code=404, detail=f"Product not found: {request.product_slug}")
-        
-        tweets = service.generate_batch_tweets(product, count=request.count)
-    else:
-        # Generate for all products
-        products = service.get_products()
-        tweets = []
-        for product in products:
-            batch = service.generate_batch_tweets(product, count=request.count // len(products))
-            tweets.extend(batch)
-    
-    return {
-        "generated": len(tweets),
-        "tweets": tweets
-    }
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate and approve social copy through ScriptHub."})
 
 
 @router.post("/schedule")
 async def schedule_tweets(request: ScheduleTweetsRequest):
-    """Schedule tweets for posting."""
-    service = get_campaign_service()
-    
-    start_time = None
-    if request.start_time:
-        start_time = datetime.fromisoformat(request.start_time)
-    
-    scheduled_ids = service.schedule_tweets(
-        tweets=request.tweets,
-        start_time=start_time,
-        interval_minutes=request.interval_minutes
-    )
-    
-    return {
-        "scheduled": len(scheduled_ids),
-        "ids": scheduled_ids
-    }
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Schedule social posts through Airtime."})
 
 
 @router.post("/run-daily")
 async def run_daily_campaign(background_tasks: BackgroundTasks):
-    """Run the daily campaign generation and scheduling."""
-    service = get_campaign_service()
-    
-    async def run_campaign():
-        return await service.run_daily_campaign()
-    
-    # Run in background
-    import asyncio
-    result = await service.run_daily_campaign()
-    
-    return {
-        "status": "completed",
-        "result": result
-    }
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub and schedule through Airtime."})
 
 
 @router.post("/process-due")
 async def process_due_tweets():
-    """Process all tweets that are due for posting."""
-    service = get_campaign_service()
-    result = await service.process_due_tweets()
-    return result
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Legacy Twitter publishing is disabled; use Airtime."})
 
 
 # =============================================================================

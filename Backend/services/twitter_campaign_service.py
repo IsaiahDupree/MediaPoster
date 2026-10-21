@@ -428,76 +428,7 @@ class TwitterCampaignService:
         content_type: ContentType,
         user_style: Optional[Dict] = None
     ) -> str:
-        """Generate a single tweet using AI."""
-        
-        user_style = user_style or self.get_user_style()
-        
-        stage_desc = AWARENESS_STAGE_DESCRIPTIONS.get(awareness_stage, '')
-        type_desc = CONTENT_TYPE_DESCRIPTIONS.get(content_type, '')
-        
-        style_prompt = user_style.get('generated_style_prompt') or f"""
-Writing Style:
-- Tone: {', '.join(user_style.get('tone_keywords', ['casual', 'direct']))}
-- {user_style.get('style_description', 'Casual and direct')}
-- Avoid words: {', '.join(user_style.get('avoid_words', []))}
-- Use lowercase when it feels natural
-- No hashtags unless absolutely necessary
-- No emojis unless they add real value
-- Sound like a real person, not a brand
-"""
-        
-        prompt = f"""Generate a single Twitter post (max 280 chars) for:
-
-PRODUCT: {product.name}
-- Description: {product.description}
-- Website: {product.website_url}
-- Tagline: {product.tagline}
-- Key Features: {', '.join(product.key_features[:3])}
-- Target Audience: {product.target_audience}
-
-AWARENESS STAGE: {awareness_stage.value}
-{stage_desc}
-
-CONTENT TYPE: {content_type.value}
-{type_desc}
-
-{style_prompt}
-
-IMPORTANT RULES:
-1. MUST be under 280 characters
-2. Sound authentic, like a real person tweeting
-3. Don't be salesy or corporate
-4. Can include the product URL ({product.website_url}) if it's a CTA type, but not required
-5. Make it engaging and likely to get replies/retweets
-6. Match the awareness stage - don't pitch to unaware audiences
-7. Be specific, not generic
-
-Generate ONLY the tweet text, nothing else."""
-
-        response = self.openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a social media expert who writes authentic, engaging tweets that don't sound like marketing. You understand the customer awareness journey and tailor messaging appropriately."
-                },
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=150,
-            temperature=0.9  # Higher creativity
-        )
-        
-        tweet = response.choices[0].message.content.strip()
-        
-        # Remove quotes if AI wrapped it
-        if tweet.startswith('"') and tweet.endswith('"'):
-            tweet = tweet[1:-1]
-        
-        # Ensure under 280 chars
-        if len(tweet) > 280:
-            tweet = tweet[:277] + "..."
-        
-        return tweet
+        raise RuntimeError("script_hub_required: legacy Twitter copy generation is disabled; use ScriptHub.")
     
     def generate_batch_tweets(
         self,
@@ -505,32 +436,7 @@ Generate ONLY the tweet text, nothing else."""
         count: int = 20,
         user_style: Optional[Dict] = None
     ) -> List[Dict]:
-        """Generate a batch of tweets cycling through stages and types."""
-        
-        user_style = user_style or self.get_user_style()
-        tweets = []
-        
-        stages = list(AwarenessStage)
-        types = list(ContentType)
-        
-        for i in range(count):
-            stage = stages[i % len(stages)]
-            content_type = types[i % len(types)]
-            
-            try:
-                tweet_text = self.generate_tweet(product, stage, content_type, user_style)
-                tweets.append({
-                    'product_id': product.id,
-                    'product_slug': product.slug,
-                    'awareness_stage': stage.value,
-                    'content_type': content_type.value,
-                    'tweet_text': tweet_text
-                })
-                logger.info(f"Generated tweet {i+1}/{count} for {product.slug}: {stage.value}/{content_type.value}")
-            except Exception as e:
-                logger.error(f"Failed to generate tweet: {e}")
-        
-        return tweets
+        raise RuntimeError("script_hub_required: legacy Twitter copy generation is disabled; use ScriptHub.")
     
     # =========================================================================
     # SCHEDULING
@@ -542,40 +448,7 @@ Generate ONLY the tweet text, nothing else."""
         start_time: Optional[datetime] = None,
         interval_minutes: int = 24  # ~60 tweets spread over 24 hours = ~24 min apart
     ) -> List[str]:
-        """Schedule tweets for posting."""
-        
-        start_time = start_time or datetime.now(timezone.utc)
-        scheduled_ids = []
-        
-        with self.engine.connect() as conn:
-            for i, tweet in enumerate(tweets):
-                scheduled_time = start_time + timedelta(minutes=interval_minutes * i)
-                
-                result = conn.execute(text("""
-                    INSERT INTO scheduled_tweets
-                    (product_id, awareness_stage, content_type, tweet_text, 
-                     scheduled_time, blotato_account_id, status)
-                    VALUES
-                    (:product_id, :awareness_stage, :content_type, :tweet_text,
-                     :scheduled_time, :blotato_account_id, 'scheduled')
-                    RETURNING id
-                """), {
-                    "product_id": tweet['product_id'],
-                    "awareness_stage": tweet['awareness_stage'],
-                    "content_type": tweet['content_type'],
-                    "tweet_text": tweet['tweet_text'],
-                    "scheduled_time": scheduled_time,
-                    "blotato_account_id": self.blotato_account_id
-                })
-                
-                row = result.fetchone()
-                if row:
-                    scheduled_ids.append(str(row[0]))
-            
-            conn.commit()
-        
-        logger.info(f"Scheduled {len(scheduled_ids)} tweets starting at {start_time}")
-        return scheduled_ids
+        raise RuntimeError("airtime_required: legacy Twitter scheduling is disabled; use Airtime.")
     
     def get_due_tweets(self) -> List[Dict]:
         """Get tweets that are due for posting."""
@@ -616,50 +489,7 @@ Generate ONLY the tweet text, nothing else."""
     # =========================================================================
     
     async def post_tweet(self, tweet: Dict) -> Dict:
-        """Post a single tweet via Blotato, with Safari fallback."""
-        from modules.publishing.blotato_client import BlotatoClient
-        
-        # Try Blotato first
-        try:
-            client = BlotatoClient()
-            
-            result = client.create_post(
-                account_id=tweet['blotato_account_id'],
-                platform='twitter',
-                text=tweet['tweet_text'],
-                media_urls=[]
-            )
-            
-            if result:
-                self._record_posted_tweet(tweet, result)
-                self._mark_tweet_posted(tweet['id'], result)
-                return {'success': True, 'result': result, 'method': 'blotato'}
-                
-        except Exception as e:
-            logger.warning(f"Blotato failed, trying Safari fallback: {e}")
-        
-        # Fallback to Safari automation
-        try:
-            from automation.safari_twitter_poster import SafariTwitterPoster
-            
-            poster = SafariTwitterPoster()
-            result = poster.post_tweet(tweet['tweet_text'])
-            
-            if result.get('success'):
-                self._record_posted_tweet(tweet, {
-                    'post_submission_id': f"safari_{int(datetime.now().timestamp())}",
-                    'platform_url': result.get('url')
-                })
-                self._mark_tweet_posted(tweet['id'], result)
-                return {'success': True, 'result': result, 'method': 'safari'}
-            else:
-                self._mark_tweet_failed(tweet['id'], result.get('error', 'Safari posting failed'))
-                return {'success': False, 'error': result.get('error'), 'method': 'safari'}
-                
-        except Exception as e:
-            logger.error(f"Failed to post tweet {tweet['id']}: {e}")
-            self._mark_tweet_failed(tweet['id'], str(e))
-            return {'success': False, 'error': str(e)}
+        return {"success": False, "error": "airtime_required"}
     
     def _record_posted_tweet(self, tweet: Dict, result: Dict):
         """Record a posted tweet for analytics tracking."""
@@ -870,45 +700,7 @@ Generate ONLY the tweet text, nothing else."""
     # =========================================================================
     
     async def run_daily_campaign(self):
-        """Generate and schedule 60 tweets for the day."""
-        logger.info("=" * 60)
-        logger.info("Starting Daily Twitter Campaign")
-        logger.info("=" * 60)
-        
-        # Reset daily counts
-        self.reset_daily_counts()
-        
-        products = self.get_products()
-        user_style = self.get_user_style()
-        
-        all_tweets = []
-        
-        for product in products:
-            logger.info(f"\n📦 Generating tweets for {product.name}...")
-            tweets = self.generate_batch_tweets(
-                product=product,
-                count=self.tweets_per_product,
-                user_style=user_style
-            )
-            all_tweets.extend(tweets)
-        
-        # Shuffle to mix products
-        random.shuffle(all_tweets)
-        
-        # Schedule tweets using configured interval (default 2 hours)
-        scheduled_ids = self.schedule_tweets(
-            tweets=all_tweets,
-            start_time=datetime.now(timezone.utc),
-            interval_minutes=self.interval_minutes
-        )
-        
-        logger.info(f"\n✅ Scheduled {len(scheduled_ids)} tweets for today")
-        
-        return {
-            'total_scheduled': len(scheduled_ids),
-            'products': [p.name for p in products],
-            'scheduled_ids': scheduled_ids[:10]  # First 10 for reference
-        }
+        raise RuntimeError("script_hub_required: legacy Twitter copy generation is disabled; use ScriptHub.")
     
     # =========================================================================
     # REQ-TWITTER-002: OFFER-FOCUSED TWEET GENERATION WITH UTM
@@ -975,94 +767,7 @@ Generate ONLY the tweet text, nothing else."""
         campaign_name: Optional[str] = None,
         content_id: Optional[str] = None
     ) -> Dict:
-        """
-        Generate a tweet focused on driving traffic to an offer.
-        
-        REQ-TWITTER-002: Creates engaging tweets with UTM-tracked links.
-        
-        Args:
-            offer_url: The URL to the offer/product
-            offer_description: What the offer is about
-            cta_text: Call-to-action text
-            campaign_name: Campaign identifier for UTM tracking
-            content_id: Optional A/B test identifier
-            
-        Returns:
-            Dict with tweet_text and tracking info
-        """
-        import uuid
-        
-        # Generate campaign name if not provided
-        if not campaign_name:
-            campaign_name = f"offer_{datetime.now().strftime('%Y%m%d')}"
-        
-        # Generate content ID for tracking if not provided
-        if not content_id:
-            content_id = str(uuid.uuid4())[:8]
-        
-        # Create UTM-tracked link
-        tracked_url = self.generate_utm_link(
-            base_url=offer_url,
-            campaign=campaign_name,
-            source="twitter",
-            medium="social",
-            content=content_id
-        )
-        
-        # Generate engaging tweet with AI
-        try:
-            response = self.openai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are an expert Twitter copywriter. 
-Create engaging, casual tweets that drive clicks.
-- Keep under 250 chars to leave room for the link
-- Use curiosity, urgency, or value proposition
-- Be conversational, not salesy
-- No hashtags (they reduce engagement on Twitter)"""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""Write a tweet promoting this offer:
-
-Offer: {offer_description}
-CTA: {cta_text}
-
-Return ONLY the tweet text, no quotes or labels."""
-                    }
-                ],
-                temperature=0.9
-            )
-            
-            tweet_text = response.choices[0].message.content.strip()
-            # Remove quotes if present
-            tweet_text = tweet_text.strip('"\'')
-            
-        except Exception as e:
-            logger.warning(f"AI offer tweet generation failed: {e}")
-            tweet_text = f"{offer_description}\n\n{cta_text} 👇"
-        
-        # Append the tracked URL
-        full_tweet = f"{tweet_text}\n\n{tracked_url}"
-        
-        # Ensure we're within Twitter's limit
-        if len(full_tweet) > 280:
-            # Truncate tweet text to fit
-            max_text_len = 280 - len(tracked_url) - 5  # 5 for newlines and buffer
-            tweet_text = tweet_text[:max_text_len] + "..."
-            full_tweet = f"{tweet_text}\n\n{tracked_url}"
-        
-        return {
-            "tweet_text": full_tweet,
-            "offer_url": offer_url,
-            "tracked_url": tracked_url,
-            "campaign": campaign_name,
-            "content_id": content_id,
-            "awareness_stage": AwarenessStage.MOST_AWARE.value,
-            "content_type": ContentType.CTA.value
-        }
+        raise RuntimeError("script_hub_required: legacy Twitter copy generation is disabled; use ScriptHub.")
     
     def schedule_offer_tweets(
         self,
@@ -1073,90 +778,10 @@ Return ONLY the tweet text, no quotes or labels."""
         start_time: Optional[datetime] = None,
         campaign_name: Optional[str] = None
     ) -> List[str]:
-        """
-        Generate and schedule multiple offer-focused tweets.
-        
-        Creates varied tweets all driving to the same offer, scheduled
-        at regular intervals (default every 2 hours = 12/day).
-        
-        Args:
-            offer_url: The offer URL
-            offer_description: What the offer is
-            count: Number of tweets to generate
-            interval_minutes: Time between posts (default 2 hours)
-            start_time: When to start posting
-            campaign_name: Campaign identifier
-            
-        Returns:
-            List of scheduled tweet IDs
-        """
-        start_time = start_time or datetime.now(timezone.utc)
-        campaign_name = campaign_name or f"offer_{datetime.now().strftime('%Y%m%d')}"
-        
-        cta_variations = [
-            "Check it out",
-            "See for yourself",
-            "Don't miss this",
-            "Link below",
-            "Grab it now",
-            "Here's the link",
-            "Take a look",
-            "See what I mean",
-            "Try it yourself",
-            "Get started here",
-            "Join the movement",
-            "See the details"
-        ]
-        
-        offer_tweets = []
-        for i in range(count):
-            cta = cta_variations[i % len(cta_variations)]
-            tweet_data = self.generate_offer_tweet(
-                offer_url=offer_url,
-                offer_description=offer_description,
-                cta_text=cta,
-                campaign_name=campaign_name,
-                content_id=f"v{i+1}"  # Version for A/B tracking
-            )
-            tweet_data["product_id"] = "offer"  # Special product ID for offers
-            offer_tweets.append(tweet_data)
-        
-        # Schedule the tweets
-        scheduled_ids = self.schedule_tweets(
-            tweets=offer_tweets,
-            start_time=start_time,
-            interval_minutes=interval_minutes
-        )
-        
-        logger.info(f"📣 Scheduled {len(scheduled_ids)} offer tweets for campaign '{campaign_name}'")
-        return scheduled_ids
+        raise RuntimeError("airtime_required: legacy Twitter scheduling is disabled; use Airtime.")
     
     async def process_due_tweets(self) -> Dict:
-        """Process all tweets that are due for posting."""
-        due_tweets = self.get_due_tweets()
-        
-        if not due_tweets:
-            return {'processed': 0, 'success': 0, 'failed': 0}
-        
-        logger.info(f"Processing {len(due_tweets)} due tweets...")
-        
-        success_count = 0
-        failed_count = 0
-        
-        for tweet in due_tweets:
-            result = await self.post_tweet(tweet)
-            if result['success']:
-                success_count += 1
-                logger.info(f"✅ Posted tweet: {tweet['tweet_text'][:50]}...")
-            else:
-                failed_count += 1
-                logger.error(f"❌ Failed: {result.get('error')}")
-        
-        return {
-            'processed': len(due_tweets),
-            'success': success_count,
-            'failed': failed_count
-        }
+        return {"processed": 0, "success": 0, "failed": 0, "error": "airtime_required"}
 
     # ARCH-004: Schedule campaign with tweet generation
     def schedule_campaign(
@@ -1166,86 +791,7 @@ Return ONLY the tweet text, no quotes or labels."""
         interval_minutes: Optional[int] = None,
         start_time: Optional[datetime] = None
     ) -> str:
-        """
-        Schedule a themed tweet campaign (ARCH-004).
-
-        Generates tweets about the theme and schedules them at specified intervals.
-
-        Args:
-            theme: Campaign theme
-            count: Number of tweets
-            interval_minutes: Time between tweets (uses self.interval_minutes if not specified)
-            start_time: When to start
-
-        Returns:
-            Campaign ID (combination of theme and timestamp)
-        """
-        campaign_id = f"{theme.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        interval = interval_minutes or self.interval_minutes
-
-        # Generate tweets about the theme
-        logger.info(f"[TwitterCampaign] Generating {count} tweets for theme: {theme}")
-
-        try:
-            response = self.openai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are a viral Twitter content creator. Generate engaging tweets that:
-- Hook attention in first 3 words
-- Include relevant hashtags (1-3 per tweet)
-- Mix awareness stages: hook, educational, story, emotional, CTA
-- Keep under 280 characters
-- Vary tone and format"""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""Generate {count} unique tweets about: {theme}
-
-Mix these types:
-- Hook tweets (curiosity-driven)
-- Educational tweets (teach something)
-- Story tweets (personal anecdote)
-- Emotional tweets (inspire/relate)
-- CTA tweets (call to action)
-
-Return ONLY the tweets, one per line, no numbering."""
-                    }
-                ],
-                temperature=0.9
-            )
-
-            tweets_text = response.choices[0].message.content.strip()
-            tweet_texts = [t.strip() for t in tweets_text.split("\n") if t.strip()][:count]
-
-            # Create tweet dicts for scheduling
-            tweets = []
-            for i, text in enumerate(tweet_texts):
-                # Determine awareness stage and content type
-                stage_cycle = ["unaware", "problem_aware", "solution_aware", "product_aware", "most_aware"]
-                type_cycle = ["hook", "authority", "story", "emotional", "cta"]
-
-                tweets.append({
-                    "product_id": None,  # Theme-based, not product-specific
-                    "awareness_stage": stage_cycle[i % len(stage_cycle)],
-                    "content_type": type_cycle[i % len(type_cycle)],
-                    "tweet_text": text[:280]  # Enforce Twitter limit
-                })
-
-            # Schedule the tweets
-            tweet_ids = self.schedule_tweets(
-                tweets=tweets,
-                start_time=start_time,
-                interval_minutes=interval
-            )
-
-            logger.info(f"[TwitterCampaign] Scheduled campaign '{campaign_id}': {len(tweet_ids)} tweets")
-            return campaign_id
-
-        except Exception as e:
-            logger.error(f"[TwitterCampaign] Failed to schedule campaign: {e}")
-            raise
+        raise RuntimeError("script_hub_required: legacy Twitter copy generation is disabled; use ScriptHub.")
 
 
 # Singleton instance

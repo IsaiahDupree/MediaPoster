@@ -34,16 +34,7 @@ class TwitterCampaignScheduler:
         self._check_count = 0
         
     async def start(self):
-        """Start the campaign scheduler."""
-        if self.is_running:
-            logger.warning("Twitter campaign scheduler already running")
-            return
-        
-        self.is_running = True
-        self._task = asyncio.create_task(self._run_loop())
-        logger.info("🐦 Twitter Campaign Scheduler started")
-        logger.info(f"   - Post check interval: {self.post_check_interval}s")
-        logger.info(f"   - Daily generation hour: {self.daily_generation_hour}:00 UTC")
+        raise RuntimeError("airtime_required: legacy Twitter campaign scheduler is disabled; use Airtime.")
         
     async def stop(self):
         """Stop the campaign scheduler."""
@@ -53,33 +44,7 @@ class TwitterCampaignScheduler:
         logger.info("🐦 Twitter Campaign Scheduler stopped")
         
     async def _run_loop(self):
-        """Main scheduler loop."""
-        while self.is_running:
-            self._check_count += 1
-            now = datetime.now(timezone.utc)
-            
-            try:
-                # Check if it's time for daily generation
-                if self._should_generate_daily(now):
-                    logger.info("🌅 Running daily tweet generation...")
-                    await self._run_daily_generation()
-                    self._last_daily_generation = now.date()
-                
-                # Process due tweets
-                result = await self.service.process_due_tweets()
-                
-                if result['processed'] > 0:
-                    logger.info(f"📤 Processed {result['processed']} tweets: "
-                               f"✅ {result['success']} | ❌ {result['failed']}")
-                
-                # Run analytics checkbacks periodically (every 10 checks)
-                if self._check_count % 10 == 0:
-                    await self._run_analytics_checkbacks()
-                    
-            except Exception as e:
-                logger.error(f"Scheduler error: {e}")
-            
-            await asyncio.sleep(self.post_check_interval)
+        raise RuntimeError("airtime_required: legacy Twitter campaign scheduler is disabled; use Airtime.")
     
     def _should_generate_daily(self, now: datetime) -> bool:
         """Check if we should run daily generation."""

@@ -334,3 +334,15 @@ The legacy `/api/safari` content-writing and video-distribution endpoints are ga
 script generation/queueing and Sora requests return `script_hub_required`, while processed-video
 distribution returns `airtime_required`. The underlying Sora script generators and orchestrator
 Sora/tweet/Blotato helpers fail closed, so importing the classes does not bypass the API guards.
+
+## Legacy Twitter campaign boundary
+
+The legacy `TwitterCampaignService` raw-model generation methods now return a
+`script_hub_required` failure, and its local scheduling and due-post methods are blocked with
+`airtime_required`. The `TwitterOfferScheduler` and `TwitterCampaignScheduler` cannot start or
+enter their Safari/DB polling loops. The active `/api/twitter-campaign` write endpoints return
+HTTP 409 with the matching migration code before generation, DB access, queueing or provider
+calls. Read-only campaign product/style/analytics endpoints remain a separate audit surface.
+Twitter publishing and scheduling must flow through ScriptHub approval and Airtime. A local
+source/LaunchAgent search did not establish whether external or deployed callers still invoke
+these legacy paths.

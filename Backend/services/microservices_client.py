@@ -8,6 +8,16 @@ from typing import Optional, Dict, Any, List
 from loguru import logger
 
 
+class ServiceCallError(RuntimeError):
+    """A downstream service call failed without producing a usable result."""
+
+    def __init__(self, service: str, endpoint: str, message: str, status_code: Optional[int] = None):
+        self.service = service
+        self.endpoint = endpoint
+        self.status_code = status_code
+        super().__init__(message)
+
+
 class MicroservicesClient:
     """Client for calling MediaPoster ecosystem microservices."""
     
@@ -43,14 +53,19 @@ class MicroservicesClient:
                 else:
                     raise ValueError(f"Unsupported method: {method}")
                 
-                response.raise_for_status()
+                if response.is_error:
+                    raise ServiceCallError(
+                        service,
+                        endpoint,
+                        f"Service {service} returned HTTP {response.status_code}",
+                        status_code=response.status_code,
+                    )
                 return response.json()
-        except httpx.ConnectError:
-            logger.warning(f"Service {service} not reachable at {url}")
-            return {"status": "error", "error": f"Service {service} not available"}
-        except Exception as e:
-            logger.error(f"Error calling {service}: {e}")
-            return {"status": "error", "error": str(e)}
+        except ServiceCallError:
+            raise
+        except httpx.HTTPError as exc:
+            logger.warning(f"Service {service} request failed at {url}: {type(exc).__name__}")
+            raise ServiceCallError(service, endpoint, f"Service {service} request failed") from exc
     
     async def health_check(self, service: str) -> bool:
         """Check if a service is healthy."""
@@ -59,7 +74,7 @@ class MicroservicesClient:
             healthy = result.get("status") == "healthy"
             self._health_cache[service] = healthy
             return healthy
-        except:
+        except Exception:
             self._health_cache[service] = False
             return False
     

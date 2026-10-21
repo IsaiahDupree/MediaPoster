@@ -15,13 +15,13 @@ Media production, provider integration, scheduling, analytics, and social publis
 
 ## Inventory summary
 
-- Static API routes: **2233** (1031 potentially mutating)
-- Formal JSON Schema/OpenAPI contracts: **1**
-- Typed application models: **1128**
-- Database objects declared in migrations: **593**
-- Environment-variable names: **191**
-- Package manifests with scripts: **3**
-- Source fingerprint: `eeca5fec51910a663499fcd478847bdb6c89c418b4f9f35c179d66c24a2d841e`
+- Static API routes: **2256** (1045 potentially mutating)
+- Formal JSON Schema/OpenAPI contracts: **3**
+- Typed application models: **1331**
+- Database objects declared in migrations: **637**
+- Environment-variable names: **282**
+- Package manifests with scripts: **7**
+- Source fingerprint: `9e6f3fe0444dd3338c39e413d3d6fc119224e20f7c93fd0aa0be5dc43dd77419`
 
 This is a static source inventory, not a live health report. Dynamic routes and runtime registrations must be verified through the repository's own health/discovery interface.
 
@@ -29,9 +29,13 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 
 | Package | Manifest | Script names |
 |---|---|---|
+| `riona-hitl-console` | [`Backend/external_libs/riona-ai-agent/frontend/package.json`](Backend/external_libs/riona-ai-agent/frontend/package.json) | build, dev, lint, preview |
+| `riona-ai-agent` | [`Backend/external_libs/riona-ai-agent/package.json`](Backend/external_libs/riona-ai-agent/package.json) | build, build:all, build:frontend, dev, dev:all, dev:api, health, migrate:supabase, scheduler, start, start:background, start:basic, start:data, test, test-instagram, test:coverage, test:schema, test:supabase, test:watch, threads, train-m... |
 | `actp-dashboard` | [`Backend/services/creative_testing_pipeline/ui/package.json`](Backend/services/creative_testing_pipeline/ui/package.json) | build, dev, preview |
+| `frontend` | [`Frontend/package.json`](Frontend/package.json) | build, dev, lint, start, test, test:e2e, test:e2e:all, test:e2e:api, test:e2e:debug, test:e2e:settings, test:e2e:settings:report, test:e2e:ui, test:watch |
 | `mediaposter-motion` | [`MotionCanvas/package.json`](MotionCanvas/package.json) | build, render, start |
-| `repo-agent-contracts-mediaposter-31462` | [`package.json`](package.json) | - |
+| `dashboard` | [`dashboard/package.json`](dashboard/package.json) | audit, build, dev, e2e, e2e:audit, e2e:buttons, e2e:report, e2e:ui, lint, start, test, test:coverage, test:watch |
+| `MediaPoster` | [`package.json`](package.json) | - |
 
 ## HTTP and API surface
 
@@ -88,12 +92,16 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/accounts` | [`Backend/api/social_accounts.py:16`](Backend/api/social_accounts.py#L16) | `read` |
 | `POST` | `/accounts` | [`Backend/api/endpoints/competitor_api.py:72`](Backend/api/endpoints/competitor_api.py#L72) | `required` |
 | `POST` | `/accounts` | [`Backend/api/endpoints/social_accounts.py:255`](Backend/api/endpoints/social_accounts.py#L255) | `required` |
+| `GET` | `/accounts/` | [`Frontend/src/hooks/useAccounts.ts:41`](Frontend/src/hooks/useAccounts.ts#L41) | `read` |
+| `POST` | `/accounts/connect` | [`Frontend/src/hooks/useAccounts.ts:76`](Frontend/src/hooks/useAccounts.ts#L76) | `required` |
 | `GET` | `/accounts/detailed` | [`Backend/api/endpoints/competitor_api.py:58`](Backend/api/endpoints/competitor_api.py#L58) | `read` |
 | `POST` | `/accounts/fetch-all` | [`Backend/api/endpoints/social_accounts.py:483`](Backend/api/endpoints/social_accounts.py#L483) | `required` |
 | `GET` | `/accounts/list` | [`Backend/api/endpoints/schedule.py:953`](Backend/api/endpoints/schedule.py#L953) | `read` |
 | `GET` | `/accounts/platform/{platform}` | [`Backend/api/endpoints/safari_sessions.py:157`](Backend/api/endpoints/safari_sessions.py#L157) | `read` |
 | `POST` | `/accounts/platform/{platform}/set-active` | [`Backend/api/endpoints/safari_sessions.py:219`](Backend/api/endpoints/safari_sessions.py#L219) | `required` |
 | `POST` | `/accounts/register` | [`Backend/api/endpoints/safari_sessions.py:58`](Backend/api/endpoints/safari_sessions.py#L58) | `required` |
+| `GET` | `/accounts/status` | [`Frontend/src/hooks/useAccounts.ts:56`](Frontend/src/hooks/useAccounts.ts#L56) | `read` |
+| `POST` | `/accounts/sync` | [`Frontend/src/hooks/useAccounts.ts:97`](Frontend/src/hooks/useAccounts.ts#L97) | `required` |
 | `POST` | `/accounts/sync-from-env` | [`Backend/api/endpoints/social_accounts.py:155`](Backend/api/endpoints/social_accounts.py#L155) | `required` |
 | `DELETE` | `/accounts/{account_id}` | [`Backend/api/endpoints/social_accounts.py:356`](Backend/api/endpoints/social_accounts.py#L356) | `required` |
 | `GET` | `/accounts/{account_id}` | [`Backend/api/endpoints/safari_sessions.py:127`](Backend/api/endpoints/safari_sessions.py#L127) | `read` |
@@ -223,6 +231,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/api/orchestrator/learnings` | [`Backend/api/endpoints/orchestrator_goals.py:128`](Backend/api/endpoints/orchestrator_goals.py#L128) | `read` |
 | `POST` | `/api/orchestrator/pipeline/record` | [`Backend/api/endpoints/orchestrator_goals.py:143`](Backend/api/endpoints/orchestrator_goals.py#L143) | `required` |
 | `POST` | `/api/orchestrator/pipeline/variants` | [`Backend/api/endpoints/orchestrator_goals.py:165`](Backend/api/endpoints/orchestrator_goals.py#L165) | `required` |
+| `GET` | `/api/status` | [`Backend/external_libs/riona-ai-agent/src/server/basic-app.ts:21`](Backend/external_libs/riona-ai-agent/src/server/basic-app.ts#L21) | `read` |
 | `GET` | `/api/videos` | [`Backend/quickstart.py:77`](Backend/quickstart.py#L77) | `read` |
 | `GET` | `/api/videos/scan` | [`Backend/quickstart.py:44`](Backend/quickstart.py#L44) | `read` |
 | `GET` | `/api/videos/{video_id}` | [`Backend/quickstart.py:82`](Backend/quickstart.py#L82) | `read` |
@@ -339,6 +348,9 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/best-time` | [`Backend/api/endpoints/reeltrends.py:529`](Backend/api/endpoints/reeltrends.py#L529) | `read` |
 | `POST` | `/best-time` | [`Backend/api/endpoints/reeltrends.py:504`](Backend/api/endpoints/reeltrends.py#L504) | `required` |
 | `GET` | `/best-times` | [`Backend/api/endpoints/posting_optimizer_api.py:54`](Backend/api/endpoints/posting_optimizer_api.py#L54) | `read` |
+| `POST` | `/blotato/post` | [`Frontend/src/app/schedule/blotato/page.tsx:68`](Frontend/src/app/schedule/blotato/page.tsx#L68) | `required` |
+| `POST` | `/blotato/scrape` | [`Frontend/src/app/schedule/blotato/page.tsx:96`](Frontend/src/app/schedule/blotato/page.tsx#L96) | `required` |
+| `POST` | `/blotato/upload` | [`Frontend/src/app/schedule/blotato/page.tsx:51`](Frontend/src/app/schedule/blotato/page.tsx#L51) | `required` |
 | `POST` | `/brand-voice/{brand_id}` | [`Backend/api/endpoints/reply_suggestions.py:169`](Backend/api/endpoints/reply_suggestions.py#L169) | `required` |
 | `GET` | `/breakdown` | [`Backend/api/endpoints/content_runway.py:179`](Backend/api/endpoints/content_runway.py#L179) | `read` |
 | `POST` | `/brief` | [`Backend/api/endpoints/trends_agent.py:190`](Backend/api/endpoints/trends_agent.py#L190) | `required` |
@@ -466,6 +478,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/clips/{media_id}` | [`Backend/api/endpoints/clip_extraction.py:197`](Backend/api/endpoints/clip_extraction.py#L197) | `read` |
 | `GET` | `/clusters` | [`Backend/api/endpoints/trend_flash.py:54`](Backend/api/endpoints/trend_flash.py#L54) | `read` |
 | `GET` | `/clusters/{cluster_id}` | [`Backend/api/endpoints/trend_flash.py:77`](Backend/api/endpoints/trend_flash.py#L77) | `read` |
+| `POST` | `/coaching/chat` | [`Frontend/src/app/coaching/page.tsx:39`](Frontend/src/app/coaching/page.tsx#L39) | `required` |
+| `GET` | `/coaching/recommendations` | [`Frontend/src/app/coaching/page.tsx:32`](Frontend/src/app/coaching/page.tsx#L32) | `read` |
 | `GET` | `/collections` | [`Backend/api/endpoints/media_assets.py:283`](Backend/api/endpoints/media_assets.py#L283) | `read` |
 | `POST` | `/collections` | [`Backend/api/endpoints/media_assets.py:275`](Backend/api/endpoints/media_assets.py#L275) | `required` |
 | `GET` | `/collections/{collection_id}` | [`Backend/api/endpoints/media_assets.py:291`](Backend/api/endpoints/media_assets.py#L291) | `read` |
@@ -832,6 +846,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/goals` | [`Backend/api/endpoints/narrative_builder.py:608`](Backend/api/endpoints/narrative_builder.py#L608) | `read` |
 | `POST` | `/goals` | [`Backend/api/endpoints/narrative_builder.py:647`](Backend/api/endpoints/narrative_builder.py#L647) | `required` |
 | `POST` | `/goals` | [`Backend/api/endpoints/narrative_goals.py:59`](Backend/api/endpoints/narrative_goals.py#L59) | `required` |
+| `POST` | `/goals` | [`Frontend/src/components/goals/CreateGoalModal.tsx:57`](Frontend/src/components/goals/CreateGoalModal.tsx#L57) | `required` |
 | `GET` | `/goals/{goal_id}` | [`Backend/api/endpoints/narrative_goals.py:107`](Backend/api/endpoints/narrative_goals.py#L107) | `read` |
 | `PATCH` | `/goals/{goal_id}` | [`Backend/api/endpoints/narrative_builder.py:700`](Backend/api/endpoints/narrative_builder.py#L700) | `required` |
 | `GET` | `/goals/{goal_id}/constraints` | [`Backend/api/endpoints/narrative_goals.py:310`](Backend/api/endpoints/narrative_goals.py#L310) | `read` |
@@ -892,6 +907,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/health` | [`Backend/api/endpoints/video_routing_api.py:247`](Backend/api/endpoints/video_routing_api.py#L247) | `read` |
 | `GET` | `/health` | [`Backend/api/media_processing.py:895`](Backend/api/media_processing.py#L895) | `read` |
 | `GET` | `/health` | [`Backend/api/media_processing_db.py:3091`](Backend/api/media_processing_db.py#L3091) | `read` |
+| `GET` | `/health` | [`Backend/external_libs/riona-ai-agent/src/server/basic-app.ts:12`](Backend/external_libs/riona-ai-agent/src/server/basic-app.ts#L12) | `read` |
 | `GET` | `/health` | [`Backend/main.py:811`](Backend/main.py#L811) | `read` |
 | `GET` | `/health` | [`Backend/quickstart.py:111`](Backend/quickstart.py#L111) | `read` |
 | `GET` | `/health` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:395`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L395) | `read` |
@@ -941,6 +957,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/ingest/comment` | [`Backend/api/endpoints/people.py:213`](Backend/api/endpoints/people.py#L213) | `required` |
 | `POST` | `/ingest/file` | [`Backend/api/media_processing_db.py:947`](Backend/api/media_processing_db.py#L947) | `required` |
 | `POST` | `/ingest/lingo/{cluster_id}` | [`Backend/api/endpoints/trend_intelligence.py:188`](Backend/api/endpoints/trend_intelligence.py#L188) | `required` |
+| `POST` | `/ingestion/import-iphone` | [`Frontend/src/components/videos/IphoneImportCard.tsx:16`](Frontend/src/components/videos/IphoneImportCard.tsx#L16) | `required` |
 | `GET` | `/insights` | [`Backend/api/content_intelligence.py:23`](Backend/api/content_intelligence.py#L23) | `read` |
 | `GET` | `/insights` | [`Backend/api/endpoints/adaptive_scheduler.py:478`](Backend/api/endpoints/adaptive_scheduler.py#L478) | `read` |
 | `GET` | `/insights` | [`Backend/api/endpoints/coaching.py:165`](Backend/api/endpoints/coaching.py#L165) | `read` |
@@ -1105,6 +1122,9 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/match-pillars` | [`Backend/api/endpoints/narrative_builder.py:894`](Backend/api/endpoints/narrative_builder.py#L894) | `required` |
 | `POST` | `/match-transcript` | [`Backend/api/endpoints/posted_content_matcher.py:70`](Backend/api/endpoints/posted_content_matcher.py#L70) | `required` |
 | `POST` | `/materialize` | [`Backend/api/endpoints/adaptive_scheduler.py:238`](Backend/api/endpoints/adaptive_scheduler.py#L238) | `required` |
+| `GET` | `/media-creation/content-types` | [`Frontend/src/app/media-creation/page.tsx:47`](Frontend/src/app/media-creation/page.tsx#L47) | `read` |
+| `GET` | `/media-creation/projects` | [`Frontend/src/app/media-creation/page.tsx:55`](Frontend/src/app/media-creation/page.tsx#L55) | `read` |
+| `POST` | `/media-creation/projects` | [`Frontend/src/app/media-creation/page.tsx:64`](Frontend/src/app/media-creation/page.tsx#L64) | `required` |
 | `POST` | `/media/upload` | [`Backend/api/blotato_router.py:816`](Backend/api/blotato_router.py#L816) | `required` |
 | `GET` | `/media/{identifier}` | [`Backend/api/endpoints/instagram_api.py:103`](Backend/api/endpoints/instagram_api.py#L103) | `read` |
 | `GET` | `/memories` | [`Backend/api/endpoints/agent_panel.py:514`](Backend/api/endpoints/agent_panel.py#L514) | `read` |
@@ -1201,6 +1221,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/open/compose` | [`Backend/api/endpoints/twitter_posting.py:438`](Backend/api/endpoints/twitter_posting.py#L438) | `required` |
 | `POST` | `/open/home` | [`Backend/api/endpoints/twitter_posting.py:450`](Backend/api/endpoints/twitter_posting.py#L450) | `required` |
 | `GET` | `/optimal` | [`Backend/api/smart_posting_times.py:54`](Backend/api/smart_posting_times.py#L54) | `read` |
+| `POST` | `/optimal-posting-times/recommend` | [`Frontend/src/components/publishing/SchedulePostModal.tsx:109`](Frontend/src/components/publishing/SchedulePostModal.tsx#L109) | `required` |
 | `GET` | `/optimal/{platform}` | [`Backend/api/smart_posting_times.py:18`](Backend/api/smart_posting_times.py#L18) | `read` |
 | `GET` | `/optimization-hints` | [`Backend/api/endpoints/analytics_feedback.py:75`](Backend/api/endpoints/analytics_feedback.py#L75) | `read` |
 | `GET` | `/output/{job_id}` | [`Backend/api/endpoints/broll_producer.py:198`](Backend/api/endpoints/broll_producer.py#L198) | `read` |
@@ -1407,6 +1428,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/publishing/posts/{post_id}/regenerate` | [`Backend/api/endpoints/publishing_analytics.py:110`](Backend/api/endpoints/publishing_analytics.py#L110) | `required` |
 | `PUT` | `/publishing/posts/{post_id}/reschedule` | [`Backend/api/endpoints/publishing_analytics.py:85`](Backend/api/endpoints/publishing_analytics.py#L85) | `required` |
 | `POST` | `/publishing/schedule` | [`Backend/api/endpoints/publishing_analytics.py:54`](Backend/api/endpoints/publishing_analytics.py#L54) | `required` |
+| `POST` | `/publishing/schedule` | [`Frontend/src/hooks/usePublishing.ts:60`](Frontend/src/hooks/usePublishing.ts#L60) | `required` |
 | `POST` | `/pull-from-device` | [`Backend/api/endpoints/android_import_api.py:280`](Backend/api/endpoints/android_import_api.py#L280) | `required` |
 | `POST` | `/push` | [`Backend/api/endpoints/video_toolkit.py:138`](Backend/api/endpoints/video_toolkit.py#L138) | `required` |
 | `POST` | `/qa-gate` | [`Backend/api/endpoints/sfx_library.py:251`](Backend/api/endpoints/sfx_library.py#L251) | `required` |
@@ -1456,6 +1478,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/recommendations` | [`Backend/api/endpoints/api_usage.py:306`](Backend/api/endpoints/api_usage.py#L306) | `read` |
 | `GET` | `/recommendations` | [`Backend/api/endpoints/coaching.py:39`](Backend/api/endpoints/coaching.py#L39) | `read` |
 | `GET` | `/recommendations` | [`Backend/api/endpoints/strategic_analysis.py:153`](Backend/api/endpoints/strategic_analysis.py#L153) | `read` |
+| `GET` | `/recommendations` | [`Frontend/src/app/recommendations/page.tsx:21`](Frontend/src/app/recommendations/page.tsx#L21) | `read` |
+| `POST` | `/recommendations/generate` | [`Frontend/src/app/recommendations/page.tsx:31`](Frontend/src/app/recommendations/page.tsx#L31) | `required` |
 | `POST` | `/record` | [`Backend/api/endpoints/posted_content.py:125`](Backend/api/endpoints/posted_content.py#L125) | `required` |
 | `POST` | `/record-posted` | [`Backend/api/endpoints/schedule.py:759`](Backend/api/endpoints/schedule.py#L759) | `required` |
 | `POST` | `/recycle` | [`Backend/api/content_recycling.py:68`](Backend/api/content_recycling.py#L68) | `required` |
@@ -1717,6 +1741,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/slots/{slot_id}/assign` | [`Backend/api/endpoints/content_loop.py:378`](Backend/api/endpoints/content_loop.py#L378) | `required` |
 | `POST` | `/smart-bulk` | [`Backend/api/endpoints/external_scheduling.py:694`](Backend/api/endpoints/external_scheduling.py#L694) | `required` |
 | `POST` | `/smart-schedule` | [`Backend/api/endpoints/external_scheduling.py:587`](Backend/api/endpoints/external_scheduling.py#L587) | `required` |
+| `GET` | `/social-analytics/overview` | [`Frontend/src/hooks/useAnalytics.ts:51`](Frontend/src/hooks/useAnalytics.ts#L51) | `read` |
 | `GET` | `/sora` | [`Backend/api/endpoints/daily_automation.py:35`](Backend/api/endpoints/daily_automation.py#L35) | `read` |
 | `POST` | `/sora-daily` | [`Backend/api/endpoints/adaptive_scheduler.py:681`](Backend/api/endpoints/adaptive_scheduler.py#L681) | `required` |
 | `POST` | `/sora-ready` | [`Backend/services/video_ready_pipeline.py:961`](Backend/services/video_ready_pipeline.py#L961) | `required` |
@@ -2093,9 +2118,11 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/videos` | [`Backend/api/endpoints/youtube_analytics.py:73`](Backend/api/endpoints/youtube_analytics.py#L73) | `read` |
 | `GET` | `/videos-needing-reanalysis` | [`Backend/api/endpoints/analysis_health.py:333`](Backend/api/endpoints/analysis_health.py#L333) | `read` |
 | `POST` | `/videos/create` | [`Backend/api/blotato_router.py:845`](Backend/api/blotato_router.py#L845) | `required` |
+| `POST` | `/videos/generate-thumbnails-batch` | [`Frontend/src/app/video-library/page.tsx:82`](Frontend/src/app/video-library/page.tsx#L82) | `required` |
 | `POST` | `/videos/narrated` | [`Backend/api/blotato_router.py:973`](Backend/api/blotato_router.py#L973) | `required` |
 | `GET` | `/videos/pool` | [`Backend/api/endpoints/adaptive_scheduler.py:210`](Backend/api/endpoints/adaptive_scheduler.py#L210) | `read` |
 | `POST` | `/videos/pov` | [`Backend/api/blotato_router.py:929`](Backend/api/blotato_router.py#L929) | `required` |
+| `POST` | `/videos/scan` | [`Frontend/src/components/videos/AddSourceModal.tsx:48`](Frontend/src/components/videos/AddSourceModal.tsx#L48) | `required` |
 | `POST` | `/videos/slideshow` | [`Backend/api/blotato_router.py:949`](Backend/api/blotato_router.py#L949) | `required` |
 | `DELETE` | `/videos/{video_id}` | [`Backend/api/blotato_router.py:1013`](Backend/api/blotato_router.py#L1013) | `required` |
 | `DELETE` | `/videos/{video_id}` | [`Backend/api/endpoints/storage.py:284`](Backend/api/endpoints/storage.py#L284) | `required` |
@@ -2276,6 +2303,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | Contract | Kind | Required fields | Join fields | Hash |
 |---|---|---|---|---|
 | [`Social Intelligence Unified API`](Backend/docs/rapidapi/openapi-unified.yaml)<br>`Backend/docs/rapidapi/openapi-unified.yaml` | `openapi` | - | - | `6e1ab70f9cb5` |
+| [`Universal Content Schema`](Backend/services/video_renderer/schema/content.schema.json)<br>`Backend/services/video_renderer/schema/content.schema.json` | `json_schema` | items, meta | project_id | `dce397f1f2af` |
+| [`Format Definition Schema`](Backend/services/video_renderer/schema/format.schema.json)<br>`Backend/services/video_renderer/schema/format.schema.json` | `json_schema` | format_id, layout, scene_order | format_id | `15dc9924d374` |
 
 ## Typed application models
 
@@ -3409,6 +3438,209 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `YouTubeComment` | `python-pydantic` | [`Backend/services/youtube_analytics_service.py`](Backend/services/youtube_analytics_service.py) |
 | `YouTubeCrawlRequest` | `python-pydantic` | [`Backend/api/endpoints/trend_intelligence.py`](Backend/api/endpoints/trend_intelligence.py) |
 | `YouTubeVideoMetrics` | `python-pydantic` | [`Backend/services/youtube_analytics_service.py`](Backend/services/youtube_analytics_service.py) |
+| `AccountsStatus` | `typescript-interface` | [`Frontend/src/hooks/useAccounts.ts`](Frontend/src/hooks/useAccounts.ts) |
+| `AgentArtifact` | `typescript-interface` | [`dashboard/lib/hooks/useRunStream.ts`](dashboard/lib/hooks/useRunStream.ts) |
+| `AgentEvent` | `typescript-interface` | [`dashboard/lib/hooks/useRunStream.ts`](dashboard/lib/hooks/useRunStream.ts) |
+| `AgentRun` | `typescript-interface` | [`dashboard/lib/hooks/useRunStream.ts`](dashboard/lib/hooks/useRunStream.ts) |
+| `AgentRun` | `typescript-interface` | [`dashboard/lib/services/automation-service.ts`](dashboard/lib/services/automation-service.ts) |
+| `AgentStep` | `typescript-interface` | [`dashboard/lib/hooks/useRunStream.ts`](dashboard/lib/hooks/useRunStream.ts) |
+| `AnalysisResult` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `AnalysisStatus` | `typescript-interface` | [`dashboard/lib/services/media-service.ts`](dashboard/lib/services/media-service.ts) |
+| `AnalyticsSummary` | `typescript-interface` | [`Frontend/src/types/analytics.ts`](Frontend/src/types/analytics.ts) |
+| `ApiResponse` | `typescript-interface` | [`dashboard/lib/services/api-client.ts`](dashboard/lib/services/api-client.ts) |
+| `AudioSpec` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `AutomationSchedule` | `typescript-interface` | [`dashboard/lib/services/automation-service.ts`](dashboard/lib/services/automation-service.ts) |
+| `AvatarProps` | `typescript-interface` | [`dashboard/app/components/ui/Avatar.tsx`](dashboard/app/components/ui/Avatar.tsx) |
+| `Beat` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `BestTime` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `BreadcrumbItem` | `typescript-interface` | [`dashboard/app/components/ui/PageHeader.tsx`](dashboard/app/components/ui/PageHeader.tsx) |
+| `BulkScheduleData` | `typescript-interface` | [`Frontend/src/types/calendar.ts`](Frontend/src/types/calendar.ts) |
+| `ButtonProps` | `typescript-interface` | [`dashboard/app/components/ui/Button.tsx`](dashboard/app/components/ui/Button.tsx) |
+| `CalendarEvent` | `typescript-interface` | [`Frontend/src/types/calendar.ts`](Frontend/src/types/calendar.ts) |
+| `CalendarFilters` | `typescript-interface` | [`Frontend/src/types/calendar.ts`](Frontend/src/types/calendar.ts) |
+| `CaptionSegment` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `CaptionsSpec` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `CardBodyProps` | `typescript-interface` | [`dashboard/app/components/ui/Card.tsx`](dashboard/app/components/ui/Card.tsx) |
+| `CardFooterProps` | `typescript-interface` | [`dashboard/app/components/ui/Card.tsx`](dashboard/app/components/ui/Card.tsx) |
+| `CardHeaderProps` | `typescript-interface` | [`dashboard/app/components/ui/Card.tsx`](dashboard/app/components/ui/Card.tsx) |
+| `CardProps` | `typescript-interface` | [`dashboard/app/components/ui/Card.tsx`](dashboard/app/components/ui/Card.tsx) |
+| `ClipListResponse` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `ClipRequest` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `ClipResponse` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `Column` | `typescript-interface` | [`dashboard/app/components/ui/DataTable.tsx`](dashboard/app/components/ui/DataTable.tsx) |
+| `ComputedTargets` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `ConnectedAccount` | `typescript-interface` | [`Frontend/src/hooks/useAccounts.ts`](Frontend/src/hooks/useAccounts.ts) |
+| `ContentAsset` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `ContentBrief` | `typescript-interface` | [`Frontend/src/services/api.ts`](Frontend/src/services/api.ts) |
+| `ContentItem` | `typescript-interface` | [`Frontend/src/services/api.ts`](Frontend/src/services/api.ts) |
+| `ContentVariant` | `typescript-interface` | [`Frontend/src/services/api.ts`](Frontend/src/services/api.ts) |
+| `CopyPlanInput` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `CopyPlanV1` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `CopyVariant` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `CreateGoalInput` | `typescript-interface` | [`Frontend/src/types/goals.ts`](Frontend/src/types/goals.ts) |
+| `CrossPlatformAnalytics` | `typescript-interface` | [`Frontend/src/hooks/useSocialAnalytics.ts`](Frontend/src/hooks/useSocialAnalytics.ts) |
+| `CurateableMedia` | `typescript-interface` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `CurationAction` | `typescript-interface` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `CurationSettings` | `typescript-interface` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `CurationStats` | `typescript-interface` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `DailyPerformance` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `DataTableProps` | `typescript-interface` | [`dashboard/app/components/ui/DataTable.tsx`](dashboard/app/components/ui/DataTable.tsx) |
+| `DeepAudit` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `DeepAuditData` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `DropdownItem` | `typescript-interface` | [`dashboard/app/components/ui/Dropdown.tsx`](dashboard/app/components/ui/Dropdown.tsx) |
+| `DropdownProps` | `typescript-interface` | [`dashboard/app/components/ui/Dropdown.tsx`](dashboard/app/components/ui/Dropdown.tsx) |
+| `EmptyStateProps` | `typescript-interface` | [`dashboard/app/components/ui/EmptyState.tsx`](dashboard/app/components/ui/EmptyState.tsx) |
+| `EnhancedHealthCheck` | `typescript-interface` | [`dashboard/lib/services/system-service.ts`](dashboard/lib/services/system-service.ts) |
+| `ErrorStateProps` | `typescript-interface` | [`dashboard/app/components/ui/ErrorState.tsx`](dashboard/app/components/ui/ErrorState.tsx) |
+| `EventBusEvent` | `typescript-interface` | [`dashboard/lib/hooks/useEventBus.ts`](dashboard/lib/hooks/useEventBus.ts) |
+| `EventPayload` | `typescript-interface` | [`dashboard/app/hooks/useEventStream.ts`](dashboard/app/hooks/useEventStream.ts) |
+| `Experiment` | `typescript-interface` | [`dashboard/lib/services/experiments-service.ts`](dashboard/lib/services/experiments-service.ts) |
+| `ExportSpec` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `GenerateCopyPlanRequest` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `GenerateCopyPlanResponse` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `GenerateRemotionSpecRequest` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `GenerateRemotionSpecResponse` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `GeneratedClip` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `GenerationMeta` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `GraphCredentials` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/db/interfaces.ts`](Backend/external_libs/riona-ai-agent/src/db/interfaces.ts) |
+| `HashtagResult` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `HashtagSet` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `Highlight` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `HighlightRequest` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `HighlightResponse` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `HighlightResult` | `typescript-interface` | [`Frontend/src/types/clip.ts`](Frontend/src/types/clip.ts) |
+| `HourlyPerformance` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `IInteractionHistory` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/analytics/interactionHistory.ts`](Backend/external_libs/riona-ai-agent/src/analytics/interactionHistory.ts) |
+| `IScheduledInteraction` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/scheduling/scheduler.ts`](Backend/external_libs/riona-ai-agent/src/scheduling/scheduler.ts) |
+| `InputProps` | `typescript-interface` | [`dashboard/app/components/ui/Input.tsx`](dashboard/app/components/ui/Input.tsx) |
+| `InstagramCommentSchema` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/Agent/schema.ts`](Backend/external_libs/riona-ai-agent/src/Agent/schema.ts) |
+| `InstagramCommentSchema` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/Agent/schema/index.ts`](Backend/external_libs/riona-ai-agent/src/Agent/schema/index.ts) |
+| `InstagramProfile` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `InteractionResult` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/types/types.ts`](Backend/external_libs/riona-ai-agent/src/types/types.ts) |
+| `LoadingStateProps` | `typescript-interface` | [`dashboard/app/components/ui/LoadingState.tsx`](dashboard/app/components/ui/LoadingState.tsx) |
+| `LogEntry` | `typescript-interface` | [`dashboard/e2e/utils/debug-logger.ts`](dashboard/e2e/utils/debug-logger.ts) |
+| `MediaItem` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `MediaItem` | `typescript-interface` | [`dashboard/lib/services/media-service.ts`](dashboard/lib/services/media-service.ts) |
+| `MediaListResponse` | `typescript-interface` | [`dashboard/lib/services/media-service.ts`](dashboard/lib/services/media-service.ts) |
+| `MediaStats` | `typescript-interface` | [`dashboard/lib/services/media-service.ts`](dashboard/lib/services/media-service.ts) |
+| `ModalProps` | `typescript-interface` | [`dashboard/app/components/ui/Modal.tsx`](dashboard/app/components/ui/Modal.tsx) |
+| `NarrativeGoal` | `typescript-interface` | [`dashboard/lib/services/narrative-service.ts`](dashboard/lib/services/narrative-service.ts) |
+| `NarrativePlan` | `typescript-interface` | [`dashboard/lib/services/narrative-service.ts`](dashboard/lib/services/narrative-service.ts) |
+| `Option` | `typescript-interface` | [`dashboard/app/components/ui/Select.tsx`](dashboard/app/components/ui/Select.tsx) |
+| `PageAction` | `typescript-interface` | [`dashboard/app/components/ui/PageHeader.tsx`](dashboard/app/components/ui/PageHeader.tsx) |
+| `PageContainerProps` | `typescript-interface` | [`dashboard/app/components/ui/PageContainer.tsx`](dashboard/app/components/ui/PageContainer.tsx) |
+| `PageHeaderProps` | `typescript-interface` | [`dashboard/app/components/ui/PageHeader.tsx`](dashboard/app/components/ui/PageHeader.tsx) |
+| `PerformanceMetric` | `typescript-interface` | [`Frontend/src/types/analytics.ts`](Frontend/src/types/analytics.ts) |
+| `PlatformConfig` | `typescript-interface` | [`dashboard/app/design-system/platform-constants.ts`](dashboard/app/design-system/platform-constants.ts) |
+| `PlatformConfig` | `typescript-interface` | [`dashboard/components/ui/tokens/platformConstants.ts`](dashboard/components/ui/tokens/platformConstants.ts) |
+| `PlatformCopyVariant` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PlatformPerformance` | `typescript-interface` | [`Frontend/src/types/analytics.ts`](Frontend/src/types/analytics.ts) |
+| `PlatformPost` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PlatformPostCreative` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PlatformSummary` | `typescript-interface` | [`Frontend/src/hooks/useSocialAnalytics.ts`](Frontend/src/hooks/useSocialAnalytics.ts) |
+| `PostData` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/types/types.ts`](Backend/external_libs/riona-ai-agent/src/types/types.ts) |
+| `PostDetailsData` | `typescript-interface` | [`Frontend/src/types/calendar.ts`](Frontend/src/types/calendar.ts) |
+| `PostInteraction` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/types/types.ts`](Backend/external_libs/riona-ai-agent/src/types/types.ts) |
+| `PostMetrics` | `typescript-interface` | [`Frontend/src/hooks/useSocialAnalytics.ts`](Frontend/src/hooks/useSocialAnalytics.ts) |
+| `PostSnapshot` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PostSnapshotConversion` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PostSnapshotDerived` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PostSnapshotTotals` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PostSnapshotWatch` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PostedContent` | `typescript-interface` | [`dashboard/lib/services/posted-content-service.ts`](dashboard/lib/services/posted-content-service.ts) |
+| `PostingGoal` | `typescript-interface` | [`Frontend/src/types/goals.ts`](Frontend/src/types/goals.ts) |
+| `ProfileAnalytics` | `typescript-interface` | [`Frontend/src/hooks/useSocialAnalytics.ts`](Frontend/src/hooks/useSocialAnalytics.ts) |
+| `ProgressProps` | `typescript-interface` | [`dashboard/app/components/ui/Progress.tsx`](dashboard/app/components/ui/Progress.tsx) |
+| `QueueItem` | `typescript-interface` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `ReadinessCheck` | `typescript-interface` | [`dashboard/lib/services/system-service.ts`](dashboard/lib/services/system-service.ts) |
+| `Recommendation` | `typescript-interface` | [`Frontend/src/components/recommendations/RecommendationCard.tsx`](Frontend/src/components/recommendations/RecommendationCard.tsx) |
+| `Recommendation` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `RemotionRenderSpecV1` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `RequestOptions` | `typescript-interface` | [`dashboard/lib/services/api-client.ts`](dashboard/lib/services/api-client.ts) |
+| `RetentionAnnotation` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `RetentionPoint` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `RetentionSeries` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `ScheduleFormData` | `typescript-interface` | [`Frontend/src/types/calendar.ts`](Frontend/src/types/calendar.ts) |
+| `ScheduleListResponse` | `typescript-interface` | [`dashboard/lib/services/schedule-service.ts`](dashboard/lib/services/schedule-service.ts) |
+| `ScheduleRequest` | `typescript-interface` | [`Frontend/src/types/publishing.ts`](Frontend/src/types/publishing.ts) |
+| `ScheduledPost` | `typescript-interface` | [`Frontend/src/types/publishing.ts`](Frontend/src/types/publishing.ts) |
+| `ScheduledPost` | `typescript-interface` | [`dashboard/lib/services/schedule-service.ts`](dashboard/lib/services/schedule-service.ts) |
+| `ScheduledPostResponse` | `typescript-interface` | [`Frontend/src/types/publishing.ts`](Frontend/src/types/publishing.ts) |
+| `Segment` | `typescript-interface` | [`Frontend/src/services/api.ts`](Frontend/src/services/api.ts) |
+| `SegmentInsight` | `typescript-interface` | [`Frontend/src/services/api.ts`](Frontend/src/services/api.ts) |
+| `SelectProps` | `typescript-interface` | [`dashboard/app/components/ui/Select.tsx`](dashboard/app/components/ui/Select.tsx) |
+| `SleepStatus` | `typescript-interface` | [`dashboard/lib/hooks/useSleepStatus.ts`](dashboard/lib/hooks/useSleepStatus.ts) |
+| `SocialAccount` | `typescript-interface` | [`dashboard/lib/services/social-service.ts`](dashboard/lib/services/social-service.ts) |
+| `StatusBadgeProps` | `typescript-interface` | [`dashboard/app/components/ui/StatusBadge.tsx`](dashboard/app/components/ui/StatusBadge.tsx) |
+| `StepDefinition` | `typescript-interface` | [`dashboard/lib/agents/step-registry.ts`](dashboard/lib/agents/step-registry.ts) |
+| `StorageInterface` | `typescript-interface` | [`Backend/external_libs/riona-ai-agent/src/db/interfaces.ts`](Backend/external_libs/riona-ai-agent/src/db/interfaces.ts) |
+| `SystemStats` | `typescript-interface` | [`dashboard/lib/services/system-service.ts`](dashboard/lib/services/system-service.ts) |
+| `Tab` | `typescript-interface` | [`dashboard/app/components/ui/Tabs.tsx`](dashboard/app/components/ui/Tabs.tsx) |
+| `TabsProps` | `typescript-interface` | [`dashboard/app/components/ui/Tabs.tsx`](dashboard/app/components/ui/Tabs.tsx) |
+| `TextConstraint` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `TimelineEvent` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `Toast` | `typescript-interface` | [`dashboard/app/hooks/useToast.ts`](dashboard/app/hooks/useToast.ts) |
+| `TooltipProps` | `typescript-interface` | [`dashboard/app/components/ui/Tooltip.tsx`](dashboard/app/components/ui/Tooltip.tsx) |
+| `TrendCard` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `TrendingAudio` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `TrendingFormat` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `TrendingHashtag` | `typescript-interface` | [`dashboard/lib/services/instagram-trends-service.ts`](dashboard/lib/services/instagram-trends-service.ts) |
+| `TypographyLevel` | `typescript-interface` | [`dashboard/components/ui/tokens/typography.ts`](dashboard/components/ui/tokens/typography.ts) |
+| `TypographyProps` | `typescript-interface` | [`dashboard/app/components/ui/Typography.tsx`](dashboard/app/components/ui/Typography.tsx) |
+| `UseApiOptions` | `typescript-interface` | [`dashboard/lib/hooks/useApi.ts`](dashboard/lib/hooks/useApi.ts) |
+| `UseApiResult` | `typescript-interface` | [`dashboard/lib/hooks/useApi.ts`](dashboard/lib/hooks/useApi.ts) |
+| `UseEventBusOptions` | `typescript-interface` | [`dashboard/lib/hooks/useEventBus.ts`](dashboard/lib/hooks/useEventBus.ts) |
+| `UseEventBusReturn` | `typescript-interface` | [`dashboard/lib/hooks/useEventBus.ts`](dashboard/lib/hooks/useEventBus.ts) |
+| `UseEventStreamOptions` | `typescript-interface` | [`dashboard/app/hooks/useEventStream.ts`](dashboard/app/hooks/useEventStream.ts) |
+| `UseEventStreamResult` | `typescript-interface` | [`dashboard/app/hooks/useEventStream.ts`](dashboard/app/hooks/useEventStream.ts) |
+| `UseSleepStatusResult` | `typescript-interface` | [`dashboard/lib/hooks/useSleepStatus.ts`](dashboard/lib/hooks/useSleepStatus.ts) |
+| `ValidationResult` | `typescript-interface` | [`dashboard/lib/services/system-service.ts`](dashboard/lib/services/system-service.ts) |
+| `VariantConstraints` | `typescript-interface` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `Video` | `typescript-interface` | [`Frontend/src/types/video.ts`](Frontend/src/types/video.ts) |
+| `VideoUploadResponse` | `typescript-interface` | [`Frontend/src/types/video.ts`](Frontend/src/types/video.ts) |
+| `WebSocketMessage` | `typescript-interface` | [`dashboard/app/hooks/useEventStream.ts`](dashboard/app/hooks/useEventStream.ts) |
+| `ActionType` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/src/hitl/models.ts`](Backend/external_libs/riona-ai-agent/src/hitl/models.ts) |
+| `AlertType` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/frontend/src/components/Alert.tsx`](Backend/external_libs/riona-ai-agent/frontend/src/components/Alert.tsx) |
+| `ApprovalState` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/src/hitl/models.ts`](Backend/external_libs/riona-ai-agent/src/hitl/models.ts) |
+| `BadgeSize` | `typescript-type` | [`dashboard/app/components/ui/StatusBadge.tsx`](dashboard/app/components/ui/StatusBadge.tsx) |
+| `BadgeStatus` | `typescript-type` | [`dashboard/app/components/ui/StatusBadge.tsx`](dashboard/app/components/ui/StatusBadge.tsx) |
+| `BeatRole` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `ButtonSize` | `typescript-type` | [`dashboard/app/components/ui/Button.tsx`](dashboard/app/components/ui/Button.tsx) |
+| `ButtonVariant` | `typescript-type` | [`dashboard/app/components/ui/Button.tsx`](dashboard/app/components/ui/Button.tsx) |
+| `CTAType` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `CardVariant` | `typescript-type` | [`dashboard/app/components/ui/Card.tsx`](dashboard/app/components/ui/Card.tsx) |
+| `ColorLevel` | `typescript-type` | [`dashboard/app/design-system/colors.ts`](dashboard/app/design-system/colors.ts) |
+| `ColorScale` | `typescript-type` | [`dashboard/app/design-system/colors.ts`](dashboard/app/design-system/colors.ts) |
+| `ConnectionStatus` | `typescript-type` | [`dashboard/lib/hooks/useBackendConnection.ts`](dashboard/lib/hooks/useBackendConnection.ts) |
+| `CountRule` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `CurationFilter` | `typescript-type` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `CurationStatus` | `typescript-type` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `EventType` | `typescript-type` | [`dashboard/lib/agents/topic-registry.ts`](dashboard/lib/agents/topic-registry.ts) |
+| `ExperimentsStepKey` | `typescript-type` | [`dashboard/lib/agents/step-registry.ts`](dashboard/lib/agents/step-registry.ts) |
+| `FormatTypeFilter` | `typescript-type` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `Link` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/src/trace/types.ts`](Backend/external_libs/riona-ai-agent/src/trace/types.ts) |
+| `Links` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/src/trace/types.ts`](Backend/external_libs/riona-ai-agent/src/trace/types.ts) |
+| `LoadingSize` | `typescript-type` | [`dashboard/app/components/ui/LoadingState.tsx`](dashboard/app/components/ui/LoadingState.tsx) |
+| `LoadingVariant` | `typescript-type` | [`dashboard/app/components/ui/LoadingState.tsx`](dashboard/app/components/ui/LoadingState.tsx) |
+| `MediaTypeFilter` | `typescript-type` | [`dashboard/lib/services/curation-service.ts`](dashboard/lib/services/curation-service.ts) |
+| `NarrativeStepKey` | `typescript-type` | [`dashboard/lib/agents/step-registry.ts`](dashboard/lib/agents/step-registry.ts) |
+| `Platform` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `PlatformType` | `typescript-type` | [`Frontend/src/types/calendar.ts`](Frontend/src/types/calendar.ts) |
+| `PlatformType` | `typescript-type` | [`dashboard/app/design-system/platform-constants.ts`](dashboard/app/design-system/platform-constants.ts) |
+| `PostStatusType` | `typescript-type` | [`Frontend/src/types/calendar.ts`](Frontend/src/types/calendar.ts) |
+| `Severity` | `typescript-type` | [`dashboard/lib/agents/topic-registry.ts`](dashboard/lib/agents/topic-registry.ts) |
+| `SourceType` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `SupportedFileType` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/src/Agent/training/FilesTraining.ts`](Backend/external_libs/riona-ai-agent/src/Agent/training/FilesTraining.ts) |
+| `Surface` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `TextField` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `TimelineLayerType` | `typescript-type` | [`dashboard/app/types/content-pipeline.ts`](dashboard/app/types/content-pipeline.ts) |
+| `ToastOptions` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/frontend/src/components/ToastProvider.tsx`](Backend/external_libs/riona-ai-agent/frontend/src/components/ToastProvider.tsx) |
+| `Topic` | `typescript-type` | [`dashboard/lib/agents/topic-registry.ts`](dashboard/lib/agents/topic-registry.ts) |
+| `TraceRecord` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/src/trace/types.ts`](Backend/external_libs/riona-ai-agent/src/trace/types.ts) |
+| `TraceStep` | `typescript-type` | [`Backend/external_libs/riona-ai-agent/src/trace/types.ts`](Backend/external_libs/riona-ai-agent/src/trace/types.ts) |
+| `formSchema` | `zod-schema` | [`Frontend/src/components/goals/CreateGoalModal.tsx`](Frontend/src/components/goals/CreateGoalModal.tsx) |
+| `formSchema` | `zod-schema` | [`Frontend/src/components/publishing/BulkScheduleModal.tsx`](Frontend/src/components/publishing/BulkScheduleModal.tsx) |
+| `formSchema` | `zod-schema` | [`Frontend/src/components/publishing/SchedulePostModal.tsx`](Frontend/src/components/publishing/SchedulePostModal.tsx) |
 
 ## Database contracts
 
@@ -3416,6 +3648,17 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 |---|---|---|
 | `actp_campaign_summary` | `MATERIALIZED VIEW` | [`Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql`](Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql) |
 | `actp_creative_leaderboard` | `MATERIALIZED VIEW` | [`Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql`](Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql) |
+| `top_commenters` | `MATERIALIZED VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `top_commenters` | `MATERIALIZED VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql) |
+| `top_engagers` | `MATERIALIZED VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `top_engagers` | `MATERIALIZED VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql) |
+| `top_performing_comments` | `MATERIALIZED VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `top_performing_comments` | `MATERIALIZED VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql) |
+| `ab_tests` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `ab_tests` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
+| `accounts` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `accounts` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/001_initial_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/001_initial_schema.sql) |
+| `accounts` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `actp_ad_deployments` | `TABLE` | [`Backend/services/creative_testing_pipeline/migrations/001_create_actp_tables.sql`](Backend/services/creative_testing_pipeline/migrations/001_create_actp_tables.sql) |
 | `actp_audit_log` | `TABLE` | [`Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql`](Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql) |
 | `actp_campaign_templates` | `TABLE` | [`Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql`](Backend/services/creative_testing_pipeline/migrations/002_indexes_audit_fts.sql) |
@@ -3449,6 +3692,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `ai_generation_jobs` | `TABLE` | [`supabase/migrations/20251222000002_ai_media_generations_enhanced.sql`](supabase/migrations/20251222000002_ai_media_generations_enhanced.sql) |
 | `ai_service_logs` | `TABLE` | [`Backend/database/schema.sql`](Backend/database/schema.sql) |
 | `ai_style_presets` | `TABLE` | [`supabase/migrations/20251222000002_ai_media_generations_enhanced.sql`](supabase/migrations/20251222000002_ai_media_generations_enhanced.sql) |
+| `ai_training_data` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `ai_training_data` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `ai_video_generations` | `TABLE` | [`supabase/migrations/20251222000001_ai_video_generations.sql`](supabase/migrations/20251222000001_ai_video_generations.sql) |
 | `analytics_checkbacks` | `TABLE` | [`supabase/migrations/20260113000000_twitter_campaign_system.sql`](supabase/migrations/20260113000000_twitter_campaign_system.sql) |
 | `analytics_feedback` | `TABLE` | [`Backend/database/migrations/001_orchestrator_tables.sql`](Backend/database/migrations/001_orchestrator_tables.sql) |
@@ -3458,6 +3703,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `analyzed_videos` | `TABLE` | [`Backend/database/migrations/004_content_intelligence_video_analysis.sql`](Backend/database/migrations/004_content_intelligence_video_analysis.sql) |
 | `analyzed_videos` | `TABLE` | [`Backend/supabase/migrations/20260131_add_missing_tables.sql`](Backend/supabase/migrations/20260131_add_missing_tables.sql) |
 | `analyzed_videos` | `TABLE` | [`supabase/migrations/20250121000005_content_intelligence_video_analysis.sql`](supabase/migrations/20250121000005_content_intelligence_video_analysis.sql) |
+| `api_usage` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `api_usage` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `api_usage_tracking` | `TABLE` | [`Backend/migrations/comprehensive_social_schema.sql`](Backend/migrations/comprehensive_social_schema.sql) |
 | `api_usage_tracking` | `TABLE` | [`Backend/migrations/social_media_analytics.sql`](Backend/migrations/social_media_analytics.sql) |
 | `appstore_metrics` | `TABLE` | [`supabase/migrations/20251222000000_trends_analytics_system.sql`](supabase/migrations/20251222000000_trends_analytics_system.sql) |
@@ -3481,6 +3728,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `campaign_analytics` | `TABLE` | [`supabase/migrations/20250127000000_offer_tracking.sql`](supabase/migrations/20250127000000_offer_tracking.sql) |
 | `campaign_cycles` | `TABLE` | [`supabase/migrations/20260113000000_twitter_campaign_system.sql`](supabase/migrations/20260113000000_twitter_campaign_system.sql) |
 | `campaign_products` | `TABLE` | [`supabase/migrations/20260113000000_twitter_campaign_system.sql`](supabase/migrations/20260113000000_twitter_campaign_system.sql) |
+| `campaigns` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `campaigns` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `character_assets` | `TABLE` | [`Backend/supabase/migrations/20260120_character_assets.sql`](Backend/supabase/migrations/20260120_character_assets.sql) |
 | `character_variants` | `TABLE` | [`Backend/supabase/migrations/20260120_character_assets.sql`](Backend/supabase/migrations/20260120_character_assets.sql) |
 | `clip_posts` | `TABLE` | [`Backend/database/migrations/005_video_clips.sql`](Backend/database/migrations/005_video_clips.sql) |
@@ -3542,6 +3791,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `content_music_library` | `TABLE` | [`supabase/migrations/20260113010000_visual_content_campaigns.sql`](supabase/migrations/20260113010000_visual_content_campaigns.sql) |
 | `content_patterns` | `TABLE` | [`supabase/migrations_disabled/20251223000004_experiments_scheduler.sql`](supabase/migrations_disabled/20251223000004_experiments_scheduler.sql) |
 | `content_patterns` | `TABLE` | [`supabase/migrations_disabled/20251223000008_experiments_scheduler_schema.sql`](supabase/migrations_disabled/20251223000008_experiments_scheduler_schema.sql) |
+| `content_performance` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `content_performance` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `content_performance_insights` | `TABLE` | [`supabase/migrations/20260113000000_twitter_campaign_system.sql`](supabase/migrations/20260113000000_twitter_campaign_system.sql) |
 | `content_plans` | `TABLE` | [`supabase/migrations/20260118000000_content_ops_entities.sql`](supabase/migrations/20260118000000_content_ops_entities.sql) |
 | `content_posts` | `TABLE` | [`Backend/migrations/add_content_and_engagement_tracking.sql`](Backend/migrations/add_content_and_engagement_tracking.sql) |
@@ -3574,6 +3825,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `creative_assets` | `TABLE` | [`Backend/database/migrations/add_content_performance_fields.sql`](Backend/database/migrations/add_content_performance_fields.sql) |
 | `creative_features` | `TABLE` | [`Backend/migrations/closed_loop_content_system.sql`](Backend/migrations/closed_loop_content_system.sql) |
 | `creator_profiles` | `TABLE` | [`supabase/migrations/20260118000000_content_ops_entities.sql`](supabase/migrations/20260118000000_content_ops_entities.sql) |
+| `daily_metrics` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `daily_metrics` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `deals` | `TABLE` | [`Backend/database/migrations/015_growth_data_plane.sql`](Backend/database/migrations/015_growth_data_plane.sql) |
 | `deep_audit` | `TABLE` | [`supabase/migrations/20250122000010_content_pipeline_schema.sql`](supabase/migrations/20250122000010_content_pipeline_schema.sql) |
 | `deletion_audit` | `TABLE` | [`supabase/migrations/20250122000002_add_curation_sentiment_columns.sql`](supabase/migrations/20250122000002_add_curation_sentiment_columns.sql) |
@@ -3586,7 +3839,13 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `engagement_interactions` | `TABLE` | [`Backend/migrations/engagement_interactions_schema.sql`](Backend/migrations/engagement_interactions_schema.sql) |
 | `engagement_limits` | `TABLE` | [`supabase/migrations/20260125_engagement_tracking.sql`](supabase/migrations/20260125_engagement_tracking.sql) |
 | `engagement_sessions` | `TABLE` | [`Backend/migrations/engagement_interactions_schema.sql`](Backend/migrations/engagement_interactions_schema.sql) |
+| `engagement_snapshots` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `engagement_snapshots` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql) |
 | `engagement_state` | `TABLE` | [`Backend/migrations/engagement_state_persistence.sql`](Backend/migrations/engagement_state_persistence.sql) |
+| `engagement_tracking` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `engagement_tracking` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
+| `error_logs` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `error_logs` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `event_history` | `TABLE` | [`supabase/migrations/20251225000000_event_history.sql`](supabase/migrations/20251225000000_event_history.sql) |
 | `experiment_agent_actions` | `TABLE` | [`supabase/migrations_disabled/20251223000004_experiments_scheduler.sql`](supabase/migrations_disabled/20251223000004_experiments_scheduler.sql) |
 | `experiment_variants` | `TABLE` | [`supabase/migrations_disabled/20251223000008_experiments_scheduler_schema.sql`](supabase/migrations_disabled/20251223000008_experiments_scheduler_schema.sql) |
@@ -3628,7 +3887,14 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `industry_benchmarks` | `TABLE` | [`supabase/migrations/20251222000000_trends_analytics_system.sql`](supabase/migrations/20251222000000_trends_analytics_system.sql) |
 | `influencer_analysis_reports` | `TABLE` | [`supabase/migrations/20250122000015_influencer_analysis.sql`](supabase/migrations/20250122000015_influencer_analysis.sql) |
 | `insights` | `TABLE` | [`Backend/migrations/closed_loop_content_system.sql`](Backend/migrations/closed_loop_content_system.sql) |
+| `instagram_posts` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `instagram_posts` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `instagram_trending_music` | `TABLE` | [`supabase/migrations/20250122000016_instagram_trending_music.sql`](supabase/migrations/20250122000016_instagram_trending_music.sql) |
+| `instagram_users` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `instagram_users` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
+| `interactions` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `interactions` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/001_initial_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/001_initial_schema.sql) |
+| `interactions` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `kb_constraints` | `TABLE` | [`supabase/migrations/20251222100000_account_roles_knowledge_base.sql`](supabase/migrations/20251222100000_account_roles_knowledge_base.sql) |
 | `kb_playbooks` | `TABLE` | [`supabase/migrations/20251222100000_account_roles_knowledge_base.sql`](supabase/migrations/20251222100000_account_roles_knowledge_base.sql) |
 | `kb_rules` | `TABLE` | [`supabase/migrations/20251222100000_account_roles_knowledge_base.sql`](supabase/migrations/20251222100000_account_roles_knowledge_base.sql) |
@@ -3720,6 +3986,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `publishing_queue` | `TABLE` | [`Backend/database/migrations/007_publishing_queue.sql`](Backend/database/migrations/007_publishing_queue.sql) |
 | `publishing_queue` | `TABLE` | [`supabase/migrations/20250121000013_publishing_queue.sql`](supabase/migrations/20250121000013_publishing_queue.sql) |
 | `quality_profiles` | `TABLE` | [`supabase/migrations/20250122000014_formats_system.sql`](supabase/migrations/20250122000014_formats_system.sql) |
+| `rate_limit_tracking` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `rate_limit_tracking` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `remotion_render_spec` | `TABLE` | [`supabase/migrations/20250122000010_content_pipeline_schema.sql`](supabase/migrations/20250122000010_content_pipeline_schema.sql) |
 | `render_jobs` | `TABLE` | [`Backend/migrations/trend_intelligence_v1.sql`](Backend/migrations/trend_intelligence_v1.sql) |
 | `repurpose_clips` | `TABLE` | [`Backend/migrations/002_create_repurpose_tables.sql`](Backend/migrations/002_create_repurpose_tables.sql) |
@@ -3746,6 +4014,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `scheduled_posts` | `TABLE` | [`supabase/migrations/20250122000000_fix_schema_mismatches.sql`](supabase/migrations/20250122000000_fix_schema_mismatches.sql) |
 | `scheduled_tweets` | `TABLE` | [`supabase/migrations/20260113000000_twitter_campaign_system.sql`](supabase/migrations/20260113000000_twitter_campaign_system.sql) |
 | `scheduled_visual_content` | `TABLE` | [`supabase/migrations/20260113010000_visual_content_campaigns.sql`](supabase/migrations/20260113010000_visual_content_campaigns.sql) |
+| `schedules` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `schedules` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `scheduling_constraints` | `TABLE` | [`supabase/migrations_disabled/20251223000007_narrative_scheduler.sql`](supabase/migrations_disabled/20251223000007_narrative_scheduler.sql) |
 | `segment_edit_history` | `TABLE` | [`Backend/database/migrations/006_segment_editing.sql`](Backend/database/migrations/006_segment_editing.sql) |
 | `segment_edit_history` | `TABLE` | [`supabase/migrations/20250121000012_segment_editing.sql`](supabase/migrations/20250121000012_segment_editing.sql) |
@@ -3763,6 +4033,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `segments` | `TABLE` | [`supabase/migrations/20241121000000_everreach_blend_schema.sql`](supabase/migrations/20241121000000_everreach_blend_schema.sql) |
 | `segments` | `TABLE` | [`supabase/migrations/20250121000001_people_graph.sql`](supabase/migrations/20250121000001_people_graph.sql) |
 | `segments` | `TABLE` | [`supabase/migrations/20251123143002_insights_segments.sql`](supabase/migrations/20251123143002_insights_segments.sql) |
+| `sessions` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `sessions` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/002_comprehensive_schema.sql) |
 | `shortlinks` | `TABLE` | [`supabase/migrations/20260118000000_content_ops_entities.sql`](supabase/migrations/20260118000000_content_ops_entities.sql) |
 | `social_accounts` | `TABLE` | [`Backend/migrations/phase_1_essentials.sql`](Backend/migrations/phase_1_essentials.sql) |
 | `social_accounts` | `TABLE` | [`supabase/migrations/20251125100000_social_accounts.sql`](supabase/migrations/20251125100000_social_accounts.sql) |
@@ -3841,6 +4113,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `trend_topics` | `TABLE` | [`supabase/migrations/20251222000000_trends_analytics_system.sql`](supabase/migrations/20251222000000_trends_analytics_system.sql) |
 | `trend_velocity_scores` | `TABLE` | [`Backend/supabase/migrations/20251226_trend_velocity.sql`](Backend/supabase/migrations/20251226_trend_velocity.sql) |
 | `tweet_templates` | `TABLE` | [`supabase/migrations/20260113000000_twitter_campaign_system.sql`](supabase/migrations/20260113000000_twitter_campaign_system.sql) |
+| `user_rankings` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `user_rankings` | `TABLE` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql) |
 | `user_writing_styles` | `TABLE` | [`supabase/migrations/20260113000000_twitter_campaign_system.sql`](supabase/migrations/20260113000000_twitter_campaign_system.sql) |
 | `users` | `TABLE` | [`Backend/migrations/phase_1_essentials.sql`](Backend/migrations/phase_1_essentials.sql) |
 | `variant_metrics` | `TABLE` | [`Backend/migrations/narrative_builder_schema.sql`](Backend/migrations/narrative_builder_schema.sql) |
@@ -3954,6 +4228,8 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `c2_recent_errors` | `VIEW` | [`supabase/migrations/20260131000001_c2_control_plane_tables.sql`](supabase/migrations/20260131000001_c2_control_plane_tables.sql) |
 | `clip_performance_summary` | `VIEW` | [`Backend/database/schema.sql`](Backend/database/schema.sql) |
 | `clips_full` | `VIEW` | [`Backend/migrations/phase_1_essentials.sql`](Backend/migrations/phase_1_essentials.sql) |
+| `comments_with_engagement` | `VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations/001_unified_comprehensive_schema.sql) |
+| `comments_with_engagement` | `VIEW` | [`Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql`](Backend/external_libs/riona-ai-agent/supabase/migrations_old/003_rankings_and_impact.sql) |
 | `content_cross_platform_summary` | `VIEW` | [`Backend/migrations/add_content_and_engagement_tracking.sql`](Backend/migrations/add_content_and_engagement_tracking.sql) |
 | `content_cross_platform_summary` | `VIEW` | [`Backend/migrations/add_content_cross_platform.sql`](Backend/migrations/add_content_cross_platform.sql) |
 | `content_cross_platform_summary` | `VIEW` | [`supabase/migrations/20251123160000_update_content_summary_view.sql`](supabase/migrations/20251123160000_update_content_summary_view.sql) |
@@ -4012,7 +4288,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 
 Only variable names are documented. Values belong in the repository's approved secret/configuration store.
 
-`ACTP_API_KEY`, `ACTP_CORS_ORIGINS`, `ACTP_LANDING_BASE_URL`, `ACTP_MAX_BODY_SIZE`, `ACTP_VERSION`, `AGENT_DAILY_BUDGET_USD`, `AIRTIME_ACCOUNTS_JSON`, `AI_MAX_TOKENS`, `AI_MODEL`, `AI_PROVIDER`, `AI_TEMPERATURE`, `AI_TIMEOUT`, `ANALYSIS_PROVIDER`, `ANTHROPIC_API_KEY`, `API_URL`, `APP_MODE`, `APP_VERSION`, `ASSEMBLYAI_API_KEY`, `BACKEND_HOST`, `BACKEND_PORT`, `BLOTATO_API_KEY`, `BLOTATO_API_URL`, `BLOTATO_URL`, `BLUESKY_USERNAMES`, `C2_API_KEY`, `C2_AUTH_DISABLED`, `C2_BIND_HOST`, `C2_PORT`, `C2_RELOAD`, `CAPTION_VARIANT_MODEL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CI`, `CLIP_OUTPUT_DIR`, `CLOUD_SUPABASE_ANON_KEY`, `CLOUD_SUPABASE_STORAGE_BUCKET`, `CLOUD_SUPABASE_URL`, `CONTENT_INTEL_URL`, `DATABASE_URL`, `DEFAULT_CAPTION_STYLE`, `DOWNLOAD_PATH`, `ELEVENLABS_API_KEY`, `ENABLE_AI_CAPTION_VARIANTS`, `ENABLE_LOCAL_SCRAPERS`, `ENABLE_RAPIDAPI_ENRICHMENT`, `EVENT_BUS_BACKEND`, `FACEBOOK_AD_ACCOUNT_ID`, `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_NAMES`, `FREESOUND_API_KEY`, `FROM_EMAIL`, `FROM_NAME`, `FRONTEND_PORT`, `GIPHY_API_KEY`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CONVERSION_ID`, `GOOGLE_CONVERSION_LABEL`, `GOOGLE_CREDENTIALS_PATH`, `GOOGLE_DRIVE_API_KEY`, `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_SHEET_ID`, `GOOGLE_VEO3_API_KEY`, `HAILUO_API_KEY`, `HF_API_TOKEN`, `HF_TOKEN`, `HUGGINGFACE_API_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, `HUGGINGFACE_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_GRAPH_ACCOUNT_ID`, `INSTAGRAM_GRAPH_TOKEN`, `INSTAGRAM_USERNAME`, `INSTAGRAM_USERNAMES`, `INSTAGRAM_USER_ID`, `KLING_API_KEY`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_API_KEY`, `LINKEDIN_MODE`, `LOCAL_CLIPS_PATH`, `LOCAL_STORAGE_ENABLED`, `LOCAL_STORAGE_PATH`, `LOCAL_TEMP_PATH`, `LOCAL_THUMBNAILS_PATH`, `LOCAL_VIDEOS_PATH`, `LUMA_API_KEY`, `MEDIAPOSTER_BASE_PATH`, `MEDIA_PIPELINE_URL`, `MEDIUM_API_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `META_PIXEL_ID`, `MINIMAX_API_KEY`, `MODAL_VOICE_API_KEY`, `MODAL_VOICE_ENDPOINT`, `MPLITE_DEFAULT_ACCOUNT_ID`, `MPLITE_KEY`, `MPLITE_URL`, `MUSIC_INDEX_PATH`, `MUSIC_LIBRARY_PATH`, `NANO_BANANA_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `PEXELS_API_KEY`, `PIKA_API_KEY`, `PINTEREST_USERNAMES`, `PIXABAY_API_KEY`, `PORT`, `POSTING_TIMEZONE_OFFSET`, `RAPIDAPI_HOST`, `RAPIDAPI_KEY`, `RAPIDAPI_TIKTOK_TIER`, `REDIS_URL`, `REMOTION_BASE_PATH`, `REMOTION_PROJECT_PATH`, `REMOTION_SERVER_URL`, `REMOTION_URL`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RUNWAY_API_KEY`, `SAFARI_AUTH_TOKEN`, `SAFARI_CONTROL_URL`, `SAFARI_TELEMETRY_URL`, `SAFARI_URL`, `SAME_DAY_CHECK_INTERVAL`, `SFX_MANIFEST_PATH`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_PORT`, `SMTP_USER`, `SNAPCHAT_ACCESS_TOKEN`, `SORA_API_KEY`, `SORA_DEFAULT_SECONDS`, `SORA_DEFAULT_SIZE`, `SORA_MODEL`, `SORA_TIMEOUT`, `STABILITY_API_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_URL`, `TEMP_DIR`, `THREADS_USERNAME`, `THREADS_USERNAMES`, `THREADS_USER_ID`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_API_KEY`, `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET`, `TIKTOK_CAPTCHA_API_URL`, `TIKTOK_PIXEL_ID`, `TIKTOK_USERNAME`, `TIKTOK_USERNAMES`, `TRANSCRIPTION_PROVIDER`, `TREND_FLASH_OUTPUT`, `TWITTER_ACCESS_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_TOKEN_SECRET`, `TWITTER_ACCOUNT_ID`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_BEARER_TOKEN`, `TWITTER_USERNAMES`, `UNSPLASH_ACCESS_KEY`, `USE_SUPABASE_STORAGE`, `VIDEO_PROVIDER`, `VIDEO_RENDERER_ENGINE`, `VIRTUAL_ENV`, `WAITLISTLAB_API_KEY`, `WAITLISTLAB_API_URL`, `WEEKLY_EXECUTOR_CHECK_INTERVAL`, `WEEKLY_PLANNER_INTERVAL`, `YOUTUBE_ACCESS_TOKEN`, `YOUTUBE_API_KEY`, `YOUTUBE_CHANNEL_ID`, `YOUTUBE_CHANNEL_IDS`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, `YOUTUBE_USERNAMES`
+`ACTP_API_KEY`, `ACTP_CORS_ORIGINS`, `ACTP_LANDING_BASE_URL`, `ACTP_MAX_BODY_SIZE`, `ACTP_VERSION`, `AGENT_DAILY_BUDGET_USD`, `AIRTIME_ACCOUNTS_JSON`, `AI_MAX_TOKENS`, `AI_MODEL`, `AI_PROVIDER`, `AI_TEMPERATURE`, `AI_TIMEOUT`, `ANALYSIS_PROVIDER`, `ANTHROPIC_API_KEY`, `API_URL`, `APP_MODE`, `APP_VERSION`, `ARTIFACT_BASE_PATH`, `ARTIFACT_BASE_URL`, `ASSEMBLYAI_API_KEY`, `BACKEND_HOST`, `BACKEND_PORT`, `BLOTATO_API_KEY`, `BLOTATO_API_URL`, `BLOTATO_URL`, `BLUESKY_USERNAMES`, `C2_API_KEY`, `C2_AUTH_DISABLED`, `C2_BIND_HOST`, `C2_PORT`, `C2_RELOAD`, `CAPTION_VARIANT_MODEL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CI`, `CLIP_OUTPUT_DIR`, `CLOUD_SUPABASE_ANON_KEY`, `CLOUD_SUPABASE_STORAGE_BUCKET`, `CLOUD_SUPABASE_URL`, `COMMIT_SHA`, `COMPUTERNAME`, `CONTENT_INTEL_URL`, `DATABASE_URL`, `DEBUG`, `DEFAULT_CAPTION_STYLE`, `DOCS_BASE_URL`, `DOWNLOAD_PATH`, `ELEVENLABS_API_KEY`, `ENABLE_AI_CAPTION_VARIANTS`, `ENABLE_LOCAL_SCRAPERS`, `ENABLE_RAPIDAPI_ENRICHMENT`, `EVENT_BUS_BACKEND`, `FACEBOOK_AD_ACCOUNT_ID`, `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_NAMES`, `FREESOUND_API_KEY`, `FROM_EMAIL`, `FROM_NAME`, `FRONTEND_PORT`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_10`, `GEMINI_API_KEY_11`, `GEMINI_API_KEY_12`, `GEMINI_API_KEY_13`, `GEMINI_API_KEY_14`, `GEMINI_API_KEY_15`, `GEMINI_API_KEY_16`, `GEMINI_API_KEY_17`, `GEMINI_API_KEY_18`, `GEMINI_API_KEY_19`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_20`, `GEMINI_API_KEY_21`, `GEMINI_API_KEY_22`, `GEMINI_API_KEY_23`, `GEMINI_API_KEY_24`, `GEMINI_API_KEY_25`, `GEMINI_API_KEY_26`, `GEMINI_API_KEY_27`, `GEMINI_API_KEY_28`, `GEMINI_API_KEY_29`, `GEMINI_API_KEY_3`, `GEMINI_API_KEY_30`, `GEMINI_API_KEY_31`, `GEMINI_API_KEY_32`, `GEMINI_API_KEY_33`, `GEMINI_API_KEY_34`, `GEMINI_API_KEY_35`, `GEMINI_API_KEY_36`, `GEMINI_API_KEY_37`, `GEMINI_API_KEY_38`, `GEMINI_API_KEY_39`, `GEMINI_API_KEY_4`, `GEMINI_API_KEY_40`, `GEMINI_API_KEY_41`, `GEMINI_API_KEY_42`, `GEMINI_API_KEY_43`, `GEMINI_API_KEY_44`, `GEMINI_API_KEY_45`, `GEMINI_API_KEY_46`, `GEMINI_API_KEY_47`, `GEMINI_API_KEY_48`, `GEMINI_API_KEY_49`, `GEMINI_API_KEY_5`, `GEMINI_API_KEY_50`, `GEMINI_API_KEY_6`, `GEMINI_API_KEY_7`, `GEMINI_API_KEY_8`, `GEMINI_API_KEY_9`, `GIPHY_API_KEY`, `GIT_BRANCH`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CONVERSION_ID`, `GOOGLE_CONVERSION_LABEL`, `GOOGLE_CREDENTIALS_PATH`, `GOOGLE_DRIVE_API_KEY`, `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_SHEET_ID`, `GOOGLE_VEO3_API_KEY`, `HAILUO_API_KEY`, `HF_API_TOKEN`, `HF_TOKEN`, `HITL_ACCOUNT_ID`, `HITL_REQUIRE_REVIEW`, `HOSTNAME`, `HUGGINGFACE_API_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, `HUGGINGFACE_TOKEN`, `IG_PASSWORD`, `IG_USERNAME`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BOT_PASSWORD`, `INSTAGRAM_BOT_USERNAME`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_GRAPH_ACCOUNT_ID`, `INSTAGRAM_GRAPH_TOKEN`, `INSTAGRAM_HITL`, `INSTAGRAM_PASSWORD`, `INSTAGRAM_PROXY_HOST`, `INSTAGRAM_PROXY_PORT`, `INSTAGRAM_TIMEOUT_MS`, `INSTAGRAM_USERNAME`, `INSTAGRAM_USERNAMES`, `INSTAGRAM_USER_ID`, `INSTAGRAM_USE_PROXY`, `KLING_API_KEY`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_API_KEY`, `LINKEDIN_MODE`, `LOCAL_CLIPS_PATH`, `LOCAL_STORAGE_ENABLED`, `LOCAL_STORAGE_PATH`, `LOCAL_TEMP_PATH`, `LOCAL_THUMBNAILS_PATH`, `LOCAL_VIDEOS_PATH`, `LOG_DIR`, `LOG_LEVEL`, `LOG_UI_BASE_URL`, `LUMA_API_KEY`, `MEDIAPOSTER_BASE_PATH`, `MEDIA_PIPELINE_URL`, `MEDIUM_API_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `META_PIXEL_ID`, `MINIMAX_API_KEY`, `MODAL_VOICE_API_KEY`, `MODAL_VOICE_ENDPOINT`, `MONGODB_URI`, `MPLITE_DEFAULT_ACCOUNT_ID`, `MPLITE_KEY`, `MPLITE_URL`, `MUSIC_INDEX_PATH`, `MUSIC_LIBRARY_PATH`, `NANO_BANANA_API_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, `NODE_ENV`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `PEXELS_API_KEY`, `PIKA_API_KEY`, `PINTEREST_USERNAMES`, `PIXABAY_API_KEY`, `PLAYWRIGHT_BASE_URL`, `PM2_DASHBOARD_URL`, `PORT`, `POSTING_TIMEZONE_OFFSET`, `PROXY_HOST`, `PROXY_PORT`, `PROXY_PORT_2`, `RAPIDAPI_HOST`, `RAPIDAPI_KEY`, `RAPIDAPI_TIKTOK_TIER`, `REDIS_URL`, `REMOTION_BASE_PATH`, `REMOTION_PROJECT_PATH`, `REMOTION_SERVER_URL`, `REMOTION_URL`, `REPO_MAIN_BRANCH`, `REPO_URL`, `REQUIRE_SERVERS`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RUNWAY_API_KEY`, `SAFARI_AUTH_TOKEN`, `SAFARI_CONTROL_URL`, `SAFARI_TELEMETRY_URL`, `SAFARI_URL`, `SAME_DAY_CHECK_INTERVAL`, `SFX_MANIFEST_PATH`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_PORT`, `SMTP_USER`, `SNAPCHAT_ACCESS_TOKEN`, `SORA_API_KEY`, `SORA_DEFAULT_SECONDS`, `SORA_DEFAULT_SIZE`, `SORA_MODEL`, `SORA_TIMEOUT`, `STABILITY_API_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_URL`, `TEMP_DIR`, `THREADS_PASSWORD_1`, `THREADS_USERNAME`, `THREADS_USERNAMES`, `THREADS_USERNAME_1`, `THREADS_USER_ID`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_API_KEY`, `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET`, `TIKTOK_CAPTCHA_API_URL`, `TIKTOK_PIXEL_ID`, `TIKTOK_USERNAME`, `TIKTOK_USERNAMES`, `TRACE_WEBHOOK_SECRET`, `TRACE_WEBHOOK_URL`, `TRANSCRIPTION_PROVIDER`, `TREND_FLASH_OUTPUT`, `TWITTER_ACCESS_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_TOKEN_SECRET`, `TWITTER_ACCOUNT_ID`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_BEARER_TOKEN`, `TWITTER_USERNAMES`, `UNSPLASH_ACCESS_KEY`, `USE_SUPABASE_STORAGE`, `VIDEO_PROVIDER`, `VIDEO_RENDERER_ENGINE`, `VIRTUAL_ENV`, `WAITLISTLAB_API_KEY`, `WAITLISTLAB_API_URL`, `WEB_SERVER_ENABLED`, `WEEKLY_EXECUTOR_CHECK_INTERVAL`, `WEEKLY_PLANNER_INTERVAL`, `YOUTUBE_ACCESS_TOKEN`, `YOUTUBE_API_KEY`, `YOUTUBE_CHANNEL_ID`, `YOUTUBE_CHANNEL_IDS`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, `YOUTUBE_USERNAMES`
 
 ## Validation and drift
 

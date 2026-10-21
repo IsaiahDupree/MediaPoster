@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+def require_airtime_authority() -> None:
+    """Keep this legacy router read-only; Airtime owns scheduling and delivery."""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for scheduling and provider writes."})
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
 
@@ -316,6 +321,7 @@ async def list_scheduled_posts(
 @router.post("/create")
 async def create_scheduled_post(post: ScheduledPostCreate):
     """Create a new scheduled post."""
+    require_airtime_authority()
     ensure_table_exists()
     engine = get_engine()
     
@@ -474,6 +480,7 @@ async def get_scheduled_post(post_id: str):
 @router.put("/{post_id}")
 async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
     """Update a scheduled post."""
+    require_airtime_authority()
     logger.info(f"[UpdatePost] 📥 Received update for post_id={post_id}")
     logger.info(f"[UpdatePost] 📄 Title: {update.title[:50] if update.title else 'None'}...")
     logger.info(f"[UpdatePost] 📝 Caption length: {len(update.caption) if update.caption else 0}")
@@ -643,6 +650,7 @@ async def update_scheduled_post(post_id: str, update: ScheduledPostUpdate):
 @router.delete("/{post_id}")
 async def delete_scheduled_post(post_id: str):
     """Delete a scheduled post."""
+    require_airtime_authority()
     ensure_table_exists()
     engine = get_engine()
     
@@ -672,6 +680,7 @@ async def delete_scheduled_post(post_id: str):
 @router.post("/{post_id}/reschedule")
 async def reschedule_post(post_id: str, new_time: str = Query(..., description="New scheduled time (ISO format)")):
     """Reschedule a post to a new time (drag & drop support)."""
+    require_airtime_authority()
     ensure_table_exists()
     engine = get_engine()
     
@@ -762,6 +771,7 @@ async def record_posted_content(request: RecordPostedRequest):
     Record a manually posted content to the schedule calendar.
     This ensures manually published content shows in the calendar with 'posted' status.
     """
+    require_airtime_authority()
     ensure_table_exists()
     engine = get_engine()
     
@@ -1019,6 +1029,7 @@ async def publish_now(request: PublishNowRequest):
     5. URL polling
     6. Posted content record storage
     """
+    require_airtime_authority()
     from services.background_publisher import get_background_publisher, PublishRequest
     
     publisher = get_background_publisher()
@@ -1093,6 +1104,7 @@ async def publish_scheduled_post(post_id: str):
     Publish a scheduled post immediately (instead of waiting for scheduled time).
     Uses the same verified flow as manual publishing.
     """
+    require_airtime_authority()
     ensure_table_exists()
     engine = get_engine()
     
@@ -1199,6 +1211,7 @@ async def process_due_posts_now():
     Manually trigger processing of due posts.
     Useful for testing or when you want immediate processing.
     """
+    require_airtime_authority()
     from services.post_scheduler import get_scheduler
     
     scheduler = get_scheduler()

@@ -364,3 +364,7 @@ to assert zero provider requests. Deployed revisions and external callers remain
 ## Additional audited migration boundary (2026-10-21)
 
 `youtube_direct_upload.py`, `schedule_videos.py`, `schedule_from_guide.py`, and `watch_folder.py` are migration-only. YouTube direct upload and schedule database-write helpers raise `airtime_required`; CLI write paths exit with status 2 before DB/provider access. `schedule_videos.py` and `schedule_from_guide.py` support local `--dry-run` previews. Thumbnail extraction is compute work and returns `orion_required` from these CLIs; submit it through the Orion job service. The watch-folder daemon is fully disabled, including direct helper calls.
+
+## Mounted scheduling API migration boundary (2026-10-21)
+
+The active legacy `/api/schedule` mutation routes (create, update, delete, reschedule, record-posted, publish-now, scheduled publish, and process-due) and `/api/external` submit/bulk/smart scheduling routes now return HTTP 409 `airtime_required` before their side effects. The external schedule-row helper is also disabled before database access. GET schedule/calendar/account/status/health discovery remains available. Use Airtime for schedule mutations and provider writes; verify remote callers and deployed revisions separately.

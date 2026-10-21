@@ -37,6 +37,11 @@ from services.external_queue_manager import get_queue_manager, ExternalQueueMana
 
 router = APIRouter(prefix="/api/external", tags=["External Scheduling"])
 
+
+def require_airtime_authority() -> None:
+    """External legacy scheduling is disabled; Airtime is the write authority."""
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for scheduling and provider writes."})
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
 # =============================================================================
@@ -267,6 +272,7 @@ def create_scheduled_post(
     video_path: str = None
 ) -> dict:
     """Create a scheduled post in the database"""
+    require_airtime_authority()
     engine = get_engine()
     
     # Convert hashtags list to PostgreSQL array format
@@ -360,6 +366,7 @@ async def submit_video(
     }
     ```
     """
+    require_airtime_authority()
     try:
         # Step 1: Resolve video (download from URL or use local path)
         video_path = await resolve_video_path(
@@ -429,6 +436,7 @@ async def bulk_schedule_videos(request: BulkScheduleRequest):
     }
     ```
     """
+    require_airtime_authority()
     try:
         download_dir = Path("/tmp/mediaposter_external")
         scheduled_posts = []
@@ -618,6 +626,7 @@ async def smart_schedule_video(request: SmartScheduleRequest):
     
     MediaPoster responds with the optimally allocated times.
     """
+    require_airtime_authority()
     try:
         queue_manager = get_queue_manager()
         
@@ -711,6 +720,7 @@ async def smart_bulk_schedule(request: SmartBulkRequest):
     }
     ```
     """
+    require_airtime_authority()
     try:
         queue_manager = get_queue_manager()
         download_dir = Path("/tmp/mediaposter_external")

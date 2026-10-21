@@ -64,3 +64,17 @@ async def test_manual_title_check_rejects_unreceipted_200(contract_service, caps
     async with httpx.AsyncClient() as client:
         assert await checks.test_title_generation(client) is False
     assert "expected 409" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_manual_checker_requires_explicit_content_intelligence_target(capsys):
+    previous = checks.SERVICES["content-intelligence"]
+    checks.SERVICES["content-intelligence"] = ""
+    try:
+        assert await checks.main() == 2
+    finally:
+        checks.SERVICES["content-intelligence"] = previous
+
+    output = capsys.readouterr().out
+    assert "Set CONTENT_INTEL_URL" in output
+    assert "Market Tape" in output

@@ -14,7 +14,7 @@ from typing import Dict, Any
 # Service URLs
 SERVICES = {
     "media-pipeline": os.getenv("MEDIA_PIPELINE_URL", "http://127.0.0.1:6004"),
-    "content-intelligence": os.getenv("CONTENT_INTEL_URL", "http://127.0.0.1:6006"),
+    "content-intelligence": os.getenv("CONTENT_INTEL_URL", ""),
 }
 
 
@@ -161,6 +161,11 @@ async def test_title_generation(client: httpx.AsyncClient) -> bool:
 
 async def main():
     """Run all integration tests."""
+    if not SERVICES["content-intelligence"]:
+        print("Set CONTENT_INTEL_URL to the broad Content Intelligence runtime before running these checks.")
+        print("Port 6006 currently hosts the separate Market Tape service and is not a valid default target.")
+        return 2
+
     print("\n" + "="*60)
     print("🔬 MediaPoster Microservices Contract Checks")
     print("="*60 + "\n")

@@ -21,7 +21,7 @@ Media production, provider integration, scheduling, analytics, and social publis
 - Database objects declared in migrations: **637**
 - Environment-variable names: **281**
 - Package manifests with scripts: **7**
-- Source fingerprint: `2257cdfc497cff676d87a2156d0c3ec44e66ec529b90452815549f320748d530`
+- Source fingerprint: `adaa9820424316ecd84b29094bd4684d716808e80688a4ee8b71d43af1bdce29`
 
 This is a static source inventory, not a live health report. Dynamic routes and runtime registrations must be verified through the repository's own health/discovery interface.
 
@@ -168,11 +168,11 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/analytics/dashboard` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:334`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L334) | `read` |
 | `GET` | `/analytics/export` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:595`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L595) | `read` |
 | `GET` | `/analytics/historical` | [`Backend/api/endpoints/orchestrator.py:457`](Backend/api/endpoints/orchestrator.py#L457) | `read` |
-| `GET` | `/analytics/insights` | [`Backend/api/endpoints/publishing_analytics.py:423`](Backend/api/endpoints/publishing_analytics.py#L423) | `read` |
-| `GET` | `/analytics/overview` | [`Backend/api/endpoints/publishing_analytics.py:292`](Backend/api/endpoints/publishing_analytics.py#L292) | `read` |
+| `GET` | `/analytics/insights` | [`Backend/api/endpoints/publishing_analytics.py:429`](Backend/api/endpoints/publishing_analytics.py#L429) | `read` |
+| `GET` | `/analytics/overview` | [`Backend/api/endpoints/publishing_analytics.py:298`](Backend/api/endpoints/publishing_analytics.py#L298) | `read` |
 | `GET` | `/analytics/posted` | [`Backend/routers/visual_campaign.py:211`](Backend/routers/visual_campaign.py#L211) | `read` |
-| `GET` | `/analytics/posts/{post_id}/performance` | [`Backend/api/endpoints/publishing_analytics.py:357`](Backend/api/endpoints/publishing_analytics.py#L357) | `read` |
-| `GET` | `/analytics/posts/{post_id}/retention` | [`Backend/api/endpoints/publishing_analytics.py:390`](Backend/api/endpoints/publishing_analytics.py#L390) | `read` |
+| `GET` | `/analytics/posts/{post_id}/performance` | [`Backend/api/endpoints/publishing_analytics.py:363`](Backend/api/endpoints/publishing_analytics.py#L363) | `read` |
+| `GET` | `/analytics/posts/{post_id}/retention` | [`Backend/api/endpoints/publishing_analytics.py:396`](Backend/api/endpoints/publishing_analytics.py#L396) | `read` |
 | `POST` | `/analytics/refresh-all` | [`Backend/api/endpoints/posted_content.py:394`](Backend/api/endpoints/posted_content.py#L394) | `required` |
 | `GET` | `/analytics/round/{round_id}` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:610`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L610) | `read` |
 | `GET` | `/analytics/scheduled` | [`Backend/routers/twitter_campaign.py:223`](Backend/routers/twitter_campaign.py#L223) | `read` |
@@ -1423,10 +1423,10 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/publish-thread` | [`Backend/api/endpoints/twitter_api.py:206`](Backend/api/endpoints/twitter_api.py#L206) | `required` |
 | `POST` | `/publish/due` | [`Backend/api/endpoints/adaptive_scheduler.py:831`](Backend/api/endpoints/adaptive_scheduler.py#L831) | `required` |
 | `GET` | `/publisher/credentials` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:677`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L677) | `read` |
-| `POST` | `/publishing/auto-schedule` | [`Backend/api/endpoints/publishing_analytics.py:230`](Backend/api/endpoints/publishing_analytics.py#L230) | `required` |
-| `GET` | `/publishing/calendar/{year}/{month}` | [`Backend/api/endpoints/publishing_analytics.py:191`](Backend/api/endpoints/publishing_analytics.py#L191) | `read` |
-| `POST` | `/publishing/posts/{post_id}/regenerate` | [`Backend/api/endpoints/publishing_analytics.py:110`](Backend/api/endpoints/publishing_analytics.py#L110) | `required` |
-| `PUT` | `/publishing/posts/{post_id}/reschedule` | [`Backend/api/endpoints/publishing_analytics.py:85`](Backend/api/endpoints/publishing_analytics.py#L85) | `required` |
+| `POST` | `/publishing/auto-schedule` | [`Backend/api/endpoints/publishing_analytics.py:236`](Backend/api/endpoints/publishing_analytics.py#L236) | `required` |
+| `GET` | `/publishing/calendar/{year}/{month}` | [`Backend/api/endpoints/publishing_analytics.py:197`](Backend/api/endpoints/publishing_analytics.py#L197) | `read` |
+| `POST` | `/publishing/posts/{post_id}/regenerate` | [`Backend/api/endpoints/publishing_analytics.py:114`](Backend/api/endpoints/publishing_analytics.py#L114) | `required` |
+| `PUT` | `/publishing/posts/{post_id}/reschedule` | [`Backend/api/endpoints/publishing_analytics.py:87`](Backend/api/endpoints/publishing_analytics.py#L87) | `required` |
 | `POST` | `/publishing/schedule` | [`Backend/api/endpoints/publishing_analytics.py:54`](Backend/api/endpoints/publishing_analytics.py#L54) | `required` |
 | `POST` | `/publishing/schedule` | [`Frontend/src/hooks/usePublishing.ts:60`](Frontend/src/hooks/usePublishing.ts#L60) | `required` |
 | `POST` | `/pull-from-device` | [`Backend/api/endpoints/android_import_api.py:280`](Backend/api/endpoints/android_import_api.py#L280) | `required` |

@@ -58,6 +58,8 @@ async def schedule_post(request: SchedulePostRequest, db: AsyncSession = Depends
 
     Inserts into the scheduled_posts table and returns the new post record.
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     post_id = str(uuid.uuid4())
 
     await db.execute(text("""
@@ -89,6 +91,8 @@ async def reschedule_post(post_id: str, new_time: datetime, db: AsyncSession = D
 
     Updates the scheduled_time in the scheduled_posts table.
     """
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Use Airtime for schedule mutations and provider writes."})
+
     result = await db.execute(text("""
         UPDATE scheduled_posts
         SET scheduled_time = :new_time, updated_at = NOW()
@@ -114,6 +118,8 @@ async def regenerate_content(post_id: str, request: RegenerateRequest):
 
     Uses OpenAI to generate new content variants.
     """
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Use ScriptHub for rights-safe content generation."})
+
     if request.type not in ("title", "caption", "hashtags"):
         raise HTTPException(400, "Invalid type. Must be 'title', 'caption', or 'hashtags'.")
 

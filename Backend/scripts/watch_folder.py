@@ -216,6 +216,7 @@ def schedule_video(
     thumb_dir: Optional[Path] = None,
 ) -> List[Dict]:
     """Schedule a single video across platforms. Returns list of created posts."""
+    raise RuntimeError("airtime_required: direct schedule writes are disabled; use Airtime.")
     from sqlalchemy import text
     
     # Load sidecar metadata
@@ -366,6 +367,7 @@ class FolderWatcher:
     
     def _process_file(self, video_path: Path):
         """Process a single new video file."""
+        raise RuntimeError("airtime_required: legacy folder scheduling is disabled; use Airtime.")
         print(f"\n{LOG_PREFIX} 🆕 New video detected: {video_path.name}")
         
         # Wait for file to finish writing
@@ -400,6 +402,7 @@ class FolderWatcher:
     
     def start(self):
         """Start watching folders."""
+        raise RuntimeError("airtime_required: legacy folder scheduling is disabled; use Airtime.")
         self.running = True
         self.start_time = datetime.now()
         
@@ -569,6 +572,8 @@ Examples:
 
 def main():
     args = parse_args()
+    print("airtime_required: legacy folder scheduling daemon is disabled; use Airtime.")
+    return 2
     
     # Resolve folders
     watch_dirs = [Path(f).expanduser().resolve() for f in args.folders]
@@ -637,4 +642,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

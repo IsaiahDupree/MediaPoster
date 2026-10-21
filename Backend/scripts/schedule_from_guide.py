@@ -204,6 +204,13 @@ def main():
                         help="Max caption length (default: 4990)")
     
     args = parser.parse_args()
+
+    if args.thumbnails:
+        print("orion_required: guide thumbnail extraction must run through the Orion job service.")
+        return 2
+    if not args.dry_run:
+        print("airtime_required: direct schedule database writes are disabled; use Airtime.")
+        return 2
     
     # Parse the guide
     guide_path = Path(args.guide).expanduser()
@@ -417,4 +424,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

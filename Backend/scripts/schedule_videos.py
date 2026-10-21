@@ -383,30 +383,9 @@ def get_existing_schedule(engine, platform: str = None) -> List[Dict]:
 
 def insert_scheduled_posts(engine, posts: List[Dict], dry_run: bool = False) -> int:
     """Insert posts into scheduled_posts table. Returns count inserted."""
-    from sqlalchemy import text
-    
     if dry_run:
         return len(posts)
-    
-    inserted = 0
-    with engine.begin() as conn:
-        for post in posts:
-            try:
-                conn.execute(text("""
-                    INSERT INTO scheduled_posts 
-                    (id, platform, title, caption, hashtags, media_path,
-                     scheduled_time, status, blotato_account_id, account_username,
-                     thumbnail_url, post_type, source, created_at, updated_at)
-                    VALUES 
-                    (:id, :platform, :title, :caption, :hashtags, :media_path,
-                     :scheduled_time, 'scheduled', :blotato_id, :username,
-                     :thumbnail_url, :post_type, 'cli', NOW(), NOW())
-                """), post)
-                inserted += 1
-            except Exception as e:
-                print(f"  ❌ Failed to insert {post.get('title', '?')}: {e}")
-    
-    return inserted
+    raise RuntimeError("airtime_required: legacy schedule database writes are disabled; use Airtime.")
 
 
 # =============================================================================
@@ -608,6 +587,13 @@ def main():
     if args.show_accounts:
         show_accounts()
         return
+
+    if args.thumbnails:
+        print("orion_required: thumbnail extraction must run through the Orion job service.")
+        return 2
+    if not args.dry_run:
+        print("airtime_required: direct schedule database writes are disabled; use Airtime.")
+        return 2
     
     if not args.source:
         print("❌ No video source specified. Use --help for usage.")
@@ -812,4 +798,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,6 +1,6 @@
 # Scheduling & Planning Scripts
 
-Standalone CLI tools for scheduling and planning content — **no backend server required**.
+Legacy standalone CLI tools for previewing and planning content — **no backend server required**. Direct scheduling and publishing paths are disabled.
 
 Some legacy scripts in this checkout connect to Supabase or the local MediaPoster API. The audited generation and provider-write entrypoints are blocked; this document describes migration context, not an approved path for production scheduling. Airtime owns active scheduling and provider writes.
 
@@ -12,18 +12,18 @@ Some legacy scripts in this checkout connect to Supabase or the local MediaPoste
 
 | Script | Purpose | Key Use Case |
 |--------|---------|-------------|
-| `schedule_videos.py` | Schedule new videos from a folder | New batch of videos ready to post |
+| `schedule_videos.py` | Preview a local schedule | Inspect a batch before Airtime handoff |
 | `plan_content.py` | Analyze schedule, find gaps, plan strategy | "When should I post next?" |
-| `schedule_from_guide.py` | Parse a publishing guide markdown | Bulk schedule with rich metadata |
+| `schedule_from_guide.py` | Preview guide-derived metadata | Inspect a guide before Airtime handoff |
 | `bulk_scheduler.py` | Local-only schedule preview | Preview legacy rows; provider writes blocked |
-| `watch_folder.py` | Auto-ingest daemon for new videos | Drop video in folder → auto-scheduled |
+| `watch_folder.py` | Disabled legacy auto-ingest daemon | Use Airtime for schedule creation |
 | `publish_monitor.py` | Live publish monitoring & notifications | Track publish progress, get alerts |
 
 ---
 
 ## schedule_videos.py
 
-Schedule videos from a folder or file into the PostScheduler DB.
+Preview a local schedule from a folder or file. Direct database writes are disabled.
 
 ```bash
 # Schedule a folder to YouTube (default: 2/day starting tomorrow 10am EST)
@@ -118,7 +118,7 @@ python scripts/plan_content.py accounts
 
 ## schedule_from_guide.py
 
-Parse a structured markdown publishing guide and schedule everything.
+Parse a structured markdown publishing guide for preview. Direct scheduling is disabled.
 
 ```bash
 # Schedule from guide to YouTube
@@ -196,7 +196,7 @@ python scripts/bulk_scheduler.py --source . --platform tiktok \
 
 ## watch_folder.py
 
-Auto-ingest daemon — watches folders for new video files and auto-schedules them.
+Disabled legacy auto-ingest daemon. Invocations return `airtime_required` before creating folders, resolving accounts, forking, or writing schedule rows.
 
 ```bash
 # Watch a folder for new videos → YouTube
@@ -359,3 +359,8 @@ BackgroundPublisher, or calling Blotato. Publishing and media writes return
 `airtime_required`; generation and deletion return `foundry_required`. Read-only account, health
 and video-status routes remain separate. The route/helper tests use a real loopback HTTP server
 to assert zero provider requests. Deployed revisions and external callers remain unknown.
+
+
+## Additional audited migration boundary (2026-10-21)
+
+`youtube_direct_upload.py`, `schedule_videos.py`, `schedule_from_guide.py`, and `watch_folder.py` are migration-only. YouTube direct upload and schedule database-write helpers raise `airtime_required`; CLI write paths exit with status 2 before DB/provider access. `schedule_videos.py` and `schedule_from_guide.py` support local `--dry-run` previews. Thumbnail extraction is compute work and returns `orion_required` from these CLIs; submit it through the Orion job service. The watch-folder daemon is fully disabled, including direct helper calls.

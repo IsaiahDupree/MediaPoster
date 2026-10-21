@@ -64,7 +64,7 @@ class MicroservicesClient:
         except ServiceCallError:
             raise
         except httpx.HTTPError as exc:
-            logger.warning(f"Service {service} request failed at {url}: {type(exc).__name__}")
+            logger.warning(f"Service {service} request failed: {type(exc).__name__}")
             raise ServiceCallError(service, endpoint, f"Service {service} request failed") from exc
     
     async def health_check(self, service: str) -> bool:

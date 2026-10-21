@@ -1,6 +1,9 @@
 """HTTP-boundary tests for downstream service failure semantics."""
+from io import StringIO
+
 import pytest
 from aiohttp import web
+from loguru import logger
 
 from services.microservices_client import MicroservicesClient, ServiceCallError
 
@@ -68,9 +71,16 @@ async def test_title_wrapper_does_not_turn_policy_block_into_empty_success(servi
 @pytest.mark.asyncio
 async def test_connection_failure_is_explicit():
     client = MicroservicesClient()
-    client.services["ai"] = "http://127.0.0.1:1"
+    client.services["ai"] = "http://user:secret@127.0.0.1:1/?token=secret"
     client.timeout = 0.2
+    log_stream = StringIO()
+    sink_id = logger.add(log_stream, format="{message}")
 
-    with pytest.raises(ServiceCallError, match="request failed"):
-        await client._call("ai", "/titles", {})
+    try:
+        with pytest.raises(ServiceCallError, match="request failed"):
+            await client._call("ai", "/titles", {})
+    finally:
+        logger.remove(sink_id)
+
+    assert "secret" not in log_stream.getvalue()
 

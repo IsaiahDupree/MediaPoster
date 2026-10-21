@@ -308,3 +308,9 @@ Legacy entrypoints `publish_approved_videos.py`, `full_workflow_ingest_analyze_p
 message before reading media, calling APIs, saving content, or publishing. They are retained
 for migration reference; use ScriptHub for generation/approval and Airtime for schedule and
 provider writes.
+
+The additional legacy paths `schedule_test_videos.py`, `schedule_7_day_posts.py`, and
+`daily_publisher.py` are also disabled at their CLI and write-helper boundaries. They previously
+created local schedule rows, inserted directly into the legacy schedule database, or started
+services and triggered due-post processing. Their caption helper no longer returns generic
+fallback copy. Schedule and delivery work belongs in Airtime.

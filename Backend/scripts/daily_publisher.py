@@ -143,18 +143,8 @@ class DailyPublisher:
             return [], []
     
     def trigger_publish(self):
-        """Trigger the scheduler to process due posts."""
-        try:
-            # The backend's post_scheduler automatically runs every 60 seconds
-            # We can also trigger it manually via API if available
-            resp = requests.post(
-                f"http://localhost:{BACKEND_PORT}/api/schedule/process-due",
-                timeout=30
-            )
-            return resp.status_code in [200, 404]  # 404 means endpoint doesn't exist, which is ok
-        except Exception as e:
-            self.log(f"Trigger publish error: {e}", "WARNING")
-            return True  # Continue anyway, scheduler will handle it
+        self.log("airtime_required: legacy due-post publisher is disabled; use Airtime", "ERROR")
+        return False
     
     def wait_for_publishing(self, due_count):
         """Wait for posts to be published."""
@@ -263,30 +253,9 @@ class DailyPublisher:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Daily Publisher - Automated posting system")
-    parser.add_argument("--check-only", action="store_true", help="Only check scheduled posts, don't publish")
-    parser.add_argument("--keep-alive", action="store_true", help="Keep services running after publishing")
-    parser.add_argument("--quiet", action="store_true", help="Minimal output")
-    args = parser.parse_args()
-    
-    publisher = DailyPublisher(
-        check_only=args.check_only,
-        keep_alive=args.keep_alive,
-        verbose=not args.quiet
-    )
-    
-    try:
-        success = publisher.run()
-        sys.exit(0 if success else 1)
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user")
-        publisher.shutdown()
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n\nError: {e}")
-        publisher.shutdown()
-        sys.exit(1)
+    print("airtime_required: legacy publisher startup and delivery are disabled; use Airtime")
+    return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main() or 0)

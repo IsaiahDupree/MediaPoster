@@ -14,6 +14,8 @@ from scripts import (
     full_workflow_ingest_analyze_publish,
     post_scheduler_monitor,
     publish_approved_videos,
+    schedule_7_day_posts,
+    schedule_test_videos,
     test_full_publish_flow,
     video_publish_tiktok,
 )
@@ -137,3 +139,28 @@ def test_legacy_generation_and_content_write_helpers_cannot_bypass_authority():
     with pytest.raises(RuntimeError, match="script_hub_required"):
         test_full_publish_flow.generate_content_for_video("content-1")
     assert test_full_publish_flow.publish_to_tiktok("content-1", "title", "copy", [], 710)["error"] == "airtime_required"
+
+
+@pytest.mark.parametrize(
+    "script_name",
+    ["schedule_test_videos.py", "schedule_7_day_posts.py", "daily_publisher.py"],
+)
+def test_additional_legacy_scheduler_clis_exit_before_service_or_queue_access(script_name):
+    script = Path(__file__).resolve().parents[1] / "scripts" / script_name
+    result = subprocess.run(
+        [sys.executable, str(script), "--keep-alive"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 2
+    assert "airtime_required" in result.stdout + result.stderr
+
+
+@pytest.mark.asyncio
+async def test_legacy_scheduler_helpers_do_not_create_queue_rows_or_generic_copy():
+    assert schedule_test_videos.get_caption_from_analysis({}, "instagram") is None
+    assert await schedule_test_videos.schedule_video(None, {"media_id": "1", "filename": "x"}, datetime.now(timezone.utc)) is False
+    account = schedule_7_day_posts.BlotatoAccount(blotato_id=710, username="owner", platform="tiktok")
+    assert schedule_7_day_posts.schedule_post(None, {"id": "1"}, "tiktok", account, datetime.now(timezone.utc)) is False

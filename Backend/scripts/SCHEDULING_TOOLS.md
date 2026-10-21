@@ -316,3 +316,21 @@ services and triggered due-post processing. Their caption helper no longer retur
 fallback copy. Schedule and delivery work belongs in Airtime.
 `daily_publisher.py` also blocks programmatic `DailyPublisher.run()` and `trigger_publish()` calls,
 so importing and invoking the class cannot start services or process due posts.
+
+## Legacy Sora Daily publishing boundary
+
+The recovery checkout's adaptive `POST /api/adaptive/sora-daily` route, Sora daily worker,
+`YouTubePublisher` metadata generator, and its direct Blotato upload helpers now fail closed.
+The route returns HTTP 409 `script_hub_required`; metadata generation requires ScriptHub,
+and YouTube scheduling/provider writes belong to Airtime. This prevents direct Sora pipeline
+runs, raw OpenAI metadata calls, and local Blotato uploads through these entrypoints. No active
+local scheduler reference was found; external or deployed callers remain unknown.
+The legacy `/api/sora-daily` generation routes for start/resume/retry, story/trend prompt
+creation, and asynchronous/synchronous script generation also return HTTP 409
+`script_hub_required` before queue writes, background work, or model calls. Read-only status,
+listing and trend-inspection endpoints remain outside this generation guard.
+
+The legacy `/api/safari` content-writing and video-distribution endpoints are gated as well:
+script generation/queueing and Sora requests return `script_hub_required`, while processed-video
+distribution returns `airtime_required`. The underlying Sora script generators and orchestrator
+Sora/tweet/Blotato helpers fail closed, so importing the classes does not bypass the API guards.

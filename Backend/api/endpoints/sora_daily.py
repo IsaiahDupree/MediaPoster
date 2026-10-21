@@ -70,50 +70,11 @@ async def start_daily_run(
     request: StartDailyRunRequest,
     background_tasks: BackgroundTasks
 ):
-    """Start the daily Sora generation run."""
-    try:
-        from services.sora_daily import get_daily_scheduler, get_trend_collector
-        
-        scheduler = get_daily_scheduler()
-        
-        # Start the run
-        result = await scheduler.start_daily_run()
-        
-        if not result["success"]:
-            raise HTTPException(status_code=400, detail=result.get("error"))
-        
-        # Collect trends and generate jobs in background
-        if request.collect_trends:
-            background_tasks.add_task(
-                _generate_jobs_with_trends,
-                scheduler
-            )
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to start daily run: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Legacy Sora generation is disabled; use ScriptHub."})
 
 
 async def _generate_jobs_with_trends(scheduler):
-    """Background task to generate jobs with trends."""
-    try:
-        from services.sora_daily import get_trend_collector
-        
-        collector = get_trend_collector()
-        
-        # Collect trends
-        trends = await collector.collect_all()
-        trend_topics = [t.topic for t in trends[:20]]
-        
-        # Generate jobs
-        await scheduler.generate_daily_jobs(trends=trend_topics)
-        
-    except Exception as e:
-        logger.error(f"Background job generation failed: {e}")
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Legacy Sora generation is disabled; use ScriptHub."})
 
 
 @router.post("/pause")
@@ -137,21 +98,7 @@ async def pause_daily_run():
 
 @router.post("/resume")
 async def resume_daily_run():
-    """Resume a paused daily run."""
-    try:
-        from services.sora_daily import get_daily_scheduler
-        
-        scheduler = get_daily_scheduler()
-        scheduler.is_running = True
-        
-        if scheduler.current_plan:
-            scheduler.update_plan_status(scheduler.current_plan.id, "in_progress")
-        
-        return {"success": True, "message": "Daily run resumed"}
-        
-    except Exception as e:
-        logger.error(f"Failed to resume: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Legacy Sora generation is disabled; use ScriptHub."})
 
 
 # =============================================================================
@@ -199,18 +146,7 @@ async def get_pending_jobs(limit: int = 20):
 
 @router.post("/jobs/{job_id}/retry")
 async def retry_job(job_id: str, background_tasks: BackgroundTasks):
-    """Retry a failed job."""
-    try:
-        from services.sora_daily import get_daily_scheduler, JobStatus
-        
-        scheduler = get_daily_scheduler()
-        scheduler.update_job_status(job_id, JobStatus.PENDING.value)
-        
-        return {"success": True, "job_id": job_id, "status": "pending"}
-        
-    except Exception as e:
-        logger.error(f"Failed to retry job: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Legacy Sora job retries are disabled; use ScriptHub."})
 
 
 # =============================================================================
@@ -309,26 +245,7 @@ async def generate_single_prompt(
     theme: Optional[str] = None,
     trend: Optional[str] = None
 ):
-    """Generate a single video prompt."""
-    try:
-        from services.sora_daily import get_story_generator
-        
-        generator = get_story_generator()
-        prompt = await generator.generate_single_prompt(
-            theme=theme,
-            trend=trend,
-            character="@isaiahdupree"
-        )
-        
-        return {
-            "prompt": prompt,
-            "theme": theme or generator.get_random_theme(),
-            "trend": trend
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to generate prompt: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 @router.post("/story/generate-movie")
@@ -336,22 +253,7 @@ async def generate_movie_arc(
     theme: Optional[str] = None,
     trend: Optional[str] = None
 ):
-    """Generate a 3-part movie story arc."""
-    try:
-        from services.sora_daily import get_story_generator
-        
-        generator = get_story_generator()
-        arc = await generator.generate_story_arc(
-            theme=theme,
-            trend=trend,
-            character="@isaiahdupree"
-        )
-        
-        return arc
-        
-    except Exception as e:
-        logger.error(f"Failed to generate story arc: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 @router.get("/themes")
@@ -479,34 +381,7 @@ async def get_random_trend_content(
     content_type: str = "single",
     trend_name: Optional[str] = None,
 ):
-    """
-    Get a random trend prompt or series for quick generation.
-    
-    Args:
-        content_type: "single" for standalone, "series" for 3-part
-        trend_name: optional filter by trend
-    """
-    try:
-        from services.sora_daily.story_generator import get_story_generator
-        
-        generator = get_story_generator()
-        
-        if content_type == "series":
-            result = await generator.generate_trend_series(
-                trend_name=trend_name,
-                character="@isaiahdupree",
-            )
-        else:
-            result = await generator.generate_trend_prompt(
-                trend_name=trend_name,
-                character="@isaiahdupree",
-            )
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"Failed to generate trend content: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate trend content through ScriptHub."})
 
 
 class CustomTrendRequest(BaseModel):
@@ -517,28 +392,7 @@ class CustomTrendRequest(BaseModel):
 
 @router.post("/trend-prompts/generate-custom")
 async def generate_custom_trend_prompt(request: CustomTrendRequest):
-    """Generate a custom Sora prompt based on a trend description using AI."""
-    try:
-        from services.sora_daily.trend_prompts import get_trend_prompt_library
-        
-        library = get_trend_prompt_library()
-        prompt = await library.generate_custom_trend_prompt(
-            trend_description=request.trend_description,
-            character="@isaiahdupree",
-            style=request.style,
-        )
-        
-        return {
-            "sora_prompt": prompt,
-            "trend_description": request.trend_description,
-            "style": request.style,
-            "character": "@isaiahdupree",
-            "source": "ai_generated",
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to generate custom trend prompt: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate trend content through ScriptHub."})
 
 
 # =============================================================================
@@ -601,36 +455,7 @@ class GenerateScriptsRequest(BaseModel):
 
 @router.post("/scripts/generate")
 async def generate_scripts(request: GenerateScriptsRequest, background_tasks: BackgroundTasks):
-    """
-    Generate new Sora script packages from trend data.
-
-    Sources:
-    - **live**: Fetches current trends from web sources, then generates scripts via AI
-    - **internal**: Uses trends already collected by TrendCollector (comments, DMs, CRM)
-    - **manual**: You provide trend descriptions, AI generates scripts from them
-
-    Returns immediately with a job_id; scripts are generated in the background.
-    """
-    from services.sora_daily.script_generator import get_script_generator
-
-    job_id = str(__import__("uuid").uuid4())
-
-    background_tasks.add_task(
-        _run_script_generation,
-        job_id,
-        request.source,
-        request.count,
-        request.include_series,
-        request.descriptions,
-    )
-
-    return {
-        "job_id": job_id,
-        "status": "generating",
-        "source": request.source,
-        "count": request.count,
-        "message": f"Generating {request.count} scripts from '{request.source}' trends in background. Poll GET /sora-daily/scripts to see results.",
-    }
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 async def _run_script_generation(
@@ -640,64 +465,12 @@ async def _run_script_generation(
     include_series: bool,
     descriptions: Optional[List[str]],
 ):
-    """Background task that runs the script generation pipeline."""
-    try:
-        from services.sora_daily.script_generator import get_script_generator
-
-        gen = get_script_generator()
-
-        if source == "manual" and descriptions:
-            scripts = await gen.generate_from_descriptions(descriptions, include_series)
-        elif source == "internal":
-            scripts = await gen.generate_from_collected_trends(count, include_series)
-        elif source == "offers":
-            scripts = await gen.generate_from_offers_and_trends(count, include_series)
-        else:  # "live" or default
-            scripts = await gen.generate_from_live_trends(count, include_series)
-
-        logger.info(f"🎬 Script generation job {job_id}: produced {len(scripts)} scripts")
-
-    except Exception as e:
-        logger.error(f"Script generation job {job_id} failed: {e}")
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 @router.post("/scripts/generate-sync")
 async def generate_scripts_sync(request: GenerateScriptsRequest):
-    """
-    Same as /scripts/generate but waits for completion and returns results directly.
-    Use for small batches (count <= 5) or when you need results immediately.
-    """
-    try:
-        from services.sora_daily.script_generator import get_script_generator
-
-        gen = get_script_generator()
-
-        if request.source == "manual" and request.descriptions:
-            scripts = await gen.generate_from_descriptions(
-                request.descriptions, request.include_series
-            )
-        elif request.source == "internal":
-            scripts = await gen.generate_from_collected_trends(
-                request.count, request.include_series
-            )
-        elif request.source == "offers":
-            scripts = await gen.generate_from_offers_and_trends(
-                request.count, request.include_series
-            )
-        else:
-            scripts = await gen.generate_from_live_trends(
-                request.count, request.include_series
-            )
-
-        return {
-            "scripts": [s.to_dict() for s in scripts],
-            "count": len(scripts),
-            "source": request.source,
-        }
-
-    except Exception as e:
-        logger.error(f"Sync script generation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 @router.get("/scripts")

@@ -174,60 +174,17 @@ async def queue_comment(request: CommentRequest):
 
 @router.post("/tweet")
 async def queue_tweet(request: TweetRequest):
-    """Manually queue a tweet task."""
-    orchestrator = get_orchestrator()
-    
-    await orchestrator.queue_manager.add_tweet_task(
-        tweet_text=request.tweet_text or "AI will generate offer tweet",
-        media_path=request.media_path
-    )
-    
-    return {
-        "status": "queued",
-        "queue_size": orchestrator.queue_manager.get_status()["queue_size"]
-    }
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate and approve social copy through ScriptHub."})
 
 
 @router.post("/sora/generate")
 async def queue_sora_generation(request: SoraGenerationRequest):
-    """Queue a Sora video generation."""
-    orchestrator = get_orchestrator()
-    
-    if orchestrator.sora_generations_today >= orchestrator.config.sora_generations_per_day:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Daily Sora limit reached ({orchestrator.config.sora_generations_per_day})"
-        )
-    
-    success = await orchestrator.queue_sora_generation(
-        prompt=request.prompt,
-        trend_source=request.trend_source
-    )
-    
-    return {
-        "status": "queued" if success else "failed",
-        "prompt": request.prompt[:100],
-        "generations_today": orchestrator.sora_generations_today,
-        "remaining": orchestrator.config.sora_generations_per_day - orchestrator.sora_generations_today
-    }
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate and approve through ScriptHub."})
 
 
 @router.post("/video/process")
 async def process_video(request: VideoProcessRequest):
-    """Manually trigger video processing (watermark removal + distribution)."""
-    import os
-    
-    if not os.path.exists(request.video_path):
-        raise HTTPException(status_code=404, detail="Video file not found")
-    
-    orchestrator = get_orchestrator()
-    await orchestrator.process_downloaded_video(request.video_path)
-    
-    return {
-        "status": "queued",
-        "video": request.video_path,
-        "pipeline": "watermark_removal -> blotato_distribution"
-    }
+    raise HTTPException(status_code=409, detail={"error": "airtime_required", "message": "Production and distribution must use the canonical FOUNDRY → StoryRail → Airtime path."})
 
 
 # ============================================================================
@@ -312,71 +269,12 @@ async def trigger_script_generation(
     request: ScriptGenerationRequest,
     background_tasks: BackgroundTasks,
 ):
-    """
-    Trigger dynamic Sora script generation from the Safari automation server.
-
-    Sources:
-    - **live**: Scrapes current web trends and generates scripts via AI
-    - **internal**: Uses trends from comments, DMs, CRM data
-    - **manual**: Provide trend descriptions, AI generates scripts from them
-
-    Scripts are saved to the DB and can be queued for the SoraScheduler.
-    """
-    import uuid
-
-    job_id = str(uuid.uuid4())
-    background_tasks.add_task(
-        _run_safari_script_generation,
-        job_id,
-        request.source,
-        request.count,
-        request.include_series,
-        request.descriptions,
-    )
-
-    return {
-        "job_id": job_id,
-        "status": "generating",
-        "source": request.source,
-        "count": request.count,
-        "message": (
-            f"Generating {request.count} Sora scripts from '{request.source}' trends. "
-            f"Poll GET /api/sora-daily/scripts to see results."
-        ),
-    }
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 @router.post("/scripts/generate-now")
 async def trigger_script_generation_sync(request: ScriptGenerationRequest):
-    """
-    Synchronous version — waits for generation to complete and returns scripts.
-    Best for small batches (count <= 5).
-    """
-    try:
-        from services.sora_daily.script_generator import get_script_generator
-
-        gen = get_script_generator()
-
-        if request.source == "manual" and request.descriptions:
-            scripts = await gen.generate_from_descriptions(
-                request.descriptions, request.include_series
-            )
-        elif request.source == "internal":
-            scripts = await gen.generate_from_collected_trends(
-                request.count, request.include_series
-            )
-        else:
-            scripts = await gen.generate_from_live_trends(
-                request.count, request.include_series
-            )
-
-        return {
-            "scripts": [s.to_dict() for s in scripts],
-            "count": len(scripts),
-            "source": request.source,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 @router.get("/scripts")
@@ -397,26 +295,7 @@ async def list_generated_scripts(
 
 @router.post("/scripts/{script_id}/queue")
 async def queue_script_for_scheduler(script_id: str):
-    """Approve a generated script and queue it for the SoraScheduler to pick up."""
-    try:
-        from services.sora_daily.script_generator import get_script_generator
-
-        gen = get_script_generator()
-        script = gen.get_script_by_id(script_id)
-        if not script:
-            raise HTTPException(status_code=404, detail=f"Script '{script_id}' not found")
-
-        gen.update_script_status(script_id, "queued")
-        return {
-            "script_id": script_id,
-            "title": script.title,
-            "status": "queued",
-            "message": "Script queued — SoraScheduler will use it for the next generation.",
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Approve and queue content through ScriptHub and StoryRail."})
 
 
 async def _run_safari_script_generation(
@@ -426,26 +305,7 @@ async def _run_safari_script_generation(
     include_series: bool,
     descriptions: Optional[List[str]],
 ):
-    """Background task for script generation triggered from Safari automation."""
-    from loguru import logger
-
-    try:
-        from services.sora_daily.script_generator import get_script_generator
-
-        gen = get_script_generator()
-
-        if source == "manual" and descriptions:
-            scripts = await gen.generate_from_descriptions(descriptions, include_series)
-        elif source == "internal":
-            scripts = await gen.generate_from_collected_trends(count, include_series)
-        else:
-            scripts = await gen.generate_from_live_trends(count, include_series)
-
-        logger.info(
-            f"🎬 Safari script generation job {job_id}: produced {len(scripts)} scripts"
-        )
-    except Exception as e:
-        logger.error(f"Safari script generation job {job_id} failed: {e}")
+    raise HTTPException(status_code=409, detail={"error": "script_hub_required", "message": "Generate content through ScriptHub."})
 
 
 @router.get("/1hour-schedule")

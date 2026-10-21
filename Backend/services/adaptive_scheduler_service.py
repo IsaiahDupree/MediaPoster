@@ -2763,21 +2763,7 @@ class AdaptiveSchedulerService:
     # =========================================================================
 
     async def coordinate_sora_daily(self) -> Dict[str, Any]:
-        """
-        Coordinate with SoraDailyPipeline to generate AI videos aligned with schedule needs.
-        Uses trend data and content gaps to inform Sora video topics.
-        """
-        if not self.sora_daily:
-            return {"coordinated": False, "reason": "SoraDailyPipeline not available"}
-        try:
-            result = await self.sora_daily.run_daily_pipeline()
-            result_dict = result if isinstance(result, dict) else {}
-            generated = result_dict.get("videos_generated", 0)
-            logger.info(f"AdaptiveScheduler: Sora daily pipeline — {generated} videos generated")
-            return {"coordinated": True, "result": result_dict}
-        except Exception as e:
-            logger.debug(f"Sora daily coordination failed: {e}")
-            return {"coordinated": False, "reason": str(e)}
+        return {"coordinated": False, "error": "script_hub_required", "message": "Legacy Sora generation is disabled; generate through ScriptHub and deliver through StoryRail/Airtime."}
 
     # =========================================================================
     # WAVE 4: PIPELINE MONITOR (Error Tracking & Health)

@@ -50,63 +50,7 @@ class SoraDailyPipelineWorker:
         logger.info("✅ SoraDailyPipelineWorker initialized")
     
     async def run_daily_pipeline(self) -> Dict:
-        """
-        Execute the full daily pipeline.
-        
-        This should be called once per day, typically early morning.
-        """
-        if self.is_running:
-            return {"success": False, "error": "Pipeline already running"}
-        
-        self.is_running = True
-        start_time = datetime.now(timezone.utc)
-        
-        try:
-            logger.info("🚀 Starting daily Sora pipeline...")
-            
-            # Step 1: Initialize today's plan
-            result = await self.scheduler.start_daily_run()
-            if not result["success"]:
-                return result
-            
-            plan = result["plan"]
-            logger.info(f"📋 Plan created: {plan['id']}")
-            
-            # Step 2: Collect trends
-            logger.info("📈 Collecting trends...")
-            trends = await self.trend_collector.collect_all()
-            trend_topics = [t.topic for t in trends[:20]]
-            logger.info(f"📈 Found {len(trend_topics)} trends")
-            
-            # Step 3: Generate jobs
-            logger.info("📝 Generating prompts...")
-            jobs = await self.scheduler.generate_daily_jobs(trends=trend_topics)
-            logger.info(f"📝 Generated {len(jobs)} jobs")
-            
-            # Step 4: Process jobs in batches
-            await self._process_all_jobs(jobs)
-            
-            # Step 5: Mark plan complete
-            self.scheduler.update_plan_status(plan["id"], "completed")
-            
-            end_time = datetime.now(timezone.utc)
-            duration = (end_time - start_time).total_seconds()
-            
-            logger.info(f"✅ Daily pipeline completed in {duration:.1f}s")
-            
-            return {
-                "success": True,
-                "plan_id": plan["id"],
-                "jobs_processed": len(jobs),
-                "duration_seconds": duration
-            }
-            
-        except Exception as e:
-            logger.error(f"Pipeline failed: {e}")
-            return {"success": False, "error": str(e)}
-            
-        finally:
-            self.is_running = False
+        return {"success": False, "error": "script_hub_required", "message": "Legacy Sora pipeline is disabled; use ScriptHub and Airtime."}
     
     async def _process_all_jobs(self, jobs: List[SoraJob]):
         """

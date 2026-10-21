@@ -281,122 +281,28 @@ class SoraScriptGenerator:
         count: int = 5,
         include_series: bool = True,
     ) -> List[ScriptPackage]:
-        """
-        Full pipeline: fetch live web trends → generate scripts → persist.
-        """
-        logger.info("🌐 Fetching live trends from web sources...")
-        trends = await self.trend_fetcher.fetch_live_trends()
-
-        if not trends:
-            logger.warning("No live trends found — using fallback trends")
-            trends = self._get_fallback_trends()
-
-        return await self._generate_scripts_from_trends(trends, count, include_series)
+        raise RuntimeError("script_hub_required: legacy Sora script generation is disabled; use ScriptHub.")
 
     async def generate_from_descriptions(
         self,
         descriptions: List[str],
         include_series: bool = True,
     ) -> List[ScriptPackage]:
-        """
-        Generate scripts from manually provided trend descriptions.
-        """
-        trends = [
-            {
-                "trend_name": f"Custom Trend {i+1}",
-                "description": desc,
-                "platform": "multi",
-                "format": "single",
-                "source": "manual",
-            }
-            for i, desc in enumerate(descriptions)
-        ]
-        return await self._generate_scripts_from_trends(trends, len(descriptions), include_series)
+        raise RuntimeError("script_hub_required: legacy Sora script generation is disabled; use ScriptHub.")
 
     async def generate_from_offers_and_trends(
         self,
         count: int = 5,
         include_series: bool = False,
     ) -> List[ScriptPackage]:
-        """
-        Generate scripts that weave in offers/products alongside live trends.
-        Fetches offers from UGC system, then generates scripts that naturally
-        incorporate product mentions into trend-aware @isaiahdupree content.
-        """
-        # Fetch offers
-        offers: List[Dict[str, Any]] = []
-        try:
-            from services.ugc_content_generator import UGCContentGenerator
-            ugc = UGCContentGenerator()
-            offers = ugc.get_available_offers() if hasattr(ugc, 'get_available_offers') else []
-        except Exception as e:
-            logger.debug(f"Could not fetch offers: {e}")
-
-        # Fetch live trends as context
-        trends = []
-        try:
-            trends = await self.trend_fetcher.fetch_live_trends()
-        except Exception:
-            trends = self._get_fallback_trends()
-
-        # Build offer-enriched trend objects
-        enriched: List[Dict[str, Any]] = []
-        for i, trend in enumerate(trends[:count * 2]):
-            offer_context = ""
-            if offers and i < len(offers):
-                o = offers[i % len(offers)]
-                offer_context = (
-                    f" Naturally incorporate the product/offer: "
-                    f"\"{o.get('title', 'Premium Product')}\" — {o.get('description', '')}. "
-                    f"Show @isaiahdupree authentically using or showcasing this product."
-                )
-            enriched.append({
-                **trend,
-                "description": trend.get("description", "") + offer_context,
-                "source": "offers_and_trends",
-            })
-
-        if not enriched:
-            enriched = [
-                {
-                    "trend_name": "Creator Brand Showcase",
-                    "description": "Cinematic showcase of @isaiahdupree's brand and products with aspirational lifestyle energy",
-                    "platform": "multi",
-                    "format": "single",
-                    "source": "offers_fallback",
-                }
-            ]
-
-        return await self._generate_scripts_from_trends(enriched, count, include_series)
+        raise RuntimeError("script_hub_required: legacy Sora script generation is disabled; use ScriptHub.")
 
     async def generate_from_collected_trends(
         self,
         count: int = 5,
         include_series: bool = True,
     ) -> List[ScriptPackage]:
-        """
-        Generate scripts from the internal TrendCollector's stored trends.
-        """
-        try:
-            from services.sora_daily.trend_collector import get_trend_collector
-            collector = get_trend_collector()
-            raw_trends = collector.get_unused_trends(limit=count * 2)
-            trends = [
-                {
-                    "trend_name": t.topic,
-                    "description": t.topic,
-                    "platform": t.source_type,
-                    "format": "single",
-                    "source": "internal_collector",
-                    "relevance_score": t.relevance_score,
-                }
-                for t in raw_trends
-            ]
-        except Exception as e:
-            logger.warning(f"Internal trend collector unavailable: {e}")
-            trends = self._get_fallback_trends()
-
-        return await self._generate_scripts_from_trends(trends, count, include_series)
+        raise RuntimeError("script_hub_required: legacy Sora script generation is disabled; use ScriptHub.")
 
     # ─────────────────────────────────────────────────────────────
     # CORE: AI script generation
@@ -408,107 +314,7 @@ class SoraScriptGenerator:
         count: int,
         include_series: bool,
     ) -> List[ScriptPackage]:
-        """Core method: take structured trends and produce ScriptPackages."""
-        if not self.openai_client:
-            logger.error("OpenAI client required for script generation")
-            return []
-
-        month = datetime.now(timezone.utc).strftime("%Y-%m")
-        scripts: List[ScriptPackage] = []
-
-        # Ask AI to generate complete script packages for each trend
-        trends_json = json.dumps(trends[:count * 2], indent=2, default=str)
-        character_json = json.dumps(ISAIAH_CHARACTER, indent=2)
-
-        series_instruction = ""
-        if include_series:
-            series_instruction = (
-                "For trends that suit a narrative arc, create a 3-part series "
-                "(format_type='series' with 3 parts). Otherwise use format_type='single'."
-            )
-
-        try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""You are a Sora AI video script writer for the character @isaiahdupree.
-
-CHARACTER DEFINITION:
-{character_json}
-
-YOUR JOB:
-Given a list of current social media trends, generate {count} complete Sora video script packages. Each script should tap into one of the trends while staying on-brand.
-
-{series_instruction}
-
-Return a JSON object:
-{{
-  "scripts": [
-    {{
-      "title": "Short catchy title",
-      "trend_name": "Name of the trend it's based on",
-      "trend_source": "Where the trend is from",
-      "format_type": "single" or "series",
-      "platforms": ["tiktok", "instagram", "youtube_shorts"],
-      "parts": [
-        {{
-          "part_number": 1,
-          "sora_prompt": "Detailed Sora video generation prompt. Include @isaiahdupree, specific camera movements, lighting, mood, setting, wardrobe. End with 'Portrait 9:16, cinematic 4K.'",
-          "caption": "Social media caption with emoji",
-          "hashtags": ["#tag1", "#tag2"],
-          "suggested_audio": "Song or sound name, or null",
-          "duration_seconds": 12
-        }}
-      ]
-    }}
-  ]
-}}
-
-IMPORTANT RULES:
-- Every sora_prompt MUST start with "@isaiahdupree"
-- Every sora_prompt MUST include: wardrobe (casual hoodie, gold chain), camera movement, lighting, mood
-- Every sora_prompt MUST end with "Portrait 9:16, cinematic 4K."
-- Captions should be engaging, use emoji, feel authentic (not corporate)
-- For series: each part should work standalone but tell a story together
-- Mix formats: some singles, some series (if include_series is true)
-- Stay on brand: tech, automation, content creation, humor, authenticity"""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Here are the current trends:\n\n{trends_json}\n\nGenerate {count} Sora script packages."
-                    }
-                ],
-                temperature=0.85,
-                max_tokens=4000,
-                response_format={"type": "json_object"},
-            )
-
-            result = json.loads(response.choices[0].message.content)
-            raw_scripts = result.get("scripts", [])
-
-            for raw in raw_scripts:
-                pkg = ScriptPackage(
-                    title=raw.get("title", "Untitled Script"),
-                    trend_name=raw.get("trend_name", ""),
-                    trend_source=raw.get("trend_source", ""),
-                    format_type=raw.get("format_type", "single"),
-                    character="@isaiahdupree",
-                    month=month,
-                    parts=raw.get("parts", []),
-                    platforms=raw.get("platforms", ["tiktok", "instagram", "youtube_shorts"]),
-                    source_trends_raw=trends_json[:2000],
-                )
-                self._save_script(pkg)
-                scripts.append(pkg)
-
-            logger.info(f"🎬 Generated {len(scripts)} script packages from {len(trends)} trends")
-
-        except Exception as e:
-            logger.error(f"Script generation failed: {e}")
-
-        return scripts
+        raise RuntimeError("script_hub_required: legacy Sora script generation is disabled; use ScriptHub.")
 
     # ─────────────────────────────────────────────────────────────
     # PERSISTENCE

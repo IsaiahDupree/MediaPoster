@@ -683,7 +683,10 @@ async def coordinate_sora_daily():
     """Coordinate daily Sora video generation pipeline with schedule needs."""
     from services.adaptive_scheduler_service import get_adaptive_scheduler
     service = get_adaptive_scheduler()
-    return await service.coordinate_sora_daily()
+    result = await service.coordinate_sora_daily()
+    if result.get("error") == "script_hub_required":
+        raise HTTPException(status_code=409, detail=result)
+    return result
 
 
 class ContentGenRequest(BaseModel):

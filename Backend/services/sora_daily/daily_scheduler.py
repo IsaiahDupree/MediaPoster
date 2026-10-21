@@ -390,68 +390,7 @@ class DailySoraScheduler:
         }
     
     async def generate_daily_jobs(self, trends: List[str] = None) -> List[SoraJob]:
-        """Generate jobs for the day based on content mix."""
-        if not self.current_plan:
-            self.current_plan = self.get_or_create_today_plan()
-        
-        from .story_generator import get_story_generator
-        story_gen = get_story_generator()
-        
-        jobs = []
-        
-        # Generate 3-part movie jobs
-        for movie_num in range(self.current_plan.movies_planned):
-            movie_id = str(uuid4())
-            theme = story_gen.get_random_theme()
-            trend = trends[movie_num] if trends and movie_num < len(trends) else None
-            
-            for part in range(1, 4):
-                job_type = f"movie_part_{part}"
-                prompt = await story_gen.generate_movie_prompt(
-                    part=part,
-                    theme=theme,
-                    trend=trend,
-                    character="@isaiahdupree"
-                )
-                
-                job = SoraJob(
-                    plan_id=self.current_plan.id,
-                    job_type=job_type,
-                    movie_id=movie_id,
-                    prompt=prompt,
-                    theme=theme,
-                    trend_source=trend,
-                    character="@isaiahdupree"
-                )
-                
-                self.create_job(job)
-                jobs.append(job)
-        
-        # Generate single video jobs
-        for i in range(self.current_plan.singles_planned):
-            theme = story_gen.get_random_theme()
-            trend = trends[self.current_plan.movies_planned + i] if trends and self.current_plan.movies_planned + i < len(trends) else None
-            
-            prompt = await story_gen.generate_single_prompt(
-                theme=theme,
-                trend=trend,
-                character="@isaiahdupree"
-            )
-            
-            job = SoraJob(
-                plan_id=self.current_plan.id,
-                job_type=JobType.SINGLE.value,
-                prompt=prompt,
-                theme=theme,
-                trend_source=trend,
-                character="@isaiahdupree"
-            )
-            
-            self.create_job(job)
-            jobs.append(job)
-        
-        logger.info(f"📝 Generated {len(jobs)} jobs for today")
-        return jobs
+        raise RuntimeError("script_hub_required: legacy Sora generation is disabled; use ScriptHub.")
     
     async def process_job(self, job: SoraJob) -> Dict:
         """Process a single job through the full pipeline."""

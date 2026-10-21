@@ -553,46 +553,7 @@ class TrendPromptLibrary:
         character: str = "@isaiahdupree",
         style: str = "cinematic 4K",
     ) -> str:
-        """Use OpenAI to generate a custom Sora prompt based on a trend description."""
-        if not self.openai_client:
-            return (
-                f"{character} in a trendy scene inspired by: {trend_description}. "
-                f"{ISAIAH_CHARACTER['visual_description']}, {style}, portrait 9:16."
-            )
-
-        try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            f"You write Sora AI video generation prompts. The main character is "
-                            f"{character}: {ISAIAH_CHARACTER['visual_description']}. "
-                            f"Brand pillars: {', '.join(ISAIAH_CHARACTER['brand_pillars'])}. "
-                            f"Output ONLY the Sora prompt — no explanation, no quotes. "
-                            f"Include specific camera movements, lighting, mood. "
-                            f"Always end with 'Portrait 9:16, {style}.' "
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Create a Sora video prompt for {character} that taps into "
-                            f"this trending concept: {trend_description}"
-                        ),
-                    },
-                ],
-                temperature=0.9,
-                max_tokens=300,
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            logger.error(f"Custom trend prompt generation failed: {e}")
-            return (
-                f"{character} in a trendy scene inspired by: {trend_description}. "
-                f"{ISAIAH_CHARACTER['visual_description']}, {style}, portrait 9:16."
-            )
+        raise RuntimeError("script_hub_required: legacy Sora generation is disabled; use ScriptHub.")
 
 
 # =============================================================================

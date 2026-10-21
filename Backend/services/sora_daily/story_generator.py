@@ -91,57 +91,7 @@ class StoryGenerator:
         trend: str = None,
         character: str = "@isaiahdupree"
     ) -> str:
-        """
-        Generate a prompt for a single standalone video.
-        
-        Args:
-            theme: Story theme
-            trend: Optional trending topic to incorporate
-            character: Sora character to use
-        
-        Returns:
-            Sora-optimized video prompt
-        """
-        theme = theme or self.get_random_theme()
-        style = self.get_random_style()
-        location = self.get_random_location()
-        
-        if self.client and trend:
-            # Use AI to incorporate trend
-            try:
-                response = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": f"""Create a Sora video prompt featuring {character}.
-
-Requirements:
-- Theme: {theme}
-- Trending topic to incorporate: {trend}
-- Visual style: {style}
-- Location: {location}
-- Duration: 10-20 seconds
-- Must be visually engaging
-- Include specific camera movements
-- Describe lighting and mood
-
-Output ONLY the prompt, no explanation."""
-                        },
-                        {
-                            "role": "user",
-                            "content": "Generate the Sora prompt."
-                        }
-                    ],
-                    temperature=0.9,
-                    max_tokens=300
-                )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                logger.error(f"AI prompt generation failed: {e}")
-        
-        # Fallback to template-based prompt
-        return self._generate_template_prompt(theme, style, location, character)
+        raise RuntimeError("script_hub_required: legacy Sora generation is disabled; use ScriptHub.")
     
     async def generate_movie_prompt(
         self,
@@ -150,66 +100,7 @@ Output ONLY the prompt, no explanation."""
         trend: str = None,
         character: str = "@isaiahdupree"
     ) -> str:
-        """
-        Generate a prompt for a 3-part movie.
-        
-        Args:
-            part: Part number (1, 2, or 3)
-            theme: Story theme
-            trend: Optional trending topic
-            character: Sora character
-        
-        Returns:
-            Sora-optimized video prompt for the specific part
-        """
-        theme = theme or self.get_random_theme()
-        style = self.get_random_style()
-        
-        part_descriptions = {
-            1: "Setup/Hook - Introduce the character and situation, create intrigue",
-            2: "Conflict/Development - Show the challenge or journey, build tension",
-            3: "Resolution/CTA - Conclude the story, show transformation or success"
-        }
-        
-        part_desc = part_descriptions.get(part, part_descriptions[1])
-        
-        if self.client:
-            try:
-                response = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": f"""Create Part {part} of a 3-part Sora video series featuring {character}.
-
-Story Theme: {theme}
-Part Purpose: {part_desc}
-Visual Style: {style}
-{f'Trending Topic: {trend}' if trend else ''}
-
-Requirements:
-- 10-20 seconds of footage
-- Continuous visual flow
-- Specific camera movements
-- Clear emotional tone
-- Works as part of series
-
-Output ONLY the prompt, no explanation."""
-                        },
-                        {
-                            "role": "user",
-                            "content": f"Generate Part {part} prompt."
-                        }
-                    ],
-                    temperature=0.8,
-                    max_tokens=300
-                )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                logger.error(f"AI movie prompt generation failed: {e}")
-        
-        # Fallback
-        return self._generate_movie_template(part, theme, style, character)
+        raise RuntimeError("script_hub_required: legacy Sora generation is disabled; use ScriptHub.")
     
     def _generate_template_prompt(
         self,
@@ -255,55 +146,7 @@ Output ONLY the prompt, no explanation."""
         trend_name: Optional[str] = None,
         character: str = "@isaiahdupree"
     ) -> Dict:
-        """
-        Generate a prompt using the curated trend library.
-        
-        Args:
-            trend_name: Optional filter for a specific trend
-            character: Sora character
-        
-        Returns:
-            Dict with prompt metadata and sora_prompt
-        """
-        try:
-            from services.sora_daily.trend_prompts import get_trend_prompt_library
-            library = get_trend_prompt_library()
-            
-            if trend_name:
-                matches = library.get_prompts(trend_name=trend_name)
-                singles = [p for p in matches if p.category == "single"]
-                prompt = random.choice(singles) if singles else library.get_random_prompt()
-            else:
-                prompt = library.get_random_prompt()
-            
-            if prompt:
-                return {
-                    "source": "trend_library",
-                    "prompt_id": prompt.id,
-                    "trend_name": prompt.trend_name,
-                    "sora_prompt": prompt.sora_prompt,
-                    "caption": prompt.caption,
-                    "hashtags": prompt.hashtags,
-                    "suggested_audio": prompt.suggested_audio,
-                    "platforms": prompt.platforms,
-                }
-        except ImportError:
-            logger.warning("Trend library not available, falling back to AI generation")
-        except Exception as e:
-            logger.error(f"Trend prompt lookup failed: {e}")
-        
-        # Fallback to standard AI generation
-        sora_prompt = await self.generate_single_prompt(trend=trend_name, character=character)
-        return {
-            "source": "ai_generated",
-            "prompt_id": None,
-            "trend_name": trend_name,
-            "sora_prompt": sora_prompt,
-            "caption": None,
-            "hashtags": [],
-            "suggested_audio": None,
-            "platforms": ["tiktok", "instagram", "youtube_shorts"],
-        }
+        raise RuntimeError("script_hub_required: legacy Sora generation is disabled; use ScriptHub.")
 
     async def generate_trend_series(
         self,
@@ -311,63 +154,7 @@ Output ONLY the prompt, no explanation."""
         series_id: Optional[str] = None,
         character: str = "@isaiahdupree"
     ) -> Dict:
-        """
-        Generate a 3-part series from the curated trend library.
-        
-        Args:
-            trend_name: Optional filter for a specific trend
-            series_id: Optional specific series ID
-            character: Sora character
-        
-        Returns:
-            Dict with series metadata and all part prompts
-        """
-        try:
-            from services.sora_daily.trend_prompts import get_trend_prompt_library
-            library = get_trend_prompt_library()
-            
-            if series_id:
-                parts = library.get_prompts(series_id=series_id)
-            elif trend_name:
-                all_series = library.get_series()
-                # Find series matching the trend
-                parts = []
-                for sid, series_parts in all_series.items():
-                    if any(trend_name.lower() in p.trend_name.lower() for p in series_parts):
-                        parts = series_parts
-                        break
-            else:
-                series_parts = library.get_random_series()
-                parts = series_parts if series_parts else []
-            
-            if parts:
-                return {
-                    "source": "trend_library",
-                    "series_id": parts[0].series_id,
-                    "trend_name": parts[0].trend_name,
-                    "character": character,
-                    "parts": [
-                        {
-                            "part": i + 1,
-                            "prompt_id": p.id,
-                            "title": p.title,
-                            "sora_prompt": p.sora_prompt,
-                            "caption": p.caption,
-                            "hashtags": p.hashtags,
-                            "suggested_audio": p.suggested_audio,
-                        }
-                        for i, p in enumerate(parts)
-                    ],
-                }
-        except ImportError:
-            logger.warning("Trend library not available, falling back to AI generation")
-        except Exception as e:
-            logger.error(f"Trend series lookup failed: {e}")
-        
-        # Fallback to standard AI story arc generation
-        arc = await self.generate_story_arc(trend=trend_name, character=character)
-        arc["source"] = "ai_generated"
-        return arc
+        raise RuntimeError("script_hub_required: legacy Sora generation is disabled; use ScriptHub.")
 
     async def generate_story_arc(
         self,
@@ -375,29 +162,7 @@ Output ONLY the prompt, no explanation."""
         trend: str = None,
         character: str = "@isaiahdupree"
     ) -> Dict:
-        """
-        Generate a complete 3-part story arc.
-        
-        Returns:
-            Dict with story metadata and all 3 prompts
-        """
-        theme = theme or self.get_random_theme()
-        
-        prompts = []
-        for part in range(1, 4):
-            prompt = await self.generate_movie_prompt(part, theme, trend, character)
-            prompts.append(prompt)
-        
-        return {
-            "theme": theme,
-            "trend": trend,
-            "character": character,
-            "parts": [
-                {"part": 1, "purpose": "Setup/Hook", "prompt": prompts[0]},
-                {"part": 2, "purpose": "Conflict/Development", "prompt": prompts[1]},
-                {"part": 3, "purpose": "Resolution/CTA", "prompt": prompts[2]}
-            ]
-        }
+        raise RuntimeError("script_hub_required: legacy Sora generation is disabled; use ScriptHub.")
 
 
 # =============================================================================

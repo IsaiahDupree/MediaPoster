@@ -339,17 +339,7 @@ class SafariAutomationOrchestrator:
         await self.queue_manager.add_task(task)
         
     async def _schedule_tweet(self):
-        """Schedule a tweet task."""
-        task = SafariTask(
-            task_type=TaskType.TWEET,
-            priority=TaskPriority.HIGH,
-            platform="twitter",
-            payload={
-                "action": "generate_and_post",
-                "use_ai": True
-            }
-        )
-        await self.queue_manager.add_task(task)
+        return False
         
     async def _schedule_stats_check(self):
         """Schedule a stats check task."""
@@ -384,64 +374,10 @@ class SafariAutomationOrchestrator:
             raise
             
     async def _handle_tweet(self, task: SafariTask):
-        """Handle tweet posting via Safari automation."""
-        if not self.config.twitter_posting_enabled:
-            logger.info("🐦 Twitter posting disabled - skipping tweet")
-            return
-            
-        logger.info("🐦 Posting tweet...")
-        
-        try:
-            # Generate tweet using AI
-            from services.twitter_campaign_service import TwitterCampaignService
-            campaign_service = TwitterCampaignService()
-            tweet_text = await campaign_service.generate_offer_tweet()
-            
-            # Post via Safari
-            poster = self._get_twitter_poster()
-            if not poster.simple_login_check():
-                raise Exception("Not logged into Twitter")
-                
-            success = poster.post_tweet(tweet_text)
-            if success:
-                self.tweets_today += 1
-                logger.info(f"✅ Tweet posted ({self.tweets_today} today)")
-            else:
-                raise Exception("Tweet posting failed")
-                
-        except Exception as e:
-            logger.error(f"Tweet failed: {e}")
-            raise
+        return {"success": False, "error": "script_hub_required"}
             
     async def _handle_sora_generate(self, task: SafariTask):
-        """Handle Sora video generation."""
-        if not self.config.sora_enabled:
-            logger.info("🎬 Sora generation disabled - skipping")
-            return
-            
-        prompt = task.payload.get("prompt", "")
-        logger.info(f"🎬 Starting Sora generation: {prompt[:50]}...")
-        
-        try:
-            sora = self._get_sora_automation()
-            # Queue generation - actual implementation in SoraFullAutomation
-            self.sora_generations_today += 1
-            
-            # Schedule polling tasks
-            for i in range(10):
-                poll_task = SafariTask(
-                    task_type=TaskType.SORA_POLL,
-                    priority=TaskPriority.CRITICAL,
-                    scheduled_at=datetime.now(timezone.utc) + timedelta(seconds=30 * (i + 1)),
-                    payload={"prompt": prompt}
-                )
-                await self.queue_manager.add_task(poll_task)
-                
-            logger.info(f"✅ Sora generation queued ({self.sora_generations_today} today)")
-            
-        except Exception as e:
-            logger.error(f"Sora generation failed: {e}")
-            raise
+        return {"success": False, "error": "script_hub_required"}
             
     async def _handle_sora_poll(self, task: SafariTask):
         """Poll Sora for generation completion."""
@@ -480,23 +416,7 @@ class SafariAutomationOrchestrator:
             raise
             
     async def _handle_blotato_post(self, task: SafariTask):
-        """Handle video distribution to Blotato."""
-        video_path = task.payload.get("video_path")
-        logger.info(f"📤 Distributing to Blotato: {Path(video_path).name}...")
-        
-        try:
-            connector = self._get_blotato_connector()
-            if connector:
-                # Submit to Blotato for multi-platform distribution
-                # This uses the Blotato API, not Safari
-                result = await connector.submit_video(video_path)
-                logger.info(f"✅ Submitted to Blotato: {result}")
-            else:
-                logger.warning("Blotato connector not available")
-                
-        except Exception as e:
-            logger.error(f"Blotato distribution failed: {e}")
-            raise
+        return {"success": False, "error": "airtime_required"}
             
     async def _handle_stats_check(self, task: SafariTask):
         """Handle stats polling across platforms."""
@@ -588,51 +508,17 @@ class SafariAutomationOrchestrator:
     # =========================================================================
     
     async def process_downloaded_video(self, video_path: str):
-        """Process a newly downloaded video through the pipeline."""
-        logger.info(f"📥 Processing downloaded video: {video_path}")
-        
-        # Queue watermark removal
-        task = SafariTask(
-            task_type=TaskType.WATERMARK_REMOVE,
-            priority=TaskPriority.HIGH,
-            payload={"video_path": video_path}
-        )
-        await self.queue_manager.add_task(task)
+        return False
         
     async def _queue_blotato_distribution(self, processed_video_path: str):
-        """Queue processed video for Blotato distribution."""
-        task = SafariTask(
-            task_type=TaskType.BLOTATO_POST,
-            priority=TaskPriority.NORMAL,
-            payload={"video_path": processed_video_path}
-        )
-        await self.queue_manager.add_task(task)
+        return False
         
     # =========================================================================
     # Sora Generation
     # =========================================================================
     
     async def queue_sora_generation(self, prompt: str, trend_source: Optional[str] = None):
-        """Queue a new Sora video generation based on trends/offers."""
-        if not self.config.sora_enabled:
-            logger.info("🎬 Sora generation disabled - not queueing")
-            return False
-            
-        if self.sora_generations_today >= self.config.sora_generations_per_day:
-            logger.warning("Daily Sora limit reached (30)")
-            return False
-            
-        task = SafariTask(
-            task_type=TaskType.SORA_GENERATE,
-            priority=TaskPriority.NORMAL,
-            payload={
-                "prompt": prompt,
-                "trend_source": trend_source,
-                "character": "@isaiahdupree"
-            }
-        )
-        await self.queue_manager.add_task(task)
-        return True
+        return False
         
     # =========================================================================
     # Status & Control

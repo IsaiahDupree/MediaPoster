@@ -45,56 +45,7 @@ class YouTubePublisher:
         part_number: int = 0,
         trend: Optional[str] = None
     ) -> Dict:
-        """
-        Generate YouTube metadata (title, description, tags) using AI.
-        """
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            
-            content_type = f"Part {part_number} of 3-part story" if is_movie_part else "standalone video"
-            
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""Generate YouTube metadata for an AI-generated video.
-
-Video Type: {content_type}
-Theme: {theme}
-{f'Trending Topic: {trend}' if trend else ''}
-Original Prompt: {prompt[:200]}
-
-Return JSON with:
-{{
-    "title": "engaging title under 100 chars, include emoji",
-    "description": "2-3 sentence description with CTA",
-    "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
-}}
-
-Make it engaging for YouTube algorithm. Include relevant hashtags in description."""
-                    },
-                    {
-                        "role": "user",
-                        "content": "Generate the metadata."
-                    }
-                ],
-                temperature=0.8,
-                response_format={"type": "json_object"}
-            )
-            
-            import json
-            return json.loads(response.choices[0].message.content)
-            
-        except Exception as e:
-            logger.error(f"Metadata generation failed: {e}")
-            # Fallback metadata
-            return {
-                "title": f"✨ {theme.replace('_', ' ').title()} | AI Generated",
-                "description": f"AI-generated video exploring {theme}. Created with Sora.\n\n#AI #Sora #AIVideo",
-                "tags": ["AI", "Sora", "AIVideo", theme, "creative"]
-            }
+        return {"error": "script_hub_required", "message": "Content metadata must be generated through ScriptHub."}
     
     async def publish_single(
         self,
@@ -104,23 +55,7 @@ Make it engaging for YouTube algorithm. Include relevant hashtags in description
         trend: Optional[str] = None,
         scheduled_time: Optional[datetime] = None
     ) -> Dict:
-        """
-        Publish a single standalone video to YouTube.
-        """
-        metadata = await self.generate_metadata(
-            prompt=prompt,
-            theme=theme,
-            is_movie_part=False,
-            trend=trend
-        )
-        
-        return await self._upload_video(
-            video_path=video_path,
-            title=metadata["title"],
-            description=metadata["description"],
-            tags=metadata["tags"],
-            scheduled_time=scheduled_time
-        )
+        return {"success": False, "error": "airtime_required", "message": "YouTube delivery must be scheduled through Airtime."}
     
     async def publish_movie(
         self,
@@ -130,44 +65,7 @@ Make it engaging for YouTube algorithm. Include relevant hashtags in description
         trend: Optional[str] = None,
         scheduled_time: Optional[datetime] = None
     ) -> Dict:
-        """
-        Publish a 3-part movie to YouTube.
-        Creates individual videos and optionally a playlist.
-        """
-        results = []
-        
-        for i, (path, prompt) in enumerate(zip(video_paths, prompts), 1):
-            metadata = await self.generate_metadata(
-                prompt=prompt,
-                theme=theme,
-                is_movie_part=True,
-                part_number=i,
-                trend=trend
-            )
-            
-            # Add part number to title
-            title = f"Part {i}/3: {metadata['title']}"
-            
-            # Calculate scheduled time with 5-min spacing
-            part_schedule = None
-            if scheduled_time:
-                part_schedule = scheduled_time + timedelta(minutes=(i-1) * 5)
-            
-            result = await self._upload_video(
-                video_path=path,
-                title=title,
-                description=metadata["description"],
-                tags=metadata["tags"],
-                scheduled_time=part_schedule
-            )
-            
-            results.append(result)
-        
-        return {
-            "success": all(r.get("success") for r in results),
-            "parts": results,
-            "theme": theme
-        }
+        return {"success": False, "error": "airtime_required", "message": "YouTube delivery must be scheduled through Airtime."}
     
     async def _upload_video(
         self,
@@ -178,55 +76,7 @@ Make it engaging for YouTube algorithm. Include relevant hashtags in description
         scheduled_time: Optional[datetime] = None,
         playlist_id: Optional[str] = None
     ) -> Dict:
-        """
-        Upload video to YouTube via Blotato.
-        """
-        try:
-            # Use Blotato API for upload
-            import aiohttp
-            
-            blotato_url = os.getenv("BLOTATO_URL", "http://localhost:16987")
-            
-            payload = {
-                "account_id": int(self.account_id),
-                "video_path": video_path,
-                "title": title[:100],  # YouTube limit
-                "description": description[:5000],
-                "tags": tags[:500] if isinstance(tags, list) else tags,
-                "scheduled_time": scheduled_time.isoformat() if scheduled_time else None
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{blotato_url}/api/youtube/upload",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=300)
-                ) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        logger.info(f"✅ Uploaded to YouTube: {title[:50]}...")
-                        return {
-                            "success": True,
-                            "video_id": result.get("video_id"),
-                            "url": result.get("url"),
-                            "title": title
-                        }
-                    else:
-                        error = await response.text()
-                        logger.error(f"YouTube upload failed: {error}")
-                        return {
-                            "success": False,
-                            "error": error,
-                            "title": title
-                        }
-                        
-        except Exception as e:
-            logger.error(f"YouTube upload error: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "title": title
-            }
+        return {"success": False, "error": "airtime_required", "message": "Direct Blotato uploads are disabled; use Airtime."}
     
     def get_publishing_schedule(self, singles_count: int, movies_count: int) -> List[Dict]:
         """

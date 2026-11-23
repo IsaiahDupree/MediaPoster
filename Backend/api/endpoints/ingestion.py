@@ -279,18 +279,21 @@ async def auto_sync_iphone_import(background_tasks: BackgroundTasks, limit: int 
     This runs on startup or can be triggered manually.
     """
     from sqlalchemy import create_engine, text
-    from config.paths import get_iphone_import_dir
+    from config.paths import get_iphone_import_dir, list_iphone_import_files
+    from config.paths import resolve_iphone_source
+    from pathlib import Path
     import os
     
     iphone_import_dir = get_iphone_import_dir()
     
-    if not iphone_import_dir.exists():
+    import_files = list_iphone_import_files()
+    if not iphone_import_dir.exists() and not import_files:
         return {"error": "Media import directory not found", "path": str(iphone_import_dir)}
     
     # Get all video files
     video_extensions = {'.mp4', '.mov', '.m4v', '.avi', '.mkv'}
     all_videos = []
-    for f in iphone_import_dir.iterdir():
+    for f in import_files:
         if f.is_file() and f.suffix.lower() in video_extensions:
             try:
                 if f.stat().st_size > 0:  # Skip empty files
@@ -309,7 +312,7 @@ async def auto_sync_iphone_import(background_tasks: BackgroundTasks, limit: int 
         with engine.connect() as conn:
             result = conn.execute(text("SELECT source_uri FROM videos WHERE source_uri IS NOT NULL"))
             for row in result:
-                existing_paths.add(row[0])
+                existing_paths.add(str(resolve_iphone_source(Path(row[0]))))
     except Exception as e:
         logger.warning(f"[AUTO-SYNC] Could not query DB: {e}")
     
@@ -391,10 +394,11 @@ async def auto_sync_iphone_import(background_tasks: BackgroundTasks, limit: int 
 @router.get("/iphone-import-stats")
 async def get_iphone_import_stats():
     """Get stats about the media import directory (My Passport or local fallback)"""
-    from config.paths import get_iphone_import_dir
+    from config.paths import get_iphone_import_dir, list_iphone_import_files
     iphone_import_dir = get_iphone_import_dir()
     
-    if not iphone_import_dir.exists():
+    import_files = list_iphone_import_files()
+    if not iphone_import_dir.exists() and not import_files:
         return {
             "exists": False,
             "path": str(iphone_import_dir),
@@ -407,7 +411,7 @@ async def get_iphone_import_stats():
     total_size = 0
     
     try:
-        for f in iphone_import_dir.iterdir():
+        for f in import_files:
             if f.is_file() and f.suffix.lower() in video_extensions:
                 video_files.append({
                     "name": f.name,

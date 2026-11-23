@@ -19,9 +19,9 @@ Media production, provider integration, scheduling, analytics, and social publis
 - Formal JSON Schema/OpenAPI contracts: **3**
 - Typed application models: **1331**
 - Database objects declared in migrations: **637**
-- Environment-variable names: **281**
+- Environment-variable names: **283**
 - Package manifests with scripts: **7**
-- Source fingerprint: `adaa9820424316ecd84b29094bd4684d716808e80688a4ee8b71d43af1bdce29`
+- Source fingerprint: `4802554c971c742459474239b7ee9e09baccaf2c0443d9d4a82d6dde01038d06`
 
 This is a static source inventory, not a live health report. Dynamic routes and runtime registrations must be verified through the repository's own health/discovery interface.
 
@@ -146,17 +146,17 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/allocations` | [`Backend/api/endpoints/bandit.py:92`](Backend/api/endpoints/bandit.py#L92) | `read` |
 | `GET` | `/already-posted` | [`Backend/api/endpoints/posted_content_matcher.py:147`](Backend/api/endpoints/posted_content_matcher.py#L147) | `read` |
 | `GET` | `/analyses` | [`Backend/api/image_analysis.py:943`](Backend/api/image_analysis.py#L943) | `read` |
-| `GET` | `/analysis-status` | [`Backend/api/media_processing_db.py:896`](Backend/api/media_processing_db.py#L896) | `read` |
+| `GET` | `/analysis-status` | [`Backend/api/media_processing_db.py:897`](Backend/api/media_processing_db.py#L897) | `read` |
 | `GET` | `/analysis/aggregate` | [`Backend/api/endpoints/competitor_api.py:513`](Backend/api/endpoints/competitor_api.py#L513) | `read` |
 | `POST` | `/analysis/generate-playbook` | [`Backend/api/endpoints/competitor_api.py:652`](Backend/api/endpoints/competitor_api.py#L652) | `required` |
 | `POST` | `/analysis/start` | [`Backend/api/endpoints/content_ingestion.py:178`](Backend/api/endpoints/content_ingestion.py#L178) | `required` |
 | `POST` | `/analysis/stop` | [`Backend/api/endpoints/content_ingestion.py:213`](Backend/api/endpoints/content_ingestion.py#L213) | `required` |
 | `GET` | `/analysis/{analysis_id}` | [`Backend/api/image_analysis.py:935`](Backend/api/image_analysis.py#L935) | `read` |
 | `GET` | `/analysis/{media_id}` | [`Backend/api/media_processing.py:324`](Backend/api/media_processing.py#L324) | `read` |
-| `GET` | `/analysis/{media_id}` | [`Backend/api/media_processing_db.py:3150`](Backend/api/media_processing_db.py#L3150) | `read` |
-| `PUT` | `/analysis/{media_id}` | [`Backend/api/media_processing_db.py:3245`](Backend/api/media_processing_db.py#L3245) | `required` |
-| `PUT` | `/analysis/{media_id}/post-score` | [`Backend/api/media_processing_db.py:3335`](Backend/api/media_processing_db.py#L3335) | `required` |
-| `GET` | `/analysis/{media_id}/scores` | [`Backend/api/media_processing_db.py:3427`](Backend/api/media_processing_db.py#L3427) | `read` |
+| `GET` | `/analysis/{media_id}` | [`Backend/api/media_processing_db.py:3154`](Backend/api/media_processing_db.py#L3154) | `read` |
+| `PUT` | `/analysis/{media_id}` | [`Backend/api/media_processing_db.py:3249`](Backend/api/media_processing_db.py#L3249) | `required` |
+| `PUT` | `/analysis/{media_id}/post-score` | [`Backend/api/media_processing_db.py:3339`](Backend/api/media_processing_db.py#L3339) | `required` |
+| `GET` | `/analysis/{media_id}/scores` | [`Backend/api/media_processing_db.py:3431`](Backend/api/media_processing_db.py#L3431) | `read` |
 | `GET` | `/analytics` | [`Backend/api/content_pipeline.py:596`](Backend/api/content_pipeline.py#L596) | `read` |
 | `GET` | `/analytics` | [`Backend/api/endpoints/publishing_queue.py:58`](Backend/api/endpoints/publishing_queue.py#L58) | `read` |
 | `GET` | `/analytics/benchmarks/{platform}` | [`Backend/services/creative_testing_pipeline/routers/actp_router.py:843`](Backend/services/creative_testing_pipeline/routers/actp_router.py#L843) | `read` |
@@ -212,7 +212,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/analyze/{job_id}` | [`Backend/api/endpoints/content_analyzer_api.py:110`](Backend/api/endpoints/content_analyzer_api.py#L110) | `read` |
 | `GET` | `/analyze/{job_id}/recommendations` | [`Backend/api/endpoints/content_analyzer_api.py:133`](Backend/api/endpoints/content_analyzer_api.py#L133) | `read` |
 | `POST` | `/analyze/{media_id}` | [`Backend/api/endpoints/audio_analysis.py:102`](Backend/api/endpoints/audio_analysis.py#L102) | `required` |
-| `POST` | `/analyze/{media_id}` | [`Backend/api/media_processing_db.py:1220`](Backend/api/media_processing_db.py#L1220) | `required` |
+| `POST` | `/analyze/{media_id}` | [`Backend/api/media_processing_db.py:1221`](Backend/api/media_processing_db.py#L1221) | `required` |
 | `POST` | `/anti-spam` | [`Backend/api/endpoints/sfx_library.py:280`](Backend/api/endpoints/sfx_library.py#L280) | `required` |
 | `GET` | `/api-usage/can-call` | [`Backend/api/endpoints/posted_content.py:479`](Backend/api/endpoints/posted_content.py#L479) | `read` |
 | `GET` | `/api-usage/endpoints` | [`Backend/api/endpoints/posted_content.py:529`](Backend/api/endpoints/posted_content.py#L529) | `read` |
@@ -301,7 +301,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/awareness` | [`Backend/api/endpoints/adaptive_scheduler.py:505`](Backend/api/endpoints/adaptive_scheduler.py#L505) | `read` |
 | `POST` | `/awareness/classify` | [`Backend/api/endpoints/adaptive_scheduler.py:651`](Backend/api/endpoints/adaptive_scheduler.py#L651) | `required` |
 | `POST` | `/backfill` | [`Backend/api/content_growth.py:463`](Backend/api/content_growth.py#L463) | `required` |
-| `POST` | `/backfill-metadata` | [`Backend/api/media_processing_db.py:3467`](Backend/api/media_processing_db.py#L3467) | `required` |
+| `POST` | `/backfill-metadata` | [`Backend/api/media_processing_db.py:3471`](Backend/api/media_processing_db.py#L3471) | `required` |
 | `GET` | `/backfill/jobs` | [`Backend/api/rapidapi_metrics.py:446`](Backend/api/rapidapi_metrics.py#L446) | `read` |
 | `POST` | `/backfill/start` | [`Backend/api/rapidapi_metrics.py:396`](Backend/api/rapidapi_metrics.py#L396) | `required` |
 | `GET` | `/backfill/status/{job_id}` | [`Backend/api/rapidapi_metrics.py:438`](Backend/api/rapidapi_metrics.py#L438) | `read` |
@@ -328,14 +328,14 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/batch-check` | [`Backend/api/endpoints/content_guard.py:130`](Backend/api/endpoints/content_guard.py#L130) | `required` |
 | `POST` | `/batch-fetch-posts` | [`Backend/api/endpoints/competitor_api.py:743`](Backend/api/endpoints/competitor_api.py#L743) | `required` |
 | `POST` | `/batch-generate-rules` | [`Backend/api/endpoints/experiments.py:1266`](Backend/api/endpoints/experiments.py#L1266) | `required` |
-| `POST` | `/batch/analyze` | [`Backend/api/media_processing_db.py:2354`](Backend/api/media_processing_db.py#L2354) | `required` |
-| `GET` | `/batch/analyze/status/{job_id}` | [`Backend/api/media_processing_db.py:2567`](Backend/api/media_processing_db.py#L2567) | `read` |
-| `GET` | `/batch/analyze/test-completion` | [`Backend/api/media_processing_db.py:2588`](Backend/api/media_processing_db.py#L2588) | `read` |
-| `POST` | `/batch/cancel` | [`Backend/api/media_processing_db.py:2494`](Backend/api/media_processing_db.py#L2494) | `required` |
-| `POST` | `/batch/cancel/{job_id}` | [`Backend/api/media_processing_db.py:2528`](Backend/api/media_processing_db.py#L2528) | `required` |
+| `POST` | `/batch/analyze` | [`Backend/api/media_processing_db.py:2355`](Backend/api/media_processing_db.py#L2355) | `required` |
+| `GET` | `/batch/analyze/status/{job_id}` | [`Backend/api/media_processing_db.py:2568`](Backend/api/media_processing_db.py#L2568) | `read` |
+| `GET` | `/batch/analyze/test-completion` | [`Backend/api/media_processing_db.py:2589`](Backend/api/media_processing_db.py#L2589) | `read` |
+| `POST` | `/batch/cancel` | [`Backend/api/media_processing_db.py:2495`](Backend/api/media_processing_db.py#L2495) | `required` |
+| `POST` | `/batch/cancel/{job_id}` | [`Backend/api/media_processing_db.py:2529`](Backend/api/media_processing_db.py#L2529) | `required` |
 | `POST` | `/batch/create` | [`Backend/api/content_pipeline.py:853`](Backend/api/content_pipeline.py#L853) | `required` |
 | `POST` | `/batch/ingest` | [`Backend/api/media_processing.py:391`](Backend/api/media_processing.py#L391) | `required` |
-| `POST` | `/batch/ingest` | [`Backend/api/media_processing_db.py:1072`](Backend/api/media_processing_db.py#L1072) | `required` |
+| `POST` | `/batch/ingest` | [`Backend/api/media_processing_db.py:1073`](Backend/api/media_processing_db.py#L1073) | `required` |
 | `POST` | `/batch/resume/{job_id}` | [`Backend/api/media_processing.py:526`](Backend/api/media_processing.py#L526) | `required` |
 | `GET` | `/batch/status/{job_id}` | [`Backend/api/media_processing.py:502`](Backend/api/media_processing.py#L502) | `read` |
 | `GET` | `/batch/{batch_id}` | [`Backend/api/content_pipeline.py:903`](Backend/api/content_pipeline.py#L903) | `read` |
@@ -379,13 +379,13 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/bulk-generate` | [`Backend/api/endpoints/content_variations.py:339`](Backend/api/endpoints/content_variations.py#L339) | `required` |
 | `POST` | `/bulk-schedule` | [`Backend/api/endpoints/calendar.py:204`](Backend/api/endpoints/calendar.py#L204) | `required` |
 | `POST` | `/bulk-schedule` | [`Backend/api/endpoints/external_scheduling.py:422`](Backend/api/endpoints/external_scheduling.py#L422) | `required` |
-| `GET` | `/by-filename/{filename}` | [`Backend/api/endpoints/media_provider.py:176`](Backend/api/endpoints/media_provider.py#L176) | `read` |
+| `GET` | `/by-filename/{filename}` | [`Backend/api/endpoints/media_provider.py:177`](Backend/api/endpoints/media_provider.py#L177) | `read` |
 | `GET` | `/by-media/{media_id}` | [`Backend/api/endpoints/posted_content.py:207`](Backend/api/endpoints/posted_content.py#L207) | `read` |
 | `GET` | `/by-media/{media_id}/fetch-metrics` | [`Backend/api/endpoints/posted_content.py:560`](Backend/api/endpoints/posted_content.py#L560) | `read` |
 | `GET` | `/by-submission/{submission_id}` | [`Backend/api/endpoints/posted_content.py:175`](Backend/api/endpoints/posted_content.py#L175) | `read` |
 | `PATCH` | `/by-submission/{submission_id}/url` | [`Backend/api/endpoints/posted_content.py:275`](Backend/api/endpoints/posted_content.py#L275) | `required` |
 | `GET` | `/by-type` | [`Backend/api/endpoints/hook_library_api.py:76`](Backend/api/endpoints/hook_library_api.py#L76) | `read` |
-| `POST` | `/cache/clear` | [`Backend/api/endpoints/media_provider.py:168`](Backend/api/endpoints/media_provider.py#L168) | `required` |
+| `POST` | `/cache/clear` | [`Backend/api/endpoints/media_provider.py:169`](Backend/api/endpoints/media_provider.py#L169) | `required` |
 | `GET` | `/cadence` | [`Backend/api/endpoints/strategic_analysis.py:176`](Backend/api/endpoints/strategic_analysis.py#L176) | `read` |
 | `POST` | `/cadence/complete` | [`Backend/api/endpoints/relationship_crm.py:648`](Backend/api/endpoints/relationship_crm.py#L648) | `required` |
 | `GET` | `/cadence/daily` | [`Backend/api/endpoints/relationship_crm.py:592`](Backend/api/endpoints/relationship_crm.py#L592) | `read` |
@@ -617,7 +617,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/crosspost` | [`Backend/api/endpoints/tiktok_repurpose.py:223`](Backend/api/endpoints/tiktok_repurpose.py#L223) | `required` |
 | `GET` | `/crosspost/queue` | [`Backend/api/endpoints/adaptive_scheduler.py:171`](Backend/api/endpoints/adaptive_scheduler.py#L171) | `read` |
 | `POST` | `/curate` | [`Backend/api/endpoints/auto_curator.py:46`](Backend/api/endpoints/auto_curator.py#L46) | `required` |
-| `PUT` | `/curate/{media_id}` | [`Backend/api/media_processing_db.py:3385`](Backend/api/media_processing_db.py#L3385) | `required` |
+| `PUT` | `/curate/{media_id}` | [`Backend/api/media_processing_db.py:3389`](Backend/api/media_processing_db.py#L3389) | `required` |
 | `POST` | `/cycle` | [`Backend/api/cascade_publisher.py:139`](Backend/api/cascade_publisher.py#L139) | `required` |
 | `GET` | `/daily-digest` | [`Backend/api/endpoints/trends_agent.py:265`](Backend/api/endpoints/trends_agent.py#L265) | `read` |
 | `GET` | `/daily-summary` | [`Backend/api/endpoints/publishing_controls.py:351`](Backend/api/endpoints/publishing_controls.py#L351) | `read` |
@@ -637,7 +637,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/dedup/check` | [`Backend/api/endpoints/adaptive_scheduler.py:735`](Backend/api/endpoints/adaptive_scheduler.py#L735) | `required` |
 | `GET` | `/default-style` | [`Backend/api/subtitles.py:125`](Backend/api/subtitles.py#L125) | `read` |
 | `POST` | `/demo` | [`Backend/api/endpoints/sora_pipeline.py:222`](Backend/api/endpoints/sora_pipeline.py#L222) | `required` |
-| `GET` | `/detail/{media_id}` | [`Backend/api/media_processing_db.py:586`](Backend/api/media_processing_db.py#L586) | `read` |
+| `GET` | `/detail/{media_id}` | [`Backend/api/media_processing_db.py:587`](Backend/api/media_processing_db.py#L587) | `read` |
 | `GET` | `/detailed` | [`Backend/api/endpoints/backend_health.py:14`](Backend/api/endpoints/backend_health.py#L14) | `read` |
 | `GET` | `/detailed` | [`Backend/api/endpoints/health.py:259`](Backend/api/endpoints/health.py#L259) | `read` |
 | `POST` | `/detect` | [`Backend/api/endpoints/trend_flash.py:32`](Backend/api/endpoints/trend_flash.py#L32) | `required` |
@@ -823,7 +823,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/generate-recommendations` | [`Backend/api/endpoints/narrative_builder.py:356`](Backend/api/endpoints/narrative_builder.py#L356) | `required` |
 | `POST` | `/generate-single` | [`Backend/api/caption_variants.py:54`](Backend/api/caption_variants.py#L54) | `required` |
 | `POST` | `/generate-text` | [`Backend/api/endpoints/broll_producer.py:261`](Backend/api/endpoints/broll_producer.py#L261) | `required` |
-| `POST` | `/generate-thumbnails` | [`Backend/api/media_processing_db.py:3574`](Backend/api/media_processing_db.py#L3574) | `required` |
+| `POST` | `/generate-thumbnails` | [`Backend/api/media_processing_db.py:3580`](Backend/api/media_processing_db.py#L3580) | `required` |
 | `POST` | `/generate-thumbnails-batch` | [`Backend/api/endpoints/videos.py:835`](Backend/api/endpoints/videos.py#L835) | `required` |
 | `POST` | `/generate-variations` | [`Backend/api/content_pipeline.py:573`](Backend/api/content_pipeline.py#L573) | `required` |
 | `POST` | `/generate-variations` | [`Backend/api/endpoints/hook_library_api.py:141`](Backend/api/endpoints/hook_library_api.py#L141) | `required` |
@@ -906,7 +906,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/health` | [`Backend/api/endpoints/video_orchestrator.py:770`](Backend/api/endpoints/video_orchestrator.py#L770) | `read` |
 | `GET` | `/health` | [`Backend/api/endpoints/video_routing_api.py:247`](Backend/api/endpoints/video_routing_api.py#L247) | `read` |
 | `GET` | `/health` | [`Backend/api/media_processing.py:895`](Backend/api/media_processing.py#L895) | `read` |
-| `GET` | `/health` | [`Backend/api/media_processing_db.py:3091`](Backend/api/media_processing_db.py#L3091) | `read` |
+| `GET` | `/health` | [`Backend/api/media_processing_db.py:3095`](Backend/api/media_processing_db.py#L3095) | `read` |
 | `GET` | `/health` | [`Backend/external_libs/riona-ai-agent/src/server/basic-app.ts:12`](Backend/external_libs/riona-ai-agent/src/server/basic-app.ts#L12) | `read` |
 | `GET` | `/health` | [`Backend/main.py:811`](Backend/main.py#L811) | `read` |
 | `GET` | `/health` | [`Backend/quickstart.py:111`](Backend/quickstart.py#L111) | `read` |
@@ -918,12 +918,12 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/heatmap/{platform}` | [`Backend/api/cross_platform_dashboard.py:84`](Backend/api/cross_platform_dashboard.py#L84) | `read` |
 | `GET` | `/heatmap/{platform}` | [`Backend/api/smart_posting_times.py:111`](Backend/api/smart_posting_times.py#L111) | `read` |
 | `DELETE` | `/history` | [`Backend/api/endpoints/android_import_api.py:532`](Backend/api/endpoints/android_import_api.py#L532) | `required` |
-| `DELETE` | `/history` | [`Backend/api/endpoints/ios_import_api.py:821`](Backend/api/endpoints/ios_import_api.py#L821) | `required` |
+| `DELETE` | `/history` | [`Backend/api/endpoints/ios_import_api.py:833`](Backend/api/endpoints/ios_import_api.py#L833) | `required` |
 | `GET` | `/history` | [`Backend/api/endpoints/analysis_scheduler.py:110`](Backend/api/endpoints/analysis_scheduler.py#L110) | `read` |
 | `GET` | `/history` | [`Backend/api/endpoints/android_import_api.py:522`](Backend/api/endpoints/android_import_api.py#L522) | `read` |
 | `GET` | `/history` | [`Backend/api/endpoints/benchmark_api.py:122`](Backend/api/endpoints/benchmark_api.py#L122) | `read` |
 | `GET` | `/history` | [`Backend/api/endpoints/instagram_automation.py:189`](Backend/api/endpoints/instagram_automation.py#L189) | `read` |
-| `GET` | `/history` | [`Backend/api/endpoints/ios_import_api.py:811`](Backend/api/endpoints/ios_import_api.py#L811) | `read` |
+| `GET` | `/history` | [`Backend/api/endpoints/ios_import_api.py:823`](Backend/api/endpoints/ios_import_api.py#L823) | `read` |
 | `GET` | `/history` | [`Backend/api/endpoints/post_scheduler_api.py:166`](Backend/api/endpoints/post_scheduler_api.py#L166) | `read` |
 | `GET` | `/history` | [`Backend/api/endpoints/publishing_controls.py:362`](Backend/api/endpoints/publishing_controls.py#L362) | `read` |
 | `GET` | `/history` | [`Backend/api/endpoints/sora_daily.py:402`](Backend/api/endpoints/sora_daily.py#L402) | `read` |
@@ -938,11 +938,11 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/hydrated` | [`Backend/api/endpoints/accounts.py:896`](Backend/api/endpoints/accounts.py#L896) | `read` |
 | `POST` | `/identify` | [`Backend/api/endpoints/user_tracking.py:424`](Backend/api/endpoints/user_tracking.py#L424) | `required` |
 | `GET` | `/image/{media_id}` | [`Backend/api/endpoints/media_provider.py:93`](Backend/api/endpoints/media_provider.py#L93) | `read` |
-| `GET` | `/image/{media_id}` | [`Backend/api/media_processing_db.py:3006`](Backend/api/media_processing_db.py#L3006) | `read` |
+| `GET` | `/image/{media_id}` | [`Backend/api/media_processing_db.py:3010`](Backend/api/media_processing_db.py#L3010) | `read` |
 | `GET` | `/impact` | [`Backend/api/comment_automation.py:873`](Backend/api/comment_automation.py#L873) | `read` |
 | `GET` | `/impact/breakdown` | [`Backend/api/comment_automation.py:945`](Backend/api/comment_automation.py#L945) | `read` |
 | `POST` | `/import` | [`Backend/api/endpoints/music_library.py:133`](Backend/api/endpoints/music_library.py#L133) | `required` |
-| `POST` | `/import-iphone` | [`Backend/api/endpoints/ingestion.py:432`](Backend/api/endpoints/ingestion.py#L432) | `required` |
+| `POST` | `/import-iphone` | [`Backend/api/endpoints/ingestion.py:436`](Backend/api/endpoints/ingestion.py#L436) | `required` |
 | `GET` | `/inbox` | [`Backend/api/endpoints/comment_engagement.py:1074`](Backend/api/endpoints/comment_engagement.py#L1074) | `read` |
 | `GET` | `/industry-averages` | [`Backend/api/endpoints/benchmark_api.py:88`](Backend/api/endpoints/benchmark_api.py#L88) | `read` |
 | `GET` | `/info` | [`Backend/api/endpoints/content_download.py:167`](Backend/api/endpoints/content_download.py#L167) | `read` |
@@ -955,7 +955,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/ingest` | [`Backend/api/endpoints/trend_intelligence.py:117`](Backend/api/endpoints/trend_intelligence.py#L117) | `required` |
 | `POST` | `/ingest/cluster` | [`Backend/api/endpoints/trend_intelligence.py:166`](Backend/api/endpoints/trend_intelligence.py#L166) | `required` |
 | `POST` | `/ingest/comment` | [`Backend/api/endpoints/people.py:213`](Backend/api/endpoints/people.py#L213) | `required` |
-| `POST` | `/ingest/file` | [`Backend/api/media_processing_db.py:947`](Backend/api/media_processing_db.py#L947) | `required` |
+| `POST` | `/ingest/file` | [`Backend/api/media_processing_db.py:948`](Backend/api/media_processing_db.py#L948) | `required` |
 | `POST` | `/ingest/lingo/{cluster_id}` | [`Backend/api/endpoints/trend_intelligence.py:188`](Backend/api/endpoints/trend_intelligence.py#L188) | `required` |
 | `POST` | `/ingestion/import-iphone` | [`Frontend/src/components/videos/IphoneImportCard.tsx:16`](Frontend/src/components/videos/IphoneImportCard.tsx#L16) | `required` |
 | `GET` | `/insights` | [`Backend/api/content_intelligence.py:23`](Backend/api/content_intelligence.py#L23) | `read` |
@@ -985,7 +985,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/intervals` | [`Backend/api/metrics_scheduler_api.py:167`](Backend/api/metrics_scheduler_api.py#L167) | `read` |
 | `GET` | `/inventory` | [`Backend/api/endpoints/adaptive_scheduler.py:719`](Backend/api/endpoints/adaptive_scheduler.py#L719) | `read` |
 | `GET` | `/inventory` | [`Backend/api/endpoints/inventory_scheduler.py:48`](Backend/api/endpoints/inventory_scheduler.py#L48) | `read` |
-| `GET` | `/iphone-import-stats` | [`Backend/api/endpoints/ingestion.py:391`](Backend/api/endpoints/ingestion.py#L391) | `read` |
+| `GET` | `/iphone-import-stats` | [`Backend/api/endpoints/ingestion.py:394`](Backend/api/endpoints/ingestion.py#L394) | `read` |
 | `GET` | `/ir/formats` | [`Backend/api/endpoints/video_generation.py:293`](Backend/api/endpoints/video_generation.py#L293) | `read` |
 | `GET` | `/ir/pipeline-status` | [`Backend/api/endpoints/video_generation.py:472`](Backend/api/endpoints/video_generation.py#L472) | `read` |
 | `POST` | `/ir/render-plan` | [`Backend/api/endpoints/video_generation.py:426`](Backend/api/endpoints/video_generation.py#L426) | `required` |
@@ -1086,11 +1086,11 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/list` | [`Backend/api/endpoints/experiments.py:225`](Backend/api/endpoints/experiments.py#L225) | `read` |
 | `GET` | `/list` | [`Backend/api/endpoints/formats.py:91`](Backend/api/endpoints/formats.py#L91) | `read` |
 | `GET` | `/list` | [`Backend/api/endpoints/formats_api.py:71`](Backend/api/endpoints/formats_api.py#L71) | `read` |
-| `GET` | `/list` | [`Backend/api/endpoints/media_provider.py:126`](Backend/api/endpoints/media_provider.py#L126) | `read` |
+| `GET` | `/list` | [`Backend/api/endpoints/media_provider.py:127`](Backend/api/endpoints/media_provider.py#L127) | `read` |
 | `GET` | `/list` | [`Backend/api/endpoints/schedule.py:167`](Backend/api/endpoints/schedule.py#L167) | `read` |
 | `GET` | `/list` | [`Backend/api/endpoints/strategy_report_api.py:113`](Backend/api/endpoints/strategy_report_api.py#L113) | `read` |
 | `GET` | `/list` | [`Backend/api/media_processing.py:353`](Backend/api/media_processing.py#L353) | `read` |
-| `GET` | `/list` | [`Backend/api/media_processing_db.py:252`](Backend/api/media_processing_db.py#L252) | `read` |
+| `GET` | `/list` | [`Backend/api/media_processing_db.py:253`](Backend/api/media_processing_db.py#L253) | `read` |
 | `GET` | `/list` | [`Backend/api/posted_media.py:69`](Backend/api/posted_media.py#L69) | `read` |
 | `POST` | `/list/add` | [`Backend/api/endpoints/dm_outreach.py:227`](Backend/api/endpoints/dm_outreach.py#L227) | `required` |
 | `GET` | `/list/ready` | [`Backend/api/endpoints/dm_outreach.py:208`](Backend/api/endpoints/dm_outreach.py#L208) | `read` |
@@ -1813,7 +1813,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/stats` | [`Backend/api/endpoints/inbox.py:432`](Backend/api/endpoints/inbox.py#L432) | `read` |
 | `GET` | `/stats` | [`Backend/api/endpoints/ios_import_api.py:246`](Backend/api/endpoints/ios_import_api.py#L246) | `read` |
 | `GET` | `/stats` | [`Backend/api/endpoints/media_assets.py:346`](Backend/api/endpoints/media_assets.py#L346) | `read` |
-| `GET` | `/stats` | [`Backend/api/endpoints/media_provider.py:161`](Backend/api/endpoints/media_provider.py#L161) | `read` |
+| `GET` | `/stats` | [`Backend/api/endpoints/media_provider.py:162`](Backend/api/endpoints/media_provider.py#L162) | `read` |
 | `GET` | `/stats` | [`Backend/api/endpoints/orchestrator.py:302`](Backend/api/endpoints/orchestrator.py#L302) | `read` |
 | `GET` | `/stats` | [`Backend/api/endpoints/pubsub_inspector.py:136`](Backend/api/endpoints/pubsub_inspector.py#L136) | `read` |
 | `GET` | `/stats` | [`Backend/api/endpoints/semantic_search.py:417`](Backend/api/endpoints/semantic_search.py#L417) | `read` |
@@ -1826,7 +1826,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/stats` | [`Backend/api/endpoints/workflows.py:48`](Backend/api/endpoints/workflows.py#L48) | `read` |
 | `GET` | `/stats` | [`Backend/api/endpoints/youtube_automation.py:99`](Backend/api/endpoints/youtube_automation.py#L99) | `read` |
 | `GET` | `/stats` | [`Backend/api/engagement_autopilot.py:152`](Backend/api/engagement_autopilot.py#L152) | `read` |
-| `GET` | `/stats` | [`Backend/api/media_processing_db.py:772`](Backend/api/media_processing_db.py#L772) | `read` |
+| `GET` | `/stats` | [`Backend/api/media_processing_db.py:773`](Backend/api/media_processing_db.py#L773) | `read` |
 | `GET` | `/stats` | [`Backend/routers/visual_campaign.py:124`](Backend/routers/visual_campaign.py#L124) | `read` |
 | `GET` | `/stats/by-origin` | [`Backend/api/endpoints/calendar.py:399`](Backend/api/endpoints/calendar.py#L399) | `read` |
 | `GET` | `/stats/overview` | [`Backend/api/endpoints/schedule.py:811`](Backend/api/endpoints/schedule.py#L811) | `read` |
@@ -2012,7 +2012,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `POST` | `/transcribe-only` | [`Backend/api/subtitles.py:94`](Backend/api/subtitles.py#L94) | `required` |
 | `POST` | `/transcribe/{video_id}` | [`Backend/api/endpoints/analysis.py:379`](Backend/api/endpoints/analysis.py#L379) | `required` |
 | `GET` | `/transcript/{video_id}` | [`Backend/api/endpoints/analysis.py:474`](Backend/api/endpoints/analysis.py#L474) | `read` |
-| `POST` | `/transfer-files` | [`Backend/api/endpoints/ios_import_api.py:633`](Backend/api/endpoints/ios_import_api.py#L633) | `required` |
+| `POST` | `/transfer-files` | [`Backend/api/endpoints/ios_import_api.py:645`](Backend/api/endpoints/ios_import_api.py#L645) | `required` |
 | `POST` | `/transfer-files-direct` | [`Backend/api/endpoints/ios_import_api.py:562`](Backend/api/endpoints/ios_import_api.py#L562) | `required` |
 | `GET` | `/trend-breakdown` | [`Backend/api/endpoints/creator_intelligence.py:23`](Backend/api/endpoints/creator_intelligence.py#L23) | `read` |
 | `POST` | `/trend-intel/ingest` | [`Backend/api/endpoints/adaptive_scheduler.py:675`](Backend/api/endpoints/adaptive_scheduler.py#L675) | `required` |
@@ -2099,7 +2099,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/video-file` | [`Backend/api/media_processing.py:692`](Backend/api/media_processing.py#L692) | `read` |
 | `POST` | `/video-ready` | [`Backend/services/video_ready_pipeline.py:931`](Backend/services/video_ready_pipeline.py#L931) | `required` |
 | `GET` | `/video-stats` | [`Backend/api/endpoints/batch_analysis.py:83`](Backend/api/endpoints/batch_analysis.py#L83) | `read` |
-| `GET` | `/video-stream/{media_id}` | [`Backend/api/media_processing_db.py:2857`](Backend/api/media_processing_db.py#L2857) | `read` |
+| `GET` | `/video-stream/{media_id}` | [`Backend/api/media_processing_db.py:2861`](Backend/api/media_processing_db.py#L2861) | `read` |
 | `GET` | `/video-styles` | [`Backend/api/blotato_router.py:1214`](Backend/api/blotato_router.py#L1214) | `read` |
 | `GET` | `/video-templates` | [`Backend/api/blotato_router.py:1225`](Backend/api/blotato_router.py#L1225) | `read` |
 | `GET` | `/video/comments` | [`Backend/api/endpoints/tiktok_analytics.py:83`](Backend/api/endpoints/tiktok_analytics.py#L83) | `read` |
@@ -2108,7 +2108,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/video/jobs/{job_id}` | [`Backend/api/explainer_video.py:316`](Backend/api/explainer_video.py#L316) | `read` |
 | `POST` | `/video/process` | [`Backend/api/endpoints/safari_automation.py:185`](Backend/api/endpoints/safari_automation.py#L185) | `required` |
 | `GET` | `/video/{media_id}` | [`Backend/api/endpoints/media_provider.py:83`](Backend/api/endpoints/media_provider.py#L83) | `read` |
-| `GET` | `/video/{media_id}` | [`Backend/api/media_processing_db.py:2751`](Backend/api/media_processing_db.py#L2751) | `read` |
+| `GET` | `/video/{media_id}` | [`Backend/api/media_processing_db.py:2755`](Backend/api/media_processing_db.py#L2755) | `read` |
 | `GET` | `/video/{video_id}` | [`Backend/api/endpoints/clip_management.py:131`](Backend/api/endpoints/clip_management.py#L131) | `read` |
 | `GET` | `/video/{video_id}` | [`Backend/api/endpoints/review.py:225`](Backend/api/endpoints/review.py#L225) | `read` |
 | `GET` | `/video/{video_id}` | [`Backend/api/endpoints/youtube_analytics.py:47`](Backend/api/endpoints/youtube_analytics.py#L47) | `read` |
@@ -2253,7 +2253,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 | `GET` | `/{key}` | [`Backend/api/endpoints/app_settings.py:52`](Backend/api/endpoints/app_settings.py#L52) | `read` |
 | `PUT` | `/{key}` | [`Backend/api/endpoints/app_settings.py:76`](Backend/api/endpoints/app_settings.py#L76) | `required` |
 | `DELETE` | `/{media_id}` | [`Backend/api/media_processing.py:589`](Backend/api/media_processing.py#L589) | `required` |
-| `DELETE` | `/{media_id}` | [`Backend/api/media_processing_db.py:3063`](Backend/api/media_processing_db.py#L3063) | `required` |
+| `DELETE` | `/{media_id}` | [`Backend/api/media_processing_db.py:3067`](Backend/api/media_processing_db.py#L3067) | `required` |
 | `GET` | `/{media_id}` | [`Backend/api/endpoints/audio_analysis.py:264`](Backend/api/endpoints/audio_analysis.py#L264) | `read` |
 | `DELETE` | `/{offer_id}` | [`Backend/api/endpoints/offers.py:272`](Backend/api/endpoints/offers.py#L272) | `required` |
 | `GET` | `/{offer_id}` | [`Backend/api/endpoints/offers.py:187`](Backend/api/endpoints/offers.py#L187) | `read` |
@@ -4288,7 +4288,7 @@ This is a static source inventory, not a live health report. Dynamic routes and 
 
 Only variable names are documented. Values belong in the repository's approved secret/configuration store.
 
-`ACTP_API_KEY`, `ACTP_CORS_ORIGINS`, `ACTP_LANDING_BASE_URL`, `ACTP_MAX_BODY_SIZE`, `ACTP_VERSION`, `AGENT_DAILY_BUDGET_USD`, `AIRTIME_ACCOUNTS_JSON`, `AI_MAX_TOKENS`, `AI_MODEL`, `AI_PROVIDER`, `AI_TEMPERATURE`, `AI_TIMEOUT`, `ANALYSIS_PROVIDER`, `ANTHROPIC_API_KEY`, `API_URL`, `APP_MODE`, `APP_VERSION`, `ARTIFACT_BASE_PATH`, `ARTIFACT_BASE_URL`, `ASSEMBLYAI_API_KEY`, `BACKEND_HOST`, `BACKEND_PORT`, `BLOTATO_API_KEY`, `BLOTATO_API_URL`, `BLUESKY_USERNAMES`, `C2_API_KEY`, `C2_AUTH_DISABLED`, `C2_BIND_HOST`, `C2_PORT`, `C2_RELOAD`, `CAPTION_VARIANT_MODEL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CI`, `CLIP_OUTPUT_DIR`, `CLOUD_SUPABASE_ANON_KEY`, `CLOUD_SUPABASE_STORAGE_BUCKET`, `CLOUD_SUPABASE_URL`, `COMMIT_SHA`, `COMPUTERNAME`, `CONTENT_INTEL_URL`, `DATABASE_URL`, `DEBUG`, `DEFAULT_CAPTION_STYLE`, `DOCS_BASE_URL`, `DOWNLOAD_PATH`, `ELEVENLABS_API_KEY`, `ENABLE_AI_CAPTION_VARIANTS`, `ENABLE_LOCAL_SCRAPERS`, `ENABLE_RAPIDAPI_ENRICHMENT`, `EVENT_BUS_BACKEND`, `FACEBOOK_AD_ACCOUNT_ID`, `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_NAMES`, `FREESOUND_API_KEY`, `FROM_EMAIL`, `FROM_NAME`, `FRONTEND_PORT`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_10`, `GEMINI_API_KEY_11`, `GEMINI_API_KEY_12`, `GEMINI_API_KEY_13`, `GEMINI_API_KEY_14`, `GEMINI_API_KEY_15`, `GEMINI_API_KEY_16`, `GEMINI_API_KEY_17`, `GEMINI_API_KEY_18`, `GEMINI_API_KEY_19`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_20`, `GEMINI_API_KEY_21`, `GEMINI_API_KEY_22`, `GEMINI_API_KEY_23`, `GEMINI_API_KEY_24`, `GEMINI_API_KEY_25`, `GEMINI_API_KEY_26`, `GEMINI_API_KEY_27`, `GEMINI_API_KEY_28`, `GEMINI_API_KEY_29`, `GEMINI_API_KEY_3`, `GEMINI_API_KEY_30`, `GEMINI_API_KEY_31`, `GEMINI_API_KEY_32`, `GEMINI_API_KEY_33`, `GEMINI_API_KEY_34`, `GEMINI_API_KEY_35`, `GEMINI_API_KEY_36`, `GEMINI_API_KEY_37`, `GEMINI_API_KEY_38`, `GEMINI_API_KEY_39`, `GEMINI_API_KEY_4`, `GEMINI_API_KEY_40`, `GEMINI_API_KEY_41`, `GEMINI_API_KEY_42`, `GEMINI_API_KEY_43`, `GEMINI_API_KEY_44`, `GEMINI_API_KEY_45`, `GEMINI_API_KEY_46`, `GEMINI_API_KEY_47`, `GEMINI_API_KEY_48`, `GEMINI_API_KEY_49`, `GEMINI_API_KEY_5`, `GEMINI_API_KEY_50`, `GEMINI_API_KEY_6`, `GEMINI_API_KEY_7`, `GEMINI_API_KEY_8`, `GEMINI_API_KEY_9`, `GIPHY_API_KEY`, `GIT_BRANCH`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CONVERSION_ID`, `GOOGLE_CONVERSION_LABEL`, `GOOGLE_CREDENTIALS_PATH`, `GOOGLE_DRIVE_API_KEY`, `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_SHEET_ID`, `GOOGLE_VEO3_API_KEY`, `HAILUO_API_KEY`, `HF_API_TOKEN`, `HF_TOKEN`, `HITL_ACCOUNT_ID`, `HITL_REQUIRE_REVIEW`, `HOSTNAME`, `HUGGINGFACE_API_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, `HUGGINGFACE_TOKEN`, `IG_PASSWORD`, `IG_USERNAME`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BOT_PASSWORD`, `INSTAGRAM_BOT_USERNAME`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_GRAPH_ACCOUNT_ID`, `INSTAGRAM_GRAPH_TOKEN`, `INSTAGRAM_HITL`, `INSTAGRAM_PASSWORD`, `INSTAGRAM_PROXY_HOST`, `INSTAGRAM_PROXY_PORT`, `INSTAGRAM_TIMEOUT_MS`, `INSTAGRAM_USERNAME`, `INSTAGRAM_USERNAMES`, `INSTAGRAM_USER_ID`, `INSTAGRAM_USE_PROXY`, `KLING_API_KEY`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_API_KEY`, `LINKEDIN_MODE`, `LOCAL_CLIPS_PATH`, `LOCAL_STORAGE_ENABLED`, `LOCAL_STORAGE_PATH`, `LOCAL_TEMP_PATH`, `LOCAL_THUMBNAILS_PATH`, `LOCAL_VIDEOS_PATH`, `LOG_DIR`, `LOG_LEVEL`, `LOG_UI_BASE_URL`, `LUMA_API_KEY`, `MEDIAPOSTER_BASE_PATH`, `MEDIA_PIPELINE_URL`, `MEDIUM_API_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `META_PIXEL_ID`, `MINIMAX_API_KEY`, `MODAL_VOICE_API_KEY`, `MODAL_VOICE_ENDPOINT`, `MONGODB_URI`, `MPLITE_DEFAULT_ACCOUNT_ID`, `MPLITE_KEY`, `MPLITE_URL`, `MUSIC_INDEX_PATH`, `MUSIC_LIBRARY_PATH`, `NANO_BANANA_API_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, `NODE_ENV`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `PEXELS_API_KEY`, `PIKA_API_KEY`, `PINTEREST_USERNAMES`, `PIXABAY_API_KEY`, `PLAYWRIGHT_BASE_URL`, `PM2_DASHBOARD_URL`, `PORT`, `POSTING_TIMEZONE_OFFSET`, `PROXY_HOST`, `PROXY_PORT`, `PROXY_PORT_2`, `RAPIDAPI_HOST`, `RAPIDAPI_KEY`, `RAPIDAPI_TIKTOK_TIER`, `REDIS_URL`, `REMOTION_BASE_PATH`, `REMOTION_PROJECT_PATH`, `REMOTION_SERVER_URL`, `REMOTION_URL`, `REPO_MAIN_BRANCH`, `REPO_URL`, `REQUIRE_SERVERS`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RUNWAY_API_KEY`, `SAFARI_AUTH_TOKEN`, `SAFARI_CONTROL_URL`, `SAFARI_TELEMETRY_URL`, `SAFARI_URL`, `SAME_DAY_CHECK_INTERVAL`, `SFX_MANIFEST_PATH`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_PORT`, `SMTP_USER`, `SNAPCHAT_ACCESS_TOKEN`, `SORA_API_KEY`, `SORA_DEFAULT_SECONDS`, `SORA_DEFAULT_SIZE`, `SORA_MODEL`, `SORA_TIMEOUT`, `STABILITY_API_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_URL`, `TEMP_DIR`, `THREADS_PASSWORD_1`, `THREADS_USERNAME`, `THREADS_USERNAMES`, `THREADS_USERNAME_1`, `THREADS_USER_ID`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_API_KEY`, `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET`, `TIKTOK_CAPTCHA_API_URL`, `TIKTOK_PIXEL_ID`, `TIKTOK_USERNAME`, `TIKTOK_USERNAMES`, `TRACE_WEBHOOK_SECRET`, `TRACE_WEBHOOK_URL`, `TRANSCRIPTION_PROVIDER`, `TREND_FLASH_OUTPUT`, `TWITTER_ACCESS_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_TOKEN_SECRET`, `TWITTER_ACCOUNT_ID`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_BEARER_TOKEN`, `TWITTER_USERNAMES`, `UNSPLASH_ACCESS_KEY`, `USE_SUPABASE_STORAGE`, `VIDEO_PROVIDER`, `VIDEO_RENDERER_ENGINE`, `VIRTUAL_ENV`, `WAITLISTLAB_API_KEY`, `WAITLISTLAB_API_URL`, `WEB_SERVER_ENABLED`, `WEEKLY_EXECUTOR_CHECK_INTERVAL`, `WEEKLY_PLANNER_INTERVAL`, `YOUTUBE_ACCESS_TOKEN`, `YOUTUBE_API_KEY`, `YOUTUBE_CHANNEL_ID`, `YOUTUBE_CHANNEL_IDS`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, `YOUTUBE_USERNAMES`
+`ACTP_API_KEY`, `ACTP_CORS_ORIGINS`, `ACTP_LANDING_BASE_URL`, `ACTP_MAX_BODY_SIZE`, `ACTP_VERSION`, `AGENT_DAILY_BUDGET_USD`, `AIRTIME_ACCOUNTS_JSON`, `AI_MAX_TOKENS`, `AI_MODEL`, `AI_PROVIDER`, `AI_TEMPERATURE`, `AI_TIMEOUT`, `ANALYSIS_PROVIDER`, `ANTHROPIC_API_KEY`, `API_URL`, `APP_MODE`, `APP_VERSION`, `ARTIFACT_BASE_PATH`, `ARTIFACT_BASE_URL`, `ASSEMBLYAI_API_KEY`, `BACKEND_HOST`, `BACKEND_PORT`, `BLOTATO_API_KEY`, `BLOTATO_API_URL`, `BLUESKY_USERNAMES`, `C2_API_KEY`, `C2_AUTH_DISABLED`, `C2_BIND_HOST`, `C2_PORT`, `C2_RELOAD`, `CAPTION_VARIANT_MODEL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CI`, `CLIP_OUTPUT_DIR`, `CLOUD_SUPABASE_ANON_KEY`, `CLOUD_SUPABASE_STORAGE_BUCKET`, `CLOUD_SUPABASE_URL`, `COMMIT_SHA`, `COMPUTERNAME`, `CONTENT_INTEL_URL`, `DATABASE_URL`, `DEBUG`, `DEFAULT_CAPTION_STYLE`, `DOCS_BASE_URL`, `DOWNLOAD_PATH`, `ELEVENLABS_API_KEY`, `ENABLE_AI_CAPTION_VARIANTS`, `ENABLE_LOCAL_SCRAPERS`, `ENABLE_RAPIDAPI_ENRICHMENT`, `EVENT_BUS_BACKEND`, `FACEBOOK_AD_ACCOUNT_ID`, `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_NAMES`, `FREESOUND_API_KEY`, `FROM_EMAIL`, `FROM_NAME`, `FRONTEND_PORT`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_10`, `GEMINI_API_KEY_11`, `GEMINI_API_KEY_12`, `GEMINI_API_KEY_13`, `GEMINI_API_KEY_14`, `GEMINI_API_KEY_15`, `GEMINI_API_KEY_16`, `GEMINI_API_KEY_17`, `GEMINI_API_KEY_18`, `GEMINI_API_KEY_19`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_20`, `GEMINI_API_KEY_21`, `GEMINI_API_KEY_22`, `GEMINI_API_KEY_23`, `GEMINI_API_KEY_24`, `GEMINI_API_KEY_25`, `GEMINI_API_KEY_26`, `GEMINI_API_KEY_27`, `GEMINI_API_KEY_28`, `GEMINI_API_KEY_29`, `GEMINI_API_KEY_3`, `GEMINI_API_KEY_30`, `GEMINI_API_KEY_31`, `GEMINI_API_KEY_32`, `GEMINI_API_KEY_33`, `GEMINI_API_KEY_34`, `GEMINI_API_KEY_35`, `GEMINI_API_KEY_36`, `GEMINI_API_KEY_37`, `GEMINI_API_KEY_38`, `GEMINI_API_KEY_39`, `GEMINI_API_KEY_4`, `GEMINI_API_KEY_40`, `GEMINI_API_KEY_41`, `GEMINI_API_KEY_42`, `GEMINI_API_KEY_43`, `GEMINI_API_KEY_44`, `GEMINI_API_KEY_45`, `GEMINI_API_KEY_46`, `GEMINI_API_KEY_47`, `GEMINI_API_KEY_48`, `GEMINI_API_KEY_49`, `GEMINI_API_KEY_5`, `GEMINI_API_KEY_50`, `GEMINI_API_KEY_6`, `GEMINI_API_KEY_7`, `GEMINI_API_KEY_8`, `GEMINI_API_KEY_9`, `GIPHY_API_KEY`, `GIT_BRANCH`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CONVERSION_ID`, `GOOGLE_CONVERSION_LABEL`, `GOOGLE_CREDENTIALS_PATH`, `GOOGLE_DRIVE_API_KEY`, `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_SHEET_ID`, `GOOGLE_VEO3_API_KEY`, `HAILUO_API_KEY`, `HF_API_TOKEN`, `HF_TOKEN`, `HITL_ACCOUNT_ID`, `HITL_REQUIRE_REVIEW`, `HOSTNAME`, `HUGGINGFACE_API_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, `HUGGINGFACE_TOKEN`, `IG_PASSWORD`, `IG_USERNAME`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BOT_PASSWORD`, `INSTAGRAM_BOT_USERNAME`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_GRAPH_ACCOUNT_ID`, `INSTAGRAM_GRAPH_TOKEN`, `INSTAGRAM_HITL`, `INSTAGRAM_PASSWORD`, `INSTAGRAM_PROXY_HOST`, `INSTAGRAM_PROXY_PORT`, `INSTAGRAM_TIMEOUT_MS`, `INSTAGRAM_USERNAME`, `INSTAGRAM_USERNAMES`, `INSTAGRAM_USER_ID`, `INSTAGRAM_USE_PROXY`, `KLING_API_KEY`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_API_KEY`, `LINKEDIN_MODE`, `LOCAL_CLIPS_PATH`, `LOCAL_STORAGE_ENABLED`, `LOCAL_STORAGE_PATH`, `LOCAL_TEMP_PATH`, `LOCAL_THUMBNAILS_PATH`, `LOCAL_VIDEOS_PATH`, `LOG_DIR`, `LOG_LEVEL`, `LOG_UI_BASE_URL`, `LUMA_API_KEY`, `MEDIAPOSTER_BASE_PATH`, `MEDIAPOSTER_IPHONE_SOURCE_RECEIPT`, `MEDIAPOSTER_IPHONE_SOURCE_VOLUME_UUID`, `MEDIA_PIPELINE_URL`, `MEDIUM_API_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `META_PIXEL_ID`, `MINIMAX_API_KEY`, `MODAL_VOICE_API_KEY`, `MODAL_VOICE_ENDPOINT`, `MONGODB_URI`, `MPLITE_DEFAULT_ACCOUNT_ID`, `MPLITE_KEY`, `MPLITE_URL`, `MUSIC_INDEX_PATH`, `MUSIC_LIBRARY_PATH`, `NANO_BANANA_API_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, `NODE_ENV`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `PEXELS_API_KEY`, `PIKA_API_KEY`, `PINTEREST_USERNAMES`, `PIXABAY_API_KEY`, `PLAYWRIGHT_BASE_URL`, `PM2_DASHBOARD_URL`, `PORT`, `POSTING_TIMEZONE_OFFSET`, `PROXY_HOST`, `PROXY_PORT`, `PROXY_PORT_2`, `RAPIDAPI_HOST`, `RAPIDAPI_KEY`, `RAPIDAPI_TIKTOK_TIER`, `REDIS_URL`, `REMOTION_BASE_PATH`, `REMOTION_PROJECT_PATH`, `REMOTION_SERVER_URL`, `REMOTION_URL`, `REPO_MAIN_BRANCH`, `REPO_URL`, `REQUIRE_SERVERS`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `RUNWAY_API_KEY`, `SAFARI_AUTH_TOKEN`, `SAFARI_CONTROL_URL`, `SAFARI_TELEMETRY_URL`, `SAFARI_URL`, `SAME_DAY_CHECK_INTERVAL`, `SFX_MANIFEST_PATH`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_PORT`, `SMTP_USER`, `SNAPCHAT_ACCESS_TOKEN`, `SORA_API_KEY`, `SORA_DEFAULT_SECONDS`, `SORA_DEFAULT_SIZE`, `SORA_MODEL`, `SORA_TIMEOUT`, `STABILITY_API_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_URL`, `TEMP_DIR`, `THREADS_PASSWORD_1`, `THREADS_USERNAME`, `THREADS_USERNAMES`, `THREADS_USERNAME_1`, `THREADS_USER_ID`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_API_KEY`, `TIKTOK_APP_KEY`, `TIKTOK_APP_SECRET`, `TIKTOK_CAPTCHA_API_URL`, `TIKTOK_PIXEL_ID`, `TIKTOK_USERNAME`, `TIKTOK_USERNAMES`, `TRACE_WEBHOOK_SECRET`, `TRACE_WEBHOOK_URL`, `TRANSCRIPTION_PROVIDER`, `TREND_FLASH_OUTPUT`, `TWITTER_ACCESS_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_TOKEN_SECRET`, `TWITTER_ACCOUNT_ID`, `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_BEARER_TOKEN`, `TWITTER_USERNAMES`, `UNSPLASH_ACCESS_KEY`, `USE_SUPABASE_STORAGE`, `VIDEO_PROVIDER`, `VIDEO_RENDERER_ENGINE`, `VIRTUAL_ENV`, `WAITLISTLAB_API_KEY`, `WAITLISTLAB_API_URL`, `WEB_SERVER_ENABLED`, `WEEKLY_EXECUTOR_CHECK_INTERVAL`, `WEEKLY_PLANNER_INTERVAL`, `YOUTUBE_ACCESS_TOKEN`, `YOUTUBE_API_KEY`, `YOUTUBE_CHANNEL_ID`, `YOUTUBE_CHANNEL_IDS`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, `YOUTUBE_USERNAMES`
 
 ## Validation and drift
 

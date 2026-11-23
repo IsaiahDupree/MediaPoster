@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config.paths import resolve_iphone_source
 from database.connection import get_db
 from database.models import Video, VideoAnalysis
 from loguru import logger
@@ -2684,6 +2685,9 @@ def map_host_to_container_path(host_path: str) -> str:
     """
     if not host_path:
         return host_path
+    source = resolve_iphone_source(Path(host_path))
+    if source != Path(host_path):
+        return str(source)
     # Map ~/Documents/IphoneImport or /Users/.../IphoneImport to /media/IphoneImport
     import re
     # Handle expanded home directory paths
@@ -3496,6 +3500,8 @@ async def backfill_metadata(
     
     for video in videos:
         source_path = video.source_uri
+        if source_path:
+            source_path = str(resolve_iphone_source(Path(source_path)))
         if not source_path or not Path(source_path).exists():
             skipped += 1
             continue
@@ -3595,6 +3601,8 @@ async def generate_thumbnails_batch(
     
     for video in videos:
         source_path = video.source_uri
+        if source_path:
+            source_path = str(resolve_iphone_source(Path(source_path)))
         if not source_path or not Path(source_path).exists():
             skipped += 1
             continue

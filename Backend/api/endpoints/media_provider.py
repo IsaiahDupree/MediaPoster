@@ -115,10 +115,11 @@ async def get_file(media_id: str, request: Request):
         return await provider.get_image_response(media_id)
     else:
         # Generic file response
-        if not provider.validate_file_exists(media_info.file_path):
+        source = provider.existing_file_path(media_info.file_path)
+        if source is None:
             raise HTTPException(status_code=404, detail="File not found")
         return FileResponse(
-            media_info.file_path,
+            source,
             media_type=media_info.mime_type or "application/octet-stream"
         )
 

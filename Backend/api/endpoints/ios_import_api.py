@@ -19,7 +19,7 @@ from services.event_bus import EventBus, Topics
 router = APIRouter(prefix="/api/import/ios", tags=["iOS Import"])
 
 # Storage paths
-from config.paths import get_iphone_import_dir
+from config.paths import IPHONE_SOURCE_ARCHIVE_DIR, get_iphone_import_dir
 IMPORT_HISTORY_FILE = Path("/tmp/mediaposter/ios_import_history.json")
 IMPORT_JOBS_FILE = Path("/tmp/mediaposter/ios_import_jobs.json")
 DEFAULT_IMPORT_PATH = get_iphone_import_dir()
@@ -591,7 +591,12 @@ async def transfer_files_direct(
             media_types = ["video", "image"]
         
         import_dir = DEFAULT_IMPORT_PATH
-        importer = iPhoneDirectImporter(import_dir)
+        source_volume_uuid = os.getenv("MEDIAPOSTER_IPHONE_SOURCE_VOLUME_UUID")
+        importer = iPhoneDirectImporter(
+            import_dir,
+            source_archive_dir=IPHONE_SOURCE_ARCHIVE_DIR if source_volume_uuid else None,
+            source_volume_uuid=source_volume_uuid,
+        )
         
         # Connect to device
         if not importer.connect():
@@ -602,19 +607,26 @@ async def transfer_files_direct(
         
         try:
             # Import files
-            result = importer.import_files(
+            result = await asyncio.to_thread(
+                importer.import_files,
                 media_types=media_types,
                 max_files=max_files
             )
             
-            return {
+            response = {
                 "status": "success",
                 "imported": result["imported"],
                 "skipped": result["skipped"],
                 "errors": result.get("errors", 0),
                 "total_found": result.get("total_found", 0),
-                "destination": str(import_dir)
+                "destination": str(IPHONE_SOURCE_ARCHIVE_DIR if source_volume_uuid else import_dir)
             }
+            if source_volume_uuid:
+                response["sources"] = [
+                    {key: entry[key] for key in ("sha256", "retained_path", "receipt_path", "status")}
+                    for entry in result["sources"]
+                ]
+            return response
         finally:
             importer.disconnect()
             

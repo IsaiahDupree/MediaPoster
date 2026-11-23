@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import create_engine, text
 from loguru import logger
+from config.paths import resolve_iphone_source
 
 
 class MediaType(str, Enum):
@@ -181,10 +182,16 @@ class MediaProviderService:
     
     def validate_file_exists(self, file_path: str) -> bool:
         """Check if a file exists and is readable."""
-        if not file_path:
-            return False
-        path = Path(file_path)
-        return path.exists() and path.is_file()
+        return self.existing_file_path(file_path) is not None
+
+    def existing_file_path(self, file_path: str) -> Optional[Path]:
+        """Return the exact readable path the response will use."""
+        if file_path:
+            for candidate in (self._map_to_container_path(file_path), file_path):
+                path = Path(candidate)
+                if path.is_file():
+                    return path
+        return None
     
     async def get_thumbnail_response(
         self, 
@@ -231,7 +238,7 @@ class MediaProviderService:
             try:
                 from services.thumbnail_service import generate_thumbnail
                 # Try original path first (host), then mapped path (container)
-                file_path = media_info.file_path
+                file_path = str(resolve_iphone_source(Path(media_info.file_path)))
                 if not Path(file_path).exists():
                     # Try container mapping as fallback
                     file_path = self._map_to_container_path(media_info.file_path)
@@ -269,6 +276,9 @@ class MediaProviderService:
         """
         if not host_path:
             return host_path
+        source_path = resolve_iphone_source(Path(host_path))
+        if source_path != Path(host_path):
+            return str(source_path)
         import re
         
         # Map My Passport path to container path
@@ -373,11 +383,12 @@ class MediaProviderService:
         if not media_info:
             raise HTTPException(status_code=404, detail="Media not found")
         
-        if not self.validate_file_exists(media_info.file_path):
+        source = self.existing_file_path(media_info.file_path)
+        if source is None:
             raise HTTPException(status_code=404, detail="File not found")
         
         return FileResponse(
-            media_info.file_path,
+            source,
             media_type=media_info.mime_type or "image/jpeg",
             headers={"Cache-Control": "public, max-age=3600"}
         )

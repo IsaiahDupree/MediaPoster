@@ -14,6 +14,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 from datetime import datetime
 import logging
+import inspect
+import plistlib
+import tempfile
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,9 @@ class iPhoneDirectImporter:
     fast fingerprinting (first+last bytes + size) to detect duplicates.
     """
     
-    def __init__(self, destination_dir: Path, manifest_file: Optional[Path] = None):
+    def __init__(self, destination_dir: Path, manifest_file: Optional[Path] = None, *,
+                 source_archive_dir: Optional[Path] = None,
+                 source_volume_uuid: Optional[str] = None):
         """
         Initialize importer.
         
@@ -44,7 +50,12 @@ class iPhoneDirectImporter:
             manifest_file: Path to manifest file (default: destination/.import_manifest.jsonl)
         """
         self.destination_dir = Path(destination_dir)
-        self.destination_dir.mkdir(parents=True, exist_ok=True)
+        self.source_archive_dir = Path(source_archive_dir).absolute() if source_archive_dir else None
+        self.source_volume_uuid = source_volume_uuid
+        if self.source_archive_dir and not source_volume_uuid:
+            raise ValueError("Canonical source import requires an explicit volume UUID")
+        if self.source_archive_dir is None:
+            self.destination_dir.mkdir(parents=True, exist_ok=True)
         
         self.manifest_file = manifest_file or (self.destination_dir / ".import_manifest.jsonl")
         self.index_file = self.destination_dir / ".import_index.json"
@@ -307,6 +318,11 @@ class iPhoneDirectImporter:
         if media_types is None:
             media_types = ["video", "image"]
         
+        if self.source_archive_dir is not None:
+            if date_from is not None or date_to is not None:
+                raise ValueError("Source archive date filtering requires dated source metadata")
+            return self._import_source_archive(media_types, max_files)
+
         # Load or build index
         index = self.load_index()
         if not index:
@@ -393,6 +409,58 @@ class iPhoneDirectImporter:
         }
         
         logger.info(f"Import complete: {imported} imported, {skipped} skipped, {errors} errors")
+        return result
+
+    def _import_source_archive(self, media_types, max_files):
+        """Opt-in source retention, independent of MediaPoster's import copies.
+
+        The existing importer targets the synchronous pymobiledevice3 API.
+        Async AFC versions require an async connection/listing adapter before
+        this path can be used; fail before device I/O rather than guessing.
+        """
+        from services.iphone_source_archive import publish_staged_source
+        archive = self.source_archive_dir
+        if "mediaposter" in {part.lower() for part in archive.parts}:
+            raise ValueError("Source archive must be outside MediaPoster")
+        if archive.resolve() != archive:
+            raise ValueError("Source archive must not traverse symlinks")
+        info = plistlib.loads(subprocess.run(
+            ["diskutil", "info", "-plist", str(archive.parent)],
+            capture_output=True, check=True).stdout)
+        if info.get("VolumeUUID", "").upper() != self.source_volume_uuid.upper():
+            raise ValueError("Source archive volume UUID mismatch")
+        if any(inspect.iscoroutinefunction(getattr(self.afc, name, None))
+               for name in ("pull", "get_file_info", "listdir")):
+            raise RuntimeError("Async AFC requires an async import adapter")
+        device = self.lockdown.device_info.get("UniqueDeviceID") if self.lockdown else None
+        if not device:
+            raise ValueError("Source receipt requires the connected device UDID")
+        incoming = archive / ".incoming"
+        incoming.mkdir(parents=True, exist_ok=True)
+        files = self.list_iphone_files(media_types)
+        result = {"success": True, "imported": 0, "skipped": 0,
+                  "errors": 0, "total_found": len(files), "sources": []}
+        for item in files:
+            if max_files is not None and len(result["sources"]) >= max_files:
+                break
+            try:
+                before = self.afc.get_file_info(item["path"])
+                handle, name = tempfile.mkstemp(prefix="iphone-", suffix=".partial", dir=incoming)
+                os.close(handle)
+                staged = Path(name)
+                self.afc.pull(item["path"], str(staged))
+                after = self.afc.get_file_info(item["path"])
+                record = publish_staged_source(archive, staged, {
+                    "device_udid": device, "afc_path": item["path"],
+                    "original_name": item["name"], "before": before, "after": after,
+                    "volume_uuid": self.source_volume_uuid,
+                }, int(before["st_size"]))
+                result["sources"].append(record)
+                result["imported" if record["status"] == "published" else "skipped"] += 1
+            except Exception:
+                logger.exception("Source archive import failed for %s; staging retained", item["path"])
+                result["errors"] += 1
+        result["success"] = result["errors"] == 0
         return result
     
     def disconnect(self):
